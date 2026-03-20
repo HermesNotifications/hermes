@@ -370,12 +370,11 @@ All delivery subjects use a common envelope:
     "group": "billing",
     "type": "invoice.paid"
   },
-  "attempt": 1,
-  "correlation_id": "req_abc123"
+  "attempt": 1
 }
 ```
 
-`correlation_id` flows from the original API request through every NATS message and event log entry for end-to-end tracing.
+`notification_id` serves as the correlation key across all NATS messages, event log entries, and structured logs for end-to-end tracing.
 
 ### Failure Handling
 
@@ -575,6 +574,6 @@ hermes/
 
 ### Observability
 
-- Structured JSON logging from all services with `correlation_id`
+- Structured JSON logging from all services with `notification_id`
 - Prometheus metrics via standard Go client (request latency, NATS consumer lag, delivery success/failure rates)
-- Correlation IDs in logs for end-to-end tracing without heavy tracing infrastructure
+- Notification IDs in logs for end-to-end tracing without heavy tracing infrastructure
