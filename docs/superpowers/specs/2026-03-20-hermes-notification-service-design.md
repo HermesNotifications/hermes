@@ -180,7 +180,18 @@ Status progression: `pending` → `sent` → `delivered` → `read` → `archive
 
 The Event Writer applies the rollup: status advances to the highest level achieved by any channel. It never regresses (e.g., an `email.failed` event does not move status back from `delivered` if inbox already succeeded).
 
-Timestamps: `sent_at` is set when the first delivery is attempted. `delivered_at` is set when the first channel confirms delivery. `read_at` and `archived_at` are inbox-only user actions.
+**Out-of-order safety:** Events may arrive out of sequence (retries, concurrent workers). The Event Writer uses conditional updates to prevent regressions:
+
+```sql
+UPDATE notifications
+SET status = $new_status,
+    sent_at = COALESCE(sent_at, CASE WHEN $new_status_rank >= 1 THEN $event_time END),
+    delivered_at = COALESCE(delivered_at, CASE WHEN $new_status_rank >= 2 THEN $event_time END)
+WHERE id = $1
+  AND status_rank(status) < status_rank($new_status)
+```
+
+Status rank mapping: `pending=0, sent=1, delivered=2, read=3, archived=4`. Implemented as a Postgres function or application-side logic. `COALESCE` ensures timestamps are only set once (first writer wins). The `WHERE` clause ensures a stale event cannot regress the status. If the update affects 0 rows, the event is silently skipped — it's already been superseded.
 
 - Partial index for default inbox query:
   ```sql
