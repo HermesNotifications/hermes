@@ -413,7 +413,7 @@ Each user has a user-limited channel: `user#<user_id>`. The `#` separator create
 2. Inbox Service returns a Centrifugo connection token (short-lived JWT signed with Centrifugo's secret, contains user ID and allowed channels)
 3. Client connects to Centrifugo WebSocket with this token
 4. Client subscribes to `user#<user_id>`
-5. Token refresh: Centrifugo calls back to Inbox Service when token nears expiry. TTL: 5–10 minutes
+5. Token refresh: Centrifugo calls back to Inbox Service when token nears expiry. TTL: 1 hour — low risk (internal service, user-scoped channel), avoids excessive refresh traffic
 
 ### Push Payload
 
