@@ -78,7 +78,7 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | text (PK) | Crockford Base32 |
+| id | uuid (PK) | UUIDv4 — tenants are few, no need for sortable IDs |
 | name | text | |
 | default_locale | text | For future i18n support |
 | settings | jsonb | Tenant-level config |
