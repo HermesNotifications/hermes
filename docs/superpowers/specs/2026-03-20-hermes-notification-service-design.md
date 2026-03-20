@@ -451,7 +451,7 @@ Control event (for cross-device sync):
   "api_key": "...",
   "presence": true,
   "history_size": 50,
-  "history_ttl": "24h",
+  "history_ttl": "1h",
   "user_subscribe_to_personal": true,
   "allow_user_limited_channels": true
 }
