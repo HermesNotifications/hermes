@@ -93,7 +93,9 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 | name | text | Human-readable label |
 | created_at | timestamptz | |
 
-API keys are global — a single key can send across tenants. Keys are not scoped to a tenant.
+- API keys are global — a single key can send across tenants. Keys are not scoped to a tenant.
+- Unique index on key_hash
+- Cached in Redis
 
 **users**
 
@@ -107,28 +109,30 @@ API keys are global — a single key can send across tenants. Keys are not scope
 | locale | text | Nullable — defaults to tenant locale. For future i18n |
 | created_at | timestamptz | |
 
-- Unique constraint: `(tenant_id, external_id)`
+- Unique constraint: `(tenant_id, external_id)` - indexed
 - Auto-created on first send if not exists using `INSERT ... ON CONFLICT (tenant_id, external_id) DO NOTHING` followed by select
 
 **notification_groups**
 
+Global table — defined by the SaaS provider, shared across all tenants. Groups organize notification types for preference management.
+
 | Column | Type | Notes |
 |--------|------|-------|
 | id | text (PK) | Crockford Base32 |
-| tenant_id | text (FK) | |
 | slug | text | e.g., `billing`, `security`, `marketing` |
 | name | text | Human-readable name |
 | default_channels | text[] | e.g., `{"email", "inbox"}` |
 | created_at | timestamptz | |
 
-- Unique constraint: `(tenant_id, slug)`
+- Unique constraint: `slug`
 
 **notification_types**
+
+Global table — defined by the SaaS provider, shared across all tenants. All tenants receive the same notification catalog; only user preferences differ.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | text (PK) | Crockford Base32 |
-| tenant_id | text (FK) | |
 | group_id | text (FK) | |
 | slug | text | e.g., `invoice.paid` |
 | name | text | Human-readable name |
@@ -139,7 +143,7 @@ API keys are global — a single key can send across tenants. Keys are not scope
 | inbox_body | text | Go text/template. Nullable |
 | created_at | timestamptz | |
 
-- Unique constraint: `(tenant_id, slug)`
+- Unique constraint: `slug`
 
 **notifications**
 
@@ -248,8 +252,8 @@ Request body:
 
 **Validation:**
 - Exactly one of `type` or `content` must be present — return `400` if both or neither
-- `type` must reference an existing `notification_types.slug` for the given tenant — return `400` if not found
-- `group` must reference an existing `notification_groups.slug` for the given tenant — return `400` if not found
+- `type` must reference an existing `notification_types.slug` — return `400` if not found
+- `group` must reference an existing `notification_groups.slug` — return `400` if not found
 - `group` is required for direct sends, inferred from type otherwise
 
 **Rate limiting:** Per-API-key token bucket. Default: 1000 req/s burst, 500 req/s sustained. Configurable. Returns `429 Too Many Requests` when exceeded.
@@ -328,7 +332,7 @@ GET    /v1/notifications/:id               # Status + event log
 ### Send Pipeline
 
 1. **Send Service** receives `POST /v1/send`, validates, auto-creates user if needed, persists notification to Postgres with `status: pending`, publishes to `notification.send` on NATS, returns `202 Accepted`
-2. **Router** subscribes to `notification.send` (consumer group). Resolves templates (type config cached in Redis, key: `type:{tenant_id}:{slug}`, TTL: 5 min, invalidated on type update). Determines channels: explicit override → user preferences → group defaults. Publishes to `delivery.{channel}` per channel. Publishes routing events to `notification.events`
+2. **Router** subscribes to `notification.send` (consumer group). Resolves templates (type config cached in Redis, key: `type:{slug}`, TTL: 5 min, invalidated on type update). Determines channels: explicit override → user preferences → group defaults. Publishes to `delivery.{channel}` per channel. Publishes routing events to `notification.events`
 3. **Delivery Workers** subscribe to their channel subject. Deliver via provider adapter. Publish result events to `notification.events`
 4. **Event Writer** subscribes to `notification.events`. Batch-inserts to notification_events table (batch size: 100 events or 500ms flush interval, whichever comes first). Updates top-level notification status and timestamps using the rollup rules
 
@@ -472,7 +476,7 @@ The Webhook adapter is the escape hatch — the SaaS provider can route to any p
 - Templates stored in `notification_types` table, per-channel fields
 - Engine: Go `html/template` for email bodies (auto-escapes HTML to prevent XSS), Go `text/template` for SMS and inbox. Restricted function set (no shell, no file access)
 - Template variables come from the `data` field in the send request
-- Cached in Redis by the Router. Key: `type:{tenant_id}:{slug}`, TTL: 5 min, invalidated on type update via admin API
+- Cached in Redis by the Router. Key: `type:{slug}`, TTL: 5 min, invalidated on type update via admin API
 
 **Future i18n path:**
 - Add `notification_type_translations` table with `locale` column
