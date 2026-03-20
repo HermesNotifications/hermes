@@ -53,7 +53,7 @@ Eight services in a Go monorepo:
 
 | Service       | Responsibility |
 |---------------|---------------|
-| **Send**      | REST API for sending notifications. Validates, persists, publishes to NATS. Hosts admin endpoints (types, groups, notification status) |
+| **Send**      | REST API (stdlib `net/http`) for sending notifications. Validates, persists, publishes to NATS. Hosts admin endpoints (types, groups, notification status) |
 | **Router**    | Subscribes to `notification.send`. Resolves templates, determines channels (group defaults + user preference overrides), fans out to `delivery.{channel}` |
 | **Email Worker** | Subscribes to `delivery.email`. Delivers via pluggable provider adapter (SendGrid, SES, webhook) |
 | **SMS Worker** | Subscribes to `delivery.sms`. Delivers via pluggable provider adapter (Twilio, webhook) |
