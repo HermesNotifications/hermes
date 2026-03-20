@@ -12,6 +12,23 @@
 
 ---
 
+## Implementation Notes (Review Fixes)
+
+The following issues were identified in plan review and must be addressed during implementation:
+
+1. **Idempotency key** — generate notification ID *before* the Redis SetNX call so the correct ID is stored immediately. Do NOT set an empty string then try to overwrite (SetNX won't overwrite). See Task 15 for the corrected flow.
+2. **Tenant validation** — the send handler MUST validate that `tenant_id` references an existing tenant before inserting. Otherwise Postgres FK violations surface as 500s. Added `GetTenantByID` to the store and a validation step in the send handler.
+3. **AdminStore interface** — define the interface in Task 12 from the start (not retroactively in Task 13). The `Server` struct takes `AdminStore` interface, which `*store.Store` satisfies. This enables mock-based unit tests for all handler tasks.
+4. **Mock store + newTestServer** — Task 13 includes full implementation of `testutil_test.go` with an in-memory mock store and `newTestServer()` helper. All subsequent handler tests use this.
+5. **Rate limiting** — the rate limit middleware is wired into `Handler()` in Task 12, keyed by `Authorization` header.
+6. **API key validation** — on startup, load all API key records into memory. Validate incoming keys by iterating and calling `auth.VerifyAPIKey` against each hash. Cache the result in Redis (`apikey:{hash_of_raw_key}` → `key_id`, 5 min TTL) to avoid repeated argon2 computation. Refresh on cache miss.
+7. **Middleware tests** — Task 11 includes unit tests for the rate limiter.
+8. **Tenants store** — added as Task 9a (between Tasks 9 and 10).
+9. **Empty test steps** (Tasks 14, 16, 17) — the implementing agent should follow the same pattern as Task 13: use `newTestServer` with mock store, create `httptest.NewRequest`, assert status code and response body.
+10. **Dependency ordering** — in Task 10, run `go get github.com/google/uuid` as Step 1 before writing any test files.
+
+---
+
 ## File Structure
 
 ```
@@ -1947,6 +1964,109 @@ git commit -m "feat: add store package with groups and types CRUD"
 
 ---
 
+### Task 9a: Store Package — Tenants + API Keys
+
+**Files:**
+- Create: `internal/store/tenants.go`
+- Create: `internal/store/tenants_test.go`
+- Create: `internal/store/apikeys.go` (moved from Task 17)
+
+- [ ] **Step 1: Write tenants store**
+
+```go
+// internal/store/tenants.go
+package store
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/hermes-notifications/hermes/internal/models"
+)
+
+func (s *Store) CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error) {
+	t := &models.Tenant{ID: id, Name: name}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO tenants (id, name) VALUES ($1, $2) RETURNING default_locale, settings, created_at`,
+		t.ID, t.Name,
+	).Scan(&t.DefaultLocale, &t.Settings, &t.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create tenant: %w", err)
+	}
+	return t, nil
+}
+
+func (s *Store) GetTenantByID(ctx context.Context, id string) (*models.Tenant, error) {
+	t := &models.Tenant{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, name, default_locale, settings, created_at FROM tenants WHERE id = $1`, id,
+	).Scan(&t.ID, &t.Name, &t.DefaultLocale, &t.Settings, &t.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get tenant: %w", err)
+	}
+	return t, nil
+}
+```
+
+- [ ] **Step 2: Write integration test**
+
+```go
+//go:build integration
+
+// internal/store/tenants_test.go
+package store_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/uuid"
+)
+
+func TestCreateTenant_And_GetByID(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "tenants")
+
+	ctx := context.Background()
+	tenantID := uuid.New().String()
+	tenant, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
+	if err != nil {
+		t.Fatalf("CreateTenant: %v", err)
+	}
+
+	got, err := s.GetTenantByID(ctx, tenant.ID)
+	if err != nil {
+		t.Fatalf("GetTenantByID: %v", err)
+	}
+	if got.Name != "Test Tenant" {
+		t.Fatalf("expected Test Tenant, got %s", got.Name)
+	}
+}
+```
+
+- [ ] **Step 3: Install uuid dependency**
+
+```bash
+cd /Users/daryl/code/hermes && go get github.com/google/uuid
+```
+
+- [ ] **Step 4: Run integration tests**
+
+```bash
+cd /Users/daryl/code/hermes && go test ./internal/store/... -tags=integration -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/store/tenants.go internal/store/tenants_test.go
+git commit -m "feat: add tenants store with create and get by ID"
+```
+
+---
+
 ### Task 10: Store Package — Users + Notifications
 
 **Files:**
@@ -2224,13 +2344,7 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Install uuid dependency for tests**
-
-```bash
-cd /Users/daryl/code/hermes && go get github.com/google/uuid
-```
-
-- [ ] **Step 4: Run integration tests**
+- [ ] **Step 3: Run integration tests**
 
 ```bash
 cd /Users/daryl/code/hermes && go test ./internal/store/... -tags=integration -v
@@ -2651,6 +2765,7 @@ Add to `internal/admin/server.go`:
 ```go
 // Add a StoreInterface that the admin server depends on
 type AdminStore interface {
+	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
 	CreateGroup(ctx context.Context, slug, name string, defaultChannels []string) (*models.NotificationGroup, error)
 	GetGroupByID(ctx context.Context, id string) (*models.NotificationGroup, error)
 	ListGroups(ctx context.Context) ([]models.NotificationGroup, error)
@@ -3053,25 +3168,36 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	// Validate tenant exists
+	if _, err := s.store.GetTenantByID(ctx, req.TenantID); err != nil {
+		s.clientError(w, http.StatusBadRequest, "unknown tenant_id")
+		return
+	}
+
+	// Generate notification ID upfront (needed for idempotency key)
+	notifID := id.New()
+
 	// Check idempotency key
 	idemKey := r.Header.Get("X-Idempotency-Key")
 	if idemKey != "" {
-		// Check Redis first
-		existing, err := s.cache.SetIdempotencyKey(ctx, req.TenantID+":"+idemKey, "", time.Hour)
+		// Try Redis SetNX with the real notification ID
+		existing, err := s.cache.SetIdempotencyKey(ctx, req.TenantID+":"+idemKey, notifID, time.Hour)
 		if err == nil && existing != "" {
+			// Key already existed — return the stored notification ID
 			s.jsonResponse(w, http.StatusAccepted, sendResponse{NotificationID: existing})
 			return
 		}
-		// Redis miss — check Postgres
-		if existing == "" {
-			n, err := s.store.GetNotificationByIdempotencyKey(ctx, req.TenantID, idemKey)
-			if err == nil && n != nil {
+		// Redis miss (key was new, or Redis error) — check Postgres as fallback
+		if err != nil {
+			n, dbErr := s.store.GetNotificationByIdempotencyKey(ctx, req.TenantID, idemKey)
+			if dbErr == nil && n != nil {
 				// Backfill Redis
 				s.cache.SetIdempotencyKey(ctx, req.TenantID+":"+idemKey, n.ID, time.Hour)
 				s.jsonResponse(w, http.StatusAccepted, sendResponse{NotificationID: n.ID})
 				return
 			}
 		}
+		// If SetNX succeeded (existing == ""), we stored notifID — proceed to create
 	}
 
 	// Resolve group
@@ -3103,8 +3229,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build notification
-	notifID := id.New()
+	// Build notification (notifID already generated above for idempotency)
 	n := &models.Notification{
 		ID:       notifID,
 		TenantID: req.TenantID,
@@ -3138,11 +3263,6 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.CreateNotification(ctx, n); err != nil {
 		s.serverError(w, err)
 		return
-	}
-
-	// Update Redis idempotency with actual notification ID
-	if idemKey != "" {
-		s.cache.SetIdempotencyKey(ctx, req.TenantID+":"+idemKey, notifID, time.Hour)
 	}
 
 	// Publish to NATS
