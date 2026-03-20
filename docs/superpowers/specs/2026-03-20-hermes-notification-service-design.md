@@ -80,10 +80,20 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 |--------|------|-------|
 | id | text (PK) | Crockford Base32 |
 | name | text | |
-| api_key_hash | text | bcrypt or argon2 hash |
 | default_locale | text | For future i18n support |
 | settings | jsonb | Tenant-level config |
 | created_at | timestamptz | |
+
+**api_keys**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text (PK) | Crockford Base32 |
+| key_hash | text | argon2 hash |
+| name | text | Human-readable label |
+| created_at | timestamptz | |
+
+API keys are global — a single key can send across tenants. Keys are not scoped to a tenant.
 
 **users**
 
@@ -98,7 +108,7 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 | created_at | timestamptz | |
 
 - Unique constraint: `(tenant_id, external_id)`
-- Auto-created on first send if not exists
+- Auto-created on first send if not exists using `INSERT ... ON CONFLICT (tenant_id, external_id) DO NOTHING` followed by select
 
 **notification_groups**
 
@@ -106,9 +116,12 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 |--------|------|-------|
 | id | text (PK) | Crockford Base32 |
 | tenant_id | text (FK) | |
-| name | text | e.g., "billing", "security", "marketing" |
+| slug | text | e.g., `billing`, `security`, `marketing` |
+| name | text | Human-readable name |
 | default_channels | text[] | e.g., `{"email", "inbox"}` |
 | created_at | timestamptz | |
+
+- Unique constraint: `(tenant_id, slug)`
 
 **notification_types**
 
@@ -120,7 +133,7 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 | slug | text | e.g., `invoice.paid` |
 | name | text | Human-readable name |
 | email_subject | text | Go text/template. Nullable — null means channel not available for this type |
-| email_body | text | Go text/template. Nullable |
+| email_body | text | Go html/template (auto-escapes HTML). Nullable |
 | sms_body | text | Go text/template. Nullable |
 | inbox_title | text | Go text/template. Nullable |
 | inbox_body | text | Go text/template. Nullable |
@@ -142,13 +155,27 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 | action_url | text | Nullable |
 | action_label | text | Nullable — button text |
 | channels | text[] | Channels this was routed to |
-| status | text | pending → sent → delivered → read → archived |
+| status | text | See status rollup rules below |
 | created_at | timestamptz | |
 | sent_at | timestamptz | Nullable |
 | delivered_at | timestamptz | Nullable |
 | read_at | timestamptz | Nullable |
 | archived_at | timestamptz | Nullable |
 | deleted_at | timestamptz | Nullable — soft delete |
+
+**Notification status rollup rules:**
+
+Status progression: `pending` → `sent` → `delivered` → `read` → `archived`
+
+- `pending`: notification created, not yet processed by Router
+- `sent`: at least one channel delivery has been attempted (Router published to delivery subjects)
+- `delivered`: at least one channel has confirmed delivery (inbox persisted, email accepted by provider)
+- `read`: user has read the inbox item. This is inbox-specific — `read_at` is set when the user marks the inbox notification as read
+- `archived`: user has archived the inbox item
+
+The Event Writer applies the rollup: status advances to the highest level achieved by any channel. It never regresses (e.g., an `email.failed` event does not move status back from `delivered` if inbox already succeeded).
+
+Timestamps: `sent_at` is set when the first delivery is attempted. `delivered_at` is set when the first channel confirms delivery. `read_at` and `archived_at` are inbox-only user actions.
 
 - Partial index for default inbox query:
   ```sql
@@ -183,7 +210,7 @@ All public-facing IDs use **Crockford Base32** encoding of a time-sortable binar
 
 ### Authentication
 
-- **Send API + Admin API**: API key in `Authorization` header. Single key can send across tenants.
+- **Send API + Admin API**: API key in `Authorization` header. Keys are global and can send across tenants (see `api_keys` table).
 - **Inbox + User API**: JWT signed by the SaaS provider. Claims include `sub` (Hermes user ID or external ID), `tenant_id`. Hermes validates the signature against a configured public key / JWKS endpoint.
 
 ### Send API (API Key auth)
@@ -206,7 +233,8 @@ Request body:
   },
   "data": { "invoice_number": "1234", "amount": "$99.00" },
   "channels": ["email", "inbox"],
-  "group": "billing"
+  "group": "billing",
+  "idempotency_key": "inv-1234-paid"
 }
 ```
 
@@ -215,6 +243,15 @@ Request body:
 - `channels` is optional — overrides group defaults + user preferences
 - `group` is required for direct sends, inferred from type otherwise
 - `user_id` is the external ID — user is auto-created if not exists
+- `idempotency_key` is optional — if provided, the Send Service checks for an existing notification with the same key before creating a new one. Duplicate requests return the original `notification_id`. Keys are scoped to `(tenant_id, idempotency_key)` and expire after 24 hours.
+
+**Validation:**
+- Exactly one of `type` or `content` must be present — return `400` if both or neither
+- `type` must reference an existing `notification_types.slug` for the given tenant — return `400` if not found
+- `group` must reference an existing `notification_groups.slug` for the given tenant — return `400` if not found
+- `group` is required for direct sends, inferred from type otherwise
+
+**Rate limiting:** Per-API-key token bucket. Default: 1000 req/s burst, 500 req/s sustained. Configurable. Returns `429 Too Many Requests` when exceeded.
 
 Response: `202 Accepted`
 ```json
@@ -292,7 +329,7 @@ GET    /v1/notifications/:id               # Status + event log
 1. **Send Service** receives `POST /v1/send`, validates, auto-creates user if needed, persists notification to Postgres with `status: pending`, publishes to `notification.send` on NATS, returns `202 Accepted`
 2. **Router** subscribes to `notification.send` (consumer group). Resolves templates (type config cached in Redis, key: `type:{tenant_id}:{slug}`, TTL: 5 min, invalidated on type update). Determines channels: explicit override → user preferences → group defaults. Publishes to `delivery.{channel}` per channel. Publishes routing events to `notification.events`
 3. **Delivery Workers** subscribe to their channel subject. Deliver via provider adapter. Publish result events to `notification.events`
-4. **Event Writer** subscribes to `notification.events`. Batch-inserts to notification_events table. Updates top-level notification status and timestamps
+4. **Event Writer** subscribes to `notification.events`. Batch-inserts to notification_events table (batch size: 100 events or 500ms flush interval, whichever comes first). Updates top-level notification status and timestamps using the rollup rules
 
 ### NATS Message Schema
 
@@ -326,13 +363,31 @@ All delivery subjects use a common envelope:
 - NATS JetStream provides at-least-once delivery — messages redeliver if not acked
 - Workers ack only after successful delivery + event publication
 - Configurable max retry count per subject, then dead-letter subject for manual inspection
-- Partial failure: if email fails but inbox succeeds, event log reflects both, top-level status reflects best outcome
+- Partial failure: if email fails but inbox succeeds, event log reflects both, top-level status reflects best outcome (see status rollup rules in Data Model)
+
+### NATS Stream Configuration
+
+| Stream | Subjects | Retention | Storage | Max Age |
+|--------|----------|-----------|---------|---------|
+| NOTIFICATIONS | `notification.send` | WorkQueue | File | 7 days |
+| DELIVERY | `delivery.email`, `delivery.sms`, `delivery.inbox` | WorkQueue | File | 7 days |
+| EVENTS | `notification.events` | WorkQueue | File | 7 days |
+
+- WorkQueue retention: messages are removed once acked by a consumer, ensuring each message is processed exactly once per consumer group
+- File storage for durability across NATS restarts
+- Max age is a safety net — messages should be consumed well before 7 days
+
+### Health Checks
+
+All services expose:
+- `GET /healthz` — liveness probe (process is running)
+- `GET /readyz` — readiness probe (dependencies are reachable: Postgres, NATS, Redis as applicable)
 
 ## Centrifugo Integration
 
 ### Channel Naming
 
-Each user has a private channel: `inbox#<user_id>` (the `#` prefix makes it a private channel requiring auth).
+Each user has a user-limited channel: `inbox#<user_id>`. The `#` separator creates a user-limited channel — Centrifugo automatically restricts subscription to the user whose ID matches the suffix in the connection token. No separate subscription token is needed.
 
 ### Connection Flow
 
@@ -417,7 +472,7 @@ The Webhook adapter is the escape hatch — the SaaS provider can route to any p
 ## Templates
 
 - Templates stored in `notification_types` table, per-channel fields
-- Engine: Go `text/template` with a restricted function set (no shell, no file access)
+- Engine: Go `html/template` for email bodies (auto-escapes HTML to prevent XSS), Go `text/template` for SMS and inbox. Restricted function set (no shell, no file access)
 - Template variables come from the `data` field in the send request
 - Cached in Redis by the Router. Key: `type:{tenant_id}:{slug}`, TTL: 5 min, invalidated on type update via admin API
 
@@ -463,6 +518,7 @@ hermes/
 - Single Go module, all services share one `go.mod`
 - Single Postgres database, services own their tables but share access
 - One Dockerfile per service, multi-stage builds for minimal images
+- Migrations: use golang-migrate, run as a Kubernetes Job before service deployments. All migrations must be backward-compatible to support rolling deploys
 
 ## Kubernetes Deployment
 
