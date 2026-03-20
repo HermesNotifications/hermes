@@ -44,7 +44,7 @@ User Apps (JWT) ──► Inbox Service (REST) ──► Postgres
 |-------------|---------------------------------------------|
 | PostgreSQL  | Durable storage — notifications, users, templates, preferences, event log |
 | NATS JetStream | Inter-service messaging, Centrifugo broker |
-| Redis       | Centrifugo engine (presence, history). Not used for application caching except type config (see Templates) |
+| Redis       | Centrifugo engine (presence, history), type config cache, idempotency key dedup |
 | Centrifugo  | Real-time WebSocket push to clients. NATS broker, Redis engine |
 
 ## Services
@@ -158,7 +158,7 @@ Global table — defined by the SaaS provider, shared across all tenants. All te
 | body | text | Resolved body |
 | action_url | text | Nullable |
 | action_label | text | Nullable — button text |
-| idempotency_key | text | Nullable. Unique partial index on `(tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL`. Expired after 24h via periodic cleanup |
+| idempotency_key | text | Nullable. Also stored in Redis for fast duplicate detection (see below) |
 | channels | text[] | Channels this was routed to |
 | status | text | See status rollup rules below |
 | created_at | timestamptz | |
@@ -259,7 +259,10 @@ Request body:
 - `channels` is optional — overrides group defaults + user preferences
 - `group` is required for direct sends, inferred from type otherwise
 - `user_id` is the external ID — user is auto-created if not exists
-- `idempotency_key` is optional — if provided, the Send Service checks for an existing notification with the same key before creating a new one. Duplicate requests return the original `notification_id`. Keys are scoped to `(tenant_id, idempotency_key)` and expire after 24 hours.
+- `idempotency_key` is optional — if provided, the Send Service checks Redis for a duplicate before creating a new one. Duplicate requests return the original `notification_id`.
+  - Redis key: `idem:{tenant_id}:{idempotency_key}` → `notification_id`, with 24h TTL (auto-expires, no cleanup job needed)
+  - On send: `SET idem:{tenant_id}:{key} {notification_id} NX EX 86400` — if key already exists, return the stored notification_id
+  - The idempotency_key is also persisted on the notifications row for auditability, but Redis is the primary lookup path
 
 **Validation:**
 - Exactly one of `type` or `content` must be present — return `400` if both or neither
