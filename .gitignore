@@ -1,0 +1,18 @@
+# Binaries
+/bin/
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Superpowers
+.superpowers/
+
+# Environment
+.env
+.env.local
