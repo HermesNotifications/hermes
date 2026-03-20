@@ -250,8 +250,7 @@ Request body:
   },
   "data": { "invoice_number": "1234", "amount": "$99.00" },
   "channels": ["email", "inbox"],
-  "group": "billing",
-  "idempotency_key": "inv-1234-paid"
+  "group": "billing"
 }
 ```
 
@@ -260,7 +259,7 @@ Request body:
 - `channels` is optional — overrides group defaults + user preferences
 - `group` is required for direct sends, inferred from type otherwise
 - `user_id` is the external ID — user is auto-created if not exists
-- `idempotency_key` is optional — if provided, the Send Service checks Redis for a duplicate before creating a new one. Duplicate requests return the original `notification_id`.
+- `X-Idempotency-Key` header is optional — if provided, the Send Service checks Redis for a duplicate before creating a new one. Duplicate requests return the original `notification_id`.
   - Redis key: `idem:{tenant_id}:{idempotency_key}` → `notification_id`, with 24h TTL (auto-expires, no cleanup job needed)
   - On send: `SET idem:{tenant_id}:{key} {notification_id} NX EX 86400` — if key already exists, return the stored notification_id
   - The idempotency_key is also persisted on the notifications row for auditability, but Redis is the primary lookup path
