@@ -259,10 +259,10 @@ Request body:
 - `channels` is optional — overrides group defaults + user preferences
 - `group` is required for direct sends, inferred from type otherwise
 - `user_id` is the external ID — user is auto-created if not exists
-- `X-Idempotency-Key` header is optional — if provided, the Send Service checks Redis for a duplicate before creating a new one. Duplicate requests return the original `notification_id`.
-  - Redis key: `idem:{tenant_id}:{idempotency_key}` → `notification_id`, with 24h TTL (auto-expires, no cleanup job needed)
-  - On send: `SET idem:{tenant_id}:{key} {notification_id} NX EX 86400` — if key already exists, return the stored notification_id
-  - The idempotency_key is also persisted on the notifications row for auditability, but Redis is the primary lookup path
+- `X-Idempotency-Key` header is optional — if provided, the Send Service checks for duplicates. Duplicate requests return the original `notification_id`.
+  - **Redis (hot path):** `SET idem:{tenant_id}:{key} {notification_id} NX EX 3600` — 1h TTL covers the vast majority of retries
+  - **Postgres (fallback):** on Redis cache miss, query the notifications table using the partial unique index on `(tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL`. If found, populate Redis with the result (1h TTL) and return the existing notification_id
+  - Idempotency keys are valid for 24h (enforced by comparing `created_at` on the Postgres row). After 24h, the same key can be reused
 
 **Validation:**
 - Exactly one of `type` or `content` must be present — return `400` if both or neither
@@ -357,7 +357,7 @@ All delivery subjects use a common envelope:
 ```json
 {
   "notification_id": "01HQJK5M3N8P2R4V6W8X0Y1Z34",
-  "tenant_id": "01HQJK5M3N8P2R4V6W8X0Y1Z34",
+  "tenant_id": "A4EE511F-E8BA-4A96-B34A-9878D96B5037",
   "user_id": "01HQJK5M3N8P2R4V6W8X0Y1Z34",
   "channel": "email",
   "content": {
