@@ -154,6 +154,7 @@ API keys are global — a single key can send across tenants. Keys are not scope
 | body | text | Resolved body |
 | action_url | text | Nullable |
 | action_label | text | Nullable — button text |
+| idempotency_key | text | Nullable. Unique partial index on `(tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL`. Expired after 24h via periodic cleanup |
 | channels | text[] | Channels this was routed to |
 | status | text | See status rollup rules below |
 | created_at | timestamptz | |
@@ -387,14 +388,14 @@ All services expose:
 
 ### Channel Naming
 
-Each user has a user-limited channel: `inbox#<user_id>`. The `#` separator creates a user-limited channel — Centrifugo automatically restricts subscription to the user whose ID matches the suffix in the connection token. No separate subscription token is needed.
+Each user has a user-limited channel: `user#<user_id>`. The `#` separator creates a user-limited channel — Centrifugo automatically restricts subscription to the user whose ID matches the suffix in the connection token. No separate subscription token is needed. This channel does not use a Centrifugo namespace — it operates in the default namespace with presence and history configured at the server level.
 
 ### Connection Flow
 
 1. Client authenticates with JWT to Inbox Service
 2. Inbox Service returns a Centrifugo connection token (short-lived JWT signed with Centrifugo's secret, contains user ID and allowed channels)
 3. Client connects to Centrifugo WebSocket with this token
-4. Client subscribes to `inbox#<user_id>`
+4. Client subscribes to `user#<user_id>`
 5. Token refresh: Centrifugo calls back to Inbox Service when token nears expiry. TTL: 5–10 minutes
 
 ### Push Payload
@@ -431,14 +432,11 @@ Control event (for cross-device sync):
   "broker": "nats",
   "token_hmac_secret_key": "...",
   "api_key": "...",
-  "namespaces": [
-    {
-      "name": "inbox",
-      "presence": true,
-      "history_size": 50,
-      "history_ttl": "24h"
-    }
-  ]
+  "presence": true,
+  "history_size": 50,
+  "history_ttl": "24h",
+  "user_subscribe_to_personal": true,
+  "allow_user_limited_channels": true
 }
 ```
 
