@@ -239,7 +239,7 @@ POST /v1/send
 Request body:
 ```json
 {
-  "tenant_id": "01HQJK5M3N8P2R4V6W8X0Y1Z34",
+  "tenant_id": "A4EE511F-E8BA-4A96-B34A-9878D96B5037",
   "user_id": "ext_user_456",
   "type": "invoice.paid",
   "content": {
@@ -255,7 +255,7 @@ Request body:
 ```
 
 - Exactly one of `type` or `content` must be present
-- `data` provides template variables when using `type`
+- `data` provides template variables — works with both `type` (database templates) and `content` (inline templates). If `content` is provided without `data`, it's used as-is
 - `channels` is optional — overrides group defaults + user preferences
 - `group` is required for direct sends, inferred from type otherwise
 - `user_id` is the external ID — user is auto-created if not exists
