@@ -209,6 +209,7 @@ Status rank mapping: `pending=0, sent=1, delivered=2, read=3, archived=4`. Imple
 | notification_id | text (FK) | |
 | channel | text | email, sms, inbox |
 | event | text | e.g., `email.routed`, `email.sent`, `email.failed`, `inbox.delivered`, `inbox.read` |
+| severity | text | `info` (normal progression), `warn` (retriable issue), `error` (delivery failure) |
 | metadata | jsonb | Provider response, error details |
 | created_at | timestamptz | |
 
