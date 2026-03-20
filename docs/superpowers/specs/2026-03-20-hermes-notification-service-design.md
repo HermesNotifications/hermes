@@ -15,7 +15,7 @@ An internal notification platform for a SaaS provider. Hermes provides a single 
 Event-driven microservice pipeline. All inter-service communication flows through NATS JetStream.
 
 ```
-SaaS Backend (API Key) ──► Send Service ──► NATS [notification.send]
+SaaS Backend (API Key) ──► Admin Service ──► NATS [notification.send]
                                                     │
                                               ┌─────▼─────┐
                                               │   Router   │
@@ -53,7 +53,7 @@ Eight services in a Go monorepo:
 
 | Service       | Responsibility |
 |---------------|---------------|
-| **Send**      | REST API (stdlib `net/http`) for sending notifications. Validates, persists, publishes to NATS. Hosts admin endpoints (types, groups, notification status) |
+| **Admin**     | REST API (stdlib `net/http`) for sending notifications, managing types/groups, and querying notification status. API key auth. Validates, persists, publishes to NATS |
 | **Router**    | Subscribes to `notification.send`. Resolves templates, determines channels (group defaults + user preference overrides), fans out to `delivery.{channel}` |
 | **Email Worker** | Subscribes to `delivery.email`. Delivers via pluggable provider adapter (SendGrid, SES, webhook) |
 | **SMS Worker** | Subscribes to `delivery.sms`. Delivers via pluggable provider adapter (Twilio, webhook) |
@@ -345,7 +345,7 @@ GET    /v1/notifications/:id               # Status + event log
 
 ### Send Pipeline
 
-1. **Send Service** receives `POST /v1/send`, validates, auto-creates user if needed, persists notification to Postgres with `status: pending`, publishes to `notification.send` on NATS, returns `202 Accepted`
+1. **Admin Service** receives `POST /v1/send`, validates, auto-creates user if needed, persists notification to Postgres with `status: pending`, publishes to `notification.send` on NATS, returns `202 Accepted`
 2. **Router** subscribes to `notification.send` (consumer group). Resolves templates (type config cached in Redis, key: `type:{slug}`, TTL: 5 min, invalidated on type update). Determines channels: explicit override → user preferences → group defaults. Publishes to `delivery.{channel}` per channel. Publishes routing events to `notification.events`
 3. **Delivery Workers** subscribe to their channel subject. Deliver via provider adapter. Publish result events to `notification.events`
 4. **Event Writer** subscribes to `notification.events`. Batch-inserts to notification_events table (batch size: 100 events or 500ms flush interval, whichever comes first). Updates top-level notification status and timestamps using the rollup rules
@@ -502,7 +502,7 @@ The Webhook adapter is the escape hatch — the SaaS provider can route to any p
 ```
 hermes/
 ├── cmd/
-│   ├── send/
+│   ├── admin/
 │   ├── router/
 │   ├── worker-email/
 │   ├── worker-sms/
@@ -541,7 +541,7 @@ hermes/
 
 | Service | Min replicas | Scaling trigger | Notes |
 |---------|-------------|----------------|-------|
-| Send | 2 | Request rate (HPA) | Stateless — validate and publish |
+| Admin | 2 | Request rate (HPA) | Stateless — validate and publish |
 | Router | 2 | NATS consumer lag (KEDA) | CPU-bound (template rendering) |
 | Email Worker | 2 | NATS consumer lag (KEDA) | Rate-limit to provider quotas |
 | SMS Worker | 2 | NATS consumer lag (KEDA) | Rate-limit to provider quotas |
@@ -559,7 +559,7 @@ hermes/
 - **Nginx Ingress Controller** for cloud-agnostic L7 routing, TLS termination, and WebSocket upgrade support
 - Exposed via `LoadBalancer` type Service, which provisions the cloud provider's native L4 load balancer automatically
 - Path-based routing:
-  - `/v1/send`, `/v1/types`, `/v1/groups`, `/v1/notifications` → Send service
+  - `/v1/send`, `/v1/types`, `/v1/groups`, `/v1/notifications` → Admin service
   - `/v1/inbox` → Inbox Service
   - `/v1/users` → User Service
   - `/centrifugo` → Centrifugo (WebSocket)
@@ -569,7 +569,7 @@ hermes/
 
 - Start small: 100–200m CPU, 128–256Mi memory per service
 - NATS consumers scale horizontally via consumer groups
-- HPA for request-facing services (Send, Inbox Service, User Service)
+- HPA for request-facing services (Admin, Inbox Service, User Service)
 - KEDA for NATS consumer services (Router, workers, Event Writer)
 
 ### Observability
