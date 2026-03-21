@@ -1,0 +1,55 @@
+package cli_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/hermes-notifications/hermes/internal/cli"
+)
+
+func TestGroupsListTableOutput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/groups" && r.Method == "GET" {
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"id": "g1", "slug": "alerts", "name": "Alerts", "default_channels": []string{"email"}, "created_at": "2026-01-01T00:00:00Z"},
+			})
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+
+	cmd := cli.NewRootCmdForTest()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--url", srv.URL, "--api-key", "test", "groups", "list"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("alerts")) {
+		t.Errorf("expected 'alerts' in output, got: %s", out.String())
+	}
+}
+
+func TestGroupsListJSONOutput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]map[string]any{
+			{"id": "g1", "slug": "alerts", "name": "Alerts", "default_channels": []string{"email"}, "created_at": "2026-01-01T00:00:00Z"},
+		})
+	}))
+	defer srv.Close()
+
+	cmd := cli.NewRootCmdForTest()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--url", srv.URL, "--api-key", "test", "-o", "json", "groups", "list"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("alerts")) {
+		t.Errorf("expected 'alerts' in JSON output, got: %s", out.String())
+	}
+}
