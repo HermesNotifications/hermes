@@ -1,0 +1,15 @@
+{
+  "engine": "redis",
+  "redis_address": "redis:6379",
+  "broker": "nats",
+  "nats_url": "nats://nats:4222",
+  "token_hmac_secret_key": "dev-jwt-secret",
+  "api_key": "centrifugo-api-key",
+  "admin": true,
+  "presence": true,
+  "history_size": 50,
+  "history_ttl": "1h",
+  "user_subscribe_to_personal": true,
+  "allow_user_limited_channels": true,
+  "health": true
+}

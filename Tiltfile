@@ -18,16 +18,8 @@ services = {
     "user":          {"port": 8087},
 }
 
-# --- Infrastructure ---
-k8s_yaml([
-    "deploy/k8s-local/namespace.yaml",
-    "deploy/k8s-local/configmap.yaml",
-    "deploy/k8s-local/secrets.yaml",
-    "deploy/k8s-local/postgres.yaml",
-    "deploy/k8s-local/nats.yaml",
-    "deploy/k8s-local/redis.yaml",
-    "deploy/k8s-local/centrifugo.yaml",
-])
+# --- Infrastructure from Kustomize local overlay ---
+k8s_yaml(kustomize("deploy/k8s/overlays/local"))
 
 k8s_resource("postgres", labels=["infra"], port_forwards=["5432:5432"])
 k8s_resource("nats", labels=["infra"], port_forwards=["4222:4222", "8222:8222"])
@@ -113,62 +105,7 @@ for svc_name, svc_cfg in services.items():
         ],
     )
 
-    # Generate K8s Deployment + Service YAML inline
-    k8s_yaml(blob("""
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: hermes-{name}
-  namespace: hermes
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: hermes-{name}
-  template:
-    metadata:
-      labels:
-        app: hermes-{name}
-    spec:
-      containers:
-        - name: {name}
-          image: {image}
-          ports:
-            - containerPort: {port}
-          envFrom:
-            - configMapRef:
-                name: hermes-config
-            - secretRef:
-                name: hermes-secrets
-          env:
-            - name: HERMES_HTTP_PORT
-              value: "{port}"
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: {port}
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: {port}
-            initialDelaySeconds: 5
-            periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: hermes-{name}
-  namespace: hermes
-spec:
-  selector:
-    app: hermes-{name}
-  ports:
-    - port: {port}
-      targetPort: {port}
-""".format(name=svc_name, image=img, port=port)))
-
+    # Service deployments come from Kustomize; Tilt matches by image name
     k8s_resource(
         "hermes-" + svc_name,
         port_forwards=["{port}:{port}".format(port=port)],

@@ -1,0 +1,129 @@
+# API services — higher resource allocation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-admin
+spec:
+  template:
+    spec:
+      containers:
+        - name: admin
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-router
+spec:
+  template:
+    spec:
+      containers:
+        - name: router
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-inbox
+spec:
+  template:
+    spec:
+      containers:
+        - name: inbox
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-user
+spec:
+  template:
+    spec:
+      containers:
+        - name: user
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+# Workers
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-events
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-events
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-email
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-email
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-sms
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-sms
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-inbox
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-inbox
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi

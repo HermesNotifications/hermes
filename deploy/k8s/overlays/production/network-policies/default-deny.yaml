@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: hermes
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # Allow DNS resolution for all pods
+  egress:
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

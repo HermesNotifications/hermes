@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - postgres.yaml
+  - redis.yaml
+  - secrets.yaml
+
+patches:
+  # Replace 3-node NATS StatefulSet with single-node for local dev
+  - path: patches/nats-local.yaml
+
+configMapGenerator:
+  - name: hermes-config
+    behavior: merge
+    literals:
+      - HERMES_DATABASE_URL=postgres://hermes:hermes@postgres:5432/hermes?sslmode=disable
+      - HERMES_REDIS_URL=redis://redis:6379/0
+    options:
+      disableNameSuffixHash: true
+  # Override centrifugo config for local dev (admin enabled, dev secrets)
+  - name: centrifugo-config
+    behavior: replace
+    files:
+      - config.json=centrifugo-config.json
+    options:
+      disableNameSuffixHash: true
+
+images:
+  - name: hermes-admin
+    newName: k3d-hermes-registry.localhost:5111/hermes-admin
+  - name: hermes-router
+    newName: k3d-hermes-registry.localhost:5111/hermes-router
+  - name: hermes-inbox
+    newName: k3d-hermes-registry.localhost:5111/hermes-inbox
+  - name: hermes-user
+    newName: k3d-hermes-registry.localhost:5111/hermes-user
+  - name: hermes-worker-events
+    newName: k3d-hermes-registry.localhost:5111/hermes-worker-events
+  - name: hermes-worker-email
+    newName: k3d-hermes-registry.localhost:5111/hermes-worker-email
+  - name: hermes-worker-sms
+    newName: k3d-hermes-registry.localhost:5111/hermes-worker-sms
+  - name: hermes-worker-inbox
+    newName: k3d-hermes-registry.localhost:5111/hermes-worker-inbox

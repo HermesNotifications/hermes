@@ -156,3 +156,15 @@ jobs:
             --build-arg SERVICE="$SERVICE" \
             -t "hermes-${SERVICE}:ci" \
             -f deploy/docker/Dockerfile .
+
+  kustomize-validate:
+    name: Validate Kustomize Overlays
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate all overlays render cleanly
+        run: |
+          kubectl kustomize deploy/k8s/overlays/local
+          kubectl kustomize deploy/k8s/overlays/staging
+          kubectl kustomize deploy/k8s/overlays/production

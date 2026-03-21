@@ -1,0 +1,56 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - external-secrets.yaml
+  - secret-store.yaml
+  - hpa/
+  - pdb/
+  - network-policies/
+
+patches:
+  - path: patches/replicas.yaml
+  - path: patches/resources.yaml
+  - path: patches/anti-affinity.yaml
+
+# DATABASE_URL and REDIS_URL are provided by ExternalSecret (hermes-secrets)
+# No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL
+
+configMapGenerator:
+  - name: centrifugo-config
+    behavior: replace
+    files:
+      - config.json=centrifugo-config.json
+    options:
+      disableNameSuffixHash: true
+
+# Update with your production container registry
+images:
+  - name: hermes-admin
+    newName: REGISTRY/hermes-admin
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-router
+    newName: REGISTRY/hermes-router
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-inbox
+    newName: REGISTRY/hermes-inbox
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-user
+    newName: REGISTRY/hermes-user
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-worker-events
+    newName: REGISTRY/hermes-worker-events
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-worker-email
+    newName: REGISTRY/hermes-worker-email
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-worker-sms
+    newName: REGISTRY/hermes-worker-sms
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-worker-inbox
+    newName: REGISTRY/hermes-worker-inbox
+    newTag: SET_BY_CD_PIPELINE
+  - name: hermes-migrate
+    newName: REGISTRY/hermes-migrate
+    newTag: SET_BY_CD_PIPELINE

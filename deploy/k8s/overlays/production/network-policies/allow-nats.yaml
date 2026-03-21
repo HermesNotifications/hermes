@@ -1,0 +1,100 @@
+# Allow all hermes pods to reach NATS on client port
+# Allow NATS pods to communicate on cluster port
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nats-client
+  namespace: hermes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+  policyTypes:
+    - Ingress
+  ingress:
+    # Client connections from all hermes pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: hermes
+      ports:
+        - protocol: TCP
+          port: 4222
+    # Cluster communication between NATS nodes
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats
+      ports:
+        - protocol: TCP
+          port: 6222
+    # Monitor port for health checks
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8222
+---
+# Allow hermes pods to connect to NATS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-nats
+  namespace: hermes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: hermes
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats
+      ports:
+        - protocol: TCP
+          port: 4222
+---
+# Allow hermes pods to connect to Centrifugo
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-centrifugo
+  namespace: hermes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: hermes
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: centrifugo
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# Allow Centrifugo to reach NATS (broker)
+# Centrifugo's egress to managed Redis is covered by allow-egress-managed-services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-centrifugo-egress
+  namespace: hermes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: centrifugo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: hermes
+      ports:
+        - protocol: TCP
+          port: 8000
