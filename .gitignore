@@ -16,4 +16,10 @@
 # Environment
 .env
 .env.local
+# Built service binaries
 /admin
+/router
+/worker-*
+/inbox
+/user
+/migrate
