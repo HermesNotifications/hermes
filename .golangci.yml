@@ -1,0 +1,25 @@
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+issues:
+  exclude-rules:
+    # Allow dot-imports in test files (e.g. testify)
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosimple
+
+    # Allow unchecked errors in test helpers and defers
+    - source: "defer "
+      linters:
+        - errcheck
