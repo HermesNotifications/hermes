@@ -10,8 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/store"
 	"github.com/hermes-notifications/hermes/internal/userservice"
 )
@@ -31,7 +33,31 @@ func main() {
 	defer pool.Close()
 
 	st := store.New(pool)
-	srv := userservice.NewServer(st, []byte(cfg.JWTSecret), logger)
+
+	// Ensure Hermes internal signing key exists
+	if err := st.EnsureHermesSigningKey(ctx, cfg.JWTSecret); err != nil {
+		logger.Error("failed to ensure hermes signing key", "error", err)
+		os.Exit(1)
+	}
+
+	keyProvider := func() []auth.JWTSigningConfig {
+		keys, err := st.ListActiveJWTSigningKeys(context.Background())
+		if err != nil {
+			logger.Error("failed to load JWT signing keys", "error", err)
+			return nil
+		}
+		return jwtSigningConfigs(keys)
+	}
+
+	resolver := func(ctx context.Context, tenantID, externalID string) (string, error) {
+		user, err := st.EnsureUser(ctx, tenantID, externalID)
+		if err != nil {
+			return "", err
+		}
+		return user.ID, nil
+	}
+
+	srv := userservice.NewServer(st, keyProvider, resolver, logger)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
@@ -54,4 +80,19 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	httpServer.Shutdown(shutdownCtx)
+}
+
+func jwtSigningConfigs(keys []models.JWTSigningKey) []auth.JWTSigningConfig {
+	configs := make([]auth.JWTSigningConfig, len(keys))
+	for i, k := range keys {
+		configs[i] = auth.JWTSigningConfig{
+			Name:          k.Name,
+			Secret:        []byte(k.Secret),
+			Algorithm:     k.Algorithm,
+			UserIDClaim:   k.UserIDClaim,
+			TenantIDClaim: k.TenantIDClaim,
+			Internal:      k.Name == "hermes-internal",
+		}
+	}
+	return configs
 }

@@ -23,11 +23,12 @@ type UserStore interface {
 
 // Server is the user-facing HTTP service.
 type Server struct {
-	store    UserStore
-	logger   *slog.Logger
-	mux      *http.ServeMux
-	skipAuth bool
-	jwtSecret []byte
+	store          UserStore
+	logger         *slog.Logger
+	mux            *http.ServeMux
+	skipAuth       bool
+	jwtKeyProvider auth.JWTKeyProvider
+	userResolver   auth.UserResolver
 }
 
 // SetSkipAuth disables JWT authentication. Intended for use in tests only.
@@ -35,12 +36,13 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store UserStore, jwtSecret []byte, logger *slog.Logger) *Server {
+func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, resolver auth.UserResolver, logger *slog.Logger) *Server {
 	s := &Server{
-		store:     store,
-		jwtSecret: jwtSecret,
-		logger:    logger,
-		mux:       http.NewServeMux(),
+		store:          store,
+		jwtKeyProvider: keyProvider,
+		userResolver:   resolver,
+		logger:         logger,
+		mux:            http.NewServeMux(),
 	}
 	s.routes()
 	return s
@@ -64,7 +66,7 @@ func (s *Server) routes() {
 func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.mux
 	if !s.skipAuth {
-		h = auth.JWTMiddleware(s.jwtSecret)(h)
+		h = auth.JWTMiddleware(s.jwtKeyProvider, s.userResolver)(h)
 	}
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)
