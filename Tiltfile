@@ -41,9 +41,9 @@ local_resource(
     "migrate",
     cmd=" && ".join([
         "go build -o ./bin/migrate ./cmd/migrate/",
-        "for i in 1 2 3 4 5 6 7 8 9 10; do "
+        'for i in 1 2 3 4 5 6 7 8 9 10; do '
         "./bin/migrate -database-url 'postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable' "
-        "-migrations-path ./migrations && break || sleep 2; done",
+        '-migrations-path ./migrations && break || sleep 2; done',
     ]),
     deps=["migrations/", "cmd/migrate/"],
     resource_deps=["postgres"],
