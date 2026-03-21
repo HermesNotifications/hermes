@@ -11,15 +11,28 @@ linters:
     - staticcheck
     - unused
 
+linters-settings:
+  errcheck:
+    exclude-functions:
+      # HTTP response writes — errors here mean the client disconnected, nothing to do
+      - (net/http.ResponseWriter).Write
+      - (*net/http.Server).Shutdown
+      # JSON encoding to response — same as above
+      - (*encoding/json.Encoder).Encode
+      # Best-effort cache operations — failures are logged or non-critical
+      - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetTypeConfig
+      - (*github.com/hermes-notifications/hermes/internal/cache.Client).InvalidateTypeConfig
+      - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetIdempotencyKey
+
 issues:
   exclude-rules:
-    # Allow dot-imports in test files (e.g. testify)
+    # Allow unchecked errors in test files
     - path: _test\.go
       linters:
         - errcheck
         - gosimple
 
-    # Allow unchecked errors in test helpers and defers
+    # Allow unchecked errors in defers
     - source: "defer "
       linters:
         - errcheck
