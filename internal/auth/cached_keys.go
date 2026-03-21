@@ -97,5 +97,5 @@ func (c *CachedKeys) populateRedis(keys []JWTSigningConfig) {
 	if err != nil {
 		return
 	}
-	c.redis.SetJWTSigningKeys(context.Background(), data, c.redisTTL)
+	_ = c.redis.SetJWTSigningKeys(context.Background(), data, c.redisTTL)
 }

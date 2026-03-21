@@ -53,7 +53,7 @@ func (s *Server) handleCreateSigningKey(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if s.cache != nil {
-		s.cache.InvalidateJWTSigningKeys(r.Context())
+		_ = s.cache.InvalidateJWTSigningKeys(r.Context())
 	}
 
 	s.jsonResponse(w, http.StatusCreated, key)
@@ -84,7 +84,7 @@ func (s *Server) handleDeleteSigningKey(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if s.cache != nil {
-		s.cache.InvalidateJWTSigningKeys(r.Context())
+		_ = s.cache.InvalidateJWTSigningKeys(r.Context())
 	}
 
 	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})

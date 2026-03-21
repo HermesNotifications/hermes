@@ -109,7 +109,12 @@ func TestInbox_ReadPath(t *testing.T) {
 	}
 
 	// ── Inbox Service ───────────────────────────────────────────────────
-	srv := inbox.NewServer(st, nil, nil, "", []byte(testJWTSecret), logger)
+	keyProvider := auth.JWTKeyProvider(func() []auth.JWTSigningConfig {
+		return []auth.JWTSigningConfig{
+			{Name: "test", Secret: []byte(testJWTSecret), Algorithm: "HS256", UserIDClaim: "sub", TenantIDClaim: "tenant_id"},
+		}
+	})
+	srv := inbox.NewServer(st, nil, nil, "", keyProvider, nil, logger)
 	handler := srv.Handler()
 
 	jwtToken := makeJWT(t, userID, tenantID)

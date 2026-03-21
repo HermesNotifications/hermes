@@ -101,7 +101,7 @@ func JWTMiddleware(keyProvider JWTKeyProvider, resolver UserResolver) func(http.
 			userIDRaw, ok := validClaims[matchedCfg.UserIDClaim]
 			if !ok {
 				// Fall back to "sub" from registered claims
-				userIDRaw, ok = validClaims["sub"]
+				userIDRaw = validClaims["sub"]
 			}
 			tenantIDRaw, tok := validClaims[matchedCfg.TenantIDClaim]
 
