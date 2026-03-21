@@ -45,6 +45,12 @@ type AdminStore interface {
 
 	// API Keys
 	ListAPIKeys(ctx context.Context) ([]models.APIKey, error)
+
+	// JWT Signing Keys
+	CreateJWTSigningKey(ctx context.Context, name, algorithm, secret, userIDClaim, tenantIDClaim string) (*models.JWTSigningKey, error)
+	ListJWTSigningKeys(ctx context.Context) ([]models.JWTSigningKey, error)
+	DeleteJWTSigningKey(ctx context.Context, id string) error
+	EnsureHermesSigningKey(ctx context.Context, secret string) error
 }
 
 type Server struct {
@@ -100,6 +106,11 @@ func (s *Server) routes() {
 
 	// Auth token exchange
 	s.mux.HandleFunc("POST /v1/auth/token", s.handleAuthToken)
+
+	// JWT signing key management
+	s.mux.HandleFunc("POST /v1/auth/keys", s.handleCreateSigningKey)
+	s.mux.HandleFunc("GET /v1/auth/keys", s.handleListSigningKeys)
+	s.mux.HandleFunc("DELETE /v1/auth/keys/{id}", s.handleDeleteSigningKey)
 }
 
 func (s *Server) Handler() http.Handler {

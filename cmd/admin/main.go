@@ -52,6 +52,13 @@ func main() {
 	defer redisClient.Close()
 
 	st := store.New(pool)
+
+	// Ensure Hermes internal signing key exists
+	if err := st.EnsureHermesSigningKey(ctx, cfg.JWTSecret); err != nil {
+		logger.Error("failed to ensure hermes signing key", "error", err)
+		os.Exit(1)
+	}
+
 	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte(cfg.JWTSecret), logger)
 
 	httpServer := &http.Server{
