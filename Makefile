@@ -1,3 +1,50 @@
+# --- Variables ---
+SERVICES := admin router worker-events worker-email worker-sms worker-inbox inbox user migrate
+DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
+
+# --- Build ---
+.PHONY: build build-%
+build: $(addprefix build-,$(SERVICES))   ## Build all services
+build-%:                                  ## Build a single service (e.g. make build-admin)
+	go build -o bin/$*/service ./cmd/$*/
+
+# --- Test ---
+.PHONY: test test-integration test-e2e
+test:              ## Run unit tests (no infra needed)
+	go test ./... -count=1
+test-integration:  ## Run all tests including integration (requires make infra-up)
+	go test ./... -tags=integration -race -timeout=120s -count=1
+test-e2e:          ## Run E2E tests only (requires make infra-up)
+	go test ./tests/e2e/... -tags=integration -v -timeout=30s
+
+# --- Lint ---
+.PHONY: lint
+lint:              ## Run golangci-lint
+	golangci-lint run
+
+# --- Infrastructure ---
+.PHONY: infra-up infra-down migrate
+infra-up:          ## Start local Postgres, NATS, Redis via Docker Compose
+	docker compose up -d
+infra-down:        ## Stop local infrastructure
+	docker compose down
+migrate:           ## Run database migrations
+	go run ./cmd/migrate/ -database-url "$(DB_URL)" -migrations-path ./migrations
+
+# --- Docker ---
+.PHONY: docker-%
+docker-%:          ## Build Docker image for a service (e.g. make docker-admin)
+	docker build --build-arg SERVICE=$* -t hermes-$* -f deploy/docker/Dockerfile .
+
+# --- Helpers ---
+.PHONY: help
+help:              ## Show available targets
+	@grep -E '^[a-zA-Z0-9_%-]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+# =============================================================================
+# K8s Dev Environment (requires k3d, tilt, kubectl)
+# =============================================================================
+
 .PHONY: dev-up dev-down dev-restart dev-status dev-logs dev-psql dev-migrate dev-ui dev-prereqs
 
 CLUSTER_NAME := hermes-dev

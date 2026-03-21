@@ -6,40 +6,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Start local infrastructure (Postgres, NATS with JetStream, Redis)
-docker compose up -d
+make infra-up
 
-# Build a specific service
-go build ./cmd/admin/
+# Build all services (binaries output to bin/<service>/service)
+make build
 
-# Build all services
-for svc in admin router worker-events worker-email worker-sms worker-inbox inbox user migrate; do go build ./cmd/$svc/; done
+# Build a single service
+make build-admin
 
 # Run unit tests (no infrastructure needed)
-go test ./...
+make test
 
 # Run a single test
 go test ./internal/store/... -run TestCreateGroup -v
 
-# Run integration tests (requires Docker Compose running)
-go test ./internal/store/... -tags=integration -v
+# Run integration tests (requires make infra-up)
+make test-integration
 
-# Run E2E tests (requires Docker Compose running)
-go test ./tests/e2e/... -tags=integration -v -timeout=30s
-
-# Run a specific E2E test
-go test ./tests/e2e/... -tags=integration -v -run TestDeliveryPipeline -timeout=30s
-
-# Run ALL tests including integration
-go test ./... -tags=integration -timeout=120s
+# Run E2E tests (requires make infra-up)
+make test-e2e
 
 # Lint
-golangci-lint run
-
-# Build Docker image for a service
-docker build --build-arg SERVICE=admin -t hermes-admin -f deploy/docker/Dockerfile .
+make lint
 
 # Run database migrations
-go run ./cmd/migrate/ -database-url "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable" -migrations-path ./migrations
+make migrate
+
+# Build Docker image for a service
+make docker-admin
+
+# Show all available Make targets
+make help
 ```
 
 ## Architecture
