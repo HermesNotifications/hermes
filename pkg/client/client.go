@@ -95,5 +95,4 @@ func (c *Client) do(req *http.Request, v any) error {
 }
 
 // Stubs — will be replaced in subsequent tasks
-type NotificationsService struct{ client *Client }
 type AuthService struct{ client *Client }
