@@ -161,8 +161,9 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 				"group": req.Group,
 				"type":  req.Type,
 			},
-			"data":    req.Data,
-			"attempt": 1,
+			"group_id": groupID,
+			"data":     req.Data,
+			"attempt":  1,
 		}
 		if len(req.Channels) > 0 {
 			msg["channels"] = req.Channels

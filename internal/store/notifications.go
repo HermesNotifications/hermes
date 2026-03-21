@@ -86,3 +86,8 @@ func (s *Store) GetNotificationEvents(ctx context.Context, notificationID string
 	}
 	return events, rows.Err()
 }
+
+func (s *Store) UpdateNotificationChannels(ctx context.Context, notificationID string, channels []string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE notifications SET channels = $2 WHERE id = $1`, notificationID, channels)
+	return err
+}
