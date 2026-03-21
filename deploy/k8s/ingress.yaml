@@ -1,0 +1,63 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hermes-ingress
+  namespace: hermes
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: centrifugo
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /v1/send
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/types
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/groups
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/inbox
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-inbox
+                port:
+                  number: 8086
+          - path: /v1/users
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-user
+                port:
+                  number: 8087
+          - path: /centrifugo
+            pathType: Prefix
+            backend:
+              service:
+                name: centrifugo
+                port:
+                  number: 8000

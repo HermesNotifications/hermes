@@ -1,0 +1,63 @@
+package delivery
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+)
+
+type WebhookProvider struct {
+	name   string
+	url    string
+	client *http.Client
+}
+
+func NewWebhookProvider(name, url string) *WebhookProvider {
+	return &WebhookProvider{
+		name: name,
+		url:  url,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+}
+
+func (w *WebhookProvider) Name() string {
+	return w.name
+}
+
+func (w *WebhookProvider) Send(ctx context.Context, req DeliveryRequest) (DeliveryResult, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return DeliveryResult{}, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, w.url, bytes.NewReader(body))
+	if err != nil {
+		return DeliveryResult{}, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := w.client.Do(httpReq)
+	if err != nil {
+		return DeliveryResult{}, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return DeliveryResult{
+			Success:      false,
+			ProviderName: w.name,
+			Error:        fmt.Sprintf("unexpected status code: %d", resp.StatusCode),
+		}, fmt.Errorf("webhook returned status %d", resp.StatusCode)
+	}
+
+	return DeliveryResult{
+		Success:      true,
+		ProviderName: w.name,
+		ProviderID:   resp.Header.Get("X-Provider-ID"),
+	}, nil
+}
