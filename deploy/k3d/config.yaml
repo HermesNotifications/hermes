@@ -1,0 +1,18 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: hermes-dev
+registries:
+  create:
+    name: k3d-hermes-registry
+    host: "0.0.0.0"
+    hostPort: "5111"
+options:
+  k3d:
+    wait: true
+    timeout: "120s"
+  k3s:
+    extraArgs:
+      - arg: "--disable=traefik"
+        nodeFilters:
+          - server:*

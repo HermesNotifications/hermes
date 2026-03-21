@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: hermes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      containers:
+        - name: nats
+          image: nats:2-alpine
+          args:
+            - "--jetstream"
+            - "--store_dir=/data"
+          ports:
+            - containerPort: 4222
+              name: client
+            - containerPort: 8222
+              name: monitor
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8222
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: hermes
+spec:
+  selector:
+    app: nats
+  ports:
+    - port: 4222
+      name: client
+      targetPort: 4222
+    - port: 8222
+      name: monitor
+      targetPort: 8222
