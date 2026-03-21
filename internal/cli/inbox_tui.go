@@ -50,8 +50,7 @@ type clearStatusMsg struct{}
 // -- Model --
 
 type inboxModel struct {
-	inbox   *client.InboxClient
-	program *tea.Program
+	inbox *client.InboxClient
 
 	items        []client.InboxNotification
 	cursor       int

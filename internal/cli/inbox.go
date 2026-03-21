@@ -35,6 +35,13 @@ func newInboxOpenCmd() *cobra.Command {
 		Use: "open", Short: "Interactive inbox viewer",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			baseURL, _ := cmd.Root().PersistentFlags().GetString("url")
+			if inboxURL == "" {
+				inboxURL = baseURL
+			}
+			if centrifugoURL == "" {
+				centrifugoURL = httpToWS(baseURL) + "/centrifugo"
+			}
 
 			// Exchange API key for JWT
 			c := newClientFromCmd(cmd)
@@ -75,12 +82,10 @@ func newInboxOpenCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
-	cmd.Flags().StringVar(&inboxURL, "inbox-url", os.Getenv("HERMES_INBOX_URL"), "Inbox service URL (env: HERMES_INBOX_URL)")
-	cmd.Flags().StringVar(&centrifugoURL, "centrifugo-url", os.Getenv("HERMES_CENTRIFUGO_URL"), "Centrifugo WebSocket URL (env: HERMES_CENTRIFUGO_URL)")
+	cmd.Flags().StringVar(&inboxURL, "inbox-url", os.Getenv("HERMES_INBOX_URL"), "Inbox service URL override (env: HERMES_INBOX_URL)")
+	cmd.Flags().StringVar(&centrifugoURL, "centrifugo-url", os.Getenv("HERMES_CENTRIFUGO_URL"), "Centrifugo WebSocket URL override (env: HERMES_CENTRIFUGO_URL)")
 	cmd.MarkFlagRequired("tenant-id")
 	cmd.MarkFlagRequired("user-id")
-	cmd.MarkFlagRequired("inbox-url")
-	cmd.MarkFlagRequired("centrifugo-url")
 	return cmd
 }
 
@@ -97,6 +102,10 @@ func newInboxListenCmd() *cobra.Command {
 			ctx := cmd.Context()
 			out := cmd.OutOrStdout()
 			outputFmt := getOutput(cmd)
+			baseURL, _ := cmd.Root().PersistentFlags().GetString("url")
+			if centrifugoURL == "" {
+				centrifugoURL = httpToWS(baseURL) + "/centrifugo"
+			}
 
 			// Step 1: Get unified JWT
 			c := newClientFromCmd(cmd)
@@ -181,11 +190,18 @@ func newInboxListenCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
-	cmd.Flags().StringVar(&centrifugoURL, "centrifugo-url", os.Getenv("HERMES_CENTRIFUGO_URL"), "Centrifugo WebSocket URL (env: HERMES_CENTRIFUGO_URL)")
+	cmd.Flags().StringVar(&centrifugoURL, "centrifugo-url", os.Getenv("HERMES_CENTRIFUGO_URL"), "Centrifugo WebSocket URL override (env: HERMES_CENTRIFUGO_URL)")
 	cmd.MarkFlagRequired("tenant-id")
 	cmd.MarkFlagRequired("user-id")
-	cmd.MarkFlagRequired("centrifugo-url")
 	return cmd
+}
+
+// httpToWS converts an HTTP(S) URL to a WS(S) URL.
+func httpToWS(url string) string {
+	url = strings.TrimRight(url, "/")
+	url = strings.Replace(url, "https://", "wss://", 1)
+	url = strings.Replace(url, "http://", "ws://", 1)
+	return url
 }
 
 func parseJWTSubject(tokenStr string) (string, error) {

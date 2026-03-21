@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  GO_VERSION: "1.24.0"
+  GO_VERSION: "1.25.0"
 
 jobs:
   lint:
@@ -21,9 +21,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: "v2.11.3"
 
   test-unit:
     name: Unit Tests

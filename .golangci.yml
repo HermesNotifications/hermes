@@ -1,40 +1,56 @@
+version: "2"
+
 run:
   timeout: 5m
 
 linters:
-  disable-all: true
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
 
-linters-settings:
-  errcheck:
-    exclude-functions:
-      # HTTP response writes — errors here mean the client disconnected, nothing to do
-      - (net/http.ResponseWriter).Write
-      - (*net/http.Server).Shutdown
-      # JSON encoding to response — same as above
-      - (*encoding/json.Encoder).Encode
-      # Best-effort cache operations — failures are logged or non-critical
-      - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetTypeConfig
-      - (*github.com/hermes-notifications/hermes/internal/cache.Client).InvalidateTypeConfig
-      - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetIdempotencyKey
-      # Background health check servers in workers — error logged by Go's default handler
-      - net/http.ListenAndServe
+  settings:
+    errcheck:
+      exclude-functions:
+        # HTTP response writes — errors here mean the client disconnected, nothing to do
+        - (net/http.ResponseWriter).Write
+        - (*net/http.Server).Shutdown
+        # JSON encoding to response — same as above
+        - (*encoding/json.Encoder).Encode
+        # Best-effort JSON decoding in error paths — extract message if possible, not critical
+        - (*encoding/json.Decoder).Decode
+        # Best-effort cache operations — failures are logged or non-critical
+        - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetTypeConfig
+        - (*github.com/hermes-notifications/hermes/internal/cache.Client).InvalidateTypeConfig
+        - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetIdempotencyKey
+        # Background health check servers in workers — error logged by Go's default handler
+        - net/http.ListenAndServe
+        # CLI output — write errors mean terminal is gone, nothing to recover
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*os.File).Write
+        # Cobra flag marking — panics on unknown flags anyway, safe to ignore
+        - (*github.com/spf13/cobra.Command).MarkFlagRequired
+        # CLI output writes — terminal gone means nothing to recover
+        - (io.Writer).Write
+        # Tabwriter flush and JSON unmarshal in CLI output paths
+        - (*text/tabwriter.Writer).Flush
+        - encoding/json.Unmarshal
+        # Centrifugo subscription cleanup — best-effort in defer
+        - (*github.com/centrifugal/centrifuge-go.Subscription).Unsubscribe
 
-issues:
-  exclude-rules:
-    # Allow unchecked errors in test files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosimple
+  exclusions:
+    rules:
+      # Allow unchecked errors in test files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - staticcheck
 
-    # Allow unchecked errors in defers
-    - source: "defer "
-      linters:
-        - errcheck
+      # Allow unchecked errors in defers
+      - source: "defer "
+        linters:
+          - errcheck

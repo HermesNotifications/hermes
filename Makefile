@@ -61,7 +61,7 @@ dev-prereqs:
 
 # --- Core Commands ---
 
-## Start local K8s dev environment (creates cluster + starts Tilt)
+## Start local K8s dev environment (API gateway at http://localhost:8888)
 dev-up: dev-prereqs
 	@if k3d cluster list 2>/dev/null | grep -q $(CLUSTER_NAME); then \
 		echo "Cluster $(CLUSTER_NAME) already exists, starting Tilt..."; \
