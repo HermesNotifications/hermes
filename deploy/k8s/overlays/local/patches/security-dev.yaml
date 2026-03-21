@@ -1,0 +1,10 @@
+# Relax filesystem restrictions for Tilt live_update.
+# - readOnlyRootFilesystem: false — restart wrapper needs to write files
+# - Remove /tmp emptyDir mount — it shadows files the restart wrapper needs
+- op: replace
+  path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+  value: false
+- op: remove
+  path: /spec/template/spec/containers/0/volumeMounts/0
+- op: remove
+  path: /spec/template/spec/volumes/0

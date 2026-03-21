@@ -10,6 +10,21 @@ resources:
 patches:
   # Replace 3-node NATS StatefulSet with single-node for local dev
   - path: patches/nats-local.yaml
+  # Relax readOnlyRootFilesystem for Tilt live_update (restart wrapper needs writes)
+  - path: patches/security-dev.yaml
+    target:
+      kind: Deployment
+      name: "hermes-.*"
+  # Remove migration Job — Tilt runs migrations via local_resource
+  - target:
+      kind: Job
+      name: hermes-migrate
+    patch: |
+      $patch: delete
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: hermes-migrate
 
 configMapGenerator:
   - name: hermes-config
