@@ -12,7 +12,7 @@ pkg/client/          — Go SDK wrapping the Admin HTTP API
   groups.go          — Group operations
   types.go           — Notification type operations
   notifications.go   — Send + status operations
-  auth.go            — Token exchange + signing key operations
+  auth.go            — Token exchange
 
 cmd/hermes/          — CLI entry point
   main.go            — Cobra root command setup
@@ -23,7 +23,6 @@ internal/cli/        — CLI command implementations
   types.go           — hermes types [list|create|update|delete]
   notifications.go   — hermes notifications [send|status]
   auth.go            — hermes auth [token]
-  keys.go            — hermes keys [list|create|delete]
   inbox.go           — hermes inbox [listen]
 ```
 
@@ -56,9 +55,6 @@ Methods organized by resource sub-structs (single level of nesting):
 - `client.Notifications.Send(ctx, SendRequest, opts ...SendOption) (*SendResponse, error)`
 - `client.Notifications.GetStatus(ctx, id) (*NotificationStatus, error)`
 - `client.Auth.ExchangeToken(ctx, TokenRequest) (*TokenResponse, error)`
-- `client.SigningKeys.List(ctx) ([]SigningKey, error)`
-- `client.SigningKeys.Create(ctx, CreateKeyRequest) (*SigningKey, error)`
-- `client.SigningKeys.Delete(ctx, id) error`
 
 `SendOption` is a functional option for request-level settings like idempotency key (sent as `X-Idempotency-Key` header, not body field).
 
@@ -89,16 +85,6 @@ type UpdateGroupRequest struct {
 type TokenResponse struct {
     Token     string `json:"token"`
     ExpiresAt string `json:"expires_at"` // RFC3339
-}
-
-type SigningKey struct {
-    ID            string    `json:"id"`
-    Name          string    `json:"name"`
-    Algorithm     string    `json:"algorithm"`
-    UserIDClaim   string    `json:"user_id_claim"`
-    TenantIDClaim string    `json:"tenant_id_claim"`
-    Active        bool      `json:"active"`
-    CreatedAt     time.Time `json:"created_at"`
 }
 
 // SendOption configures per-request behavior
@@ -147,10 +133,7 @@ No default URL — must be explicitly configured.
 | `hermes notifications send` | `--tenant-id`, `--user-id`, `--type`, `--channels`, `--data` (JSON), `--title`, `--body`, `--action-url`, `--action-label`, `--group`, `--idempotency-key` | Send a notification |
 | `hermes notifications status` | `--id` | Get notification with delivery events |
 | `hermes auth token` | `--tenant-id`, `--user-id` | Exchange API key for user JWT |
-| `hermes keys list` | — | List JWT signing keys |
-| `hermes keys create` | `--name`, `--secret`, `--algorithm`, `--user-id-claim`, `--tenant-id-claim` | Create a signing key |
-| `hermes keys delete` | `--id` | Delete a signing key |
-| `hermes inbox listen` | `--tenant-id`, `--user-id`, `--centrifugo-url`, `--inbox-url` | Listen for real-time inbox notifications |
+| `hermes inbox listen` | `--tenant-id`, `--user-id`, `--centrifugo-url` | Listen for real-time inbox notifications |
 
 ## Inbox Listen Flow
 
@@ -158,19 +141,17 @@ The `hermes inbox listen` command simulates a user connecting to Centrifugo for 
 
 ### Steps
 
-1. **Get user JWT** — calls `POST /v1/auth/token` with `--tenant-id` and `--user-id` via the SDK
-2. **Get Centrifugo token** — calls `GET /v1/inbox/centrifugo-token` on the inbox service (`--inbox-url`), authenticated with the JWT from step 1
-3. **Connect to Centrifugo** — uses `centrifugal/centrifuge-go` to open a WebSocket connection to `--centrifugo-url`
-4. **Subscribe** — subscribes to the `user#{userID}` channel
-5. **Print events** — prints each incoming event to stdout
-6. **Run until interrupted** — blocks on SIGINT/SIGTERM for graceful disconnect
+1. **Get unified JWT** — calls `POST /v1/auth/token` with `--tenant-id` and `--user-id` via the SDK. This returns a JWT that works for both API auth and Centrifugo WebSocket auth (signed with the shared `HERMES_JWT_SECRET`).
+2. **Connect to Centrifugo** — uses `centrifugal/centrifuge-go` to open a WebSocket connection to `--centrifugo-url`, authenticating with the JWT from step 1.
+3. **Subscribe** — subscribes to the `user#{userID}` channel (where `userID` is the internal Hermes user ID from the JWT `sub` claim).
+4. **Print events** — prints each incoming event to stdout.
+5. **Run until interrupted** — blocks on SIGINT/SIGTERM for graceful disconnect.
 
 ### Additional Flags
 
 | Flag | Env Var | Required | Description |
 |------|---------|----------|-------------|
 | `--centrifugo-url` | `HERMES_CENTRIFUGO_URL` | Yes | Centrifugo WebSocket endpoint |
-| `--inbox-url` | `HERMES_INBOX_URL` | Yes | Inbox service base URL (for token endpoint) |
 
 ### Output Examples
 
@@ -198,11 +179,10 @@ New dependencies to add:
 
 The CLI authenticates to the Admin API using an API key passed via `--api-key` flag or `HERMES_API_KEY` environment variable. It is purely an HTTP client — no direct database access.
 
-For the inbox listen feature, the CLI performs a two-step token exchange:
-1. API key -> user JWT (via admin service `POST /v1/auth/token`)
-2. User JWT -> Centrifugo token (via inbox service `GET /v1/inbox/centrifugo-token`)
+For the inbox listen feature, the CLI performs a single token exchange:
+- API key -> unified JWT (via admin service `POST /v1/auth/token`)
 
-**Prerequisite:** Both the admin and inbox services must share the same Hermes internal signing key (configured via `HERMES_JWT_SECRET`). The admin service issues JWTs signed with this key, and the inbox service's JWT middleware validates against it via the signing keys table. The `EnsureHermesSigningKey` startup logic in both services handles this automatically when they share the same `HERMES_JWT_SECRET`.
+The unified JWT is signed with `HERMES_JWT_SECRET` (HS256) and works for both Hermes API auth and Centrifugo WebSocket auth. Centrifugo is configured with the same secret (`token_hmac_secret_key`), so no separate Centrifugo token endpoint is needed.
 
 ## Testing Strategy
 
@@ -219,9 +199,9 @@ Test command wiring by executing commands against an `httptest.Server`. Verify:
 - Output formatting works for both table and JSON modes
 
 ### Inbox Listen
-Unit test the token exchange steps and Centrifugo client construction:
-- Two `httptest.Server` instances: one for admin (token exchange), one for inbox (Centrifugo token)
-- The inbox mock validates the JWT from the admin mock — use a shared test signing secret to generate valid JWTs in test fixtures
+Unit test the token exchange and Centrifugo client construction:
+- Single `httptest.Server` for admin (token exchange)
+- Verify the returned JWT is passed correctly to the Centrifugo client constructor
 - Full WebSocket integration test behind `integration` build tag if desired
 
 No new infrastructure required — all unit tests use `httptest`.
