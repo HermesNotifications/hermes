@@ -48,13 +48,14 @@ type AdminStore interface {
 }
 
 type Server struct {
-	store    AdminStore
-	nats     *messaging.Client
-	cache    *cache.Client
-	pool     *pgxpool.Pool
-	logger   *slog.Logger
-	mux      *http.ServeMux
-	skipAuth bool
+	store     AdminStore
+	nats      *messaging.Client
+	cache     *cache.Client
+	pool      *pgxpool.Pool
+	logger    *slog.Logger
+	mux       *http.ServeMux
+	skipAuth  bool
+	jwtSecret []byte
 }
 
 // SetSkipAuth disables API key authentication. Intended for use in tests only.
@@ -62,14 +63,15 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, pool *pgxpool.Pool, logger *slog.Logger) *Server {
+func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, logger *slog.Logger) *Server {
 	s := &Server{
-		store:  store,
-		nats:   nats,
-		cache:  cache,
-		pool:   pool,
-		logger: logger,
-		mux:    http.NewServeMux(),
+		store:     store,
+		nats:      nats,
+		cache:     cache,
+		pool:      pool,
+		jwtSecret: jwtSecret,
+		logger:    logger,
+		mux:       http.NewServeMux(),
 	}
 	s.routes()
 	return s
@@ -95,6 +97,9 @@ func (s *Server) routes() {
 
 	// Notifications
 	s.mux.HandleFunc("GET /v1/notifications/{id}", s.handleGetNotification)
+
+	// Auth token exchange
+	s.mux.HandleFunc("POST /v1/auth/token", s.handleAuthToken)
 }
 
 func (s *Server) Handler() http.Handler {

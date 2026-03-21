@@ -209,8 +209,8 @@ func newTestServer(t *testing.T) *admin.Server {
 			{ID: "test-tenant-id", Name: "Test Tenant", CreatedAt: time.Now()},
 		},
 	}
-	// Pass nil for nats, cache, pool — groups handlers don't need them.
-	srv := admin.NewServer(store, nil, nil, nil, logger)
+	// Pass nil for nats, cache, pool — most handlers don't need them.
+	srv := admin.NewServer(store, nil, nil, nil, []byte("test-jwt-secret"), logger)
 	srv.SetSkipAuth(true)
 	return srv
 }

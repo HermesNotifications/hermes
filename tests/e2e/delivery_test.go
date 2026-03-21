@@ -70,7 +70,7 @@ func TestDeliveryPipeline(t *testing.T) {
 	st := store.New(pool)
 
 	// Admin server (with auth)
-	srv := admin.NewServer(st, natsClient, redisClient, pool, logger)
+	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), logger)
 	srv.SetSkipAuth(false)
 	handler := srv.Handler()
 

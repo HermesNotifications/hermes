@@ -66,7 +66,7 @@ func TestSendNotification_E2E(t *testing.T) {
 	// Create store and server
 	st := store.New(pool)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	srv := admin.NewServer(st, natsClient, redisClient, pool, logger)
+	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), logger)
 	srv.SetSkipAuth(false) // Test with auth enabled
 
 	handler := srv.Handler()
