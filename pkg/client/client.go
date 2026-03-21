@@ -94,5 +94,3 @@ func (c *Client) do(req *http.Request, v any) error {
 	return nil
 }
 
-// Stubs — will be replaced in subsequent tasks
-type AuthService struct{ client *Client }
