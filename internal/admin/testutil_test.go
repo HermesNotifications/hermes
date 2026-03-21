@@ -20,6 +20,7 @@ type mockStore struct {
 	users         []models.User
 	notifications []models.Notification
 	events        []models.NotificationEvent
+	apiKeys       []models.APIKey
 }
 
 // --- Tenants ---
@@ -192,6 +193,12 @@ func (m *mockStore) GetNotificationEvents(ctx context.Context, notificationID st
 	return out, nil
 }
 
+// --- API Keys ---
+
+func (m *mockStore) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
+	return m.apiKeys, nil
+}
+
 // --- Test helpers ---
 
 func newTestServer(t *testing.T) *admin.Server {
@@ -203,5 +210,7 @@ func newTestServer(t *testing.T) *admin.Server {
 		},
 	}
 	// Pass nil for nats, cache, pool — groups handlers don't need them.
-	return admin.NewServer(store, nil, nil, nil, logger)
+	srv := admin.NewServer(store, nil, nil, nil, logger)
+	srv.SetSkipAuth(true)
+	return srv
 }

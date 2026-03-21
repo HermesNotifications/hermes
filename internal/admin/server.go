@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/middleware"
@@ -41,15 +42,24 @@ type AdminStore interface {
 	GetNotificationByID(ctx context.Context, id string) (*models.Notification, error)
 	GetNotificationByIdempotencyKey(ctx context.Context, tenantID, key string) (*models.Notification, error)
 	GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error)
+
+	// API Keys
+	ListAPIKeys(ctx context.Context) ([]models.APIKey, error)
 }
 
 type Server struct {
-	store  AdminStore
-	nats   *messaging.Client
-	cache  *cache.Client
-	pool   *pgxpool.Pool
-	logger *slog.Logger
-	mux    *http.ServeMux
+	store    AdminStore
+	nats     *messaging.Client
+	cache    *cache.Client
+	pool     *pgxpool.Pool
+	logger   *slog.Logger
+	mux      *http.ServeMux
+	skipAuth bool
+}
+
+// SetSkipAuth disables API key authentication. Intended for use in tests only.
+func (s *Server) SetSkipAuth(skip bool) {
+	s.skipAuth = skip
 }
 
 func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, pool *pgxpool.Pool, logger *slog.Logger) *Server {
@@ -92,7 +102,24 @@ func (s *Server) Handler() http.Handler {
 	h = middleware.RateLimit(func(r *http.Request) string {
 		return r.Header.Get("Authorization")
 	}, 1000, 500)(h)
+	if !s.skipAuth {
+		h = auth.APIKeyMiddleware(s.validateAPIKey)(h)
+	}
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)
 	return h
+}
+
+func (s *Server) validateAPIKey(rawKey string) bool {
+	keys, err := s.store.ListAPIKeys(context.Background())
+	if err != nil {
+		s.logger.Error("failed to load API keys", "error", err)
+		return false
+	}
+	for _, k := range keys {
+		if auth.VerifyAPIKey(rawKey, k.KeyHash) {
+			return true
+		}
+	}
+	return false
 }
