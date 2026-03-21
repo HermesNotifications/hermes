@@ -73,6 +73,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/groups", s.handleListGroups)
 	s.mux.HandleFunc("POST /v1/groups", s.handleCreateGroup)
 	s.mux.HandleFunc("PUT /v1/groups/{id}", s.handleUpdateGroup)
+
+	// Types
+	s.mux.HandleFunc("GET /v1/types", s.handleListTypes)
+	s.mux.HandleFunc("POST /v1/types", s.handleCreateType)
+	s.mux.HandleFunc("PUT /v1/types/{id}", s.handleUpdateType)
+	s.mux.HandleFunc("DELETE /v1/types/{id}", s.handleDeleteType)
 }
 
 func (s *Server) Handler() http.Handler {
