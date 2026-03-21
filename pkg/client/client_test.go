@@ -1,7 +1,10 @@
 package client_test
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/hermes-notifications/hermes/pkg/client"
@@ -27,5 +30,31 @@ func TestAPIErrorMessage(t *testing.T) {
 	expected := "API error (400): bad input"
 	if err.Error() != expected {
 		t.Errorf("got %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestAPIErrorOnBadRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": "bad input"}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL, "test-key")
+	_, err := c.Groups.List(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 400 {
+		t.Errorf("expected StatusCode 400, got %d", apiErr.StatusCode)
+	}
+	if apiErr.Message != "bad input" {
+		t.Errorf("expected message %q, got %q", "bad input", apiErr.Message)
 	}
 }

@@ -33,9 +33,10 @@ func newInboxListenCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			out := cmd.OutOrStdout()
+			outputFmt := getOutput(cmd)
 
 			// Step 1: Get unified JWT
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			tokenResp, err := c.Auth.ExchangeToken(ctx, client.TokenRequest{
 				TenantID: tenantID, UserID: userID,
 			})
@@ -51,7 +52,7 @@ func newInboxListenCmd() *cobra.Command {
 
 			channel := "user#" + internalUserID
 
-			// Step 2: Connect to Centrifugo (v0.10+ API: SetToken after construction)
+			// Step 2: Connect to Centrifugo
 			wsClient := centrifuge.NewJsonClient(centrifugoURL, centrifuge.Config{})
 			wsClient.SetToken(tokenResp.Token)
 
@@ -75,14 +76,14 @@ func newInboxListenCmd() *cobra.Command {
 			}
 
 			w := newTabWriter(out)
-			if flagOutput == "table" {
+			if outputFmt == "table" {
 				fmt.Fprintf(os.Stderr, "Listening on %s ...\n", channel)
 				printRow(w, "TIME", "TYPE", "NOTIFICATION_ID", "ACTION")
 				w.Flush()
 			}
 
 			sub.OnPublication(func(e centrifuge.PublicationEvent) {
-				if flagOutput == "json" {
+				if outputFmt == "json" {
 					out.Write(e.Data)
 					fmt.Fprintln(out)
 					return
@@ -97,11 +98,12 @@ func newInboxListenCmd() *cobra.Command {
 				w.Flush()
 			})
 
-			if err := sub.Subscribe(); err != nil {
-				return fmt.Errorf("subscribe failed: %w", err)
-			}
+			// Connect first, then subscribe (matches spec flow)
 			if err := wsClient.Connect(); err != nil {
 				return fmt.Errorf("connect failed: %w", err)
+			}
+			if err := sub.Subscribe(); err != nil {
+				return fmt.Errorf("subscribe failed: %w", err)
 			}
 
 			// Step 4: Wait for interrupt

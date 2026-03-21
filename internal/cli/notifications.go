@@ -51,14 +51,14 @@ func newNotifSendCmd() *cobra.Command {
 				opts = append(opts, client.WithIdempotencyKey(idempotencyKey))
 			}
 
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			resp, err := c.Notifications.Send(cmd.Context(), req, opts...)
 			if err != nil {
 				return err
 			}
 
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, resp)
 			}
 			fmt.Fprintf(out, "Accepted: %s\n", resp.NotificationID)
@@ -88,8 +88,10 @@ func newNotifStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Get the status of a notification",
+		// Always outputs JSON — the response contains nested notification and events
+		// structures as json.RawMessage, which don't have a meaningful table format.
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			status, err := c.Notifications.GetStatus(cmd.Context(), id)
 			if err != nil {
 				return err

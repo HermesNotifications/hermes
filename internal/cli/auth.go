@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/hermes-notifications/hermes/pkg/client"
 	"github.com/spf13/cobra"
 )
@@ -17,13 +18,13 @@ func newAuthTokenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "token", Short: "Exchange API key for a user JWT",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			resp, err := c.Auth.ExchangeToken(cmd.Context(), client.TokenRequest{TenantID: tenantID, UserID: userID})
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, resp)
 			}
 			fmt.Fprintf(out, "Token: %s\nExpires: %s\n", resp.Token, resp.ExpiresAt)

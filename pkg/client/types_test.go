@@ -1,4 +1,4 @@
-package client
+package client_test
 
 import (
 	"context"
@@ -7,13 +7,15 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/hermes-notifications/hermes/pkg/client"
 )
 
 func ptr(s string) *string { return &s }
 
 func TestTypesList(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	types := []NotificationType{
+	types := []client.NotificationType{
 		{ID: "t1", GroupID: "g1", Slug: "welcome", Name: "Welcome", CreatedAt: now},
 		{ID: "t2", GroupID: "g1", Slug: "alert", Name: "Alert", EmailSubject: ptr("Alert!"), CreatedAt: now},
 	}
@@ -33,7 +35,7 @@ func TestTypesList(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
+	c := client.New(srv.URL, "test-key")
 	result, err := c.Types.List(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -51,7 +53,7 @@ func TestTypesList(t *testing.T) {
 
 func TestTypesCreate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	created := NotificationType{
+	created := client.NotificationType{
 		ID:           "t3",
 		GroupID:      "g1",
 		Slug:         "newsletter",
@@ -71,7 +73,7 @@ func TestTypesCreate(t *testing.T) {
 			t.Errorf("expected application/json, got %s", r.Header.Get("Content-Type"))
 		}
 
-		var body CreateTypeRequest
+		var body client.CreateTypeRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
@@ -85,8 +87,8 @@ func TestTypesCreate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
-	result, err := c.Types.Create(context.Background(), CreateTypeRequest{
+	c := client.New(srv.URL, "test-key")
+	result, err := c.Types.Create(context.Background(), client.CreateTypeRequest{
 		GroupID:      "g1",
 		Slug:         "newsletter",
 		Name:         "Newsletter",
@@ -108,7 +110,7 @@ func TestTypesCreate(t *testing.T) {
 
 func TestTypesUpdate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	updated := NotificationType{
+	updated := client.NotificationType{
 		ID:           "t1",
 		GroupID:      "g1",
 		Slug:         "welcome",
@@ -125,7 +127,7 @@ func TestTypesUpdate(t *testing.T) {
 			t.Errorf("expected /v1/types/t1, got %s", r.URL.Path)
 		}
 
-		var body UpdateTypeRequest
+		var body client.UpdateTypeRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
@@ -138,8 +140,8 @@ func TestTypesUpdate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
-	result, err := c.Types.Update(context.Background(), "t1", UpdateTypeRequest{
+	c := client.New(srv.URL, "test-key")
+	result, err := c.Types.Update(context.Background(), "t1", client.UpdateTypeRequest{
 		Name:         "Welcome Updated",
 		EmailSubject: ptr("Welcome aboard!"),
 	})
@@ -169,7 +171,7 @@ func TestTypesDelete(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
+	c := client.New(srv.URL, "test-key")
 	err := c.Types.Delete(context.Background(), "t1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

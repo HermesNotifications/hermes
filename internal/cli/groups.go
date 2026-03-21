@@ -20,13 +20,13 @@ func newGroupsListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use: "list", Short: "List all notification groups",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			groups, err := c.Groups.List(cmd.Context())
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, groups)
 			}
 			w := newTabWriter(out)
@@ -45,13 +45,13 @@ func newGroupsCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "create", Short: "Create a notification group",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			g, err := c.Groups.Create(cmd.Context(), client.CreateGroupRequest{Slug: slug, Name: name, DefaultChannels: channels})
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, g)
 			}
 			fmt.Fprintf(out, "Created group %s (%s)\n", g.ID, g.Slug)
@@ -72,7 +72,7 @@ func newGroupsUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "update", Short: "Update a notification group",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			req := client.UpdateGroupRequest{DefaultChannels: channels}
 			if cmd.Flags().Changed("name") {
 				req.Name = &name
@@ -82,7 +82,7 @@ func newGroupsUpdateCmd() *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, g)
 			}
 			fmt.Fprintf(out, "Updated group %s\n", g.ID)

@@ -35,13 +35,13 @@ func newTypesListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use: "list", Short: "List all notification types",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			types, err := c.Types.List(cmd.Context())
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, types)
 			}
 			w := newTabWriter(out)
@@ -56,20 +56,29 @@ func newTypesListCmd() *cobra.Command {
 
 func newTypesCreateCmd() *cobra.Command {
 	var groupID, slug, name string
-	var req client.CreateTypeRequest
+	var emailSubject, emailBody, smsBody, inboxTitle, inboxBody string
+
 	cmd := &cobra.Command{
 		Use: "create", Short: "Create a notification type",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			req.GroupID = groupID
-			req.Slug = slug
-			req.Name = name
-			c := newClient()
+			req := client.CreateTypeRequest{
+				GroupID: groupID,
+				Slug:    slug,
+				Name:    name,
+			}
+			setOptionalString(cmd, "email-subject", &req.EmailSubject, emailSubject)
+			setOptionalString(cmd, "email-body", &req.EmailBody, emailBody)
+			setOptionalString(cmd, "sms-body", &req.SMSBody, smsBody)
+			setOptionalString(cmd, "inbox-title", &req.InboxTitle, inboxTitle)
+			setOptionalString(cmd, "inbox-body", &req.InboxBody, inboxBody)
+
+			c := newClientFromCmd(cmd)
 			t, err := c.Types.Create(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, t)
 			}
 			fmt.Fprintf(out, "Created type %s (%s)\n", t.ID, t.Slug)
@@ -79,33 +88,41 @@ func newTypesCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&groupID, "group-id", "", "Group ID (required)")
 	cmd.Flags().StringVar(&slug, "slug", "", "Type slug (required)")
 	cmd.Flags().StringVar(&name, "name", "", "Type name (required)")
+	cmd.Flags().StringVar(&emailSubject, "email-subject", "", "Email subject template")
+	cmd.Flags().StringVar(&emailBody, "email-body", "", "Email body template")
+	cmd.Flags().StringVar(&smsBody, "sms-body", "", "SMS body template")
+	cmd.Flags().StringVar(&inboxTitle, "inbox-title", "", "Inbox title template")
+	cmd.Flags().StringVar(&inboxBody, "inbox-body", "", "Inbox body template")
 	cmd.MarkFlagRequired("group-id")
 	cmd.MarkFlagRequired("slug")
 	cmd.MarkFlagRequired("name")
-	addOptionalStringFlag(cmd, &req.EmailSubject, "email-subject", "Email subject template")
-	addOptionalStringFlag(cmd, &req.EmailBody, "email-body", "Email body template")
-	addOptionalStringFlag(cmd, &req.SMSBody, "sms-body", "SMS body template")
-	addOptionalStringFlag(cmd, &req.InboxTitle, "inbox-title", "Inbox title template")
-	addOptionalStringFlag(cmd, &req.InboxBody, "inbox-body", "Inbox body template")
 	return cmd
 }
 
 func newTypesUpdateCmd() *cobra.Command {
 	var id, name string
-	var req client.UpdateTypeRequest
+	var emailSubject, emailBody, smsBody, inboxTitle, inboxBody string
+
 	cmd := &cobra.Command{
 		Use: "update", Short: "Update a notification type",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var req client.UpdateTypeRequest
 			if cmd.Flags().Changed("name") {
 				req.Name = name
 			}
-			c := newClient()
+			setOptionalString(cmd, "email-subject", &req.EmailSubject, emailSubject)
+			setOptionalString(cmd, "email-body", &req.EmailBody, emailBody)
+			setOptionalString(cmd, "sms-body", &req.SMSBody, smsBody)
+			setOptionalString(cmd, "inbox-title", &req.InboxTitle, inboxTitle)
+			setOptionalString(cmd, "inbox-body", &req.InboxBody, inboxBody)
+
+			c := newClientFromCmd(cmd)
 			t, err := c.Types.Update(cmd.Context(), id, req)
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, t)
 			}
 			fmt.Fprintf(out, "Updated type %s\n", t.ID)
@@ -114,12 +131,12 @@ func newTypesUpdateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&id, "id", "", "Type ID (required)")
 	cmd.Flags().StringVar(&name, "name", "", "Type name")
+	cmd.Flags().StringVar(&emailSubject, "email-subject", "", "Email subject template")
+	cmd.Flags().StringVar(&emailBody, "email-body", "", "Email body template")
+	cmd.Flags().StringVar(&smsBody, "sms-body", "", "SMS body template")
+	cmd.Flags().StringVar(&inboxTitle, "inbox-title", "", "Inbox title template")
+	cmd.Flags().StringVar(&inboxBody, "inbox-body", "", "Inbox body template")
 	cmd.MarkFlagRequired("id")
-	addOptionalStringFlag(cmd, &req.EmailSubject, "email-subject", "Email subject template")
-	addOptionalStringFlag(cmd, &req.EmailBody, "email-body", "Email body template")
-	addOptionalStringFlag(cmd, &req.SMSBody, "sms-body", "SMS body template")
-	addOptionalStringFlag(cmd, &req.InboxTitle, "inbox-title", "Inbox title template")
-	addOptionalStringFlag(cmd, &req.InboxBody, "inbox-body", "Inbox body template")
 	return cmd
 }
 
@@ -128,17 +145,16 @@ func newTypesDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "delete", Short: "Delete a notification type",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c := newClient()
+			c := newClientFromCmd(cmd)
 			if err := c.Types.Delete(cmd.Context(), id); err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			if flagOutput == "json" {
+			if getOutput(cmd) == "json" {
 				return printJSON(out, map[string]string{"status": "deleted", "id": id})
 			}
-			w := newTabWriter(out)
-			printRow(w, fmt.Sprintf("Deleted type %s", id))
-			return w.Flush()
+			fmt.Fprintf(out, "Deleted type %s\n", id)
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&id, "id", "", "Type ID (required)")
@@ -146,17 +162,9 @@ func newTypesDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func addOptionalStringFlag(cmd *cobra.Command, p **string, name, usage string) {
-	var val string
-	cmd.Flags().StringVar(&val, name, "", usage)
-	old := cmd.PreRunE
-	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if cmd.Flags().Changed(name) {
-			*p = &val
-		}
-		if old != nil {
-			return old(cmd, args)
-		}
-		return nil
+// setOptionalString sets a *string pointer only when the flag was explicitly provided.
+func setOptionalString(cmd *cobra.Command, flagName string, target **string, val string) {
+	if cmd.Flags().Changed(flagName) {
+		*target = &val
 	}
 }

@@ -1,4 +1,4 @@
-package client
+package client_test
 
 import (
 	"context"
@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/hermes-notifications/hermes/pkg/client"
 )
 
 func TestNotificationsSend(t *testing.T) {
-	sendResp := SendResponse{NotificationID: "notif_01"}
+	sendResp := client.SendResponse{NotificationID: "notif_01"}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -25,7 +27,7 @@ func TestNotificationsSend(t *testing.T) {
 			t.Errorf("expected application/json, got %s", r.Header.Get("Content-Type"))
 		}
 
-		var body SendRequest
+		var body client.SendRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
@@ -39,8 +41,8 @@ func TestNotificationsSend(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
-	result, err := c.Notifications.Send(context.Background(), SendRequest{
+	c := client.New(srv.URL, "test-key")
+	result, err := c.Notifications.Send(context.Background(), client.SendRequest{
 		TenantID: "tenant1",
 		UserID:   "user1",
 		Type:     "welcome",
@@ -54,7 +56,7 @@ func TestNotificationsSend(t *testing.T) {
 }
 
 func TestNotificationsSendWithIdempotencyKey(t *testing.T) {
-	sendResp := SendResponse{NotificationID: "notif_02"}
+	sendResp := client.SendResponse{NotificationID: "notif_02"}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ikey := r.Header.Get("X-Idempotency-Key")
@@ -68,11 +70,11 @@ func TestNotificationsSendWithIdempotencyKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
-	result, err := c.Notifications.Send(context.Background(), SendRequest{
+	c := client.New(srv.URL, "test-key")
+	result, err := c.Notifications.Send(context.Background(), client.SendRequest{
 		TenantID: "tenant1",
 		UserID:   "user1",
-	}, WithIdempotencyKey("my-idempotency-key"))
+	}, client.WithIdempotencyKey("my-idempotency-key"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,7 +86,7 @@ func TestNotificationsSendWithIdempotencyKey(t *testing.T) {
 func TestNotificationsGetStatus(t *testing.T) {
 	rawNotif := json.RawMessage(`{"id":"n1","status":"delivered"}`)
 	rawEvents := json.RawMessage(`[{"type":"delivered","created_at":"2024-01-01T00:00:00Z"}]`)
-	statusResp := NotificationStatus{
+	statusResp := client.NotificationStatus{
 		Notification: rawNotif,
 		Events:       rawEvents,
 	}
@@ -105,7 +107,7 @@ func TestNotificationsGetStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
+	c := client.New(srv.URL, "test-key")
 	result, err := c.Notifications.GetStatus(context.Background(), "n1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

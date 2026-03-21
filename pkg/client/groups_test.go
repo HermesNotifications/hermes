@@ -1,4 +1,4 @@
-package client
+package client_test
 
 import (
 	"context"
@@ -7,11 +7,13 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/hermes-notifications/hermes/pkg/client"
 )
 
 func TestGroupsList(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	groups := []Group{
+	groups := []client.Group{
 		{ID: "g1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"email"}, CreatedAt: now},
 		{ID: "g2", Slug: "updates", Name: "Updates", DefaultChannels: []string{"sms", "inbox"}, CreatedAt: now},
 	}
@@ -31,7 +33,7 @@ func TestGroupsList(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
+	c := client.New(srv.URL, "test-key")
 	result, err := c.Groups.List(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -49,7 +51,7 @@ func TestGroupsList(t *testing.T) {
 
 func TestGroupsCreate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	created := Group{
+	created := client.Group{
 		ID:              "g3",
 		Slug:            "marketing",
 		Name:            "Marketing",
@@ -68,7 +70,7 @@ func TestGroupsCreate(t *testing.T) {
 			t.Errorf("expected application/json, got %s", r.Header.Get("Content-Type"))
 		}
 
-		var body CreateGroupRequest
+		var body client.CreateGroupRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
@@ -82,8 +84,8 @@ func TestGroupsCreate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
-	result, err := c.Groups.Create(context.Background(), CreateGroupRequest{
+	c := client.New(srv.URL, "test-key")
+	result, err := c.Groups.Create(context.Background(), client.CreateGroupRequest{
 		Slug:            "marketing",
 		Name:            "Marketing",
 		DefaultChannels: []string{"email", "inbox"},
@@ -102,7 +104,7 @@ func TestGroupsCreate(t *testing.T) {
 func TestGroupsUpdate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	newName := "Alerts Updated"
-	updated := Group{
+	updated := client.Group{
 		ID:              "g1",
 		Slug:            "alerts",
 		Name:            newName,
@@ -118,7 +120,7 @@ func TestGroupsUpdate(t *testing.T) {
 			t.Errorf("expected /v1/groups/g1, got %s", r.URL.Path)
 		}
 
-		var body UpdateGroupRequest
+		var body client.UpdateGroupRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
@@ -131,8 +133,8 @@ func TestGroupsUpdate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
-	result, err := c.Groups.Update(context.Background(), "g1", UpdateGroupRequest{
+	c := client.New(srv.URL, "test-key")
+	result, err := c.Groups.Update(context.Background(), "g1", client.UpdateGroupRequest{
 		Name:            &newName,
 		DefaultChannels: []string{"email", "sms"},
 	})

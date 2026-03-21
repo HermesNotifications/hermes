@@ -1,4 +1,4 @@
-package client
+package client_test
 
 import (
 	"context"
@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/hermes-notifications/hermes/pkg/client"
 )
 
 func TestAuthExchangeToken(t *testing.T) {
-	tokenResp := TokenResponse{
+	tokenResp := client.TokenResponse{
 		Token:     "eyJhbGciOiJIUzI1NiJ9.test",
 		ExpiresAt: "2026-03-21T12:00:00Z",
 	}
@@ -28,7 +30,7 @@ func TestAuthExchangeToken(t *testing.T) {
 			t.Errorf("expected application/json, got %s", r.Header.Get("Content-Type"))
 		}
 
-		var body TokenRequest
+		var body client.TokenRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
@@ -42,8 +44,8 @@ func TestAuthExchangeToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "test-key")
-	result, err := c.Auth.ExchangeToken(context.Background(), TokenRequest{
+	c := client.New(srv.URL, "test-key")
+	result, err := c.Auth.ExchangeToken(context.Background(), client.TokenRequest{
 		TenantID: "tenant1",
 		UserID:   "user1",
 	})
