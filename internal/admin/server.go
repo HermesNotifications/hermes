@@ -82,6 +82,9 @@ func (s *Server) routes() {
 
 	// Send
 	s.mux.HandleFunc("POST /v1/send", s.handleSend)
+
+	// Notifications
+	s.mux.HandleFunc("GET /v1/notifications/{id}", s.handleGetNotification)
 }
 
 func (s *Server) Handler() http.Handler {
