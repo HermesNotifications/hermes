@@ -14,6 +14,21 @@
 
 ---
 
+## Implementation Notes (Review Fixes)
+
+The following issues were identified in plan review and must be addressed during implementation:
+
+1. **Missing imports** — `router.go` needs `"github.com/hermes-notifications/hermes/internal/models"` and `writer.go` needs `"encoding/json"`. The implementer must add these.
+2. **Double template rendering** — `contentForChannel` must NOT call `RenderTemplates` again. Instead, pass the already-rendered `*RenderedContent` from `handleMessage` to `contentForChannel`. Change signature to `contentForChannel(defaultContent MessageContent, rendered *RenderedContent, channel string) MessageContent`.
+3. **Batch-then-ack tradeoff** — The Event Writer batches events before persisting, but NATS acks happen before the batch flushes. This creates a small window (≤500ms) where events could be lost on crash. For the MVP this is acceptable. Future improvement: modify `messaging.Subscribe` to expose the raw `jetstream.Msg` for manual ack control.
+4. **Enrich NATS message with group_id** — The Admin service's send handler should include `group_id` (the internal ID, not slug) in the NATS message. Add a `GroupID string` field to `SendMessage`. This eliminates the Router's `GetNotificationByID` DB call. Update `handler_send.go` to include `group_id` in the published message.
+5. **Status rollup WHERE clause** — `UpdateNotificationStatus` should use a `WHERE` clause to skip stale updates: `WHERE id = $1 AND (CASE status ... END) < $2`. This allows distinguishing advanced vs. already-superseded updates.
+6. **Batch mutex** — `Batch.flushLocked` should copy the items slice and release the lock BEFORE calling `flushFn`, to avoid blocking `Add` during DB writes.
+7. **SetupStreams error handling** — `cmd/router/main.go` and `cmd/worker-events/main.go` must check the error from `SetupStreams`.
+8. **user_preferences migration** — already exists from Phase 1 (000008). No action needed.
+
+---
+
 ## File Structure
 
 ```
