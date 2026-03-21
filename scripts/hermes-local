@@ -6,14 +6,18 @@
 #   scripts/hermes-local -o json notifications send ...
 #
 # Override defaults with environment variables:
-#   HERMES_ADMIN_URL   (default: http://localhost:8080)
-#   HERMES_API_KEY     (default: hms_dev_key — seeded by make seed)
+#   HERMES_ADMIN_URL     (default: http://localhost:8080)
+#   HERMES_API_KEY       (default: hms_dev_key — seeded by make seed)
+#   HERMES_INBOX_URL     (default: http://localhost:8086)
+#   HERMES_CENTRIFUGO_URL (default: ws://localhost:8000/connection/websocket)
 
 set -euo pipefail
 
 : "${HERMES_ADMIN_URL:=http://localhost:8080}"
 : "${HERMES_API_KEY:=hms_dev_key}"
+: "${HERMES_INBOX_URL:=http://localhost:8086}"
+: "${HERMES_CENTRIFUGO_URL:=ws://localhost:8000/connection/websocket}"
 
-export HERMES_ADMIN_URL HERMES_API_KEY
+export HERMES_ADMIN_URL HERMES_API_KEY HERMES_INBOX_URL HERMES_CENTRIFUGO_URL
 
 exec go run ./cmd/hermes "$@"

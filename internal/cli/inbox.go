@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/centrifugal/centrifuge-go"
 	"github.com/hermes-notifications/hermes/pkg/client"
 	"github.com/spf13/cobra"
@@ -18,6 +19,68 @@ import (
 func newInboxCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "inbox", Short: "Inbox operations"}
 	cmd.AddCommand(newInboxListenCmd())
+	cmd.AddCommand(newInboxOpenCmd())
+	return cmd
+}
+
+func newInboxOpenCmd() *cobra.Command {
+	var (
+		tenantID      string
+		userID        string
+		inboxURL      string
+		centrifugoURL string
+	)
+
+	cmd := &cobra.Command{
+		Use: "open", Short: "Interactive inbox viewer",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			// Exchange API key for JWT
+			c := newClientFromCmd(cmd)
+			tokenResp, err := c.Auth.ExchangeToken(ctx, client.TokenRequest{
+				TenantID: tenantID, UserID: userID,
+			})
+			if err != nil {
+				return fmt.Errorf("token exchange failed: %w", err)
+			}
+
+			internalUserID, err := parseJWTSubject(tokenResp.Token)
+			if err != nil {
+				return fmt.Errorf("failed to parse JWT: %w", err)
+			}
+
+			// Create inbox client with JWT auth
+			inboxClient := client.NewInboxClient(inboxURL, tokenResp.Token)
+
+			// Create and run Bubble Tea program
+			model := newInboxModel(inboxClient)
+			p := tea.NewProgram(model, tea.WithAltScreen())
+
+			// Setup WebSocket to feed real-time events into the TUI
+			wsClient, sub, err := setupWebSocket(centrifugoURL, tokenResp.Token, internalUserID, p)
+			if err != nil {
+				return fmt.Errorf("websocket setup failed: %w", err)
+			}
+			defer func() {
+				sub.Unsubscribe()
+				wsClient.Close()
+			}()
+
+			if _, err := p.Run(); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
+	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
+	cmd.Flags().StringVar(&inboxURL, "inbox-url", os.Getenv("HERMES_INBOX_URL"), "Inbox service URL (env: HERMES_INBOX_URL)")
+	cmd.Flags().StringVar(&centrifugoURL, "centrifugo-url", os.Getenv("HERMES_CENTRIFUGO_URL"), "Centrifugo WebSocket URL (env: HERMES_CENTRIFUGO_URL)")
+	cmd.MarkFlagRequired("tenant-id")
+	cmd.MarkFlagRequired("user-id")
+	cmd.MarkFlagRequired("inbox-url")
+	cmd.MarkFlagRequired("centrifugo-url")
 	return cmd
 }
 
