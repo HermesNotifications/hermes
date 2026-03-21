@@ -84,3 +84,14 @@ type UserPreference struct {
 	GroupID  string   `json:"group_id"`
 	Channels []string `json:"channels"`
 }
+
+type JWTSigningKey struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Algorithm     string    `json:"algorithm"`
+	Secret        string    `json:"-"`
+	UserIDClaim   string    `json:"user_id_claim"`
+	TenantIDClaim string    `json:"tenant_id_claim"`
+	Active        bool      `json:"active"`
+	CreatedAt     time.Time `json:"created_at"`
+}
