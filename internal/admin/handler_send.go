@@ -110,13 +110,17 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build notification
+	channels := req.Channels
+	if channels == nil {
+		channels = []string{}
+	}
 	n := &models.Notification{
 		ID:       notifID,
 		TenantID: req.TenantID,
 		UserID:   user.ID,
 		TypeID:   typeID,
 		GroupID:  groupID,
-		Channels: req.Channels,
+		Channels: channels,
 		Status:   models.StatusPending,
 	}
 

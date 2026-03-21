@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -44,7 +45,7 @@ func (c *Client) SetIdempotencyKey(ctx context.Context, key, notificationID stri
 
 func (c *Client) GetTypeConfig(ctx context.Context, slug string) ([]byte, error) {
 	val, err := c.rdb.Get(ctx, "type:"+slug).Bytes()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	}
 	if err != nil {
@@ -62,5 +63,8 @@ func (c *Client) InvalidateTypeConfig(ctx context.Context, slug string) error {
 }
 
 func (c *Client) Close() {
-	c.rdb.Close()
+	err := c.rdb.Close()
+	if err != nil {
+		return
+	}
 }
