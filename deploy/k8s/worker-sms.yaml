@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-sms
+  namespace: hermes
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hermes-worker-sms
+  template:
+    metadata:
+      labels:
+        app: hermes-worker-sms
+    spec:
+      containers:
+        - name: worker-sms
+          image: hermes-worker-sms:latest
+          ports:
+            - containerPort: 8084
+          envFrom:
+            - configMapRef:
+                name: hermes-config
+            - secretRef:
+                name: hermes-secrets
+          env:
+            - name: HERMES_HTTP_PORT
+              value: "8084"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8084
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8084
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-worker-sms
+  namespace: hermes
+spec:
+  selector:
+    app: hermes-worker-sms
+  ports:
+    - port: 8084
+      targetPort: 8084

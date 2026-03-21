@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-admin
+  namespace: hermes
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hermes-admin
+  template:
+    metadata:
+      labels:
+        app: hermes-admin
+    spec:
+      containers:
+        - name: admin
+          image: hermes-admin:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: hermes-config
+            - secretRef:
+                name: hermes-secrets
+          env:
+            - name: HERMES_HTTP_PORT
+              value: "8080"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-admin
+  namespace: hermes
+spec:
+  selector:
+    app: hermes-admin
+  ports:
+    - port: 8080
+      targetPort: 8080
