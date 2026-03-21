@@ -27,15 +27,15 @@ linters:
         # Background health check servers in workers — error logged by Go's default handler
         - net/http.ListenAndServe
 
-issues:
-  exclude-rules:
-    # Allow unchecked errors in test files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosimple
+  exclusions:
+    rules:
+      # Allow unchecked errors in test files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosimple
 
-    # Allow unchecked errors in defers
-    - source: "defer "
-      linters:
-        - errcheck
+      # Allow unchecked errors in defers
+      - source: "defer "
+        linters:
+          - errcheck
