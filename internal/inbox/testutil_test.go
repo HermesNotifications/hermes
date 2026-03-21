@@ -156,7 +156,7 @@ func newTestServer(t *testing.T) (*inbox.Server, *mockInboxStore) {
 			{ID: "group-1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"inbox"}},
 		},
 	}
-	srv := inbox.NewServer(store, nil, nil, "test-centrifugo-secret", nil, nil, logger)
+	srv := inbox.NewServer(store, nil, nil, nil, logger)
 	srv.SetSkipAuth(true)
 	return srv, store
 }

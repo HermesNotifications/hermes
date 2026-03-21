@@ -30,15 +30,13 @@ type InboxStore interface {
 
 // Server is the inbox HTTP service.
 type Server struct {
-	store            InboxStore
-	centrifugo       *centrifugo.Client
-	nats             *messaging.Client
-	centrifugoSecret string
-	logger           *slog.Logger
-	mux              *http.ServeMux
-	skipAuth         bool
-	jwtKeyProvider   auth.JWTKeyProvider
-	userResolver     auth.UserResolver
+	store          InboxStore
+	centrifugo     *centrifugo.Client
+	nats           *messaging.Client
+	logger         *slog.Logger
+	mux            *http.ServeMux
+	skipAuth       bool
+	jwtKeyProvider auth.JWTKeyProvider
 }
 
 // SetSkipAuth disables JWT authentication. Intended for use in tests only.
@@ -46,16 +44,14 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client, centrifugoSecret string, keyProvider auth.JWTKeyProvider, resolver auth.UserResolver, logger *slog.Logger) *Server {
+func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
 	s := &Server{
-		store:            store,
-		centrifugo:       cent,
-		nats:             nats,
-		centrifugoSecret: centrifugoSecret,
-		jwtKeyProvider:   keyProvider,
-		userResolver:     resolver,
-		logger:           logger,
-		mux:              http.NewServeMux(),
+		store:          store,
+		centrifugo:     cent,
+		nats:           nats,
+		jwtKeyProvider: keyProvider,
+		logger:         logger,
+		mux:            http.NewServeMux(),
 	}
 	s.routes()
 	return s
@@ -74,15 +70,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /v1/inbox/{id}/archive", s.handleArchive)
 	s.mux.HandleFunc("DELETE /v1/inbox/{id}/archive", s.handleUnarchive)
 	s.mux.HandleFunc("DELETE /v1/inbox/{id}", s.handleSoftDelete)
-
-	// Centrifugo token
-	s.mux.HandleFunc("GET /v1/inbox/centrifugo-token", s.handleCentrifugoToken)
 }
 
 func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.mux
 	if !s.skipAuth {
-		h = auth.JWTMiddleware(s.jwtKeyProvider, s.userResolver)(h)
+		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)

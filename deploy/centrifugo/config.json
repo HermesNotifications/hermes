@@ -3,7 +3,7 @@
   "redis_address": "redis://redis:6379/0",
   "broker": "nats",
   "nats_url": "nats://nats:4222",
-  "token_hmac_secret_key": "CHANGE-ME-centrifugo-token-secret",
+  "token_hmac_secret_key": "CHANGE-ME-must-match-HERMES_JWT_SECRET",
   "api_key": "centrifugo-api-key",
   "admin": false,
   "presence": true,

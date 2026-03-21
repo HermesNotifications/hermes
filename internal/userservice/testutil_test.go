@@ -109,7 +109,7 @@ func newTestServer(t *testing.T) (*userservice.Server, *mockUserStore) {
 			{UserID: testUserID, GroupID: "group-1", Channels: []string{"email", "inbox"}},
 		},
 	}
-	srv := userservice.NewServer(store, nil, nil, logger)
+	srv := userservice.NewServer(store, nil, logger)
 	srv.SetSkipAuth(true)
 	return srv, store
 }
