@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -28,9 +27,33 @@ type SendResponse struct {
 	NotificationID string `json:"notification_id"`
 }
 
+type NotificationDetail struct {
+	ID          string   `json:"id"`
+	TenantID    string   `json:"tenant_id"`
+	UserID      string   `json:"user_id"`
+	GroupID     string   `json:"group_id"`
+	Title       string   `json:"title"`
+	Body        string   `json:"body"`
+	Channels    []string `json:"channels"`
+	Status      string   `json:"status"`
+	CreatedAt   string   `json:"created_at"`
+	SentAt      *string  `json:"sent_at,omitempty"`
+	DeliveredAt *string  `json:"delivered_at,omitempty"`
+	ReadAt      *string  `json:"read_at,omitempty"`
+}
+
+type NotificationEvent struct {
+	ID             string `json:"id"`
+	NotificationID string `json:"notification_id"`
+	Channel        string `json:"channel"`
+	Event          string `json:"event"`
+	Severity       string `json:"severity"`
+	CreatedAt      string `json:"created_at"`
+}
+
 type NotificationStatus struct {
-	Notification json.RawMessage `json:"notification"`
-	Events       json.RawMessage `json:"events"`
+	Notification NotificationDetail `json:"notification"`
+	Events       []NotificationEvent `json:"events"`
 }
 
 type sendOptions struct {

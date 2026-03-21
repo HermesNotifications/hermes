@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Wrapper to run the Hermes CLI against the local dev environment.
+#
+# Usage:
+#   scripts/hermes-local groups list
+#   scripts/hermes-local -o json notifications send ...
+#
+# Override defaults with environment variables:
+#   HERMES_ADMIN_URL   (default: http://localhost:8080)
+#   HERMES_API_KEY     (default: hms_dev_key — seeded by make seed)
+
+set -euo pipefail
+
+: "${HERMES_ADMIN_URL:=http://localhost:8080}"
+: "${HERMES_API_KEY:=hms_dev_key}"
+
+export HERMES_ADMIN_URL HERMES_API_KEY
+
+exec go run ./cmd/hermes "$@"

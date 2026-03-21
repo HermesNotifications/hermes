@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/hermes-notifications/hermes/pkg/client"
 	"github.com/spf13/cobra"
@@ -61,7 +62,7 @@ func newNotifSendCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, resp)
 			}
-			fmt.Fprintf(out, "Accepted: %s\n", resp.NotificationID)
+			fmt.Fprintf(out, "%s %s\n", success("Accepted:"), bold(resp.NotificationID))
 			return nil
 		},
 	}
@@ -88,8 +89,6 @@ func newNotifStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Get the status of a notification",
-		// Always outputs JSON — the response contains nested notification and events
-		// structures as json.RawMessage, which don't have a meaningful table format.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := newClientFromCmd(cmd)
 			status, err := c.Notifications.GetStatus(cmd.Context(), id)
@@ -97,7 +96,27 @@ func newNotifStatusCmd() *cobra.Command {
 				return err
 			}
 			out := cmd.OutOrStdout()
-			return printJSON(out, status)
+			if getOutput(cmd) == "json" {
+				return printJSON(out, status)
+			}
+
+			n := status.Notification
+			fmt.Fprintf(out, "%s %s\n", bold("Notification"), bold(n.ID))
+			fmt.Fprintf(out, "  %s   %s\n", label("Status:"), colorStatus(n.Status))
+			fmt.Fprintf(out, "  %s    %s\n", label("Title:"), n.Title)
+			fmt.Fprintf(out, "  %s     %s\n", label("Body:"), n.Body)
+			fmt.Fprintf(out, "  %s %s\n", label("Channels:"), strings.Join(n.Channels, ", "))
+			fmt.Fprintf(out, "  %s  %s\n", label("Created:"), fmtTime(n.CreatedAt))
+
+			if len(status.Events) > 0 {
+				fmt.Fprintln(out)
+				var rows [][]string
+				for _, e := range status.Events {
+					rows = append(rows, []string{e.Event, e.Channel, colorSeverity(e.Severity), fmtTime(e.CreatedAt)})
+				}
+				printTable(out, []string{"EVENT", "CHANNEL", "SEVERITY", "TIME"}, rows)
+			}
+			return nil
 		},
 	}
 

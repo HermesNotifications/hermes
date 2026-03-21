@@ -50,6 +50,18 @@ local_resource(
     labels=["infra"],
 )
 
+# --- Seed ---
+local_resource(
+    "seed",
+    cmd=" && ".join([
+        "go build -o ./bin/seed/service ./cmd/seed/",
+        "./bin/seed/service -database-url 'postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable'",
+    ]),
+    deps=["cmd/seed/"],
+    resource_deps=["migrate"],
+    labels=["infra"],
+)
+
 # --- Services ---
 for svc_name, svc_cfg in services.items():
     img = "{}/hermes-{}".format(k3d_registry, svc_name)

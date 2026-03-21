@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hermes-notifications/hermes/pkg/client"
 	"github.com/spf13/cobra"
@@ -44,12 +45,12 @@ func newTypesListCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, types)
 			}
-			w := newTabWriter(out)
-			printRow(w, "ID", "SLUG", "NAME", "GROUP_ID", "CHANNELS", "CREATED")
+			var rows [][]string
 			for _, t := range types {
-				printRow(w, t.ID, t.Slug, t.Name, t.GroupID, typeChannels(t), t.CreatedAt.Format("2006-01-02 15:04:05"))
+				rows = append(rows, []string{t.ID, t.Slug, bold(t.Name), t.GroupID, typeChannels(t), fmtTime(t.CreatedAt.Format(time.RFC3339))})
 			}
-			return w.Flush()
+			printTable(out, []string{"ID", "SLUG", "NAME", "GROUP_ID", "CHANNELS", "CREATED"}, rows)
+			return nil
 		},
 	}
 }
@@ -81,7 +82,7 @@ func newTypesCreateCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, t)
 			}
-			fmt.Fprintf(out, "Created type %s (%s)\n", t.ID, t.Slug)
+			fmt.Fprintf(out, "%s %s %s\n", success("Created type"), bold(t.ID), dim("("+t.Slug+")"))
 			return nil
 		},
 	}
@@ -125,7 +126,7 @@ func newTypesUpdateCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, t)
 			}
-			fmt.Fprintf(out, "Updated type %s\n", t.ID)
+			fmt.Fprintf(out, "%s %s\n", success("Updated type"), bold(t.ID))
 			return nil
 		},
 	}
@@ -153,7 +154,7 @@ func newTypesDeleteCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, map[string]string{"status": "deleted", "id": id})
 			}
-			fmt.Fprintf(out, "Deleted type %s\n", id)
+			fmt.Fprintf(out, "%s %s\n", success("Deleted type"), bold(id))
 			return nil
 		},
 	}

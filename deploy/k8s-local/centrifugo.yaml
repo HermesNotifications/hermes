@@ -10,7 +10,7 @@ data:
       "redis_address": "redis:6379",
       "broker": "nats",
       "nats_url": "nats://nats:4222",
-      "token_hmac_secret_key": "dev-centrifugo-token-secret",
+      "token_hmac_secret_key": "dev-jwt-secret",
       "api_key": "centrifugo-api-key",
       "admin": true,
       "presence": true,

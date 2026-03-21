@@ -84,11 +84,14 @@ func TestNotificationsSendWithIdempotencyKey(t *testing.T) {
 }
 
 func TestNotificationsGetStatus(t *testing.T) {
-	rawNotif := json.RawMessage(`{"id":"n1","status":"delivered"}`)
-	rawEvents := json.RawMessage(`[{"type":"delivered","created_at":"2024-01-01T00:00:00Z"}]`)
 	statusResp := client.NotificationStatus{
-		Notification: rawNotif,
-		Events:       rawEvents,
+		Notification: client.NotificationDetail{
+			ID:     "n1",
+			Status: "delivered",
+		},
+		Events: []client.NotificationEvent{
+			{Event: "delivered", CreatedAt: "2024-01-01T00:00:00Z"},
+		},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,10 +115,13 @@ func TestNotificationsGetStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if string(result.Notification) != string(rawNotif) {
-		t.Errorf("unexpected notification: %s", result.Notification)
+	if result.Notification.ID != "n1" {
+		t.Errorf("unexpected notification ID: %s", result.Notification.ID)
 	}
-	if string(result.Events) != string(rawEvents) {
-		t.Errorf("unexpected events: %s", result.Events)
+	if result.Notification.Status != "delivered" {
+		t.Errorf("unexpected status: %s", result.Notification.Status)
+	}
+	if len(result.Events) != 1 || result.Events[0].Event != "delivered" {
+		t.Errorf("unexpected events: %+v", result.Events)
 	}
 }

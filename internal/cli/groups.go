@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hermes-notifications/hermes/pkg/client"
 	"github.com/spf13/cobra"
@@ -29,12 +30,12 @@ func newGroupsListCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, groups)
 			}
-			w := newTabWriter(out)
-			printRow(w, "ID", "SLUG", "NAME", "CHANNELS", "CREATED")
+			var rows [][]string
 			for _, g := range groups {
-				printRow(w, g.ID, g.Slug, g.Name, strings.Join(g.DefaultChannels, ","), g.CreatedAt.Format("2006-01-02 15:04:05"))
+				rows = append(rows, []string{g.ID, g.Slug, bold(g.Name), strings.Join(g.DefaultChannels, ","), fmtTime(g.CreatedAt.Format(time.RFC3339))})
 			}
-			return w.Flush()
+			printTable(out, []string{"ID", "SLUG", "NAME", "CHANNELS", "CREATED"}, rows)
+			return nil
 		},
 	}
 }
@@ -54,7 +55,7 @@ func newGroupsCreateCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, g)
 			}
-			fmt.Fprintf(out, "Created group %s (%s)\n", g.ID, g.Slug)
+			fmt.Fprintf(out, "%s %s %s\n", success("Created group"), bold(g.ID), dim("("+g.Slug+")"))
 			return nil
 		},
 	}
@@ -85,7 +86,7 @@ func newGroupsUpdateCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, g)
 			}
-			fmt.Fprintf(out, "Updated group %s\n", g.ID)
+			fmt.Fprintf(out, "%s %s\n", success("Updated group"), bold(g.ID))
 			return nil
 		},
 	}

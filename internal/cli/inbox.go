@@ -78,7 +78,7 @@ func newInboxListenCmd() *cobra.Command {
 			w := newTabWriter(out)
 			if outputFmt == "table" {
 				fmt.Fprintf(os.Stderr, "Listening on %s ...\n", channel)
-				printRow(w, "TIME", "TYPE", "NOTIFICATION_ID", "ACTION")
+				printRow(w, "TIME", "ID", "TITLE", "BODY")
 				w.Flush()
 			}
 
@@ -89,12 +89,12 @@ func newInboxListenCmd() *cobra.Command {
 					return
 				}
 				var event struct {
-					Type           string `json:"type"`
-					NotificationID string `json:"notification_id"`
-					Action         string `json:"action"`
+					ID    string `json:"id"`
+					Title string `json:"title"`
+					Body  string `json:"body"`
 				}
 				json.Unmarshal(e.Data, &event)
-				printRow(w, time.Now().Format("2006-01-02 15:04:05"), event.Type, event.NotificationID, event.Action)
+				printRow(w, dim(time.Now().Format("2006-01-02 15:04:05")), event.ID, bold(event.Title), event.Body)
 				w.Flush()
 			})
 

@@ -1,5 +1,5 @@
 # --- Variables ---
-SERVICES := admin router worker-events worker-email worker-sms worker-inbox inbox user migrate
+SERVICES := admin router worker-events worker-email worker-sms worker-inbox inbox user migrate seed
 DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 
 # --- Build ---
@@ -23,13 +23,15 @@ lint:              ## Run golangci-lint
 	golangci-lint run
 
 # --- Infrastructure ---
-.PHONY: infra-up infra-down migrate
+.PHONY: infra-up infra-down migrate seed
 infra-up:          ## Start local Postgres, NATS, Redis via Docker Compose
 	docker compose up -d
 infra-down:        ## Stop local infrastructure
 	docker compose down
 migrate:           ## Run database migrations
 	go run ./cmd/migrate/ -database-url "$(DB_URL)" -migrations-path ./migrations
+seed:              ## Seed dev API key (run after migrate)
+	go run ./cmd/seed/ -database-url "$(DB_URL)"
 
 # --- Docker ---
 .PHONY: docker-%
