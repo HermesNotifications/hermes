@@ -6,7 +6,6 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/websocket-services: centrifugo
 spec:
   ingressClassName: nginx
   rules:
@@ -40,6 +39,13 @@ spec:
                 name: hermes-admin
                 port:
                   number: 8080
+          - path: /v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
           - path: /v1/inbox
             pathType: Prefix
             backend:
@@ -54,8 +60,24 @@ spec:
                 name: hermes-user
                 port:
                   number: 8087
-          - path: /centrifugo
-            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hermes-centrifugo-ingress
+  namespace: hermes
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /centrifugo(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: centrifugo

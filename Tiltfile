@@ -35,6 +35,22 @@ k8s_resource("redis", labels=["infra"], port_forwards=["6379:6379"])
 k8s_resource("centrifugo", labels=["infra"], port_forwards=["8000:8000"],
              resource_deps=["nats", "redis"])
 
+# --- Ingress ---
+helm_remote(
+    "ingress-nginx",
+    repo_name="ingress-nginx",
+    repo_url="https://kubernetes.github.io/ingress-nginx",
+    namespace="ingress-nginx",
+    create_namespace=True,
+    set=[
+        "controller.hostPort.enabled=true",
+        "controller.service.type=NodePort",
+        "controller.admissionWebhooks.enabled=false",
+    ],
+)
+
+k8s_yaml("deploy/k8s/ingress.yaml")
+
 # --- Migration ---
 # Retry loop handles the race between postgres readiness and port-forward setup
 local_resource(

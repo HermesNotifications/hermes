@@ -7,6 +7,10 @@ registries:
     name: k3d-hermes-registry
     host: "0.0.0.0"
     hostPort: "5111"
+ports:
+  - port: 8888:80
+    nodeFilters:
+      - loadbalancer
 options:
   k3d:
     wait: true
