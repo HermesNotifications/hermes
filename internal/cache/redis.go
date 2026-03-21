@@ -65,6 +65,25 @@ func (c *Client) InvalidateTypeConfig(ctx context.Context, slug string) error {
 	return c.rdb.Del(ctx, "type:"+slug).Err()
 }
 
+func (c *Client) GetJWTSigningKeys(ctx context.Context) ([]byte, error) {
+	val, err := c.rdb.Get(ctx, "jwt:signing_keys").Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get jwt signing keys: %w", err)
+	}
+	return val, nil
+}
+
+func (c *Client) SetJWTSigningKeys(ctx context.Context, data []byte, ttl time.Duration) error {
+	return c.rdb.Set(ctx, "jwt:signing_keys", data, ttl).Err()
+}
+
+func (c *Client) InvalidateJWTSigningKeys(ctx context.Context) error {
+	return c.rdb.Del(ctx, "jwt:signing_keys").Err()
+}
+
 func (c *Client) Close() {
 	err := c.rdb.Close()
 	if err != nil {

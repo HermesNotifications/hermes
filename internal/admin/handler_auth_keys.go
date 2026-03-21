@@ -52,6 +52,10 @@ func (s *Server) handleCreateSigningKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if s.cache != nil {
+		s.cache.InvalidateJWTSigningKeys(r.Context())
+	}
+
 	s.jsonResponse(w, http.StatusCreated, key)
 }
 
@@ -77,6 +81,10 @@ func (s *Server) handleDeleteSigningKey(w http.ResponseWriter, r *http.Request) 
 	if err := s.store.DeleteJWTSigningKey(r.Context(), id); err != nil {
 		s.clientError(w, http.StatusNotFound, "signing key not found")
 		return
+	}
+
+	if s.cache != nil {
+		s.cache.InvalidateJWTSigningKeys(r.Context())
 	}
 
 	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})

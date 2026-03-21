@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/database"
@@ -41,6 +42,13 @@ func main() {
 	}
 	defer natsClient.Close()
 
+	redisClient, err := cache.Connect(cfg.RedisURL)
+	if err != nil {
+		logger.Error("redis connection failed", "error", err)
+		os.Exit(1)
+	}
+	defer redisClient.Close()
+
 	centrifugoClient := centrifugo.NewClient(cfg.CentrifugoAPIURL, cfg.CentrifugoAPIKey)
 
 	st := store.New(pool)
@@ -51,14 +59,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	keyProvider := auth.CachedKeyProvider(func() []auth.JWTSigningConfig {
+	cachedKeys := auth.NewCachedKeyProvider(func() []auth.JWTSigningConfig {
 		keys, err := st.ListActiveJWTSigningKeys(context.Background())
 		if err != nil {
 			logger.Error("failed to load JWT signing keys", "error", err)
 			return nil
 		}
 		return jwtSigningConfigs(keys)
-	}, time.Minute)
+	}, time.Minute, redisClient)
+	keyProvider := cachedKeys.Provider()
 
 	resolver := func(ctx context.Context, tenantID, externalID string) (string, error) {
 		user, err := st.EnsureUser(ctx, tenantID, externalID)
