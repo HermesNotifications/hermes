@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hermes-config
+  namespace: hermes
+data:
+  HERMES_DATABASE_URL: "postgres://hermes:hermes@postgres:5432/hermes?sslmode=disable"
+  HERMES_NATS_URL: "nats://nats:4222"
+  HERMES_REDIS_URL: "redis://redis:6379/0"
+  HERMES_CENTRIFUGO_API_URL: "http://centrifugo:8000"
