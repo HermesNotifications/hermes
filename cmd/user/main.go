@@ -58,15 +58,7 @@ func main() {
 	}, time.Minute, redisClient)
 	keyProvider := cachedKeys.Provider()
 
-	resolver := func(ctx context.Context, tenantID, externalID string) (string, error) {
-		user, err := st.EnsureUser(ctx, tenantID, externalID)
-		if err != nil {
-			return "", err
-		}
-		return user.ID, nil
-	}
-
-	srv := userservice.NewServer(st, keyProvider, resolver, logger)
+	srv := userservice.NewServer(st, keyProvider, logger)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
@@ -100,7 +92,6 @@ func jwtSigningConfigs(keys []models.JWTSigningKey) []auth.JWTSigningConfig {
 			Algorithm:     k.Algorithm,
 			UserIDClaim:   k.UserIDClaim,
 			TenantIDClaim: k.TenantIDClaim,
-			Internal:      k.Name == "hermes-internal",
 		}
 	}
 	return configs

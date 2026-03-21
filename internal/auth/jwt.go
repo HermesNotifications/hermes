@@ -29,21 +29,14 @@ type JWTSigningConfig struct {
 	Algorithm     string
 	UserIDClaim   string
 	TenantIDClaim string
-	Internal      bool // true for Hermes-issued keys (sub = internal user ID)
 }
 
 // JWTKeyProvider returns all active signing configs. Called on each request.
 type JWTKeyProvider func() []JWTSigningConfig
 
-// UserResolver resolves an external user ID + tenant ID to a Hermes internal user ID.
-// Used for provider-issued tokens where the user_id_claim contains an external ID.
-type UserResolver func(ctx context.Context, tenantID, externalID string) (internalID string, err error)
-
 // JWTMiddleware validates JWTs against any of the provided signing configs.
-// For internal keys (Hermes-issued), sub is treated as the internal user ID.
-// For external keys (provider-issued), the configured claim is treated as an external ID
-// and resolved to an internal user ID via the resolver.
-func JWTMiddleware(keyProvider JWTKeyProvider, resolver UserResolver) func(http.Handler) http.Handler {
+// The sub claim is treated as the internal user ID (all tokens are Hermes-issued).
+func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
@@ -73,15 +66,8 @@ func JWTMiddleware(keyProvider JWTKeyProvider, resolver UserResolver) func(http.
 				cfg := &configs[i]
 				claims := jwt.MapClaims{}
 				token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
-					switch cfg.Algorithm {
-					case "HS256", "HS384", "HS512":
-						if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-							return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-						}
-					default:
-						if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-							return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-						}
+					if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+						return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 					}
 					return cfg.Secret, nil
 				})
@@ -97,10 +83,9 @@ func JWTMiddleware(keyProvider JWTKeyProvider, resolver UserResolver) func(http.
 				return
 			}
 
-			// Extract user ID and tenant ID from claims using the config's claim mappings
+			// Extract user ID and tenant ID from claims
 			userIDRaw, ok := validClaims[matchedCfg.UserIDClaim]
 			if !ok {
-				// Fall back to "sub" from registered claims
 				userIDRaw = validClaims["sub"]
 			}
 			tenantIDRaw, tok := validClaims[matchedCfg.TenantIDClaim]
@@ -111,16 +96,6 @@ func JWTMiddleware(keyProvider JWTKeyProvider, resolver UserResolver) func(http.
 			if userID == "" || (!tok && tenantID == "") {
 				http.Error(w, `{"error":"missing claims"}`, http.StatusUnauthorized)
 				return
-			}
-
-			// For external (provider-issued) keys, resolve external ID to internal user ID
-			if !matchedCfg.Internal && resolver != nil {
-				internalID, err := resolver(r.Context(), tenantID, userID)
-				if err != nil {
-					http.Error(w, `{"error":"user resolution failed"}`, http.StatusUnauthorized)
-					return
-				}
-				userID = internalID
 			}
 
 			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)

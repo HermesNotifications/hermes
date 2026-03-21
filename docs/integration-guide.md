@@ -10,8 +10,8 @@ Hermes runs as a set of microservices:
 
 | Service | Port (default) | Purpose |
 |---------|---------------|---------|
-| **Admin** | 8080 | Server-side API: send notifications, manage groups/types, issue JWT tokens, manage signing keys |
-| **Inbox** | 8081 | User-facing API: list/read/archive inbox notifications, Centrifugo token generation |
+| **Admin** | 8080 | Server-side API: send notifications, manage groups/types, issue JWT tokens |
+| **Inbox** | 8081 | User-facing API: list/read/archive inbox notifications |
 | **User** | 8082 | User-facing API: profile management, notification preferences |
 | **Router** | - | Internal worker: routes notifications to delivery channels |
 | **Workers** | - | Internal workers: email, SMS, inbox delivery, event writing |
@@ -21,11 +21,7 @@ Hermes runs as a set of microservices:
 
 ## Authentication
 
-Hermes supports two JWT authentication flows for user-facing APIs:
-
-### Flow 1: Hermes-Issued Tokens
-
-Your backend calls the Admin API to exchange a user identifier for a Hermes JWT. This is the simplest approach.
+Your backend calls the Admin API to exchange a user identifier for a Hermes JWT. This token is used for all user-facing APIs and for connecting to Centrifugo (real-time WebSocket push).
 
 ```
 Your Backend                     Hermes Admin API
@@ -66,80 +62,10 @@ The `user_id` you provide is the **external user ID** in your system. Hermes aut
 
 Tokens expire in approximately 1 hour (with jitter). Your backend should request a new token before expiry and pass it to the frontend.
 
-### Flow 2: Provider-Issued Tokens (Bring Your Own JWT)
-
-If your application already issues JWTs (e.g., from your auth system), you can configure Hermes to accept them directly. This avoids the extra token-exchange round trip.
-
-**Step 1: Register your signing key with Hermes**
-
-```bash
-curl -X POST https://hermes.example.com/admin/v1/auth/keys \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My Auth Service",
-    "algorithm": "HS256",
-    "secret": "your-jwt-signing-secret",
-    "user_id_claim": "sub",
-    "tenant_id_claim": "org_id"
-  }'
-```
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `name` | (required) | A human-readable name for this key |
-| `algorithm` | `HS256` | Signing algorithm. Supported: `HS256`, `HS384`, `HS512` |
-| `secret` | (required) | The shared secret used to sign your JWTs |
-| `user_id_claim` | `sub` | The JWT claim containing the user's external identifier |
-| `tenant_id_claim` | `tenant_id` | The JWT claim containing the tenant/organization identifier |
-
-**Step 2: Include the required claims in your JWTs**
-
-Your JWTs must contain:
-- A claim with the user's external ID (mapped by `user_id_claim`)
-- A claim with the tenant ID (mapped by `tenant_id_claim`)
-- An `exp` (expiration) claim
-
-Example JWT payload when `user_id_claim: "sub"` and `tenant_id_claim: "org_id"`:
-
-```json
-{
-  "sub": "alice@example.com",
-  "org_id": "acme-corp",
-  "exp": 1742572800
-}
-```
-
-When Hermes receives a provider-issued JWT, it:
-1. Validates the signature against registered signing keys
-2. Extracts the user ID and tenant ID from the configured claims
-3. Auto-creates the Hermes user (via `EnsureUser`) if they do not exist
-4. Resolves the external ID to the Hermes internal user ID
-
-**Step 3: Use the token with Inbox and User APIs**
-
-```bash
-curl https://hermes.example.com/inbox/v1/inbox \
-  -H "Authorization: Bearer YOUR_EXISTING_JWT"
-```
-
-### Managing Signing Keys
-
-**List all signing keys:**
-
-```bash
-curl https://hermes.example.com/admin/v1/auth/keys \
-  -H "Authorization: Bearer YOUR_API_KEY"
-```
-
-Secrets are never returned in API responses.
-
-**Delete a signing key:**
-
-```bash
-curl -X DELETE https://hermes.example.com/admin/v1/auth/keys/KEY_ID \
-  -H "Authorization: Bearer YOUR_API_KEY"
-```
+The same JWT is used for:
+- **Inbox API** requests (`Authorization: Bearer <token>`)
+- **User API** requests (`Authorization: Bearer <token>`)
+- **Centrifugo WebSocket** connections (passed as the connection token)
 
 ## Setup Steps
 
@@ -194,10 +120,6 @@ curl -X POST https://hermes.example.com/admin/v1/types \
 ```
 
 Templates use Go `text/template` syntax. Variables are passed via the `data` field when sending.
-
-### 5. Register a JWT Signing Key (Optional)
-
-Only needed if using Flow 2 (provider-issued tokens). See the [Authentication](#flow-2-provider-issued-tokens-bring-your-own-jwt) section above.
 
 ## Sending Notifications
 
@@ -453,20 +375,7 @@ curl -X DELETE https://hermes.example.com/user/v1/users/me/preferences/GROUP_ID 
 
 Hermes uses [Centrifugo](https://centrifugal.dev/) for real-time WebSocket delivery of inbox events (new notification, read, archive, etc.).
 
-### Getting a Centrifugo Connection Token
-
-```bash
-curl https://hermes.example.com/inbox/v1/inbox/centrifugo-token \
-  -H "Authorization: Bearer USER_JWT"
-```
-
-**Response:**
-
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
+The same JWT from `POST /v1/auth/token` is used to connect to Centrifugo -- no separate token endpoint is needed. Centrifugo is configured with the same HMAC signing secret as Hermes (`HERMES_JWT_SECRET`).
 
 ### Connecting from the Frontend
 
@@ -475,19 +384,13 @@ Using the [centrifuge-js](https://github.com/centrifugal/centrifuge-js) client:
 ```javascript
 import { Centrifuge } from 'centrifuge';
 
-// 1. Get the Centrifugo token from your backend / Hermes inbox API
-const tokenResp = await fetch('/inbox/v1/inbox/centrifugo-token', {
-  headers: { 'Authorization': `Bearer ${userJwt}` }
-});
-const { token } = await tokenResp.json();
-
-// 2. Connect to Centrifugo
+// Use the same Hermes JWT for Centrifugo connection
 const centrifuge = new Centrifuge('wss://centrifugo.example.com/connection/websocket', {
-  token: token
+  token: userJwt
 });
 
-// 3. Subscribe to the user's channel
-const sub = centrifuge.newSubscription(`user#${userId}`);
+// Subscribe to the user's channel
+const sub = centrifuge.newSubscription(`user#${hermesUserId}`);
 
 sub.on('publication', (ctx) => {
   const event = ctx.data;
@@ -503,6 +406,8 @@ centrifuge.connect();
 
 The channel format is `user#<hermes_internal_user_id>`. Events are published when inbox actions occur (mark read, archive, new delivery, etc.).
 
+**Important:** Centrifugo's `token_hmac_secret_key` must be set to the same value as `HERMES_JWT_SECRET` so it can validate the Hermes-issued JWTs.
+
 ## Admin API Reference
 
 All Admin endpoints require an API key: `Authorization: Bearer YOUR_API_KEY`.
@@ -510,9 +415,6 @@ All Admin endpoints require an API key: `Authorization: Bearer YOUR_API_KEY`.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/auth/token` | Exchange user ID + tenant ID for a Hermes JWT |
-| `POST` | `/v1/auth/keys` | Register a JWT signing key |
-| `GET` | `/v1/auth/keys` | List JWT signing keys (secrets masked) |
-| `DELETE` | `/v1/auth/keys/:id` | Delete a JWT signing key |
 | `POST` | `/v1/groups` | Create a notification group |
 | `GET` | `/v1/groups` | List notification groups |
 | `PUT` | `/v1/groups/:id` | Update a notification group |
@@ -536,7 +438,6 @@ All Inbox endpoints require a user JWT: `Authorization: Bearer USER_JWT`.
 | `PUT` | `/v1/inbox/:id/archive` | Archive notification |
 | `DELETE` | `/v1/inbox/:id/archive` | Unarchive notification |
 | `DELETE` | `/v1/inbox/:id` | Soft-delete notification |
-| `GET` | `/v1/inbox/centrifugo-token` | Get Centrifugo connection token |
 
 ## User API Reference
 
@@ -558,7 +459,6 @@ All User endpoints require a user JWT: `Authorization: Bearer USER_JWT`.
 | `HERMES_DATABASE_URL` | `postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable` | PostgreSQL connection string |
 | `HERMES_NATS_URL` | `nats://localhost:4222` | NATS server URL |
 | `HERMES_REDIS_URL` | `redis://localhost:6379/0` | Redis URL (used for idempotency cache) |
-| `HERMES_JWT_SECRET` | `hermes-jwt-secret` | Secret for Hermes-issued JWTs |
-| `HERMES_CENTRIFUGO_TOKEN_SECRET` | `centrifugo-token-secret` | Secret for Centrifugo connection tokens |
+| `HERMES_JWT_SECRET` | `hermes-jwt-secret` | Secret for Hermes-issued JWTs (also used by Centrifugo) |
 | `HERMES_CENTRIFUGO_API_URL` | `http://localhost:8000` | Centrifugo HTTP API URL |
 | `HERMES_CENTRIFUGO_API_KEY` | `centrifugo-api-key` | Centrifugo API key |

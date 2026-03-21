@@ -28,7 +28,6 @@ type Server struct {
 	mux            *http.ServeMux
 	skipAuth       bool
 	jwtKeyProvider auth.JWTKeyProvider
-	userResolver   auth.UserResolver
 }
 
 // SetSkipAuth disables JWT authentication. Intended for use in tests only.
@@ -36,11 +35,10 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, resolver auth.UserResolver, logger *slog.Logger) *Server {
+func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
 	s := &Server{
 		store:          store,
 		jwtKeyProvider: keyProvider,
-		userResolver:   resolver,
 		logger:         logger,
 		mux:            http.NewServeMux(),
 	}
@@ -66,7 +64,7 @@ func (s *Server) routes() {
 func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.mux
 	if !s.skipAuth {
-		h = auth.JWTMiddleware(s.jwtKeyProvider, s.userResolver)(h)
+		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)

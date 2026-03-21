@@ -20,8 +20,7 @@ type mockStore struct {
 	users         []models.User
 	notifications []models.Notification
 	events        []models.NotificationEvent
-	apiKeys       []models.APIKey
-	jwtKeys       []models.JWTSigningKey
+	apiKeys []models.APIKey
 }
 
 // --- Tenants ---
@@ -202,52 +201,7 @@ func (m *mockStore) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 
 // --- JWT Signing Keys ---
 
-func (m *mockStore) CreateJWTSigningKey(ctx context.Context, name, algorithm, secret, userIDClaim, tenantIDClaim string) (*models.JWTSigningKey, error) {
-	k := models.JWTSigningKey{
-		ID:            fmt.Sprintf("jwtk-%d", len(m.jwtKeys)+1),
-		Name:          name,
-		Algorithm:     algorithm,
-		Secret:        secret,
-		UserIDClaim:   userIDClaim,
-		TenantIDClaim: tenantIDClaim,
-		Active:        true,
-		CreatedAt:     time.Now(),
-	}
-	m.jwtKeys = append(m.jwtKeys, k)
-	return &k, nil
-}
-
-func (m *mockStore) ListJWTSigningKeys(ctx context.Context) ([]models.JWTSigningKey, error) {
-	return m.jwtKeys, nil
-}
-
-func (m *mockStore) DeleteJWTSigningKey(ctx context.Context, id string) error {
-	for i, k := range m.jwtKeys {
-		if k.ID == id {
-			m.jwtKeys = append(m.jwtKeys[:i], m.jwtKeys[i+1:]...)
-			return nil
-		}
-	}
-	return fmt.Errorf("jwt signing key not found: %s", id)
-}
-
 func (m *mockStore) EnsureHermesSigningKey(ctx context.Context, secret string) error {
-	for i, k := range m.jwtKeys {
-		if k.ID == "hermes-internal" {
-			m.jwtKeys[i].Secret = secret
-			return nil
-		}
-	}
-	m.jwtKeys = append(m.jwtKeys, models.JWTSigningKey{
-		ID:            "hermes-internal",
-		Name:          "hermes-internal",
-		Algorithm:     "HS256",
-		Secret:        secret,
-		UserIDClaim:   "sub",
-		TenantIDClaim: "tenant_id",
-		Active:        true,
-		CreatedAt:     time.Now(),
-	})
 	return nil
 }
 
