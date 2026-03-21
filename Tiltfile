@@ -40,10 +40,10 @@ k8s_resource("centrifugo", labels=["infra"], port_forwards=["8000:8000"],
 local_resource(
     "migrate",
     cmd=" && ".join([
-        "go build -o ./bin/migrate ./cmd/migrate/",
-        'for i in 1 2 3 4 5 6 7 8 9 10; do '
-        "./bin/migrate -database-url 'postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable' "
-        '-migrations-path ./migrations && break || sleep 2; done',
+        "go build -o ./bin/migrate/service ./cmd/migrate/",
+        "for i in 1 2 3 4 5 6 7 8 9 10; do " +
+        "./bin/migrate/service -database-url 'postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable' " +
+        "-migrations-path ./migrations && break || sleep 2; done",
     ]),
     deps=["migrations/", "cmd/migrate/"],
     resource_deps=["postgres"],
