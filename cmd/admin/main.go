@@ -1,3 +1,10 @@
+// @title Hermes Admin API
+// @version 1.0
+// @description Server-to-server API for managing notification groups, types, and sending notifications.
+// @BasePath /
+// @securityDefinitions.apiKey ApiKeyAuth
+// @in header
+// @name Authorization
 package main
 
 import (

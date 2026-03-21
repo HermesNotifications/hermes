@@ -27,6 +27,13 @@ type updateTypeRequest struct {
 	InboxBody    *string `json:"inbox_body"`
 }
 
+// @Summary List notification types
+// @Tags types
+// @Produce json
+// @Success 200 {array} models.NotificationType
+// @Failure 500 {object} map[string]string
+// @Router /v1/types [get]
+// @Security ApiKeyAuth
 func (s *Server) handleListTypes(w http.ResponseWriter, r *http.Request) {
 	types, err := s.store.ListTypes(r.Context())
 	if err != nil {
@@ -36,6 +43,16 @@ func (s *Server) handleListTypes(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, http.StatusOK, types)
 }
 
+// @Summary Create a notification type
+// @Tags types
+// @Accept json
+// @Produce json
+// @Param body body createTypeRequest true "Type to create"
+// @Success 201 {object} models.NotificationType
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/types [post]
+// @Security ApiKeyAuth
 func (s *Server) handleCreateType(w http.ResponseWriter, r *http.Request) {
 	var req createTypeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -59,6 +76,18 @@ func (s *Server) handleCreateType(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, http.StatusCreated, nt)
 }
 
+// @Summary Update a notification type
+// @Tags types
+// @Accept json
+// @Produce json
+// @Param id path string true "Type ID"
+// @Param body body updateTypeRequest true "Fields to update"
+// @Success 200 {object} models.NotificationType
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/types/{id} [put]
+// @Security ApiKeyAuth
 func (s *Server) handleUpdateType(w http.ResponseWriter, r *http.Request) {
 	typeID := r.PathValue("id")
 	var req updateTypeRequest
@@ -90,6 +119,14 @@ func (s *Server) handleUpdateType(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, http.StatusOK, updated)
 }
 
+// @Summary Delete a notification type
+// @Tags types
+// @Param id path string true "Type ID"
+// @Success 204
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/types/{id} [delete]
+// @Security ApiKeyAuth
 func (s *Server) handleDeleteType(w http.ResponseWriter, r *http.Request) {
 	typeID := r.PathValue("id")
 

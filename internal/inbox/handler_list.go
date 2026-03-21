@@ -13,6 +13,17 @@ type listInboxResponse struct {
 	Cursor      string `json:"cursor,omitempty"`
 }
 
+// @Summary List inbox notifications
+// @Tags inbox
+// @Produce json
+// @Param archived query bool false "Filter archived notifications"
+// @Param cursor query string false "Pagination cursor"
+// @Param limit query int false "Page size (default 20)"
+// @Success 200 {object} listInboxResponse
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/inbox [get]
+// @Security BearerAuth
 func (s *Server) handleListInbox(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {

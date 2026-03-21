@@ -30,6 +30,17 @@ type sendResponse struct {
 	NotificationID string `json:"notification_id"`
 }
 
+// @Summary Send a notification
+// @Tags notifications
+// @Accept json
+// @Produce json
+// @Param X-Idempotency-Key header string false "Idempotency key for deduplication"
+// @Param body body sendRequest true "Notification to send"
+// @Success 202 {object} sendResponse
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/send [post]
+// @Security ApiKeyAuth
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	var req sendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

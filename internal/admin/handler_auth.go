@@ -21,6 +21,16 @@ type tokenResponse struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+// @Summary Exchange credentials for a user JWT token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param body body tokenRequest true "User and tenant to issue token for"
+// @Success 200 {object} tokenResponse
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/auth/token [post]
+// @Security ApiKeyAuth
 func (s *Server) handleAuthToken(w http.ResponseWriter, r *http.Request) {
 	var req tokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

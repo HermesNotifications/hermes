@@ -1,0 +1,493 @@
+basePath: /
+definitions:
+  admin.content:
+    properties:
+      action_label:
+        type: string
+      action_url:
+        type: string
+      body:
+        type: string
+      title:
+        type: string
+    type: object
+  admin.createGroupRequest:
+    properties:
+      default_channels:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      slug:
+        type: string
+    type: object
+  admin.createTypeRequest:
+    properties:
+      email_body:
+        type: string
+      email_subject:
+        type: string
+      group_id:
+        type: string
+      inbox_body:
+        type: string
+      inbox_title:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      sms_body:
+        type: string
+    type: object
+  admin.notificationStatusResponse:
+    properties:
+      events: {}
+      notification: {}
+    type: object
+  admin.sendRequest:
+    properties:
+      channels:
+        items:
+          type: string
+        type: array
+      content:
+        $ref: '#/definitions/admin.content'
+      data:
+        additionalProperties: {}
+        type: object
+      group:
+        type: string
+      tenant_id:
+        type: string
+      type:
+        type: string
+      user_id:
+        type: string
+    type: object
+  admin.sendResponse:
+    properties:
+      notification_id:
+        type: string
+    type: object
+  admin.tokenRequest:
+    properties:
+      tenant_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  admin.tokenResponse:
+    properties:
+      expires_at:
+        type: string
+      token:
+        type: string
+    type: object
+  admin.updateGroupRequest:
+    properties:
+      default_channels:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+    type: object
+  admin.updateTypeRequest:
+    properties:
+      email_body:
+        type: string
+      email_subject:
+        type: string
+      inbox_body:
+        type: string
+      inbox_title:
+        type: string
+      name:
+        type: string
+      sms_body:
+        type: string
+    type: object
+  models.NotificationGroup:
+    properties:
+      created_at:
+        type: string
+      default_channels:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+    type: object
+  models.NotificationType:
+    properties:
+      created_at:
+        type: string
+      email_body:
+        type: string
+      email_subject:
+        type: string
+      group_id:
+        type: string
+      id:
+        type: string
+      inbox_body:
+        type: string
+      inbox_title:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      sms_body:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Server-to-server API for managing notification groups, types, and sending
+    notifications.
+  title: Hermes Admin API
+  version: "1.0"
+paths:
+  /v1/auth/token:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User and tenant to issue token for
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.tokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/admin.tokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Exchange credentials for a user JWT token
+      tags:
+      - auth
+  /v1/groups:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.NotificationGroup'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List notification groups
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Group to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.createGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.NotificationGroup'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a notification group
+      tags:
+      - groups
+  /v1/groups/{id}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Group ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.updateGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.NotificationGroup'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update a notification group
+      tags:
+      - groups
+  /v1/notifications/{id}:
+    get:
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/admin.notificationStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get notification status and events
+      tags:
+      - notifications
+  /v1/send:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Idempotency key for deduplication
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Notification to send
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.sendRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/admin.sendResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Send a notification
+      tags:
+      - notifications
+  /v1/types:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.NotificationType'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List notification types
+      tags:
+      - types
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Type to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.createTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.NotificationType'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a notification type
+      tags:
+      - types
+  /v1/types/{id}:
+    delete:
+      parameters:
+      - description: Type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a notification type
+      tags:
+      - types
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/admin.updateTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.NotificationType'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update a notification type
+      tags:
+      - types
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

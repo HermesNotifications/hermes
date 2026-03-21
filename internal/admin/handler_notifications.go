@@ -7,6 +7,15 @@ type notificationStatusResponse struct {
 	Events       any `json:"events"`
 }
 
+// @Summary Get notification status and events
+// @Tags notifications
+// @Produce json
+// @Param id path string true "Notification ID"
+// @Success 200 {object} notificationStatusResponse
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/notifications/{id} [get]
+// @Security ApiKeyAuth
 func (s *Server) handleGetNotification(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 

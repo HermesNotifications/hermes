@@ -12,6 +12,14 @@ type updateContactsRequest struct {
 	Phone *string `json:"phone"`
 }
 
+// @Summary Get current user profile
+// @Tags users
+// @Produce json
+// @Success 200 {object} models.User
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/users/me [get]
+// @Security BearerAuth
 func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
@@ -28,6 +36,17 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, http.StatusOK, user)
 }
 
+// @Summary Update user contact information
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param body body updateContactsRequest true "Contact fields to update"
+// @Success 200 {object} models.User
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/users/me/contacts [put]
+// @Security BearerAuth
 func (s *Server) handleUpdateContacts(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
