@@ -79,6 +79,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/types", s.handleCreateType)
 	s.mux.HandleFunc("PUT /v1/types/{id}", s.handleUpdateType)
 	s.mux.HandleFunc("DELETE /v1/types/{id}", s.handleDeleteType)
+
+	// Send
+	s.mux.HandleFunc("POST /v1/send", s.handleSend)
 }
 
 func (s *Server) Handler() http.Handler {
