@@ -156,7 +156,9 @@ func (m *mockStore) EnsureUser(ctx context.Context, tenantID, externalID string)
 
 func (m *mockStore) CreateNotification(ctx context.Context, n *models.Notification) (*models.Notification, error) {
 	created := *n
-	created.ID = fmt.Sprintf("ntf-%d", len(m.notifications)+1)
+	if created.ID == "" {
+		created.ID = fmt.Sprintf("ntf-%d", len(m.notifications)+1)
+	}
 	created.CreatedAt = time.Now()
 	m.notifications = append(m.notifications, created)
 	return &created, nil

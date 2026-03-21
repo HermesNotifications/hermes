@@ -136,12 +136,10 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Persist
-	persisted, err := s.store.CreateNotification(ctx, n)
-	if err != nil {
+	if _, err := s.store.CreateNotification(ctx, n); err != nil {
 		s.serverError(w, err)
 		return
 	}
-	notifID = persisted.ID
 
 	// Publish to NATS
 	if s.nats != nil {
