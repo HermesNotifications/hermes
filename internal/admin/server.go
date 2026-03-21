@@ -68,7 +68,11 @@ func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, po
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /readyz", s.handleReadyz)
-	// More routes added in subsequent tasks
+
+	// Groups
+	s.mux.HandleFunc("GET /v1/groups", s.handleListGroups)
+	s.mux.HandleFunc("POST /v1/groups", s.handleCreateGroup)
+	s.mux.HandleFunc("PUT /v1/groups/{id}", s.handleUpdateGroup)
 }
 
 func (s *Server) Handler() http.Handler {
