@@ -60,6 +60,10 @@ func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client
 }
 
 func (s *Server) routes() {
+	// Health
+	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	s.mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+
 	// Inbox
 	s.mux.HandleFunc("GET /v1/inbox", s.handleListInbox)
 	s.mux.HandleFunc("PUT /v1/inbox/read-all", s.handleMarkAllRead)

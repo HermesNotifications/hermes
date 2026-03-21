@@ -47,6 +47,10 @@ func NewServer(store UserStore, jwtSecret []byte, logger *slog.Logger) *Server {
 }
 
 func (s *Server) routes() {
+	// Health
+	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	s.mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+
 	// Profile
 	s.mux.HandleFunc("GET /v1/users/me", s.handleGetProfile)
 	s.mux.HandleFunc("PUT /v1/users/me/contacts", s.handleUpdateContacts)
