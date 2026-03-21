@@ -1,0 +1,37 @@
+# Kargo Warehouse watches ECR for new images across all 9 Hermes services.
+# When any service publishes a new tag, Kargo creates a Freight that can
+# be promoted through the staging -> production pipeline.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: hermes
+  namespace: hermes
+spec:
+  subscriptions:
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-router
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-user
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
+        discoveryLimit: 5
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
+        discoveryLimit: 5

@@ -1,0 +1,13 @@
+environment                 = "staging"
+aws_region                  = "us-east-1"
+eks_node_instance_types     = ["t4g.medium"]
+eks_node_min_size           = 2
+eks_node_max_size           = 4
+eks_node_desired_size       = 2
+rds_instance_class          = "db.t4g.medium"
+rds_multi_az                = false
+rds_allocated_storage       = 20
+rds_backup_retention_period = 7
+elasticache_node_type       = "cache.t4g.micro"
+elasticache_num_cache_nodes = 1
+domain_name                 = "staging.hermes.example.com"

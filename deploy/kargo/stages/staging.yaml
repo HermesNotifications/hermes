@@ -1,0 +1,61 @@
+# Kargo Stage: staging
+# Subscribes directly to the hermes Warehouse. When new Freight arrives,
+# the promotion steps clone the repo, update Kustomize image tags in the
+# staging overlay, commit, push, and trigger an ArgoCD sync.
+# Post-promotion verification runs the health-check analysis template.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: staging
+  namespace: hermes
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: hermes
+      sources:
+        direct: true
+  promotionTemplate:
+    spec:
+      steps:
+        # 1. Clone the repository
+        - uses: git-clone
+          config:
+            repoURL: https://github.com/OWNER/hermes.git
+            checkout:
+              - branch: main
+                path: ./src
+        # 2. Update image tags in the staging Kustomize overlay
+        - uses: kustomize-set-image
+          config:
+            path: ./src/deploy/k8s/overlays/staging
+            images:
+              - image: hermes-admin
+              - image: hermes-router
+              - image: hermes-inbox
+              - image: hermes-user
+              - image: hermes-worker-events
+              - image: hermes-worker-email
+              - image: hermes-worker-sms
+              - image: hermes-worker-inbox
+              - image: hermes-migrate
+        # 3. Commit the image tag changes
+        - uses: git-commit
+          config:
+            path: ./src
+            messageFromSteps:
+              - kustomize-set-image
+        # 4. Push the commit to the remote
+        - uses: git-push
+          config:
+            path: ./src
+        # 5. Tell ArgoCD to sync the staging application
+        - uses: argocd-update
+          config:
+            apps:
+              - name: hermes-staging
+                sources:
+                  - repoURL: https://github.com/OWNER/hermes.git
+  verification:
+    analysisTemplates:
+      - name: hermes-health-check

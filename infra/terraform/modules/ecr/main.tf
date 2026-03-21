@@ -1,0 +1,69 @@
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+locals {
+  services = toset([
+    "admin",
+    "router",
+    "inbox",
+    "user",
+    "worker-events",
+    "worker-email",
+    "worker-sms",
+    "worker-inbox",
+    "migrate",
+  ])
+}
+
+resource "aws_ecr_repository" "services" {
+  for_each = local.services
+
+  name                 = "hermes-${each.value}"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name    = "hermes-${each.value}"
+    Service = each.value
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "services" {
+  for_each = local.services
+
+  repository = aws_ecr_repository.services[each.key].name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images after 7 days"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 7
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep only 20 tagged images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["v", "sha-"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 20
+        }
+        action = {
+          type = "expire"
+        }
+      },
+    ]
+  })
+}

@@ -4,9 +4,13 @@ kind: Kustomization
 resources:
   - ../../base
   - external-secrets.yaml
+  - secret-store.yaml
+  - network-policies/
 
 patches:
   - path: patches/replicas.yaml
+  - path: patches/centrifugo-env.yaml
+  - path: patches/ingress.yaml
 
 # DATABASE_URL and REDIS_URL are provided by ExternalSecret (hermes-secrets)
 # No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL

@@ -1,0 +1,93 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hermes-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - hermes.example.com
+      secretName: hermes-tls
+  rules:
+    - host: hermes.example.com
+      http:
+        paths:
+          - path: /v1/send
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/types
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/groups
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/inbox
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-inbox
+                port:
+                  number: 8086
+          - path: /v1/users
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-user
+                port:
+                  number: 8087
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hermes-centrifugo-ingress
+  namespace: hermes
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - hermes.example.com
+      secretName: hermes-centrifugo-tls
+  rules:
+    - host: hermes.example.com
+      http:
+        paths:
+          - path: /centrifugo(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: centrifugo
+                port:
+                  number: 8000

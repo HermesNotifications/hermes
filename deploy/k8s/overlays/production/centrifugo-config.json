@@ -1,10 +1,10 @@
 {
   "engine": "redis",
-  "redis_address": "REPLACE_WITH_PRODUCTION_ELASTICACHE_ENDPOINT:6379",
+  "redis_address": "overridden-by-env",
   "broker": "nats",
   "nats_url": "nats://nats:4222",
-  "token_hmac_secret_key": "REPLACE_WITH_PRODUCTION_JWT_SECRET",
-  "api_key": "REPLACE_WITH_PRODUCTION_API_KEY",
+  "token_hmac_secret_key": "overridden-by-env",
+  "api_key": "overridden-by-env",
   "admin": false,
   "presence": true,
   "history_size": 50,

@@ -13,6 +13,8 @@ patches:
   - path: patches/replicas.yaml
   - path: patches/resources.yaml
   - path: patches/anti-affinity.yaml
+  - path: patches/centrifugo-env.yaml
+  - path: patches/ingress.yaml
 
 # DATABASE_URL and REDIS_URL are provided by ExternalSecret (hermes-secrets)
 # No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL

@@ -1,0 +1,58 @@
+# Kargo Stage: production
+# Subscribes to Freight that has been verified in the staging stage.
+# NO auto-promotion — requires manual approval in the Kargo UI before
+# Freight is promoted to production.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: production
+  namespace: hermes
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: hermes
+      sources:
+        stages:
+          - staging
+  promotionTemplate:
+    spec:
+      steps:
+        # 1. Clone the repository
+        - uses: git-clone
+          config:
+            repoURL: https://github.com/OWNER/hermes.git
+            checkout:
+              - branch: main
+                path: ./src
+        # 2. Update image tags in the production Kustomize overlay
+        - uses: kustomize-set-image
+          config:
+            path: ./src/deploy/k8s/overlays/production
+            images:
+              - image: hermes-admin
+              - image: hermes-router
+              - image: hermes-inbox
+              - image: hermes-user
+              - image: hermes-worker-events
+              - image: hermes-worker-email
+              - image: hermes-worker-sms
+              - image: hermes-worker-inbox
+              - image: hermes-migrate
+        # 3. Commit the image tag changes
+        - uses: git-commit
+          config:
+            path: ./src
+            messageFromSteps:
+              - kustomize-set-image
+        # 4. Push the commit to the remote
+        - uses: git-push
+          config:
+            path: ./src
+        # 5. Tell ArgoCD to sync the production application
+        - uses: argocd-update
+          config:
+            apps:
+              - name: hermes-production
+                sources:
+                  - repoURL: https://github.com/OWNER/hermes.git

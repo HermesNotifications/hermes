@@ -1,0 +1,33 @@
+# ArgoCD Application for Hermes production environment.
+# Auto-sync is enabled (prune + selfHeal) because Kargo controls
+# WHEN the production overlay is updated via promotion steps.
+# ArgoCD simply reconciles whatever state is committed to git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hermes-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/OWNER/hermes.git # placeholder
+    targetRevision: main
+    path: deploy/k8s/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hermes
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

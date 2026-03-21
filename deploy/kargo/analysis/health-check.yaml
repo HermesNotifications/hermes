@@ -1,0 +1,44 @@
+# Argo Rollouts AnalysisTemplate used by Kargo for post-promotion verification.
+# Runs a kubectl job that checks rollout status for all Hermes deployments
+# and the NATS StatefulSet, then verifies all pods are in Running state.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: hermes-health-check
+  namespace: hermes
+spec:
+  metrics:
+    - name: pod-health
+      provider:
+        job:
+          spec:
+            backoffLimit: 1
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: health-check
+                    image: bitnami/kubectl:latest
+                    command:
+                      - /bin/sh
+                      - -c
+                      - |
+                        # Wait for each deployment rollout to complete
+                        for deploy in admin router inbox user worker-events worker-email worker-sms worker-inbox; do
+                          echo "Checking hermes-${deploy}..."
+                          kubectl rollout status deployment/hermes-${deploy} -n hermes --timeout=120s
+                        done
+                        # Check NATS StatefulSet
+                        kubectl rollout status statefulset/nats -n hermes --timeout=60s
+                        # Verify all pods are ready
+                        NOT_READY=$(kubectl get pods -n hermes --no-headers | grep -v "Running\|Completed" | wc -l)
+                        if [ "$NOT_READY" -gt 0 ]; then
+                          echo "Found $NOT_READY pods not in Running state"
+                          kubectl get pods -n hermes
+                          exit 1
+                        fi
+                        echo "All pods healthy"
+      successCondition: result.exitCode == 0
+      failureLimit: 2
+      interval: 30s
+      count: 1

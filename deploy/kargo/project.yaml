@@ -1,0 +1,6 @@
+# Kargo Project groups all promotion resources for Hermes
+# under a single namespace-scoped project.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: hermes

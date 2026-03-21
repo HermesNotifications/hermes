@@ -16,6 +16,12 @@
 # Environment
 .env
 .env.local
+
+# Terraform
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
 # Built service binaries
 /admin
 /router

@@ -1,0 +1,33 @@
+# ArgoCD Application for Hermes staging environment.
+# Syncs the staging Kustomize overlay automatically.
+# Kargo controls WHEN image tags are updated in the overlay;
+# ArgoCD just applies whatever is in git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hermes-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/OWNER/hermes.git # placeholder
+    targetRevision: main
+    path: deploy/k8s/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hermes
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
