@@ -28,14 +28,17 @@ func Connect(redisURL string) (*Client, error) {
 // SetIdempotencyKey attempts to set an idempotency key. Returns "" if the key was new,
 // or the existing notification_id if the key already existed.
 func (c *Client) SetIdempotencyKey(ctx context.Context, key, notificationID string, ttl time.Duration) (string, error) {
-	set, err := c.rdb.SetNX(ctx, "idem:"+key, notificationID, ttl).Result()
-	if err != nil {
-		return "", fmt.Errorf("setnx: %w", err)
+	err := c.rdb.SetArgs(ctx, "idem:"+key, notificationID, redis.SetArgs{
+		Mode: "NX",
+		TTL:  ttl,
+	}).Err()
+	if err == nil {
+		return "", nil // new key — NX succeeded
 	}
-	if set {
-		return "", nil // new key
+	if !errors.Is(err, redis.Nil) {
+		return "", fmt.Errorf("set nx: %w", err)
 	}
-	// Key already existed — return stored value
+	// NX failed (key exists) — return stored value
 	existing, err := c.rdb.Get(ctx, "idem:"+key).Result()
 	if err != nil {
 		return "", fmt.Errorf("get existing: %w", err)

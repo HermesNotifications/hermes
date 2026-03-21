@@ -23,6 +23,8 @@ linters-settings:
       - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetTypeConfig
       - (*github.com/hermes-notifications/hermes/internal/cache.Client).InvalidateTypeConfig
       - (*github.com/hermes-notifications/hermes/internal/cache.Client).SetIdempotencyKey
+      # Background health check servers in workers — error logged by Go's default handler
+      - net/http.ListenAndServe
 
 issues:
   exclude-rules:
