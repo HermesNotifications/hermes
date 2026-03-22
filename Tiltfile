@@ -1,4 +1,5 @@
 load("ext://restart_process", "docker_build_with_restart")
+load("ext://helm_remote", "helm_remote")
 
 # --- Config ---
 k3d_registry = "k3d-hermes-registry.localhost:5111"
@@ -40,8 +41,6 @@ helm_remote(
         "controller.admissionWebhooks.enabled=false",
     ],
 )
-
-k8s_yaml("deploy/k8s/ingress.yaml")
 
 # --- Migration ---
 # Retry loop handles the race between postgres readiness and port-forward setup
