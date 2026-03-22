@@ -5,6 +5,7 @@ module "vpc" {
   vpc_cidr           = var.vpc_cidr
   cluster_name       = "hermes-${var.environment}"
   single_nat_gateway = var.environment == "staging"
+  az_count           = var.environment == "production" ? 3 : 2
 }
 
 module "eks" {

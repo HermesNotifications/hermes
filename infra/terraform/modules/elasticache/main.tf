@@ -74,6 +74,7 @@ resource "aws_elasticache_replication_group" "main" {
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
   auth_token                 = random_password.auth_token.result
+  auth_token_update_strategy = "ROTATE"
 
   snapshot_retention_limit = var.environment == "production" ? 7 : 1
 

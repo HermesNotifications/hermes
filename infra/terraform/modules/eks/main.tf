@@ -41,6 +41,7 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = var.private_subnet_ids
     endpoint_public_access  = true
     endpoint_private_access = true
+    public_access_cidrs     = var.public_access_cidrs
   }
 
   depends_on = [
@@ -179,6 +180,36 @@ resource "aws_iam_role_policy" "external_secrets" {
 }
 
 # ------------------------------------------------------------------------------
+# IRSA: EBS CSI Driver
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "ebs_csi" {
+  name = "${local.cluster_name}-ebs-csi"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks.arn
+      }
+      Condition = {
+        StringEquals = {
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  role       = aws_iam_role.ebs_csi.name
+}
+
+# ------------------------------------------------------------------------------
 # EKS Addons
 # ------------------------------------------------------------------------------
 
@@ -204,8 +235,9 @@ resource "aws_eks_addon" "kube_proxy" {
 }
 
 resource "aws_eks_addon" "ebs_csi" {
-  cluster_name = aws_eks_cluster.main.name
-  addon_name   = "aws-ebs-csi-driver"
+  cluster_name             = aws_eks_cluster.main.name
+  addon_name               = "aws-ebs-csi-driver"
+  service_account_role_arn = aws_iam_role.ebs_csi.arn
 
   depends_on = [aws_eks_node_group.main]
 }

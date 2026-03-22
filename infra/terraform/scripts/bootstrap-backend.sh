@@ -2,13 +2,13 @@
 set -euo pipefail
 
 REGION="${1:-us-east-1}"
-BUCKET_NAME="hermes-terraform-state"
-TABLE_NAME="hermes-terraform-locks"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+BUCKET_NAME="hermes-terraform-state-${ACCOUNT_ID}"
 
 echo "Bootstrapping Terraform backend in region: ${REGION}"
 
 # ------------------------------------------------------------------------------
-# S3 Bucket for state
+# S3 Bucket for state (Terraform 1.10+ uses native S3 locking via use_lockfile)
 # ------------------------------------------------------------------------------
 echo "Creating S3 bucket: ${BUCKET_NAME}..."
 
@@ -51,35 +51,14 @@ aws s3api put-public-access-block \
   --public-access-block-configuration \
     "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
-# ------------------------------------------------------------------------------
-# DynamoDB Table for state locking
-# ------------------------------------------------------------------------------
-echo "Creating DynamoDB table: ${TABLE_NAME}..."
-
-if aws dynamodb describe-table --table-name "${TABLE_NAME}" --region "${REGION}" >/dev/null 2>&1; then
-  echo "Table ${TABLE_NAME} already exists, skipping creation."
-else
-  aws dynamodb create-table \
-    --table-name "${TABLE_NAME}" \
-    --attribute-definitions AttributeName=LockID,AttributeType=S \
-    --key-schema AttributeName=LockID,KeyType=HASH \
-    --billing-mode PAY_PER_REQUEST \
-    --region "${REGION}"
-
-  echo "Waiting for table to become active..."
-  aws dynamodb wait table-exists \
-    --table-name "${TABLE_NAME}" \
-    --region "${REGION}"
-  echo "Table created."
-fi
-
 echo ""
 echo "Terraform backend bootstrap complete!"
 echo ""
 echo "Initialize Terraform with:"
+echo "  ENVIRONMENT=staging  # or production"
 echo "  terraform init \\"
 echo "    -backend-config=\"bucket=${BUCKET_NAME}\" \\"
 echo "    -backend-config=\"key=hermes/\${ENVIRONMENT}/terraform.tfstate\" \\"
 echo "    -backend-config=\"region=${REGION}\" \\"
-echo "    -backend-config=\"dynamodb_table=${TABLE_NAME}\" \\"
+echo "    -backend-config=\"use_lockfile=true\" \\"
 echo "    -backend-config=\"encrypt=true\""

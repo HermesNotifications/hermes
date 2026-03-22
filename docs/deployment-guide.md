@@ -95,7 +95,7 @@ Deployment Pipeline:
 
 ## 1. Bootstrap Terraform State
 
-Create the S3 bucket and DynamoDB table that Terraform uses for remote state and locking. This is a one-time operation.
+Create the S3 bucket that Terraform uses for remote state. Terraform 1.10+ handles locking natively via S3. This is a one-time operation.
 
 ```bash
 chmod +x infra/terraform/scripts/bootstrap-backend.sh
@@ -103,8 +103,7 @@ chmod +x infra/terraform/scripts/bootstrap-backend.sh
 ```
 
 This creates:
-- S3 bucket `hermes-terraform-state` (versioned, encrypted, public access blocked)
-- DynamoDB table `hermes-terraform-locks` (for state locking)
+- S3 bucket `hermes-terraform-state-<ACCOUNT_ID>` (versioned, encrypted, public access blocked)
 
 ---
 
@@ -118,10 +117,10 @@ Start with staging. Each environment gets its own Terraform state file.
 cd infra/terraform
 
 terraform init \
-  -backend-config="bucket=hermes-terraform-state" \
+  -backend-config="bucket=hermes-terraform-state-$(aws sts get-caller-identity --query Account --output text)" \
   -backend-config="key=hermes/staging/terraform.tfstate" \
   -backend-config="region=us-east-1" \
-  -backend-config="dynamodb_table=hermes-terraform-locks" \
+  -backend-config="use_lockfile=true" \
   -backend-config="encrypt=true"
 ```
 
@@ -399,10 +398,10 @@ cd infra/terraform
 
 # Switch to production state file
 terraform init -reconfigure \
-  -backend-config="bucket=hermes-terraform-state" \
+  -backend-config="bucket=hermes-terraform-state-$(aws sts get-caller-identity --query Account --output text)" \
   -backend-config="key=hermes/production/terraform.tfstate" \
   -backend-config="region=us-east-1" \
-  -backend-config="dynamodb_table=hermes-terraform-locks" \
+  -backend-config="use_lockfile=true" \
   -backend-config="encrypt=true"
 
 terraform apply -var-file=environments/production.tfvars \

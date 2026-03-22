@@ -14,7 +14,12 @@ output "cluster_ca_certificate" {
 }
 
 output "node_security_group_id" {
-  description = "Security group ID of the EKS node group"
+  description = "Security group ID shared by EKS cluster and nodes"
+  value       = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+}
+
+output "cluster_security_group_id" {
+  description = "EKS-managed cluster security group ID (attached to both control plane and nodes)"
   value       = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
 }
 

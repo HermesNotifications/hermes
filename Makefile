@@ -127,3 +127,24 @@ dev-migrate:
 ## Open the Tilt dashboard
 dev-ui:
 	@open http://localhost:10350 2>/dev/null || xdg-open http://localhost:10350 2>/dev/null || echo "Open http://localhost:10350"
+
+# =============================================================================
+# Terraform (requires AWS credentials)
+# =============================================================================
+
+.PHONY: tf-plan tf-apply tf-destroy tf-bootstrap
+
+tf-plan:         ## Plan infra changes (usage: make tf-plan ENV=staging)
+	@test -n "$(ENV)" || { echo "Usage: make tf-plan ENV=staging"; exit 1; }
+	./infra/terraform/scripts/tfenv.sh $(ENV) plan
+
+tf-apply:        ## Apply infra changes (usage: make tf-apply ENV=staging)
+	@test -n "$(ENV)" || { echo "Usage: make tf-apply ENV=staging"; exit 1; }
+	./infra/terraform/scripts/tfenv.sh $(ENV) apply
+
+tf-destroy:      ## Destroy infra (usage: make tf-destroy ENV=staging)
+	@test -n "$(ENV)" || { echo "Usage: make tf-destroy ENV=staging"; exit 1; }
+	./infra/terraform/scripts/tfenv.sh $(ENV) destroy
+
+tf-bootstrap:    ## Bootstrap Terraform backend (one-time, usage: make tf-bootstrap REGION=us-east-1)
+	./infra/terraform/scripts/bootstrap-backend.sh $(or $(REGION),us-east-1)

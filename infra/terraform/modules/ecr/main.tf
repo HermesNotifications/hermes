@@ -25,6 +25,10 @@ resource "aws_ecr_repository" "services" {
     scan_on_push = true
   }
 
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
   tags = {
     Name    = "hermes-${each.value}"
     Service = each.value

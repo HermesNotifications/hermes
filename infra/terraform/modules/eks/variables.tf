@@ -37,3 +37,9 @@ variable "node_desired_size" {
   description = "Desired number of nodes"
   type        = number
 }
+
+variable "public_access_cidrs" {
+  description = "CIDR blocks allowed to access the EKS API endpoint (default: unrestricted)"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

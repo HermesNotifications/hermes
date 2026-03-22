@@ -18,3 +18,9 @@ variable "single_nat_gateway" {
   type        = bool
   default     = true
 }
+
+variable "az_count" {
+  description = "Number of availability zones to use (2 for staging, 3 for production)"
+  type        = number
+  default     = 3
+}

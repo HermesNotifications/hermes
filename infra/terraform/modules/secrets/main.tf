@@ -7,6 +7,11 @@ resource "random_password" "jwt_secret" {
   special = false
 }
 
+resource "random_password" "centrifugo_token_secret" {
+  length  = 32
+  special = false
+}
+
 resource "random_password" "centrifugo_api_key" {
   length  = 32
   special = false
@@ -17,7 +22,8 @@ resource "random_password" "centrifugo_api_key" {
 # ------------------------------------------------------------------------------
 
 resource "aws_secretsmanager_secret" "hermes" {
-  name = "hermes/${var.environment}"
+  name                    = "hermes/${var.environment}"
+  recovery_window_in_days = var.environment == "production" ? 30 : 0
 
   tags = {
     Name = "hermes-${var.environment}"
@@ -31,7 +37,7 @@ resource "aws_secretsmanager_secret_version" "hermes" {
     database_url              = "postgres://${var.rds_username}:${var.rds_password}@${var.rds_endpoint}:5432/hermes?sslmode=require"
     redis_url                 = "rediss://default:${var.elasticache_auth_token}@${var.elasticache_endpoint}:6379"
     jwt_secret                = random_password.jwt_secret.result
-    centrifugo_token_secret   = random_password.jwt_secret.result
+    centrifugo_token_secret   = random_password.centrifugo_token_secret.result
     centrifugo_api_key        = random_password.centrifugo_api_key.result
     centrifugo_redis_address  = "${var.elasticache_endpoint}:6379"
     centrifugo_redis_password = var.elasticache_auth_token
