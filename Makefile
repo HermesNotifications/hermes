@@ -44,6 +44,7 @@ sdk-ts-generate:   ## Generate TypeScript types from OpenAPI specs
 	pnpm --filter @hermes-notifications/client generate
 sdk-ts-build:      ## Build TypeScript SDKs
 	pnpm --filter @hermes-notifications/server build
+	pnpm --filter @hermes-notifications/client build
 sdk-generate: openapi sdk-ts-generate sdk-ts-build  ## Full pipeline: specs → types → build
 
 # --- Infrastructure ---
