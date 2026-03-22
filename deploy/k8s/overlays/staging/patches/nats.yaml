@@ -4,6 +4,16 @@ metadata:
   name: nats
 spec:
   replicas: 1
+  template:
+    spec:
+      containers:
+      - name: nats
+        args:
+        - "--jetstream"
+        - "--store_dir=/data"
+        - "--server_name=nats-staging"
+        - "-m"
+        - "8222"
   volumeClaimTemplates:
   - metadata:
       name: data
