@@ -29,8 +29,7 @@ module "rds" {
   private_subnet_ids      = module.vpc.private_subnet_ids
   eks_security_group_id   = module.eks.node_security_group_id
   instance_class          = var.rds_instance_class
-  multi_az                = var.rds_multi_az
-  allocated_storage       = var.rds_allocated_storage
+  instance_count          = var.rds_instance_count
   backup_retention_period = var.rds_backup_retention_period
 }
 

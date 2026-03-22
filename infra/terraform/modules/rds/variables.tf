@@ -19,18 +19,14 @@ variable "eks_security_group_id" {
 }
 
 variable "instance_class" {
-  description = "RDS instance class"
+  description = "Aurora instance class"
   type        = string
 }
 
-variable "multi_az" {
-  description = "Enable Multi-AZ deployment"
-  type        = bool
-}
-
-variable "allocated_storage" {
-  description = "Allocated storage in GB"
+variable "instance_count" {
+  description = "Number of Aurora instances (1 for staging, 2+ for production)"
   type        = number
+  default     = 1
 }
 
 variable "backup_retention_period" {

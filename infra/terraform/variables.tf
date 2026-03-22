@@ -23,7 +23,7 @@ variable "vpc_cidr" {
 variable "eks_cluster_version" {
   description = "Kubernetes version for the EKS cluster"
   type        = string
-  default     = "1.31"
+  default     = "1.35"
 }
 
 variable "eks_node_instance_types" {
@@ -47,22 +47,18 @@ variable "eks_node_desired_size" {
 }
 
 variable "rds_instance_class" {
-  description = "RDS instance class"
+  description = "Aurora instance class"
   type        = string
 }
 
-variable "rds_multi_az" {
-  description = "Enable Multi-AZ deployment for RDS"
-  type        = bool
-}
-
-variable "rds_allocated_storage" {
-  description = "Allocated storage in GB for RDS"
+variable "rds_instance_count" {
+  description = "Number of Aurora instances (1 for staging, 2+ for production with read replica)"
   type        = number
+  default     = 1
 }
 
 variable "rds_backup_retention_period" {
-  description = "Number of days to retain RDS backups"
+  description = "Number of days to retain Aurora backups"
   type        = number
   default     = 7
 }

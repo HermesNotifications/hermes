@@ -1,5 +1,9 @@
 # ------------------------------------------------------------------------------
 # Random passwords for secrets not derived from other modules
+#
+# These only change when the resource is tainted or recreated — they are stable
+# across normal applies, so the secret version only updates when infrastructure
+# inputs (endpoints, credentials) actually change.
 # ------------------------------------------------------------------------------
 
 resource "random_password" "jwt_secret" {
@@ -18,7 +22,7 @@ resource "random_password" "centrifugo_api_key" {
 }
 
 # ------------------------------------------------------------------------------
-# Secrets Manager
+# Secrets Manager — infrastructure-derived values (Terraform-managed)
 # ------------------------------------------------------------------------------
 
 resource "aws_secretsmanager_secret" "hermes" {
@@ -41,11 +45,37 @@ resource "aws_secretsmanager_secret_version" "hermes" {
     centrifugo_api_key        = random_password.centrifugo_api_key.result
     centrifugo_redis_address  = "${var.elasticache_endpoint}:6379"
     centrifugo_redis_password = var.elasticache_auth_token
-    email_webhook_url         = "https://REPLACE_ME/email"
-    sms_webhook_url           = "https://REPLACE_ME/sms"
   })
+}
+
+# ------------------------------------------------------------------------------
+# SSM Parameter Store — operator-managed config (not secrets)
+# ------------------------------------------------------------------------------
+
+resource "aws_ssm_parameter" "email_webhook_url" {
+  name  = "/hermes/${var.environment}/email_webhook_url"
+  type  = "String"
+  value = "https://REPLACE_ME/email"
 
   lifecycle {
-    ignore_changes = [secret_string]
+    ignore_changes = [value]
+  }
+
+  tags = {
+    Name = "hermes-${var.environment}-email-webhook-url"
+  }
+}
+
+resource "aws_ssm_parameter" "sms_webhook_url" {
+  name  = "/hermes/${var.environment}/sms_webhook_url"
+  type  = "String"
+  value = "https://REPLACE_ME/sms"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  tags = {
+    Name = "hermes-${var.environment}-sms-webhook-url"
   }
 }

@@ -17,7 +17,7 @@ resource "aws_db_subnet_group" "main" {
 
 resource "aws_security_group" "rds" {
   name_prefix = "hermes-${var.environment}-rds-"
-  description = "Security group for Hermes RDS instance"
+  description = "Security group for Hermes Aurora cluster"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -55,12 +55,12 @@ resource "random_password" "master" {
 }
 
 # ------------------------------------------------------------------------------
-# Parameter Group
+# Cluster Parameter Group
 # ------------------------------------------------------------------------------
 
-resource "aws_db_parameter_group" "main" {
+resource "aws_rds_cluster_parameter_group" "main" {
   name_prefix = "hermes-${var.environment}-"
-  family      = "postgres16"
+  family      = "aurora-postgresql16"
 
   parameter {
     name  = "log_min_duration_statement"
@@ -77,38 +77,54 @@ resource "aws_db_parameter_group" "main" {
 }
 
 # ------------------------------------------------------------------------------
-# RDS Instance
+# Aurora Cluster
 # ------------------------------------------------------------------------------
 
-resource "aws_db_instance" "main" {
-  identifier = "hermes-${var.environment}"
+resource "aws_rds_cluster" "main" {
+  cluster_identifier = "hermes-${var.environment}"
 
-  engine         = "postgres"
-  engine_version = "16"
-  instance_class = var.instance_class
+  engine         = "aurora-postgresql"
+  engine_version = "16.4"
 
-  allocated_storage = var.allocated_storage
-  storage_type      = "gp3"
+  database_name   = "hermes"
+  master_username = "hermes"
+  master_password = random_password.master.result
+
+  db_subnet_group_name            = aws_db_subnet_group.main.name
+  vpc_security_group_ids          = [aws_security_group.rds.id]
+  db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.main.name
+
   storage_encrypted = true
 
-  db_name  = "hermes"
-  username = "hermes"
-  password = random_password.master.result
-
-  multi_az               = var.multi_az
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
-  parameter_group_name   = aws_db_parameter_group.main.name
-
   backup_retention_period = var.backup_retention_period
+  preferred_backup_window = "03:00-04:00"
   deletion_protection     = var.environment == "production"
-
-  performance_insights_enabled = true
 
   skip_final_snapshot       = var.environment != "production"
   final_snapshot_identifier = var.environment == "production" ? "hermes-${var.environment}-final" : null
 
   tags = {
     Name = "hermes-${var.environment}"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# Aurora Instances
+# ------------------------------------------------------------------------------
+
+resource "aws_rds_cluster_instance" "main" {
+  count = var.instance_count
+
+  identifier         = "hermes-${var.environment}-${count.index}"
+  cluster_identifier = aws_rds_cluster.main.id
+
+  engine         = aws_rds_cluster.main.engine
+  engine_version = aws_rds_cluster.main.engine_version
+  instance_class = var.instance_class
+
+  performance_insights_enabled = true
+
+  tags = {
+    Name = "hermes-${var.environment}-${count.index}"
   }
 }

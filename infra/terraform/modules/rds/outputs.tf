@@ -1,21 +1,26 @@
 output "endpoint" {
-  description = "RDS instance endpoint (hostname only)"
-  value       = aws_db_instance.main.address
+  description = "Aurora cluster endpoint (writer)"
+  value       = aws_rds_cluster.main.endpoint
+}
+
+output "reader_endpoint" {
+  description = "Aurora cluster reader endpoint"
+  value       = aws_rds_cluster.main.reader_endpoint
 }
 
 output "port" {
-  description = "RDS instance port"
-  value       = aws_db_instance.main.port
+  description = "Aurora cluster port"
+  value       = aws_rds_cluster.main.port
 }
 
 output "database_name" {
   description = "Name of the database"
-  value       = aws_db_instance.main.db_name
+  value       = aws_rds_cluster.main.database_name
 }
 
 output "master_username" {
   description = "Master username"
-  value       = aws_db_instance.main.username
+  value       = aws_rds_cluster.main.master_username
 }
 
 output "master_password" {

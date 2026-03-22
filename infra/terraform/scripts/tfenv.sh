@@ -65,4 +65,35 @@ if [ "${COMMAND}" = "init" ]; then
   exit 0
 fi
 
+# Restore secrets pending deletion — Secrets Manager enforces a recovery window
+# that blocks re-creation. Restore first so Terraform can manage the resource.
+reconcile_secret() {
+  local secret_name="$1"
+  local tf_address="$2"
+
+  local secret_json
+  secret_json="$(aws secretsmanager describe-secret --secret-id "${secret_name}" 2>/dev/null || echo "")"
+  [ -z "${secret_json}" ] && return 0
+
+  # Restore if pending deletion
+  local deleted_date
+  deleted_date="$(echo "${secret_json}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('DeletedDate',''))" 2>/dev/null)"
+  if [ -n "${deleted_date}" ]; then
+    echo "Restoring secret '${secret_name}' from pending deletion..."
+    aws secretsmanager restore-secret --secret-id "${secret_name}"
+  fi
+
+  # Import into state if not already tracked
+  if ! terraform state show "${tf_address}" >/dev/null 2>&1; then
+    local secret_arn
+    secret_arn="$(echo "${secret_json}" | python3 -c "import sys,json; print(json.load(sys.stdin)['ARN'])")"
+    echo "Importing existing secret '${secret_name}' into Terraform state..."
+    terraform import -var-file="${TFVARS_FILE}" "${tf_address}" "${secret_arn}"
+  fi
+}
+
+if [ "${COMMAND}" = "apply" ] || [ "${COMMAND}" = "plan" ]; then
+  reconcile_secret "hermes/${ENVIRONMENT}" "module.secrets.aws_secretsmanager_secret.hermes"
+fi
+
 terraform "${COMMAND}" -var-file="${TFVARS_FILE}" "$@"
