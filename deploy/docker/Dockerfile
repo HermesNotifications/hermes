@@ -1,5 +1,5 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
+# Build stage — runs natively on the build host, Go cross-compiles for TARGETARCH
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 RUN apk --no-cache add tzdata ca-certificates
 
