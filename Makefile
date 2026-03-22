@@ -23,13 +23,15 @@ lint:              ## Run golangci-lint
 	golangci-lint run
 
 # --- API Docs ---
-.PHONY: swagger swagger-check
+.PHONY: swagger swagger-check asyncapi-check
 swagger:           ## Generate OpenAPI specs
 	swag init -g main.go -d cmd/admin,internal/admin,internal/models -o api/admin --parseInternal --outputTypes json,yaml
 	swag init -g doc.go -d cmd/swagger-user,internal/inbox,internal/userservice,internal/models -o api/user --parseInternal --outputTypes json,yaml
 swagger-check:     ## Verify specs are up to date (for CI)
 	$(MAKE) swagger
 	git diff --exit-code api/
+asyncapi-check:    ## Validate AsyncAPI spec
+	npx --yes @asyncapi/cli validate api/async/asyncapi.yaml
 
 # --- Infrastructure ---
 .PHONY: infra-up infra-down migrate seed

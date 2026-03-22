@@ -38,6 +38,9 @@ make docker-admin
 # Install git hooks (one-time setup, requires lefthook)
 make hooks
 
+# Validate AsyncAPI spec
+make asyncapi-check
+
 # Show all available Make targets
 make help
 ```

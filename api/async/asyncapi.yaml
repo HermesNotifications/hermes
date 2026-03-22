@@ -1,0 +1,436 @@
+asyncapi: 3.0.0
+info:
+  title: Hermes Notification Platform
+  version: 1.0.0
+  description: |
+    Async messaging contracts for the Hermes notification platform.
+    Covers NATS JetStream streams (service-to-service) and Centrifugo
+    WebSocket events (server-to-client push).
+
+servers:
+  nats:
+    host: nats:4222
+    protocol: nats
+    description: NATS JetStream message broker
+  centrifugo:
+    host: centrifugo:8000
+    protocol: ws
+    description: Centrifugo WebSocket server for real-time client push
+
+channels:
+  # ---------------------------------------------------------------------------
+  # NATS JetStream — NOTIFICATIONS stream
+  # ---------------------------------------------------------------------------
+  notificationSend:
+    address: notification.send
+    description: |
+      Incoming notification requests. Published by the Admin Service after
+      validating and persisting the notification. Consumed by the Router.
+    servers:
+      - $ref: '#/servers/nats'
+    messages:
+      sendMessage:
+        $ref: '#/components/messages/SendMessage'
+    bindings:
+      nats:
+        jetstream:
+          stream: NOTIFICATIONS
+          retention: workqueue
+          storage: file
+          maxAge: 604800000000000  # 7 days in nanoseconds
+
+  # ---------------------------------------------------------------------------
+  # NATS JetStream — DELIVERY stream
+  # ---------------------------------------------------------------------------
+  deliveryEmail:
+    address: delivery.email
+    description: Email delivery tasks dispatched by the Router.
+    servers:
+      - $ref: '#/servers/nats'
+    messages:
+      deliveryMessage:
+        $ref: '#/components/messages/DeliveryMessage'
+    bindings:
+      nats:
+        jetstream:
+          stream: DELIVERY
+
+  deliverySms:
+    address: delivery.sms
+    description: SMS delivery tasks dispatched by the Router.
+    servers:
+      - $ref: '#/servers/nats'
+    messages:
+      deliveryMessage:
+        $ref: '#/components/messages/DeliveryMessage'
+    bindings:
+      nats:
+        jetstream:
+          stream: DELIVERY
+
+  deliveryInbox:
+    address: delivery.inbox
+    description: In-app inbox delivery tasks dispatched by the Router.
+    servers:
+      - $ref: '#/servers/nats'
+    messages:
+      deliveryMessage:
+        $ref: '#/components/messages/DeliveryMessage'
+    bindings:
+      nats:
+        jetstream:
+          stream: DELIVERY
+
+  # ---------------------------------------------------------------------------
+  # NATS JetStream — EVENTS stream
+  # ---------------------------------------------------------------------------
+  notificationEvents:
+    address: notification.events
+    description: |
+      Delivery lifecycle events. Published by the Router (routing outcomes)
+      and delivery workers (send/fail outcomes). Consumed by the Event Writer
+      for batch insert and notification status rollup.
+    servers:
+      - $ref: '#/servers/nats'
+    messages:
+      eventMessage:
+        $ref: '#/components/messages/EventMessage'
+    bindings:
+      nats:
+        jetstream:
+          stream: EVENTS
+          retention: workqueue
+          storage: file
+          maxAge: 604800000000000
+
+  # ---------------------------------------------------------------------------
+  # Centrifugo WebSocket — user channels
+  # ---------------------------------------------------------------------------
+  userInboxUpdated:
+    address: "user#{userId}"
+    description: |
+      Inbox status change events pushed to connected clients. Sent when a
+      user reads, archives, unarchives, or deletes a notification via the
+      Inbox Service API.
+    servers:
+      - $ref: '#/servers/centrifugo'
+    parameters:
+      userId:
+        description: The user ID (matches the JWT sub claim)
+    messages:
+      inboxUpdated:
+        $ref: '#/components/messages/InboxUpdatedEvent'
+      notificationNew:
+        $ref: '#/components/messages/NotificationNewEvent'
+
+operations:
+  # --- Publish operations ---
+  publishNotification:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSend'
+    summary: Admin Service publishes a notification for routing
+    description: |
+      After validating the request and persisting the notification to Postgres,
+      the Admin Service publishes a SendMessage to the NOTIFICATIONS stream.
+
+  routeToEmail:
+    action: send
+    channel:
+      $ref: '#/channels/deliveryEmail'
+    summary: Router dispatches email delivery
+
+  routeToSms:
+    action: send
+    channel:
+      $ref: '#/channels/deliverySms'
+    summary: Router dispatches SMS delivery
+
+  routeToInbox:
+    action: send
+    channel:
+      $ref: '#/channels/deliveryInbox'
+    summary: Router dispatches inbox delivery
+
+  publishEvent:
+    action: send
+    channel:
+      $ref: '#/channels/notificationEvents'
+    summary: Router or worker publishes a delivery lifecycle event
+
+  pushInboxUpdate:
+    action: send
+    channel:
+      $ref: '#/channels/userInboxUpdated'
+    summary: Inbox Service pushes status changes to connected clients
+
+  # --- Receive operations ---
+  consumeNotifications:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationSend'
+    summary: Router consumes notifications for channel resolution and fan-out
+    description: "NATS consumer: router"
+
+  consumeEmailDelivery:
+    action: receive
+    channel:
+      $ref: '#/channels/deliveryEmail'
+    summary: Email Worker consumes email delivery tasks
+    description: "NATS consumer: worker-email"
+
+  consumeSmsDelivery:
+    action: receive
+    channel:
+      $ref: '#/channels/deliverySms'
+    summary: SMS Worker consumes SMS delivery tasks
+    description: "NATS consumer: worker-sms"
+
+  consumeInboxDelivery:
+    action: receive
+    channel:
+      $ref: '#/channels/deliveryInbox'
+    summary: Inbox Worker consumes inbox delivery tasks
+    description: "NATS consumer: worker-inbox"
+
+  consumeEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationEvents'
+    summary: Event Writer batch-inserts events and updates notification status
+    description: "NATS consumer: event-writer"
+
+  receiveInboxUpdates:
+    action: receive
+    channel:
+      $ref: '#/channels/userInboxUpdated'
+    summary: Client receives real-time inbox updates via WebSocket
+
+components:
+  messages:
+    SendMessage:
+      name: SendMessage
+      contentType: application/json
+      summary: Notification send request
+      payload:
+        $ref: '#/components/schemas/SendMessage'
+
+    DeliveryMessage:
+      name: DeliveryMessage
+      contentType: application/json
+      summary: Channel-specific delivery task
+      payload:
+        $ref: '#/components/schemas/DeliveryMessage'
+
+    EventMessage:
+      name: EventMessage
+      contentType: application/json
+      summary: Delivery lifecycle event
+      payload:
+        $ref: '#/components/schemas/EventMessage'
+
+    InboxUpdatedEvent:
+      name: InboxUpdatedEvent
+      contentType: application/json
+      summary: Inbox status change pushed to clients via WebSocket
+      payload:
+        $ref: '#/components/schemas/InboxUpdatedEvent'
+
+    NotificationNewEvent:
+      name: NotificationNewEvent
+      contentType: application/json
+      summary: New notification pushed to clients via WebSocket
+      payload:
+        $ref: '#/components/schemas/NotificationNewEvent'
+
+  schemas:
+    SendMessage:
+      type: object
+      required:
+        - notification_id
+        - tenant_id
+        - user_id
+        - group_id
+        - content
+        - metadata
+        - attempt
+      properties:
+        notification_id:
+          type: string
+          description: Crockford Base32 time-sortable ID
+        tenant_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        group_id:
+          type: string
+        content:
+          $ref: '#/components/schemas/MessageContent'
+        metadata:
+          $ref: '#/components/schemas/MessageMetadata'
+        data:
+          type: object
+          additionalProperties: true
+          description: Template variables for rendering notification content
+        channels:
+          type: array
+          items:
+            type: string
+            enum: [email, sms, inbox]
+          description: Explicit channel override. If omitted, resolved from user preferences or group defaults.
+        attempt:
+          type: integer
+          minimum: 1
+
+    DeliveryMessage:
+      type: object
+      required:
+        - notification_id
+        - tenant_id
+        - user_id
+        - channel
+        - content
+        - metadata
+        - attempt
+      properties:
+        notification_id:
+          type: string
+        tenant_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        channel:
+          type: string
+          enum: [email, sms, inbox]
+        content:
+          $ref: '#/components/schemas/MessageContent'
+        metadata:
+          $ref: '#/components/schemas/MessageMetadata'
+        attempt:
+          type: integer
+          minimum: 1
+
+    EventMessage:
+      type: object
+      required:
+        - notification_id
+        - channel
+        - event
+        - severity
+      properties:
+        notification_id:
+          type: string
+        channel:
+          type: string
+          enum: [email, sms, inbox]
+        event:
+          type: string
+          description: |
+            Event type. Router events: routing.dispatched, routing.failed,
+            routing.no_channels. Worker events: {channel}.sent, {channel}.failed.
+          examples:
+            - routing.dispatched
+            - email.sent
+            - sms.failed
+            - inbox.delivered
+        severity:
+          type: string
+          enum: [info, warn, error]
+        metadata:
+          type: object
+          additionalProperties: true
+          description: |
+            Event-specific metadata. Successful deliveries include provider_name
+            and provider_id. Failures include error message.
+
+    MessageContent:
+      type: object
+      required:
+        - title
+        - body
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        action_url:
+          type: string
+          format: uri
+        action_label:
+          type: string
+
+    MessageMetadata:
+      type: object
+      required:
+        - group
+      properties:
+        group:
+          type: string
+          description: Group slug
+        type:
+          type: string
+          description: Notification type slug (present for type-based sends)
+
+    InboxUpdatedEvent:
+      type: object
+      required:
+        - type
+        - notification_id
+        - action
+        - unread_count
+        - timestamp
+      properties:
+        type:
+          type: string
+          const: inbox.updated
+        notification_id:
+          type: string
+        action:
+          type: string
+          enum: [read, unread, archive, unarchive, delete, read-all]
+        unread_count:
+          type: integer
+          minimum: 0
+          description: Current unread count after this action (cached in Redis)
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix milliseconds. Clients use this to resolve out-of-order updates.
+
+    NotificationNewEvent:
+      type: object
+      required:
+        - type
+        - id
+        - title
+        - body
+        - created_at
+        - timestamp
+      properties:
+        type:
+          type: string
+          const: notification.new
+        id:
+          type: string
+          description: Notification ID
+        title:
+          type: string
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix milliseconds
+        action:
+          type: object
+          properties:
+            url:
+              type: string
+              format: uri
+            label:
+              type: string
