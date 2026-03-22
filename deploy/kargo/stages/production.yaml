@@ -34,22 +34,31 @@ spec:
             path: ./src/deploy/k8s/overlays/production/images
             images:
               - image: hermes-admin
+                newName: ${{ vars.registry }}/hermes-admin
                 tag: ${{ imageFrom(vars.registry + "/hermes-admin").Tag }}
               - image: hermes-router
+                newName: ${{ vars.registry }}/hermes-router
                 tag: ${{ imageFrom(vars.registry + "/hermes-router").Tag }}
               - image: hermes-inbox
+                newName: ${{ vars.registry }}/hermes-inbox
                 tag: ${{ imageFrom(vars.registry + "/hermes-inbox").Tag }}
               - image: hermes-user
+                newName: ${{ vars.registry }}/hermes-user
                 tag: ${{ imageFrom(vars.registry + "/hermes-user").Tag }}
               - image: hermes-worker-events
+                newName: ${{ vars.registry }}/hermes-worker-events
                 tag: ${{ imageFrom(vars.registry + "/hermes-worker-events").Tag }}
               - image: hermes-worker-email
+                newName: ${{ vars.registry }}/hermes-worker-email
                 tag: ${{ imageFrom(vars.registry + "/hermes-worker-email").Tag }}
               - image: hermes-worker-sms
+                newName: ${{ vars.registry }}/hermes-worker-sms
                 tag: ${{ imageFrom(vars.registry + "/hermes-worker-sms").Tag }}
               - image: hermes-worker-inbox
+                newName: ${{ vars.registry }}/hermes-worker-inbox
                 tag: ${{ imageFrom(vars.registry + "/hermes-worker-inbox").Tag }}
               - image: hermes-migrate
+                newName: ${{ vars.registry }}/hermes-migrate
                 tag: ${{ imageFrom(vars.registry + "/hermes-migrate").Tag }}
         - uses: git-commit
           config:
