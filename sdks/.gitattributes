@@ -1,1 +1,4 @@
 **/generated/** linguist-generated=true
+python/** linguist-generated=true
+java/** linguist-generated=true
+dotnet/** linguist-generated=true

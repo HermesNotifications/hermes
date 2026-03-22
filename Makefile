@@ -45,7 +45,25 @@ sdk-ts-generate:   ## Generate TypeScript types from OpenAPI specs
 sdk-ts-build:      ## Build TypeScript SDKs
 	pnpm --filter @hermes-notifications/server build
 	pnpm --filter @hermes-notifications/client build
-sdk-generate: openapi sdk-ts-generate sdk-ts-build  ## Full pipeline: specs → types → build
+sdk-python:        ## Generate Python server SDK
+	npx @openapitools/openapi-generator-cli generate \
+		-i api/admin/openapi.yaml -g python \
+		-o sdks/python/hermes-server-sdk \
+		--additional-properties=packageName=hermes_server_sdk,projectName=hermes-server-sdk \
+		--global-property=skipFormModel=true
+sdk-java:          ## Generate Java server SDK
+	npx @openapitools/openapi-generator-cli generate \
+		-i api/admin/openapi.yaml -g java \
+		-o sdks/java/hermes-server-sdk \
+		--additional-properties=artifactId=hermes-server-sdk,groupId=com.hermes,invokerPackage=com.hermes.sdk,apiPackage=com.hermes.sdk.api,modelPackage=com.hermes.sdk.model \
+		--global-property=skipFormModel=true
+sdk-dotnet:        ## Generate .NET server SDK
+	npx @openapitools/openapi-generator-cli generate \
+		-i api/admin/openapi.yaml -g csharp \
+		-o sdks/dotnet/Hermes.ServerSdk \
+		--additional-properties=packageName=Hermes.ServerSdk,targetFramework=net8.0 \
+		--global-property=skipFormModel=true
+sdk-generate: openapi sdk-ts-generate sdk-ts-build sdk-python sdk-java sdk-dotnet  ## Full pipeline: specs → types → build
 
 # --- Infrastructure ---
 .PHONY: infra-up infra-down migrate seed

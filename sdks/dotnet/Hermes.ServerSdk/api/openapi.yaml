@@ -1,0 +1,818 @@
+openapi: 3.1.0
+info:
+  description: "Server-to-server API for managing notification groups, types, and\
+    \ sending notifications."
+  title: Hermes Admin API
+  version: 1.0.0
+servers:
+- url: /
+paths:
+  /v1/auth/token:
+    post:
+      operationId: exchange-token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Exchange credentials for a user JWT token
+      tags:
+      - Auth
+  /v1/groups:
+    get:
+      operationId: list-groups
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/NotificationGroup"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List notification groups
+      tags:
+      - Groups
+    post:
+      operationId: create-group
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationGroup"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a notification group
+      tags:
+      - Groups
+  /v1/groups/{id}:
+    put:
+      operationId: update-group
+      parameters:
+      - description: Group ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Group ID
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGroupInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationGroup"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Update a notification group
+      tags:
+      - Groups
+  /v1/notifications/{id}:
+    get:
+      operationId: get-notification
+      parameters:
+      - description: Notification ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Notification ID
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationStatusOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get notification status and events
+      tags:
+      - Notifications
+  /v1/send:
+    post:
+      operationId: send-notification
+      parameters:
+      - description: Idempotency key for deduplication
+        explode: false
+        in: header
+        name: X-Idempotency-Key
+        required: false
+        schema:
+          description: Idempotency key for deduplication
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendInputBody"
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendOutputBody"
+          description: Accepted
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Send a notification
+      tags:
+      - Notifications
+  /v1/types:
+    get:
+      operationId: list-types
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/NotificationType"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List notification types
+      tags:
+      - Types
+    post:
+      operationId: create-type
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTypeInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationType"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a notification type
+      tags:
+      - Types
+  /v1/types/{id}:
+    delete:
+      operationId: delete-type
+      parameters:
+      - description: Type ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Type ID
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete a notification type
+      tags:
+      - Types
+    put:
+      operationId: update-type
+      parameters:
+      - description: Type ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Type ID
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTypeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationType"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Update a notification type
+      tags:
+      - Types
+components:
+  schemas:
+    CreateGroupInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        default_channels:
+        - default_channels
+        - default_channels
+        name: name
+        slug: slug
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        default_channels:
+          description: Default delivery channels for this group
+          items:
+            type: string
+          nullable: true
+          type: array
+        name:
+          description: Human-readable name
+          minLength: 1
+          type: string
+        slug:
+          description: URL-friendly identifier
+          minLength: 1
+          type: string
+      required:
+      - name
+      - slug
+    CreateTypeInputBody:
+      additionalProperties: false
+      example:
+        inbox_title: inbox_title
+        $schema: https://openapi-generator.tech
+        email_body: email_body
+        group_id: group_id
+        inbox_body: inbox_body
+        name: name
+        sms_body: sms_body
+        email_subject: email_subject
+        slug: slug
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        email_body:
+          description: Email body template
+          type: string
+        email_subject:
+          description: Email subject template
+          type: string
+        group_id:
+          description: ID of the group this type belongs to
+          minLength: 1
+          type: string
+        inbox_body:
+          description: Inbox notification body template
+          type: string
+        inbox_title:
+          description: Inbox notification title template
+          type: string
+        name:
+          description: Human-readable name
+          minLength: 1
+          type: string
+        slug:
+          description: URL-friendly identifier
+          minLength: 1
+          type: string
+        sms_body:
+          description: SMS body template
+          type: string
+      required:
+      - group_id
+      - name
+      - slug
+    ErrorDetail:
+      additionalProperties: false
+      properties:
+        location:
+          description: "Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'"
+          type: string
+        message:
+          description: Error message text
+          type: string
+        value: {}
+    ErrorModel:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        detail:
+          description: A human-readable explanation specific to this occurrence of
+            the problem.
+          type: string
+        errors:
+          description: Optional list of individual error details
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+          nullable: true
+          type: array
+        instance:
+          description: A URI reference that identifies the specific occurrence of
+            the problem.
+          format: uri
+          type: string
+        status:
+          description: HTTP status code
+          format: int64
+          type: integer
+        title:
+          description: "A short, human-readable summary of the problem type. This\
+            \ value should not change between occurrences of the error."
+          type: string
+        type:
+          default: about:blank
+          description: A URI reference to human-readable documentation for the error.
+          format: uri
+          type: string
+    Notification:
+      additionalProperties: false
+      properties:
+        action_label:
+          type: string
+        action_url:
+          type: string
+        archived_at:
+          format: date-time
+          type: string
+        body:
+          type: string
+        channels:
+          items:
+            type: string
+          nullable: true
+          type: array
+        created_at:
+          format: date-time
+          type: string
+        deleted_at:
+          format: date-time
+          type: string
+        delivered_at:
+          format: date-time
+          type: string
+        group_id:
+          type: string
+        id:
+          type: string
+        idempotency_key:
+          type: string
+        read_at:
+          format: date-time
+          type: string
+        sent_at:
+          format: date-time
+          type: string
+        status:
+          type: string
+        tenant_id:
+          type: string
+        title:
+          type: string
+        type_id:
+          type: string
+        user_id:
+          type: string
+      required:
+      - body
+      - channels
+      - created_at
+      - group_id
+      - id
+      - status
+      - tenant_id
+      - title
+      - user_id
+    NotificationEvent:
+      additionalProperties: false
+      example:
+        severity: severity
+        metadata: metadata
+        channel: channel
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        notification_id: notification_id
+        event: event
+      properties:
+        channel:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        event:
+          type: string
+        id:
+          type: string
+        metadata:
+          type: string
+        notification_id:
+          type: string
+        severity:
+          type: string
+      required:
+      - channel
+      - created_at
+      - event
+      - id
+      - notification_id
+      - severity
+    NotificationGroup:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        default_channels:
+        - default_channels
+        - default_channels
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        slug: slug
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        default_channels:
+          items:
+            type: string
+          nullable: true
+          type: array
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+      - created_at
+      - default_channels
+      - id
+      - name
+      - slug
+    NotificationStatusOutputBody:
+      additionalProperties: false
+      example:
+        notification: ""
+        $schema: https://openapi-generator.tech
+        events:
+        - severity: severity
+          metadata: metadata
+          channel: channel
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          notification_id: notification_id
+          event: event
+        - severity: severity
+          metadata: metadata
+          channel: channel
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: id
+          notification_id: notification_id
+          event: event
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        events:
+          description: Timeline of notification events
+          items:
+            $ref: "#/components/schemas/NotificationEvent"
+          nullable: true
+          type: array
+        notification:
+          allOf:
+          - $ref: "#/components/schemas/Notification"
+          description: The notification record
+      required:
+      - events
+      - notification
+    NotificationType:
+      additionalProperties: false
+      example:
+        inbox_title: inbox_title
+        $schema: https://openapi-generator.tech
+        email_body: email_body
+        group_id: group_id
+        inbox_body: inbox_body
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        sms_body: sms_body
+        email_subject: email_subject
+        slug: slug
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        email_body:
+          type: string
+        email_subject:
+          type: string
+        group_id:
+          type: string
+        id:
+          type: string
+        inbox_body:
+          type: string
+        inbox_title:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        sms_body:
+          type: string
+      required:
+      - created_at
+      - group_id
+      - id
+      - name
+      - slug
+    SendContent:
+      additionalProperties: false
+      properties:
+        action_label:
+          description: Optional action button label
+          type: string
+        action_url:
+          description: Optional action URL
+          type: string
+        body:
+          description: Notification body
+          type: string
+        title:
+          description: Notification title
+          type: string
+      required:
+      - body
+      - title
+    SendInputBody:
+      additionalProperties: false
+      example:
+        tenant_id: tenant_id
+        $schema: https://openapi-generator.tech
+        channels:
+        - channels
+        - channels
+        data:
+          key: ""
+        user_id: user_id
+        type: type
+        content: ""
+        group: group
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        channels:
+          description: Explicit delivery channels
+          items:
+            type: string
+          nullable: true
+          type: array
+        content:
+          allOf:
+          - $ref: "#/components/schemas/SendContent"
+          description: Direct content (mutually exclusive with type)
+        data:
+          additionalProperties: {}
+          description: Template data for rendering
+        group:
+          description: Group slug (required for direct content sends)
+          type: string
+        tenant_id:
+          description: Tenant identifier
+          minLength: 1
+          type: string
+        type:
+          description: Notification type slug (mutually exclusive with content)
+          type: string
+        user_id:
+          description: External user identifier
+          minLength: 1
+          type: string
+      required:
+      - tenant_id
+      - user_id
+    SendOutputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        notification_id: notification_id
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        notification_id:
+          description: ID of the created notification
+          type: string
+      required:
+      - notification_id
+    TokenInputBody:
+      additionalProperties: false
+      example:
+        tenant_id: tenant_id
+        $schema: https://openapi-generator.tech
+        user_id: user_id
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        tenant_id:
+          description: Tenant identifier
+          minLength: 1
+          type: string
+        user_id:
+          description: External user identifier
+          minLength: 1
+          type: string
+      required:
+      - tenant_id
+      - user_id
+    TokenOutputBody:
+      additionalProperties: false
+      example:
+        expires_at: expires_at
+        $schema: https://openapi-generator.tech
+        token: token
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        expires_at:
+          description: Token expiration time in RFC3339 format
+          type: string
+        token:
+          description: JWT token for user-facing API access
+          type: string
+      required:
+      - expires_at
+      - token
+    UpdateGroupInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        default_channels:
+        - default_channels
+        - default_channels
+        name: name
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        default_channels:
+          description: Default delivery channels for this group
+          items:
+            type: string
+          nullable: true
+          type: array
+        name:
+          description: Human-readable name
+          type: string
+      required:
+      - default_channels
+      - name
+    UpdateTypeInputBody:
+      additionalProperties: false
+      example:
+        inbox_title: inbox_title
+        $schema: https://openapi-generator.tech
+        email_body: email_body
+        inbox_body: inbox_body
+        name: name
+        sms_body: sms_body
+        email_subject: email_subject
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        email_body:
+          description: Email body template
+          type: string
+        email_subject:
+          description: Email subject template
+          type: string
+        inbox_body:
+          description: Inbox notification body template
+          type: string
+        inbox_title:
+          description: Inbox notification title template
+          type: string
+        name:
+          description: Human-readable name
+          type: string
+        sms_body:
+          description: SMS body template
+          type: string
+      required:
+      - name
+

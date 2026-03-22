@@ -32,6 +32,15 @@ infra/terraform/.terraform/
 /user
 /migrate
 /hermes
+# SDKs - TypeScript
 sdks/typescript/node_modules/
 sdks/typescript/packages/*/dist/
 sdks/typescript/packages/*/node_modules/
+
+# SDKs - Java
+sdks/java/hermes-server-sdk/target/
+sdks/java/hermes-server-sdk/build/
+
+# SDKs - .NET
+sdks/dotnet/Hermes.ServerSdk/src/*/bin/
+sdks/dotnet/Hermes.ServerSdk/src/*/obj/
