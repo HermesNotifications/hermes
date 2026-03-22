@@ -1,0 +1,27 @@
+{
+  "name": "@hermes-notifications/web",
+  "version": "0.1.0",
+  "description": "Embeddable inbox notification widget as a Web Component",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@hermes-notifications/client": "workspace:*",
+    "lit": "^3.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  },
+  "license": "MIT"
+}
