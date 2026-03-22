@@ -23,3 +23,12 @@ spec:
                 secretKeyRef:
                   name: hermes-secrets
                   key: HERMES_CENTRIFUGO_REDIS_ADDRESS
+            - name: CENTRIFUGO_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_REDIS_PASSWORD
+            - name: CENTRIFUGO_REDIS_TLS
+              value: "true"
+            - name: CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY
+              value: "true"
