@@ -1,6 +1,10 @@
 package admin
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/hermes-notifications/hermes/internal/httputil"
+)
 
 type notificationStatusResponse struct {
 	Notification any `json:"notification"`
@@ -21,17 +25,17 @@ func (s *Server) handleGetNotification(w http.ResponseWriter, r *http.Request) {
 
 	n, err := s.store.GetNotificationByID(r.Context(), id)
 	if err != nil {
-		s.clientError(w, http.StatusNotFound, "notification not found")
+		httputil.ClientError(w, http.StatusNotFound, "notification not found")
 		return
 	}
 
 	events, err := s.store.GetNotificationEvents(r.Context(), id)
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.jsonResponse(w, http.StatusOK, notificationStatusResponse{
+	httputil.JSON(w, http.StatusOK, notificationStatusResponse{
 		Notification: n,
 		Events:       events,
 	})

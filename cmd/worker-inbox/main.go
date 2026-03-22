@@ -2,48 +2,30 @@ package main
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
+	"github.com/hermes-notifications/hermes/internal/bootstrap"
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/delivery"
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
-func envStr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := bootstrap.NewLogger()
 	cfg := config.Load()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	natsClient, err := messaging.Connect(cfg.NATSUrl)
-	if err != nil {
-		logger.Error("nats", "error", err)
-		os.Exit(1)
-	}
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger)
+	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
 
-	if err := natsClient.SetupStreams(ctx); err != nil {
-		logger.Error("nats stream setup", "error", err)
-		os.Exit(1)
-	}
-
-	centrifugoAPIURL := envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000")
-	centrifugoAPIKey := envStr("HERMES_CENTRIFUGO_API_KEY", "centrifugo-api-key")
-	centrifugoClient := centrifugo.NewClient(centrifugoAPIURL, centrifugoAPIKey)
+	centrifugoClient := centrifugo.NewClient(cfg.CentrifugoAPIURL, cfg.CentrifugoAPIKey)
 
 	provider := delivery.NewInboxProvider(centrifugoClient)
 
@@ -54,19 +36,8 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
-	})
-	go http.ListenAndServe(":8085", mux)
+	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
+	mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
 
-	logger.Info("worker-inbox started")
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	logger.Info("shutting down")
+	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger)
 }

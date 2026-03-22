@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
 type listInboxResponse struct {
@@ -27,7 +28,7 @@ type listInboxResponse struct {
 func (s *Server) handleListInbox(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 
@@ -42,7 +43,7 @@ func (s *Server) handleListInbox(w http.ResponseWriter, r *http.Request) {
 
 	notifications, unreadCount, nextCursor, err := s.store.ListInbox(r.Context(), userID, archived, cursor, limit)
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
@@ -52,7 +53,7 @@ func (s *Server) handleListInbox(w http.ResponseWriter, r *http.Request) {
 		data = []struct{}{}
 	}
 
-	s.jsonResponse(w, http.StatusOK, listInboxResponse{
+	httputil.JSON(w, http.StatusOK, listInboxResponse{
 		Data:        data,
 		UnreadCount: unreadCount,
 		Cursor:      nextCursor,

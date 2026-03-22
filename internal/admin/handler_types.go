@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -37,10 +38,10 @@ type updateTypeRequest struct {
 func (s *Server) handleListTypes(w http.ResponseWriter, r *http.Request) {
 	types, err := s.store.ListTypes(r.Context())
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
-	s.jsonResponse(w, http.StatusOK, types)
+	httputil.JSON(w, http.StatusOK, types)
 }
 
 // @Summary Create a notification type
@@ -56,11 +57,11 @@ func (s *Server) handleListTypes(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateType(w http.ResponseWriter, r *http.Request) {
 	var req createTypeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.clientError(w, http.StatusBadRequest, "invalid JSON")
+		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 	if req.Slug == "" || req.Name == "" || req.GroupID == "" {
-		s.clientError(w, http.StatusBadRequest, "slug, name, and group_id are required")
+		httputil.ClientError(w, http.StatusBadRequest, "slug, name, and group_id are required")
 		return
 	}
 
@@ -70,10 +71,10 @@ func (s *Server) handleCreateType(w http.ResponseWriter, r *http.Request) {
 		SMSBody: req.SMSBody, InboxTitle: req.InboxTitle, InboxBody: req.InboxBody,
 	})
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
-	s.jsonResponse(w, http.StatusCreated, nt)
+	httputil.JSON(w, http.StatusCreated, nt)
 }
 
 // @Summary Update a notification type
@@ -92,13 +93,13 @@ func (s *Server) handleUpdateType(w http.ResponseWriter, r *http.Request) {
 	typeID := r.PathValue("id")
 	var req updateTypeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.clientError(w, http.StatusBadRequest, "invalid JSON")
+		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	existing, err := s.store.GetTypeByID(r.Context(), typeID)
 	if err != nil {
-		s.clientError(w, http.StatusNotFound, "type not found")
+		httputil.ClientError(w, http.StatusNotFound, "type not found")
 		return
 	}
 
@@ -108,7 +109,7 @@ func (s *Server) handleUpdateType(w http.ResponseWriter, r *http.Request) {
 		SMSBody: req.SMSBody, InboxTitle: req.InboxTitle, InboxBody: req.InboxBody,
 	})
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
@@ -116,7 +117,7 @@ func (s *Server) handleUpdateType(w http.ResponseWriter, r *http.Request) {
 		s.cache.InvalidateTypeConfig(r.Context(), existing.Slug)
 	}
 
-	s.jsonResponse(w, http.StatusOK, updated)
+	httputil.JSON(w, http.StatusOK, updated)
 }
 
 // @Summary Delete a notification type
@@ -132,12 +133,12 @@ func (s *Server) handleDeleteType(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := s.store.GetTypeByID(r.Context(), typeID)
 	if err != nil {
-		s.clientError(w, http.StatusNotFound, "type not found")
+		httputil.ClientError(w, http.StatusNotFound, "type not found")
 		return
 	}
 
 	if err := s.store.DeleteType(r.Context(), typeID); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
