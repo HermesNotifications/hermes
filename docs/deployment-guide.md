@@ -95,7 +95,7 @@ Create the S3 bucket that Terraform uses for remote state. Terraform 1.10+ handl
 make tf-bootstrap REGION=us-east-1
 ```
 
-This creates an S3 bucket `hermes-terraform-state-<ACCOUNT_ID>` (versioned, encrypted, public access blocked).
+This creates an S3 bucket `hermes-terraform-state-471524413120` (versioned, encrypted, public access blocked).
 
 ---
 
@@ -206,7 +206,7 @@ Replace `ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com` in:
 
 | File | What to replace |
 |------|-----------------|
-| `deploy/kargo/warehouse.yaml` | `<ACCOUNT_ID>` in all image repoURLs |
+| `deploy/kargo/warehouse.yaml` | `471524413120` in all image repoURLs |
 | `deploy/k8s/overlays/staging/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
 | `deploy/k8s/overlays/production/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
 

@@ -9,29 +9,29 @@ metadata:
 spec:
   subscriptions:
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-router
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-router
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-user
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
         discoveryLimit: 5
     - image:
-        repoURL: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
         discoveryLimit: 5

@@ -58,6 +58,13 @@ helm upgrade --install external-secrets external-secrets/external-secrets \
   --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$ESO_ROLE_ARN" \
   --wait
 
+echo "==> Installing Argo Rollouts CRDs (required for Kargo verification)"
+helm upgrade --install argo-rollouts argo/argo-rollouts \
+  --namespace argo-rollouts --create-namespace \
+  --set controller.replicas=0 \
+  --set dashboard.enabled=false \
+  --wait
+
 echo "==> Installing ArgoCD"
 helm upgrade --install argocd argo/argo-cd \
   --namespace argocd --create-namespace \

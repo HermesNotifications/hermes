@@ -16,6 +16,11 @@ patches:
 # No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL
 
 configMapGenerator:
+  - name: hermes-domain
+    literals:
+      - DOMAIN=staging.hermes.horizonhq.io # ← Set your staging domain here
+    options:
+      disableNameSuffixHash: true
   - name: centrifugo-config
     behavior: replace
     files:
@@ -23,32 +28,45 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
 
-# Update with your staging container registry
+replacements:
+  - source:
+      kind: ConfigMap
+      name: hermes-domain
+      fieldPath: data.DOMAIN
+    targets:
+      - select:
+          kind: Ingress
+        fieldPaths:
+          - spec.tls.0.hosts.0
+          - spec.rules.0.host
+
+# ECR registry — set once, sed replaces across all image entries
+# Configure via: make configure-registry REGISTRY=471524413120.dkr.ecr.us-east-1.amazonaws.com
 images:
   - name: hermes-admin
-    newName: REGISTRY/hermes-admin
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-router
-    newName: REGISTRY/hermes-router
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-router
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-inbox
-    newName: REGISTRY/hermes-inbox
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-user
-    newName: REGISTRY/hermes-user
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-worker-events
-    newName: REGISTRY/hermes-worker-events
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-worker-email
-    newName: REGISTRY/hermes-worker-email
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-worker-sms
-    newName: REGISTRY/hermes-worker-sms
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-worker-inbox
-    newName: REGISTRY/hermes-worker-inbox
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
     newTag: SET_BY_CD_PIPELINE
   - name: hermes-migrate
-    newName: REGISTRY/hermes-migrate
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
     newTag: SET_BY_CD_PIPELINE
