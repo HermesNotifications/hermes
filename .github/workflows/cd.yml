@@ -13,8 +13,6 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  # Update after running Terraform
-  ECR_REGISTRY: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
 
 jobs:
   # Only run CD if CI passed (reuse CI checks)
@@ -39,21 +37,23 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::ACCOUNT_ID:role/hermes-github-actions
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/hermes-github-actions
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
+        id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image
         env:
           SERVICE: ${{ matrix.service }}
           IMAGE_TAG: ${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           docker build \
             --build-arg SERVICE="$SERVICE" \
-            -t "${{ env.ECR_REGISTRY }}/hermes-${SERVICE}:${IMAGE_TAG}" \
-            -t "${{ env.ECR_REGISTRY }}/hermes-${SERVICE}:latest" \
+            -t "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
+            -t "${ECR_REGISTRY}/hermes-${SERVICE}:latest" \
             -f deploy/docker/Dockerfile .
-          docker push "${{ env.ECR_REGISTRY }}/hermes-${SERVICE}:${IMAGE_TAG}"
-          docker push "${{ env.ECR_REGISTRY }}/hermes-${SERVICE}:latest"
+          docker push "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}"
+          docker push "${ECR_REGISTRY}/hermes-${SERVICE}:latest"

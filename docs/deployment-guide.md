@@ -8,20 +8,14 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 - [Architecture Overview](#architecture-overview)
 - [1. Bootstrap Terraform State](#1-bootstrap-terraform-state)
 - [2. Provision Infrastructure](#2-provision-infrastructure)
-- [3. Bootstrap EKS Cluster](#3-bootstrap-eks-cluster)
-- [4. Configure DNS](#4-configure-dns)
-- [5. Update Placeholders](#5-update-placeholders)
-- [6. Deploy with ArgoCD + Kargo](#6-deploy-with-argocd--kargo)
-- [7. Verify Deployment](#7-verify-deployment)
-- [8. Production Deployment](#8-production-deployment)
+- [3. Configure GitHub Actions](#3-configure-github-actions)
+- [4. Bootstrap EKS Cluster](#4-bootstrap-eks-cluster)
+- [5. Configure DNS](#5-configure-dns)
+- [6. Update Placeholders](#6-update-placeholders)
+- [7. Deploy with ArgoCD + Kargo](#7-deploy-with-argocd--kargo)
+- [8. Verify Deployment](#8-verify-deployment)
+- [9. Production Deployment](#9-production-deployment)
 - [Day-2 Operations](#day-2-operations)
-  - [Promoting to Production](#promoting-to-production)
-  - [Scaling](#scaling)
-  - [Secrets Rotation](#secrets-rotation)
-  - [Database Migrations](#database-migrations)
-  - [Upgrading EKS](#upgrading-eks)
-  - [Monitoring and Debugging](#monitoring-and-debugging)
-  - [Disaster Recovery](#disaster-recovery)
 
 ---
 
@@ -32,13 +26,13 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 | Tool | Version | Purpose |
 |------|---------|---------|
 | AWS CLI | v2 | Cloud resource management |
-| Terraform | >= 1.5 | Infrastructure provisioning |
+| Terraform | >= 1.10 | Infrastructure provisioning (native S3 locking) |
 | kubectl | >= 1.28 | Kubernetes management |
 | Helm | >= 3.12 | Cluster component installation |
-| kustomize | >= 5.0 | K8s manifest rendering (bundled with kubectl) |
+| jq | any | JSON processing |
 
 **AWS access:**
-- An AWS account with permissions to create VPC, EKS, RDS, ElastiCache, ECR, Secrets Manager, and IAM resources
+- An AWS account with permissions to create VPC, EKS, Aurora, ElastiCache, ECR, Secrets Manager, SSM, and IAM resources
 - AWS CLI configured (`aws configure` or environment variables)
 
 **GitHub:**
@@ -68,16 +62,15 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 │  │                         ┌─────────┘       └─────────┐    │  │
 │  │                         │                           │    │  │
 │  │                    ┌────▼────┐              ┌───────▼┐   │  │
-│  │                    │   RDS   │              │Valkey  │   │  │
+│  │                    │ Aurora  │              │Valkey  │   │  │
 │  │                    │Postgres │              │(ElastiC│   │  │
 │  │                    │  16     │              │ache)   │   │  │
 │  │                    └─────────┘              └────────┘   │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  ┌─────────────┐  ┌──────────────────┐  ┌─────────────────┐    │
-│  │     ECR     │  │ Secrets Manager  │  │  S3 + DynamoDB  │    │
-│  │  9 repos    │  │ hermes/staging   │  │  TF state       │    │
-│  │             │  │ hermes/production│  │                  │    │
+│  │     ECR     │  │ Secrets Manager  │  │    S3 bucket    │    │
+│  │  9 repos    │  │ + SSM Params     │  │  TF state       │    │
 │  └─────────────┘  └──────────────────┘  └─────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -86,7 +79,8 @@ Deployment Pipeline:
 ```
 
 **Key infrastructure decisions:**
-- **Graviton (ARM) instances** throughout — EKS nodes, RDS, ElastiCache — for better price/performance
+- **Graviton (ARM) instances** throughout — EKS nodes, Aurora, ElastiCache — for better price/performance
+- **Aurora PostgreSQL** — auto-scaling storage, automatic failover with read replicas
 - **Valkey** (not Redis) — BSD-licensed, wire-compatible, supported natively by ElastiCache
 - **NATS runs in-cluster** as a StatefulSet (no AWS-managed equivalent)
 - **Separate EKS clusters** per environment (not shared)
@@ -95,81 +89,69 @@ Deployment Pipeline:
 
 ## 1. Bootstrap Terraform State
 
-Create the S3 bucket that Terraform uses for remote state. Terraform 1.10+ handles locking natively via S3. This is a one-time operation.
+Create the S3 bucket that Terraform uses for remote state. Terraform 1.10+ handles locking natively via S3 — no DynamoDB table needed. This is a one-time operation.
 
 ```bash
-chmod +x infra/terraform/scripts/bootstrap-backend.sh
-./infra/terraform/scripts/bootstrap-backend.sh us-east-1
+make tf-bootstrap REGION=us-east-1
 ```
 
-This creates:
-- S3 bucket `hermes-terraform-state-<ACCOUNT_ID>` (versioned, encrypted, public access blocked)
+This creates an S3 bucket `hermes-terraform-state-<ACCOUNT_ID>` (versioned, encrypted, public access blocked).
 
 ---
 
 ## 2. Provision Infrastructure
 
-Start with staging. Each environment gets its own Terraform state file.
-
-### Initialize Terraform
+Start with staging. The `tfenv.sh` wrapper handles backend init, secret reconciliation, and environment selection automatically.
 
 ```bash
-cd infra/terraform
-
-terraform init \
-  -backend-config="bucket=hermes-terraform-state-$(aws sts get-caller-identity --query Account --output text)" \
-  -backend-config="key=hermes/staging/terraform.tfstate" \
-  -backend-config="region=us-east-1" \
-  -backend-config="use_lockfile=true" \
-  -backend-config="encrypt=true"
-```
-
-### Review and apply
-
-```bash
-terraform plan -var-file=environments/staging.tfvars \
-  -var="github_org=YOUR_GITHUB_ORG"
-
-terraform apply -var-file=environments/staging.tfvars \
-  -var="github_org=YOUR_GITHUB_ORG"
+make tf-plan ENV=staging
+make tf-apply ENV=staging    # requires manual approval
 ```
 
 ### Capture outputs
 
-After apply completes, save the outputs — you'll need them for subsequent steps:
+After apply completes, save key outputs for subsequent steps:
 
 ```bash
-terraform output -json > ../../staging-outputs.json
-
-# Key values you'll need:
-terraform output ecr_registry_url          # e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com
-terraform output eks_cluster_name           # e.g. hermes-staging
-terraform output external_secrets_role_arn  # for bootstrap-cluster.sh
-terraform output github_actions_role_arn    # for .github/workflows/cd.yml
+cd infra/terraform
+terraform output -raw eks_cluster_name          # e.g. hermes-staging
+terraform output -raw external_secrets_role_arn  # for bootstrap-cluster.sh
 ```
 
 ### What Terraform creates
 
 | Resource | Staging | Production |
 |----------|---------|------------|
-| VPC | 2 public + 2 private subnets, 1 NAT GW | Same but 2 NAT GWs (HA) |
+| VPC | 2 AZs, 1 NAT GW | 3 AZs, 3 NAT GWs (HA) |
 | EKS | `t4g.medium` nodes, 2-4 count | `m7g.large` nodes, 3-10 count |
-| RDS PostgreSQL 16 | `db.t4g.medium`, single-AZ, 20GB | `db.r7g.large`, multi-AZ, 100GB |
+| Aurora PostgreSQL 16 | `db.t4g.medium`, 1 instance | `db.r7g.large`, 2 instances (writer + reader) |
 | ElastiCache Valkey 7.2 | `cache.t4g.micro`, 1 node | `cache.r7g.large`, 2 replicas |
-| ECR | 9 repositories | Shared (apply once) |
-| Secrets Manager | `hermes/staging` secret | `hermes/production` secret |
+| ECR | 9 repositories (AES256 encrypted) | Shared (apply once) |
+| Secrets Manager | `hermes/staging` (infra credentials) | `hermes/production` (30-day recovery window) |
+| SSM Parameter Store | Webhook URLs (operator-managed) | Webhook URLs (operator-managed) |
 | IAM (CICD) | GitHub Actions OIDC role | Shared (apply once) |
 
 ---
 
-## 3. Bootstrap EKS Cluster
+## 3. Configure GitHub Actions
 
-Install the platform components (ingress, cert-manager, External Secrets Operator, ArgoCD, Kargo) onto the EKS cluster.
+Set your AWS account ID as a repository secret (keeps it out of the codebase):
+
+```bash
+gh secret set AWS_ACCOUNT_ID --body "$(aws sts get-caller-identity --query Account --output text)"
+```
+
+The CD workflow derives the ECR registry URL and IAM role ARN at runtime — no hardcoded account IDs.
+
+---
+
+## 4. Bootstrap EKS Cluster
+
+Install platform components (ingress, cert-manager, External Secrets Operator, ArgoCD, Kargo) onto the EKS cluster.
 
 ```bash
 ESO_ROLE_ARN=$(cd infra/terraform && terraform output -raw external_secrets_role_arn)
 
-chmod +x infra/scripts/bootstrap-cluster.sh
 ./infra/scripts/bootstrap-cluster.sh hermes-staging us-east-1 "$ESO_ROLE_ARN"
 ```
 
@@ -183,16 +165,19 @@ The script installs:
 | ArgoCD | `argocd` | GitOps — syncs K8s manifests from git |
 | Kargo | `kargo` | Promotion pipeline — manages staging → production flow |
 
-After bootstrap, note the ArgoCD admin password printed to stdout. Access ArgoCD:
+After bootstrap, note the ArgoCD and Kargo admin passwords printed to stdout. Access them:
 
 ```bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 # Open https://localhost:8080, login with admin / <password from output>
+
+kubectl port-forward svc/kargo-api -n kargo 8443:443
+# Open https://localhost:8443
 ```
 
 ---
 
-## 4. Configure DNS
+## 5. Configure DNS
 
 Get the NLB hostname created by the NGINX ingress controller:
 
@@ -213,9 +198,7 @@ For production, use `hermes.example.com` → production NLB.
 
 ---
 
-## 5. Update Placeholders
-
-Several files contain placeholder values that need to be replaced with your actual Terraform outputs.
+## 6. Update Placeholders
 
 ### ECR registry URL
 
@@ -223,12 +206,16 @@ Replace `ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com` in:
 
 | File | What to replace |
 |------|-----------------|
-| `.github/workflows/cd.yml` | `ECR_REGISTRY` env var and `role-to-assume` ARN |
 | `deploy/kargo/warehouse.yaml` | `<ACCOUNT_ID>` in all image repoURLs |
 | `deploy/k8s/overlays/staging/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
 | `deploy/k8s/overlays/production/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
 
-Use the actual ECR URL from `terraform output ecr_registry_url`.
+Get the actual ECR URL:
+```bash
+cd infra/terraform && terraform output -raw ecr_registry_url
+```
+
+> **Note:** `.github/workflows/cd.yml` does **not** need updating — it derives the ECR registry at runtime from the ECR login step.
 
 ### GitHub repository URL
 
@@ -241,13 +228,6 @@ Replace `OWNER` in:
 | `deploy/kargo/stages/staging.yaml` | `repoURL` in git-clone and argocd-update steps |
 | `deploy/kargo/stages/production.yaml` | `repoURL` in git-clone and argocd-update steps |
 
-### GitHub Actions IAM role
-
-Update `.github/workflows/cd.yml`:
-```yaml
-role-to-assume: <terraform output github_actions_role_arn>
-```
-
 ### Domain names
 
 If your domain isn't `hermes.example.com`, update:
@@ -256,16 +236,13 @@ If your domain isn't `hermes.example.com`, update:
 
 ### Webhook URLs
 
-After deploying, update the webhook URLs in AWS Secrets Manager:
+After deploying, update the webhook URLs in SSM Parameter Store:
 ```bash
-aws secretsmanager put-secret-value \
-  --secret-id hermes/staging \
-  --secret-string "$(
-    aws secretsmanager get-secret-value --secret-id hermes/staging \
-      --query SecretString --output text | \
-    jq '.email_webhook_url = "https://your-email-provider.com/send" |
-        .sms_webhook_url = "https://your-sms-provider.com/send"'
-  )"
+aws ssm put-parameter --name "/hermes/staging/email_webhook_url" \
+  --value "https://your-email-provider.com/send" --overwrite
+
+aws ssm put-parameter --name "/hermes/staging/sms_webhook_url" \
+  --value "https://your-sms-provider.com/send" --overwrite
 ```
 
 ### Let's Encrypt email
@@ -282,7 +259,7 @@ git push
 
 ---
 
-## 6. Deploy with ArgoCD + Kargo
+## 7. Deploy with ArgoCD + Kargo
 
 ### Apply ArgoCD Applications
 
@@ -293,7 +270,6 @@ kubectl apply -f deploy/argocd/staging.yaml
 ArgoCD will immediately sync the staging overlay. Watch the sync:
 
 ```bash
-# Via CLI
 kubectl get applications -n argocd
 # Or via the ArgoCD UI at https://localhost:8080
 ```
@@ -313,17 +289,12 @@ kubectl apply -f deploy/kargo/stages/production.yaml
 Push any commit to `main` to trigger the CD pipeline. This builds all 9 images and pushes them to ECR. Kargo then detects the new images and promotes to staging.
 
 ```bash
-# Watch the CD pipeline
 gh run watch
-
-# Watch Kargo promotion
-kubectl port-forward svc/kargo-api -n kargo 8443:443
-# Open https://localhost:8443
 ```
 
 ---
 
-## 7. Verify Deployment
+## 8. Verify Deployment
 
 ### Check pods
 
@@ -331,43 +302,14 @@ kubectl port-forward svc/kargo-api -n kargo 8443:443
 kubectl get pods -n hermes
 ```
 
-All 8 service deployments + NATS StatefulSet + Centrifugo should be Running:
-
-```
-NAME                              READY   STATUS    RESTARTS
-hermes-admin-xxx                  1/1     Running   0
-hermes-router-xxx                 1/1     Running   0
-hermes-worker-events-xxx          1/1     Running   0
-hermes-worker-email-xxx           1/1     Running   0
-hermes-worker-sms-xxx             1/1     Running   0
-hermes-worker-inbox-xxx           1/1     Running   0
-hermes-inbox-xxx                  1/1     Running   0
-hermes-user-xxx                   1/1     Running   0
-centrifugo-xxx                    1/1     Running   0
-nats-0                            1/1     Running   0
-```
+All 8 service deployments + NATS StatefulSet + Centrifugo should be Running.
 
 ### Check health endpoints
 
 ```bash
 DOMAIN="staging.hermes.example.com"
-
 curl -s https://$DOMAIN/v1/send     # Should return 401 (no API key)
 curl -s https://$DOMAIN/v1/inbox    # Should return 401 (no JWT)
-```
-
-### Run seed (first time only)
-
-Create an initial tenant and API key for testing:
-
-```bash
-# Port-forward the admin service
-kubectl port-forward svc/hermes-admin -n hermes 8080:8080
-
-# Use the existing seed script or create a tenant via API
-curl -X POST http://localhost:8080/v1/auth/tenants \
-  -H "Content-Type: application/json" \
-  -d '{"name": "test-tenant"}'
 ```
 
 ### Check ArgoCD sync status
@@ -387,31 +329,21 @@ kubectl get stages -n hermes
 
 ---
 
-## 8. Production Deployment
+## 9. Production Deployment
 
-Repeat steps 2-7 with production-specific values.
+Repeat steps 2-8 with production values.
 
-### Re-initialize Terraform for production
+### Provision production infrastructure
 
 ```bash
-cd infra/terraform
-
-# Switch to production state file
-terraform init -reconfigure \
-  -backend-config="bucket=hermes-terraform-state-$(aws sts get-caller-identity --query Account --output text)" \
-  -backend-config="key=hermes/production/terraform.tfstate" \
-  -backend-config="region=us-east-1" \
-  -backend-config="use_lockfile=true" \
-  -backend-config="encrypt=true"
-
-terraform apply -var-file=environments/production.tfvars \
-  -var="github_org=YOUR_GITHUB_ORG"
+make tf-plan ENV=production
+make tf-apply ENV=production    # requires manual approval
 ```
 
 ### Bootstrap production cluster
 
 ```bash
-ESO_ROLE_ARN=$(terraform output -raw external_secrets_role_arn)
+ESO_ROLE_ARN=$(cd infra/terraform && terraform output -raw external_secrets_role_arn)
 ./infra/scripts/bootstrap-cluster.sh hermes-production us-east-1 "$ESO_ROLE_ARN"
 ```
 
@@ -439,29 +371,30 @@ The normal deployment flow:
 2. CI runs tests, CD builds and pushes images to ECR
 3. Kargo auto-promotes to staging, runs health checks
 4. Once staging is verified, Kargo shows production promotion as available
-5. An operator approves the promotion in the Kargo UI (https://localhost:8443)
+5. An operator approves the promotion in the Kargo UI
 6. Kargo updates the production overlay in git
 7. ArgoCD syncs the production cluster
 
 To check what's currently deployed:
 
 ```bash
-# Staging image tags
 kubectl get deployments -n hermes -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.template.spec.containers[0].image}{"\n"}{end}'
-
-# Kargo freight status
 kubectl get freight -n hermes
 ```
 
 ### Scaling
 
-**Horizontal (node count):** Update `eks_node_min_size` / `eks_node_max_size` in the appropriate tfvars file and re-apply Terraform.
+**Horizontal (node count):** Update `eks_node_min_size` / `eks_node_max_size` in the appropriate tfvars file:
+```bash
+make tf-plan ENV=production
+make tf-apply ENV=production
+```
 
-**Horizontal (pod count):** Production services use HPA (Horizontal Pod Autoscaler). To adjust:
+**Horizontal (pod count):** Production services use HPA. To adjust:
 - Edit `deploy/k8s/overlays/production/hpa/*.yaml`
 - Commit and push — ArgoCD auto-syncs
 
-**Vertical (instance size):** Update instance types in tfvars and re-apply. For EKS nodes, this triggers a rolling replacement. For RDS/ElastiCache, expect brief downtime during the maintenance window.
+**Vertical (instance size):** Update instance types in tfvars and re-apply. For EKS nodes, this triggers a rolling replacement. For Aurora/ElastiCache, expect brief downtime during the maintenance window.
 
 ### Secrets Rotation
 
@@ -469,13 +402,13 @@ Secrets are stored in AWS Secrets Manager and synced to K8s by External Secrets 
 
 **Rotate database password:**
 ```bash
-# Generate new password
 NEW_PASS=$(openssl rand -base64 32)
 
-# Update RDS
-aws rds modify-db-instance \
-  --db-instance-identifier hermes-production \
-  --master-user-password "$NEW_PASS"
+# Update Aurora
+aws rds modify-db-cluster \
+  --db-cluster-identifier hermes-production \
+  --master-user-password "$NEW_PASS" \
+  --apply-immediately
 
 # Update Secrets Manager
 aws secretsmanager put-secret-value \
@@ -503,12 +436,6 @@ Migrations run automatically as a K8s Job during each ArgoCD sync (defined in `d
 
 **Run migrations manually:**
 ```bash
-# Port-forward to RDS via a pod
-kubectl run pg-client --rm -it --image=postgres:16-alpine \
-  --env="PGPASSWORD=<password>" \
-  -- psql -h <rds-endpoint> -U hermes -d hermes
-
-# Or trigger the migration job
 kubectl delete job hermes-migration -n hermes --ignore-not-found
 kubectl apply -f deploy/k8s/base/migration-job.yaml
 ```
@@ -523,10 +450,15 @@ kubectl run migrate-down --rm -it \
 ### Upgrading EKS
 
 1. Update `eks_cluster_version` in the tfvars file
-2. Run `terraform plan` to review — the cluster upgrade is in-place, node group replacement is rolling
-3. Apply: `terraform apply -var-file=environments/<env>.tfvars -var="github_org=..."`
-4. The cluster control plane upgrades first (~15 min), then the node group rolls (~15 min per node)
-5. Verify: `kubectl get nodes` — all nodes should show the new version
+2. Review the plan:
+   ```bash
+   make tf-plan ENV=production
+   ```
+3. Apply — the cluster control plane upgrades first (~15 min), then the node group rolls (~15 min per node):
+   ```bash
+   make tf-apply ENV=production
+   ```
+4. Verify: `kubectl get nodes` — all nodes should show the new version
 
 > **Important:** Only upgrade one minor version at a time (e.g., 1.31 → 1.32). Check the [EKS release calendar](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html) for deprecations.
 
@@ -556,15 +488,6 @@ kubectl describe pod <pod-name> -n hermes
 kubectl logs <pod-name> -n hermes --previous  # logs from crashed container
 ```
 
-**ArgoCD sync issues:**
-```bash
-kubectl get applications -n argocd hermes-staging -o yaml | grep -A 20 'status:'
-
-# Force a re-sync
-kubectl patch application hermes-staging -n argocd --type merge \
-  -p '{"operation": {"sync": {"revision": "HEAD"}}}'
-```
-
 **NATS JetStream status:**
 ```bash
 kubectl exec -n hermes nats-0 -- nats stream ls
@@ -576,40 +499,28 @@ kubectl exec -n hermes nats-0 -- nats consumer ls DELIVERY
 ```bash
 # Get connection string from secret
 kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_URL}' | base64 -d
-
-# Port-forward to RDS (from a pod, since RDS is in private subnet)
-kubectl run pg-client --rm -it --image=postgres:16-alpine \
-  --env="PGPASSWORD=<password>" \
-  -- psql -h <rds-endpoint> -U hermes -d hermes
 ```
 
 ### Disaster Recovery
 
-**RDS:**
-- Automated daily backups (7 days staging, 30 days production)
+**Aurora PostgreSQL:**
+- Automated continuous backups (7 days staging, 30 days production)
 - Point-in-time recovery available within the retention window
-- Multi-AZ failover is automatic in production
-
-```bash
-# Restore from snapshot
-aws rds restore-db-instance-from-db-snapshot \
-  --db-instance-identifier hermes-production-restored \
-  --db-snapshot-identifier <snapshot-id>
-```
+- Production runs 2 instances across AZs with automatic failover
 
 **NATS JetStream:**
-- Data stored on EBS PVCs (5Gi per replica)
+- Data stored on EBS PVCs
 - Stream retention is 7 days
-- If all NATS pods are lost, streams are recreated automatically by services on startup (empty)
-- In-flight messages would be lost — services use durable consumers with explicit ack, so unacknowledged messages are redelivered
+- If all NATS pods are lost, streams are recreated automatically by services on startup
+- Unacknowledged messages are redelivered via durable consumers with explicit ack
 
 **Valkey:**
 - Production has 2 replicas across AZs with automatic failover
 - Daily snapshots (7 days retention)
-- Cache data is reconstructable — Hermes uses Redis as a cache layer, not as primary storage
+- Cache data is reconstructable — Hermes uses Valkey as a cache layer, not as primary storage
 
 **Full cluster recovery:**
-1. `terraform apply` recreates cloud infrastructure from state
+1. `make tf-apply ENV=<environment>` recreates cloud infrastructure from state
 2. `./infra/scripts/bootstrap-cluster.sh` reinstalls platform components
 3. `kubectl apply -f deploy/argocd/` + `kubectl apply -f deploy/kargo/` restores GitOps
 4. ArgoCD auto-syncs the application — all K8s resources are defined in git
@@ -638,6 +549,11 @@ aws rds restore-db-instance-from-db-snapshot \
 ### Useful commands
 
 ```bash
+# Terraform — plan/apply/destroy via wrapper
+make tf-plan ENV=staging
+make tf-apply ENV=staging
+make tf-destroy ENV=staging
+
 # View what's deployed
 kubectl get all -n hermes
 
@@ -647,12 +563,4 @@ kubectl kustomize deploy/k8s/overlays/staging
 # Switch kubectl context between clusters
 aws eks update-kubeconfig --name hermes-staging --region us-east-1
 aws eks update-kubeconfig --name hermes-production --region us-east-1
-
-# ArgoCD CLI (if installed)
-argocd app list
-argocd app sync hermes-staging
-
-# Terraform switch environments
-terraform init -reconfigure -backend-config="key=hermes/staging/terraform.tfstate" ...
-terraform init -reconfigure -backend-config="key=hermes/production/terraform.tfstate" ...
 ```

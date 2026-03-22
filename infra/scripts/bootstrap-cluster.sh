@@ -17,7 +17,6 @@ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo add jetstack https://charts.jetstack.io
 helm repo add external-secrets https://charts.external-secrets.io
 helm repo add argo https://argoproj.github.io/argo-helm
-helm repo add kargo https://charts.kargo.io
 helm repo update
 
 echo "==> Installing NGINX Ingress Controller"
@@ -68,11 +67,15 @@ echo "    ArgoCD admin password: $(kubectl -n argocd get secret argocd-initial-a
 echo "    Access via: kubectl port-forward svc/argocd-server -n argocd 8080:443"
 
 echo "==> Installing Kargo"
-helm upgrade --install kargo kargo/kargo \
+KARGO_ADMIN_PASSWORD="$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 24)"
+KARGO_PASSWORD_HASH="$(htpasswd -nbBC 10 "" "${KARGO_ADMIN_PASSWORD}" | cut -d: -f2)"
+helm upgrade --install kargo oci://ghcr.io/akuity/kargo-charts/kargo \
   --namespace kargo --create-namespace \
   --set api.adminAccount.enabled=true \
-  --set api.adminAccount.tokenSigningKey=auto \
+  --set "api.adminAccount.passwordHash=${KARGO_PASSWORD_HASH}" \
+  --set api.adminAccount.tokenSigningKey="$(head -c 32 /dev/urandom | base64)" \
   --wait
+echo "    Kargo admin password: ${KARGO_ADMIN_PASSWORD}"
 echo "    Access Kargo via: kubectl port-forward svc/kargo-api -n kargo 8443:443"
 
 echo "==> Bootstrap complete for cluster: $CLUSTER"
