@@ -38,3 +38,22 @@ replacements:
 # Image tags managed by Kargo in a separate component to avoid merge conflicts
 components:
 - images/
+images:
+- name: hermes-admin
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
+- name: hermes-inbox
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
+- name: hermes-migrate
+  newTag: 29f949003b68b88f832aba3f79687ba0f65054c3
+- name: hermes-router
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
+- name: hermes-user
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
+- name: hermes-worker-email
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
+- name: hermes-worker-events
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
+- name: hermes-worker-inbox
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
+- name: hermes-worker-sms
+  newTag: 33c324917894ed038ab308f33ccc112206fb2bd5
