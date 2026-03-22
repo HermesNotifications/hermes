@@ -34,6 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -50,8 +53,9 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
-          docker build \
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
             --build-arg SERVICE="$SERVICE" \
             -t "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
+            --push \
             -f deploy/docker/Dockerfile .
-          docker push "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}"
