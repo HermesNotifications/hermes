@@ -26,7 +26,7 @@ func TestInboxProvider_Send_Success(t *testing.T) {
 	defer server.Close()
 
 	centrifugoClient := centrifugo.NewClient(server.URL, "test-key")
-	provider := NewInboxProvider(centrifugoClient)
+	provider := NewInboxProvider(centrifugoClient, nil)
 
 	req := DeliveryRequest{
 		NotificationID: "notif-1",
@@ -70,7 +70,7 @@ func TestInboxProvider_Send_CentrifugoError(t *testing.T) {
 	defer server.Close()
 
 	centrifugoClient := centrifugo.NewClient(server.URL, "test-key")
-	provider := NewInboxProvider(centrifugoClient)
+	provider := NewInboxProvider(centrifugoClient, nil)
 
 	req := DeliveryRequest{
 		NotificationID: "notif-1",

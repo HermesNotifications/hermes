@@ -1,6 +1,7 @@
 package inbox
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
@@ -24,12 +25,14 @@ func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 
-	if err := s.store.MarkRead(r.Context(), userID, id); err != nil {
+	changed, err := s.store.MarkRead(r.Context(), userID, id)
+	if err != nil {
 		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.publishInboxEvent(r.Context(), userID, id, "read")
+	unreadCount := s.updateCacheAfterAction(r.Context(), userID, changed, cacheDecr)
+	s.publishInboxEvent(r.Context(), userID, id, "read", unreadCount)
 	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -50,12 +53,14 @@ func (s *Server) handleMarkUnread(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 
-	if err := s.store.MarkUnread(r.Context(), userID, id); err != nil {
+	changed, err := s.store.MarkUnread(r.Context(), userID, id)
+	if err != nil {
 		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.publishInboxEvent(r.Context(), userID, id, "unread")
+	unreadCount := s.updateCacheAfterAction(r.Context(), userID, changed, cacheIncr)
+	s.publishInboxEvent(r.Context(), userID, id, "unread", unreadCount)
 	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -76,12 +81,14 @@ func (s *Server) handleArchive(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 
-	if err := s.store.Archive(r.Context(), userID, id); err != nil {
+	wasUnread, err := s.store.Archive(r.Context(), userID, id)
+	if err != nil {
 		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.publishInboxEvent(r.Context(), userID, id, "archive")
+	unreadCount := s.updateCacheAfterAction(r.Context(), userID, wasUnread, cacheDecr)
+	s.publishInboxEvent(r.Context(), userID, id, "archive", unreadCount)
 	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -102,12 +109,14 @@ func (s *Server) handleUnarchive(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 
-	if err := s.store.Unarchive(r.Context(), userID, id); err != nil {
+	nowUnread, err := s.store.Unarchive(r.Context(), userID, id)
+	if err != nil {
 		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.publishInboxEvent(r.Context(), userID, id, "unarchive")
+	unreadCount := s.updateCacheAfterAction(r.Context(), userID, nowUnread, cacheIncr)
+	s.publishInboxEvent(r.Context(), userID, id, "unarchive", unreadCount)
 	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -128,12 +137,14 @@ func (s *Server) handleSoftDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 
-	if err := s.store.SoftDelete(r.Context(), userID, id); err != nil {
+	wasUnread, err := s.store.SoftDelete(r.Context(), userID, id)
+	if err != nil {
 		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.publishInboxEvent(r.Context(), userID, id, "delete")
+	unreadCount := s.updateCacheAfterAction(r.Context(), userID, wasUnread, cacheDecr)
+	s.publishInboxEvent(r.Context(), userID, id, "delete", unreadCount)
 	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -157,6 +168,46 @@ func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.publishInboxEvent(r.Context(), userID, "", "read-all")
+	if s.cache != nil {
+		if err := s.cache.SetUnreadCount(r.Context(), userID, 0, unreadCountTTL); err != nil {
+			s.logger.Error("failed to set unread count cache", "error", err)
+		}
+	}
+	s.publishInboxEvent(r.Context(), userID, "", "read-all", 0)
 	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type cacheDirection int
+
+const (
+	cacheIncr cacheDirection = iota
+	cacheDecr
+)
+
+// updateCacheAfterAction updates the Redis unread count if the action affected it.
+// Returns the current unread count (from cache INCR/DECR result or DB fallback).
+func (s *Server) updateCacheAfterAction(ctx context.Context, userID string, affectsCount bool, dir cacheDirection) int {
+	if !affectsCount || s.cache == nil {
+		return s.getUnreadCount(ctx, userID)
+	}
+
+	var newCount int64
+	var err error
+	if dir == cacheIncr {
+		newCount, err = s.cache.IncrUnreadCount(ctx, userID)
+	} else {
+		newCount, err = s.cache.DecrUnreadCount(ctx, userID)
+	}
+
+	if err != nil {
+		s.logger.Error("failed to update unread count cache", "error", err)
+		return s.getUnreadCount(ctx, userID)
+	}
+
+	// DecrUnreadCount returns -1 on cache miss — fall back to DB
+	if newCount < 0 {
+		return s.getUnreadCount(ctx, userID)
+	}
+
+	return int(newCount)
 }

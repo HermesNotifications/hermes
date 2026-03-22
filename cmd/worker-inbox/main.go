@@ -25,9 +25,12 @@ func main() {
 	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
 
+	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
+	defer redisClient.Close()
+
 	centrifugoClient := centrifugo.NewClient(cfg.CentrifugoAPIURL, cfg.CentrifugoAPIKey)
 
-	provider := delivery.NewInboxProvider(centrifugoClient)
+	provider := delivery.NewInboxProvider(centrifugoClient, redisClient)
 
 	worker := delivery.NewWorker(natsClient, provider, "inbox", "worker-inbox", logger)
 	if err := worker.Start(context.Background()); err != nil {

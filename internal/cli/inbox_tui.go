@@ -45,6 +45,13 @@ type newNotifMsg struct {
 	notif client.InboxNotification
 }
 
+type inboxUpdatedMsg struct {
+	notificationID string
+	action         string
+	unreadCount    int
+	timestamp      int64
+}
+
 type clearStatusMsg struct{}
 
 // -- Model --
@@ -63,6 +70,7 @@ type inboxModel struct {
 	loading      bool
 	err          error
 	statusMsg    string
+	lastEventTS  int64 // tracks latest event timestamp for ordering
 }
 
 func newInboxModel(inboxClient *client.InboxClient) inboxModel {
@@ -104,6 +112,16 @@ func (m inboxModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = msg.action
 		}
 		return m, tea.Batch(m.fetchInbox(), m.clearStatusAfter(2*time.Second))
+
+	case inboxUpdatedMsg:
+		// Status change from another client — apply optimistic unread count if newer
+		if msg.timestamp > m.lastEventTS {
+			m.lastEventTS = msg.timestamp
+			if msg.unreadCount >= 0 {
+				m.unreadCount = msg.unreadCount
+			}
+		}
+		return m, m.fetchInbox()
 
 	case newNotifMsg:
 		// New notification arrived via WebSocket — refresh the list

@@ -121,7 +121,7 @@ func TestDeliveryPipeline(t *testing.T) {
 	emailWorker := delivery.NewWorker(natsClient, emailProvider, "email", "email-worker", logger)
 
 	centrifugoClient := centrifugo.NewClient(centrifugoServer.URL, "test-api-key")
-	inboxProvider := delivery.NewInboxProvider(centrifugoClient)
+	inboxProvider := delivery.NewInboxProvider(centrifugoClient, nil)
 	inboxWorker := delivery.NewWorker(natsClient, inboxProvider, "inbox", "inbox-worker", logger)
 
 	// ── Seed Data ───────────────────────────────────────────────────────

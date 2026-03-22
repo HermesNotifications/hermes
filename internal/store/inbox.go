@@ -3,10 +3,13 @@ package store
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/hermes-notifications/hermes/internal/models"
 )
@@ -113,9 +116,24 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 	return notifications, unreadCount, nextCursor, nil
 }
 
+// UnreadCount returns the number of unread, non-archived, non-deleted notifications for a user.
+func (s *Store) UnreadCount(ctx context.Context, userID string) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications
+		 WHERE user_id = $1 AND read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL`,
+		userID,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("unread count: %w", err)
+	}
+	return count, nil
+}
+
 // MarkRead marks a notification as read and advances its status.
-func (s *Store) MarkRead(ctx context.Context, userID, notificationID string) error {
-	_, err := s.pool.Exec(ctx, `
+// Returns true if the notification was actually changed (was unread).
+func (s *Store) MarkRead(ctx context.Context, userID, notificationID string) (bool, error) {
+	result, err := s.pool.Exec(ctx, `
 		UPDATE notifications
 		SET read_at = NOW(),
 		    status = CASE
@@ -133,14 +151,15 @@ func (s *Store) MarkRead(ctx context.Context, userID, notificationID string) err
 		notificationID, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("mark read: %w", err)
+		return false, fmt.Errorf("mark read: %w", err)
 	}
-	return nil
+	return result.RowsAffected() > 0, nil
 }
 
 // MarkUnread marks a notification as unread and reverts status to delivered if it was read.
-func (s *Store) MarkUnread(ctx context.Context, userID, notificationID string) error {
-	_, err := s.pool.Exec(ctx, `
+// Returns true if the notification was actually changed (was read).
+func (s *Store) MarkUnread(ctx context.Context, userID, notificationID string) (bool, error) {
+	result, err := s.pool.Exec(ctx, `
 		UPDATE notifications
 		SET read_at = NULL,
 		    status = CASE
@@ -151,55 +170,70 @@ func (s *Store) MarkUnread(ctx context.Context, userID, notificationID string) e
 		notificationID, userID,
 	)
 	if err != nil {
-		return fmt.Errorf("mark unread: %w", err)
+		return false, fmt.Errorf("mark unread: %w", err)
 	}
-	return nil
+	return result.RowsAffected() > 0, nil
 }
 
 // Archive archives a notification and advances its status to archived.
-func (s *Store) Archive(ctx context.Context, userID, notificationID string) error {
-	_, err := s.pool.Exec(ctx, `
+// Returns true if the archived notification was unread (affecting unread count).
+func (s *Store) Archive(ctx context.Context, userID, notificationID string) (wasUnread bool, err error) {
+	err = s.pool.QueryRow(ctx, `
 		UPDATE notifications
 		SET archived_at = NOW(),
 		    status = 'archived'
-		WHERE id = $1 AND user_id = $2 AND archived_at IS NULL`,
+		WHERE id = $1 AND user_id = $2 AND archived_at IS NULL
+		RETURNING (read_at IS NULL)`,
 		notificationID, userID,
-	)
+	).Scan(&wasUnread)
 	if err != nil {
-		return fmt.Errorf("archive: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("archive: %w", err)
 	}
-	return nil
+	return wasUnread, nil
 }
 
 // Unarchive unarchives a notification and reverts status based on read_at.
-func (s *Store) Unarchive(ctx context.Context, userID, notificationID string) error {
-	_, err := s.pool.Exec(ctx, `
+// Returns true if the unarchived notification is unread (affecting unread count).
+func (s *Store) Unarchive(ctx context.Context, userID, notificationID string) (nowUnread bool, err error) {
+	err = s.pool.QueryRow(ctx, `
 		UPDATE notifications
 		SET archived_at = NULL,
 		    status = CASE
 		        WHEN read_at IS NOT NULL THEN 'read'
 		        ELSE 'delivered'
 		    END
-		WHERE id = $1 AND user_id = $2 AND archived_at IS NOT NULL`,
+		WHERE id = $1 AND user_id = $2 AND archived_at IS NOT NULL
+		RETURNING (read_at IS NULL)`,
 		notificationID, userID,
-	)
+	).Scan(&nowUnread)
 	if err != nil {
-		return fmt.Errorf("unarchive: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("unarchive: %w", err)
 	}
-	return nil
+	return nowUnread, nil
 }
 
 // SoftDelete soft-deletes a notification.
-func (s *Store) SoftDelete(ctx context.Context, userID, notificationID string) error {
-	_, err := s.pool.Exec(ctx, `
+// Returns true if the deleted notification was unread and non-archived (affecting unread count).
+func (s *Store) SoftDelete(ctx context.Context, userID, notificationID string) (wasUnread bool, err error) {
+	err = s.pool.QueryRow(ctx, `
 		UPDATE notifications SET deleted_at = NOW()
-		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		RETURNING (read_at IS NULL AND archived_at IS NULL)`,
 		notificationID, userID,
-	)
+	).Scan(&wasUnread)
 	if err != nil {
-		return fmt.Errorf("soft delete: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("soft delete: %w", err)
 	}
-	return nil
+	return wasUnread, nil
 }
 
 // MarkAllRead marks all unread, non-archived, non-deleted notifications as read for a user.
