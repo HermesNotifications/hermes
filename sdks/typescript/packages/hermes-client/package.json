@@ -1,0 +1,31 @@
+{
+  "name": "@hermes-notifications/client",
+  "version": "0.1.0",
+  "description": "Hermes client SDK for inbox notifications with real-time updates",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "generate:inbox": "openapi-typescript ../../../../api/inbox/openapi.yaml -o src/generated/inbox-api.d.ts",
+    "generate:user": "openapi-typescript ../../../../api/user/openapi.yaml -o src/generated/user-api.d.ts",
+    "generate": "pnpm generate:inbox && pnpm generate:user"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.0",
+    "centrifuge": "^5.0.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.0",
+    "typescript": "^5.8.0"
+  },
+  "license": "MIT"
+}

@@ -37,6 +37,15 @@ openapi-check:     ## Verify specs are up to date (for CI)
 asyncapi-check:    ## Validate AsyncAPI spec
 	npx --yes @asyncapi/cli validate api/async/asyncapi.yaml
 
+# --- SDKs ---
+.PHONY: sdk-ts-generate sdk-ts-build sdk-generate
+sdk-ts-generate:   ## Generate TypeScript types from OpenAPI specs
+	pnpm --filter @hermes-notifications/server generate
+	pnpm --filter @hermes-notifications/client generate
+sdk-ts-build:      ## Build TypeScript SDKs
+	pnpm --filter @hermes-notifications/server build
+sdk-generate: openapi sdk-ts-generate sdk-ts-build  ## Full pipeline: specs → types → build
+
 # --- Infrastructure ---
 .PHONY: infra-up infra-down migrate seed
 infra-up:          ## Start local Postgres, NATS, Redis via Docker Compose
