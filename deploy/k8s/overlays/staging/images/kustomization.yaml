@@ -1,0 +1,32 @@
+# This file is managed by Kargo — do not edit manually.
+# Kargo updates image tags here during promotions.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+images:
+- name: hermes-admin
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-inbox
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-migrate
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-router
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-router
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-user
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-worker-email
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-worker-events
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-worker-inbox
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89
+- name: hermes-worker-sms
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
+  newTag: 5935e8d1647cdaa9f2f923fab874c41852576c89

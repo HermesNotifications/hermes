@@ -151,5 +151,5 @@ tf-bootstrap:    ## Bootstrap Terraform backend (one-time, usage: make tf-bootst
 
 configure-registry: ## Set ECR registry in K8s overlays (usage: make configure-registry REGISTRY=123456.dkr.ecr.us-east-1.amazonaws.com)
 	@test -n "$(REGISTRY)" || { echo "Usage: make configure-registry REGISTRY=<ecr-url>"; echo "  Get it via: cd infra/terraform && terraform output -raw ecr_registry_url"; exit 1; }
-	sed -i'' -e 's|REGISTRY/|$(REGISTRY)/|g' deploy/k8s/overlays/staging/kustomization.yaml deploy/k8s/overlays/production/kustomization.yaml deploy/kargo/warehouse.yaml
+	sed -i'' -e 's|REGISTRY/|$(REGISTRY)/|g' deploy/k8s/overlays/staging/images/kustomization.yaml deploy/k8s/overlays/production/images/kustomization.yaml deploy/kargo/warehouse.yaml
 	@echo "Registry set to $(REGISTRY) in staging, production, and kargo overlays"

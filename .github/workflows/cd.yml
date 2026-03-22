@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths-ignore:
       # Don't trigger on Kargo's automated image tag updates
-      - 'deploy/k8s/overlays/*/kustomization.yaml'
+      - 'deploy/k8s/overlays/*/images/kustomization.yaml'
 
 permissions:
   id-token: write    # OIDC for AWS
@@ -53,7 +53,5 @@ jobs:
           docker build \
             --build-arg SERVICE="$SERVICE" \
             -t "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
-            -t "${ECR_REGISTRY}/hermes-${SERVICE}:latest" \
             -f deploy/docker/Dockerfile .
           docker push "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}"
-          docker push "${ECR_REGISTRY}/hermes-${SERVICE}:latest"

@@ -45,32 +45,6 @@ replacements:
           - spec.tls.0.hosts.0
           - spec.rules.0.host
 
-# Update with your production container registry
-images:
-  - name: hermes-admin
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-router
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-router
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-inbox
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-user
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-worker-events
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-worker-email
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-worker-sms
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-worker-inbox
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
-    newTag: SET_BY_CD_PIPELINE
-  - name: hermes-migrate
-    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
-    newTag: SET_BY_CD_PIPELINE
+# Image tags managed by Kargo in a separate component to avoid merge conflicts
+components:
+  - images/

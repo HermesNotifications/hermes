@@ -31,7 +31,7 @@ spec:
                 path: ./src
         - uses: kustomize-set-image
           config:
-            path: ./src/deploy/k8s/overlays/production
+            path: ./src/deploy/k8s/overlays/production/images
             images:
               - image: hermes-admin
                 tag: ${{ imageFrom(vars.registry + "/hermes-admin").Tag }}
