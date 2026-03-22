@@ -35,6 +35,9 @@ make migrate
 # Build Docker image for a service
 make docker-admin
 
+# Install git hooks (one-time setup, requires lefthook)
+make hooks
+
 # Show all available Make targets
 make help
 ```

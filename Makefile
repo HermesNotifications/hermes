@@ -149,6 +149,13 @@ tf-destroy:      ## Destroy infra (usage: make tf-destroy ENV=staging)
 tf-bootstrap:    ## Bootstrap Terraform backend (one-time, usage: make tf-bootstrap REGION=us-east-1)
 	./infra/terraform/scripts/bootstrap-backend.sh $(or $(REGION),us-east-1)
 
+.PHONY: hooks hooks-check
+hooks:           ## Install git hooks via lefthook (one-time setup)
+	lefthook install
+
+hooks-check:     ## Run all hook checks manually
+	lefthook run pre-commit && lefthook run pre-push
+
 configure-registry: ## Set ECR registry in K8s overlays (usage: make configure-registry REGISTRY=123456.dkr.ecr.us-east-1.amazonaws.com)
 	@test -n "$(REGISTRY)" || { echo "Usage: make configure-registry REGISTRY=<ecr-url>"; echo "  Get it via: cd infra/terraform && terraform output -raw ecr_registry_url"; exit 1; }
 	sed -i'' -e 's|REGISTRY/|$(REGISTRY)/|g' deploy/k8s/overlays/staging/images/kustomization.yaml deploy/k8s/overlays/production/images/kustomization.yaml deploy/kargo/warehouse.yaml

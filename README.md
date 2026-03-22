@@ -65,6 +65,9 @@ make seed
 # Build all services
 make build
 
+# Install git hooks (requires lefthook)
+make hooks
+
 # Run unit tests
 make test
 

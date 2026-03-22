@@ -1,0 +1,27 @@
+pre-commit:
+  parallel: true
+  commands:
+    vet:
+      glob: "*.go"
+      run: go vet ./...
+    lint:
+      glob: "*.go"
+      run: golangci-lint run
+    build:
+      glob: "*.go"
+      run: go build ./...
+
+pre-push:
+  commands:
+    test:
+      glob: "*.go"
+      run: make test
+    kustomize:
+      glob: "deploy/k8s/**/*"
+      run: |
+        kubectl kustomize deploy/k8s/overlays/local &&
+        kubectl kustomize deploy/k8s/overlays/staging &&
+        kubectl kustomize deploy/k8s/overlays/production
+    terraform:
+      glob: "infra/terraform/**/*"
+      run: cd infra/terraform && terraform fmt -check -recursive && terraform validate
