@@ -51,7 +51,6 @@
       "Bash(git reset --hard:*)",
       "Bash(git clean -f:*)",
       "Bash(rm -rf:*)",
-      "Bash(kubectl delete:*)",
       "Bash(terraform destroy:*)",
       "Bash(k3d cluster delete:*)",
       "Bash(make dev-down:*)",

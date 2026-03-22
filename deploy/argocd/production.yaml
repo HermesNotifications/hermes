@@ -7,12 +7,16 @@ kind: Application
 metadata:
   name: hermes-production
   namespace: argocd
+  labels:
+    kargo.akuity.io/authorized-stage: production
+  annotations:
+    kargo.akuity.io/authorized-stage: hermes:production
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/OWNER/hermes.git # placeholder
+    repoURL: https://github.com/darylrobbins/hermes.git
     targetRevision: main
     path: deploy/k8s/overlays/production
   destination:

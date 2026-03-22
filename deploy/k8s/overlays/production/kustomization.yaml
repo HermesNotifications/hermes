@@ -5,6 +5,7 @@ resources:
   - ../../base
   - external-secrets.yaml
   - secret-store.yaml
+  - parameter-store.yaml
   - hpa/
   - pdb/
   - network-policies/

@@ -38,6 +38,12 @@ variable "node_desired_size" {
   type        = number
 }
 
+variable "ecr_repository_arns" {
+  description = "List of ECR repository ARNs for Kargo read access"
+  type        = list(string)
+  default     = []
+}
+
 variable "public_access_cidrs" {
   description = "CIDR blocks allowed to access the EKS API endpoint (default: unrestricted)"
   type        = list(string)

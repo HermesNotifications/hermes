@@ -19,6 +19,7 @@ module "eks" {
   node_min_size       = var.eks_node_min_size
   node_max_size       = var.eks_node_max_size
   node_desired_size   = var.eks_node_desired_size
+  ecr_repository_arns = values(module.ecr.repository_arns)
 }
 
 module "rds" {

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Bootstrap an EKS cluster with required platform components.
-# Usage: ./bootstrap-cluster.sh <cluster-name> [region] [eso-role-arn]
-# Example: ./bootstrap-cluster.sh hermes-staging us-east-1 arn:aws:iam::123:role/...
+# Usage: ./bootstrap-cluster.sh <cluster-name> [region] [eso-role-arn] [kargo-role-arn]
+# Example: ./bootstrap-cluster.sh hermes-staging us-east-1 arn:aws:iam::123:role/eso arn:aws:iam::123:role/kargo
 
 set -euo pipefail
 
-CLUSTER="${1:?Usage: $0 <cluster-name> [region] [eso-role-arn]}"
+CLUSTER="${1:?Usage: $0 <cluster-name> [region] [eso-role-arn] [kargo-role-arn]}"
 REGION="${2:-us-east-1}"
 ESO_ROLE_ARN="${3:?Provide the External Secrets Operator IAM role ARN}"
+KARGO_ROLE_ARN="${4:?Provide the Kargo controller IAM role ARN}"
 
 echo "==> Configuring kubectl for cluster: $CLUSTER"
 aws eks update-kubeconfig --name "$CLUSTER" --region "$REGION"
@@ -81,6 +82,7 @@ helm upgrade --install kargo oci://ghcr.io/akuity/kargo-charts/kargo \
   --set api.adminAccount.enabled=true \
   --set "api.adminAccount.passwordHash=${KARGO_PASSWORD_HASH}" \
   --set api.adminAccount.tokenSigningKey="$(head -c 32 /dev/urandom | base64)" \
+  --set "controller.serviceAccount.annotations.eks\.amazonaws\.com/role-arn=${KARGO_ROLE_ARN}" \
   --wait
 echo "    Kargo admin password: ${KARGO_ADMIN_PASSWORD}"
 echo "    Access Kargo via: kubectl port-forward svc/kargo-api -n kargo 8443:443"

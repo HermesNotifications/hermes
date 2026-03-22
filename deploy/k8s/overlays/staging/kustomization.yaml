@@ -4,6 +4,7 @@ resources:
 - ../../base
 - external-secrets.yaml
 - secret-store.yaml
+- parameter-store.yaml
 - network-policies/
 patches:
 - path: patches/replicas.yaml

@@ -1,11 +1,11 @@
 apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
-  name: aws-secrets-manager
+  name: aws-parameter-store
 spec:
   provider:
     aws:
-      service: SecretsManager
+      service: ParameterStore
       region: us-east-1
       auth:
         jwt:

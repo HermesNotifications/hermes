@@ -17,45 +17,53 @@ spec:
         direct: true
   promotionTemplate:
     spec:
+      vars:
+        - name: registry
+          value: 471524413120.dkr.ecr.us-east-1.amazonaws.com
+        - name: repoURL
+          value: git@github.com:darylrobbins/hermes.git
       steps:
-        # 1. Clone the repository
         - uses: git-clone
           config:
-            repoURL: https://github.com/OWNER/hermes.git
+            repoURL: ${{ vars.repoURL }}
             checkout:
               - branch: main
                 path: ./src
-        # 2. Update image tags in the staging Kustomize overlay
         - uses: kustomize-set-image
           config:
             path: ./src/deploy/k8s/overlays/staging
             images:
               - image: hermes-admin
+                tag: ${{ imageFrom(vars.registry + "/hermes-admin").Tag }}
               - image: hermes-router
+                tag: ${{ imageFrom(vars.registry + "/hermes-router").Tag }}
               - image: hermes-inbox
+                tag: ${{ imageFrom(vars.registry + "/hermes-inbox").Tag }}
               - image: hermes-user
+                tag: ${{ imageFrom(vars.registry + "/hermes-user").Tag }}
               - image: hermes-worker-events
+                tag: ${{ imageFrom(vars.registry + "/hermes-worker-events").Tag }}
               - image: hermes-worker-email
+                tag: ${{ imageFrom(vars.registry + "/hermes-worker-email").Tag }}
               - image: hermes-worker-sms
+                tag: ${{ imageFrom(vars.registry + "/hermes-worker-sms").Tag }}
               - image: hermes-worker-inbox
+                tag: ${{ imageFrom(vars.registry + "/hermes-worker-inbox").Tag }}
               - image: hermes-migrate
-        # 3. Commit the image tag changes
+                tag: ${{ imageFrom(vars.registry + "/hermes-migrate").Tag }}
         - uses: git-commit
           config:
             path: ./src
-            messageFromSteps:
-              - kustomize-set-image
-        # 4. Push the commit to the remote
+            message: "chore(staging): update image tags via Kargo promotion"
         - uses: git-push
           config:
             path: ./src
-        # 5. Tell ArgoCD to sync the staging application
         - uses: argocd-update
           config:
             apps:
               - name: hermes-staging
                 sources:
-                  - repoURL: https://github.com/OWNER/hermes.git
+                  - repoURL: https://github.com/darylrobbins/hermes.git
   verification:
     analysisTemplates:
       - name: hermes-health-check

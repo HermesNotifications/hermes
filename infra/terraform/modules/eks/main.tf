@@ -171,11 +171,18 @@ resource "aws_iam_role_policy" "external_secrets" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "secretsmanager:GetSecretValue"
-      Resource = "arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:hermes/*"
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = "arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:hermes/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:*:${data.aws_caller_identity.current.account_id}:parameter/hermes/*"
+      },
+    ]
   })
 }
 
@@ -207,6 +214,91 @@ resource "aws_iam_role" "ebs_csi" {
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
   role       = aws_iam_role.ebs_csi.name
+}
+
+# ------------------------------------------------------------------------------
+# IRSA: Kargo Controller (assumes project-specific roles)
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "kargo_controller" {
+  name = "${local.cluster_name}-kargo-controller"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks.arn
+      }
+      Condition = {
+        StringEquals = {
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:kargo:kargo-controller"
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "kargo_controller" {
+  name = "${local.cluster_name}-kargo-assume-project-roles"
+  role = aws_iam_role.kargo_controller.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sts:AssumeRole"
+      Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/kargo-project-*"
+    }]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# Kargo Project Role: hermes (ECR read access)
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "kargo_project_hermes" {
+  name = "kargo-project-hermes"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        AWS = aws_iam_role.kargo_controller.arn
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "kargo_project_hermes" {
+  name = "kargo-project-hermes-ecr"
+  role = aws_iam_role.kargo_project_hermes.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:ListImages",
+          "ecr:DescribeImages",
+        ]
+        Resource = var.ecr_repository_arns
+      },
+    ]
+  })
 }
 
 # ------------------------------------------------------------------------------

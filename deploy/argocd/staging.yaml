@@ -7,12 +7,16 @@ kind: Application
 metadata:
   name: hermes-staging
   namespace: argocd
+  labels:
+    kargo.akuity.io/authorized-stage: staging
+  annotations:
+    kargo.akuity.io/authorized-stage: hermes:staging
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/OWNER/hermes.git # placeholder
+    repoURL: https://github.com/darylrobbins/hermes.git
     targetRevision: main
     path: deploy/k8s/overlays/staging
   destination:

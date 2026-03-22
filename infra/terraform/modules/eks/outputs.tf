@@ -37,3 +37,8 @@ output "external_secrets_role_arn" {
   description = "IAM role ARN for External Secrets Operator"
   value       = aws_iam_role.external_secrets.arn
 }
+
+output "kargo_controller_role_arn" {
+  description = "IAM role ARN for Kargo controller (IRSA)"
+  value       = aws_iam_role.kargo_controller.arn
+}

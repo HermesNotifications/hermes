@@ -1,6 +1,9 @@
 # Kargo Warehouse watches ECR for new images across all 9 Hermes services.
 # When any service publishes a new tag, Kargo creates a Freight that can
 # be promoted through the staging -> production pipeline.
+#
+# Images are tagged with git SHAs by the CD pipeline, so we use the Lexical
+# strategy with a regex filter to match 40-char hex strings.
 apiVersion: kargo.akuity.io/v1alpha1
 kind: Warehouse
 metadata:
@@ -10,28 +13,46 @@ spec:
   subscriptions:
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-router
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
