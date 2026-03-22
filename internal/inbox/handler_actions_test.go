@@ -1,7 +1,6 @@
 package inbox_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -140,21 +139,14 @@ func TestHandleMarkRead_NoUser(t *testing.T) {
 func TestHandleMarkRead_NotFound(t *testing.T) {
 	srv, _ := newTestServer(t)
 
+	// Marking a nonexistent notification is a no-op, not an error (idempotent)
 	req := httptest.NewRequest(http.MethodPut, "/v1/inbox/nonexistent/read", nil)
 	req = requestWithUser(req, testUserID)
 	rec := httptest.NewRecorder()
 
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var errResp map[string]string
-	if err := json.NewDecoder(rec.Body).Decode(&errResp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if errResp["error"] == "" {
-		t.Error("expected non-empty error field")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

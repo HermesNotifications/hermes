@@ -31,7 +31,7 @@ func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived 
 		if !archived && n.ArchivedAt != nil {
 			continue
 		}
-		if n.ReadAt == nil {
+		if n.ReadAt == nil && n.ArchivedAt == nil {
 			unread++
 		}
 		result = append(result, n)
@@ -50,57 +50,70 @@ func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived 
 	return result, unread, nextCursor, nil
 }
 
-func (m *mockInboxStore) MarkRead(ctx context.Context, userID, notificationID string) error {
+func (m *mockInboxStore) UnreadCount(ctx context.Context, userID string) (int, error) {
+	count := 0
+	for _, n := range m.notifications {
+		if n.UserID == userID && n.ReadAt == nil && n.ArchivedAt == nil && n.DeletedAt == nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockInboxStore) MarkRead(ctx context.Context, userID, notificationID string) (bool, error) {
 	for i, n := range m.notifications {
-		if n.ID == notificationID && n.UserID == userID {
+		if n.ID == notificationID && n.UserID == userID && n.ReadAt == nil {
 			now := time.Now()
 			m.notifications[i].ReadAt = &now
-			return nil
+			return true, nil
 		}
 	}
-	return fmt.Errorf("notification not found: %s", notificationID)
+	return false, nil
 }
 
-func (m *mockInboxStore) MarkUnread(ctx context.Context, userID, notificationID string) error {
+func (m *mockInboxStore) MarkUnread(ctx context.Context, userID, notificationID string) (bool, error) {
 	for i, n := range m.notifications {
-		if n.ID == notificationID && n.UserID == userID {
+		if n.ID == notificationID && n.UserID == userID && n.ReadAt != nil {
 			m.notifications[i].ReadAt = nil
-			return nil
+			return true, nil
 		}
 	}
-	return fmt.Errorf("notification not found: %s", notificationID)
+	return false, nil
 }
 
-func (m *mockInboxStore) Archive(ctx context.Context, userID, notificationID string) error {
+func (m *mockInboxStore) Archive(ctx context.Context, userID, notificationID string) (bool, error) {
 	for i, n := range m.notifications {
-		if n.ID == notificationID && n.UserID == userID {
+		if n.ID == notificationID && n.UserID == userID && n.ArchivedAt == nil {
 			now := time.Now()
+			wasUnread := n.ReadAt == nil
 			m.notifications[i].ArchivedAt = &now
-			return nil
+			return wasUnread, nil
 		}
 	}
-	return fmt.Errorf("notification not found: %s", notificationID)
+	return false, nil
 }
 
-func (m *mockInboxStore) Unarchive(ctx context.Context, userID, notificationID string) error {
+func (m *mockInboxStore) Unarchive(ctx context.Context, userID, notificationID string) (bool, error) {
 	for i, n := range m.notifications {
-		if n.ID == notificationID && n.UserID == userID {
+		if n.ID == notificationID && n.UserID == userID && n.ArchivedAt != nil {
 			m.notifications[i].ArchivedAt = nil
-			return nil
+			nowUnread := n.ReadAt == nil
+			return nowUnread, nil
 		}
 	}
-	return fmt.Errorf("notification not found: %s", notificationID)
+	return false, nil
 }
 
-func (m *mockInboxStore) SoftDelete(ctx context.Context, userID, notificationID string) error {
+func (m *mockInboxStore) SoftDelete(ctx context.Context, userID, notificationID string) (bool, error) {
 	for i, n := range m.notifications {
-		if n.ID == notificationID && n.UserID == userID {
+		if n.ID == notificationID && n.UserID == userID && n.DeletedAt == nil {
 			now := time.Now()
+			wasUnread := n.ReadAt == nil && n.ArchivedAt == nil
 			m.notifications[i].DeletedAt = &now
-			return nil
+			return wasUnread, nil
 		}
 	}
-	return fmt.Errorf("notification not found: %s", notificationID)
+	return false, nil
 }
 
 func (m *mockInboxStore) MarkAllRead(ctx context.Context, userID string) error {
@@ -156,7 +169,7 @@ func newTestServer(t *testing.T) (*inbox.Server, *mockInboxStore) {
 			{ID: "group-1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"inbox"}},
 		},
 	}
-	srv := inbox.NewServer(store, nil, nil, nil, logger)
+	srv := inbox.NewServer(store, nil, nil, nil, nil, logger)
 	srv.SetSkipAuth(true)
 	return srv, store
 }

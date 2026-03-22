@@ -47,6 +47,13 @@ func (s *Server) handleListInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Populate unread count cache from the authoritative DB result
+	if s.cache != nil {
+		if err := s.cache.SetUnreadCount(r.Context(), userID, unreadCount, unreadCountTTL); err != nil {
+			s.logger.Error("failed to cache unread count", "error", err)
+		}
+	}
+
 	// Ensure we return [] not null in JSON
 	var data any = notifications
 	if notifications == nil {

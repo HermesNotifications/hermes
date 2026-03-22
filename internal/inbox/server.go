@@ -4,8 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
 	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/messaging"
@@ -13,15 +15,18 @@ import (
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
+const unreadCountTTL = 10 * time.Minute
+
 // InboxStore defines the database operations the inbox service needs.
 type InboxStore interface {
 	// Inbox
 	ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, int, string, error)
-	MarkRead(ctx context.Context, userID, notificationID string) error
-	MarkUnread(ctx context.Context, userID, notificationID string) error
-	Archive(ctx context.Context, userID, notificationID string) error
-	Unarchive(ctx context.Context, userID, notificationID string) error
-	SoftDelete(ctx context.Context, userID, notificationID string) error
+	UnreadCount(ctx context.Context, userID string) (int, error)
+	MarkRead(ctx context.Context, userID, notificationID string) (bool, error)
+	MarkUnread(ctx context.Context, userID, notificationID string) (bool, error)
+	Archive(ctx context.Context, userID, notificationID string) (bool, error)
+	Unarchive(ctx context.Context, userID, notificationID string) (bool, error)
+	SoftDelete(ctx context.Context, userID, notificationID string) (bool, error)
 	MarkAllRead(ctx context.Context, userID string) error
 
 	// Groups (for slug resolution)
@@ -31,6 +36,7 @@ type InboxStore interface {
 // Server is the inbox HTTP service.
 type Server struct {
 	store          InboxStore
+	cache          *cache.Client
 	centrifugo     *centrifugo.Client
 	nats           *messaging.Client
 	logger         *slog.Logger
@@ -44,9 +50,10 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
+func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client, cacheClient *cache.Client, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
 	s := &Server{
 		store:          store,
+		cache:          cacheClient,
 		centrifugo:     cent,
 		nats:           nats,
 		jwtKeyProvider: keyProvider,
@@ -82,15 +89,39 @@ func (s *Server) Handler() http.Handler {
 	return h
 }
 
+// getUnreadCount reads the unread count from cache, falling back to DB on miss.
+func (s *Server) getUnreadCount(ctx context.Context, userID string) int {
+	if s.cache != nil {
+		count, found, err := s.cache.GetUnreadCount(ctx, userID)
+		if err == nil && found {
+			return count
+		}
+	}
+	// Cache miss or error — fall back to DB
+	count, err := s.store.UnreadCount(ctx, userID)
+	if err != nil {
+		s.logger.Error("failed to get unread count", "error", err)
+		return -1
+	}
+	if s.cache != nil {
+		if err := s.cache.SetUnreadCount(ctx, userID, count, unreadCountTTL); err != nil {
+			s.logger.Error("failed to cache unread count", "error", err)
+		}
+	}
+	return count
+}
+
 // publishInboxEvent publishes a control event to the user's Centrifugo channel.
-func (s *Server) publishInboxEvent(ctx context.Context, userID, notificationID, action string) {
+func (s *Server) publishInboxEvent(ctx context.Context, userID, notificationID, action string, unreadCount int) {
 	if s.centrifugo == nil {
 		return
 	}
-	event := map[string]string{
+	event := map[string]any{
 		"type":            "inbox.updated",
 		"notification_id": notificationID,
 		"action":          action,
+		"unread_count":    unreadCount,
+		"timestamp":       time.Now().UnixMilli(),
 	}
 	channel := "user#" + userID
 	if err := s.centrifugo.Publish(ctx, channel, event); err != nil {

@@ -50,7 +50,7 @@ func main() {
 	}, time.Minute, redisClient)
 	keyProvider := cachedKeys.Provider()
 
-	srv := inbox.NewServer(st, centrifugoClient, natsClient, keyProvider, logger)
+	srv := inbox.NewServer(st, centrifugoClient, natsClient, redisClient, keyProvider, logger)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }
