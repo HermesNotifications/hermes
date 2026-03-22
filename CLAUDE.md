@@ -85,3 +85,21 @@ All config via environment variables with `HERMES_` prefix. Defaults target Dock
 - **E2E tests** (`tests/e2e/`, `//go:build integration`): wire up multiple services in-process against real infrastructure. Test full notification pipeline.
 
 When writing new handlers, follow the existing pattern: define methods on the store interface, implement in `internal/store/`, create mock in the service's `testutil_test.go`, test handlers with httptest.
+
+## Tool Usage Rules
+
+**Always use dedicated tools instead of shell commands:**
+- File search: use `Glob` (not `find` or `ls`)
+- Content search: use `Grep` (not `grep` or `rg`)
+- Read files: use `Read` (not `cat`, `head`, `tail`, or `xargs cat`)
+- Edit files: use `Edit` (not `sed` or `awk`)
+- Write files: use `Write` (not `echo` or `cat <<EOF`)
+
+These tools are always available without permission prompts. Shell equivalents require manual approval and should only be used for actual shell operations (running builds, starting services, etc.).
+
+**Validation:** Use `jq . file.json > /dev/null` to validate JSON files.
+
+**Worktree and subagent rules:**
+- Always use relative paths or paths within your current working directory.
+- Never use absolute paths to the main repo (e.g., `/Users/.../hermes/...`) from a worktree — your copy of the code is in the worktree directory.
+- Never search outside your working directory. The worktree contains the full repo.
