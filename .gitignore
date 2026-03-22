@@ -2,9 +2,11 @@
 /bin/
 *.exe
 
-# IDE
+# IDE / tools
 .idea/
 .vscode/
+.claude/settings.local.json
+.claude/worktrees/
 *.swp
 
 # OS
