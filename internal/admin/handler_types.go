@@ -1,149 +1,132 @@
 package admin
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-type createTypeRequest struct {
-	GroupID      string  `json:"group_id"`
-	Slug         string  `json:"slug"`
-	Name         string  `json:"name"`
-	EmailSubject *string `json:"email_subject"`
-	EmailBody    *string `json:"email_body"`
-	SMSBody      *string `json:"sms_body"`
-	InboxTitle   *string `json:"inbox_title"`
-	InboxBody    *string `json:"inbox_body"`
+type createTypeInput struct {
+	Body struct {
+		GroupID      string  `json:"group_id" required:"true" minLength:"1" doc:"ID of the group this type belongs to"`
+		Slug         string  `json:"slug" required:"true" minLength:"1" doc:"URL-friendly identifier"`
+		Name         string  `json:"name" required:"true" minLength:"1" doc:"Human-readable name"`
+		EmailSubject *string `json:"email_subject,omitempty" doc:"Email subject template"`
+		EmailBody    *string `json:"email_body,omitempty" doc:"Email body template"`
+		SMSBody      *string `json:"sms_body,omitempty" doc:"SMS body template"`
+		InboxTitle   *string `json:"inbox_title,omitempty" doc:"Inbox notification title template"`
+		InboxBody    *string `json:"inbox_body,omitempty" doc:"Inbox notification body template"`
+	}
 }
 
-type updateTypeRequest struct {
-	Name         string  `json:"name"`
-	EmailSubject *string `json:"email_subject"`
-	EmailBody    *string `json:"email_body"`
-	SMSBody      *string `json:"sms_body"`
-	InboxTitle   *string `json:"inbox_title"`
-	InboxBody    *string `json:"inbox_body"`
+type updateTypeInput struct {
+	ID string `path:"id" doc:"Type ID"`
+	Body struct {
+		Name         string  `json:"name" doc:"Human-readable name"`
+		EmailSubject *string `json:"email_subject,omitempty" doc:"Email subject template"`
+		EmailBody    *string `json:"email_body,omitempty" doc:"Email body template"`
+		SMSBody      *string `json:"sms_body,omitempty" doc:"SMS body template"`
+		InboxTitle   *string `json:"inbox_title,omitempty" doc:"Inbox notification title template"`
+		InboxBody    *string `json:"inbox_body,omitempty" doc:"Inbox notification body template"`
+	}
 }
 
-// @Summary List notification types
-// @Tags types
-// @Produce json
-// @Success 200 {array} models.NotificationType
-// @Failure 500 {object} map[string]string
-// @Router /v1/types [get]
-// @Security ApiKeyAuth
-func (s *Server) handleListTypes(w http.ResponseWriter, r *http.Request) {
-	types, err := s.store.ListTypes(r.Context())
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, types)
+type deleteTypeInput struct {
+	ID string `path:"id" doc:"Type ID"`
 }
 
-// @Summary Create a notification type
-// @Tags types
-// @Accept json
-// @Produce json
-// @Param body body createTypeRequest true "Type to create"
-// @Success 201 {object} models.NotificationType
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/types [post]
-// @Security ApiKeyAuth
-func (s *Server) handleCreateType(w http.ResponseWriter, r *http.Request) {
-	var req createTypeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-	if req.Slug == "" || req.Name == "" || req.GroupID == "" {
-		httputil.ClientError(w, http.StatusBadRequest, "slug, name, and group_id are required")
-		return
-	}
+type typeOutput struct {
+	Body models.NotificationType
+}
 
-	nt, err := s.store.CreateType(r.Context(), &models.NotificationType{
-		GroupID: req.GroupID, Slug: req.Slug, Name: req.Name,
-		EmailSubject: req.EmailSubject, EmailBody: req.EmailBody,
-		SMSBody: req.SMSBody, InboxTitle: req.InboxTitle, InboxBody: req.InboxBody,
+type typeListOutput struct {
+	Body []models.NotificationType
+}
+
+func (s *Server) registerTypeRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "list-types",
+		Method:      http.MethodGet,
+		Path:        "/v1/types",
+		Summary:     "List notification types",
+		Tags:        []string{"Types"},
+	}, func(ctx context.Context, input *struct{}) (*typeListOutput, error) {
+		types, err := s.store.ListTypes(ctx)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		return &typeListOutput{Body: types}, nil
 	})
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-	httputil.JSON(w, http.StatusCreated, nt)
-}
 
-// @Summary Update a notification type
-// @Tags types
-// @Accept json
-// @Produce json
-// @Param id path string true "Type ID"
-// @Param body body updateTypeRequest true "Fields to update"
-// @Success 200 {object} models.NotificationType
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/types/{id} [put]
-// @Security ApiKeyAuth
-func (s *Server) handleUpdateType(w http.ResponseWriter, r *http.Request) {
-	typeID := r.PathValue("id")
-	var req updateTypeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-
-	existing, err := s.store.GetTypeByID(r.Context(), typeID)
-	if err != nil {
-		httputil.ClientError(w, http.StatusNotFound, "type not found")
-		return
-	}
-
-	updated, err := s.store.UpdateType(r.Context(), &models.NotificationType{
-		ID: typeID, Name: req.Name,
-		EmailSubject: req.EmailSubject, EmailBody: req.EmailBody,
-		SMSBody: req.SMSBody, InboxTitle: req.InboxTitle, InboxBody: req.InboxBody,
+	huma.Register(s.api, huma.Operation{
+		OperationID:   "create-type",
+		Method:        http.MethodPost,
+		Path:          "/v1/types",
+		Summary:       "Create a notification type",
+		Tags:          []string{"Types"},
+		DefaultStatus: http.StatusCreated,
+	}, func(ctx context.Context, input *createTypeInput) (*typeOutput, error) {
+		nt, err := s.store.CreateType(ctx, &models.NotificationType{
+			GroupID: input.Body.GroupID, Slug: input.Body.Slug, Name: input.Body.Name,
+			EmailSubject: input.Body.EmailSubject, EmailBody: input.Body.EmailBody,
+			SMSBody: input.Body.SMSBody, InboxTitle: input.Body.InboxTitle, InboxBody: input.Body.InboxBody,
+		})
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		return &typeOutput{Body: *nt}, nil
 	})
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
 
-	if s.cache != nil {
-		s.cache.InvalidateTypeConfig(r.Context(), existing.Slug)
-	}
+	huma.Register(s.api, huma.Operation{
+		OperationID: "update-type",
+		Method:      http.MethodPut,
+		Path:        "/v1/types/{id}",
+		Summary:     "Update a notification type",
+		Tags:        []string{"Types"},
+	}, func(ctx context.Context, input *updateTypeInput) (*typeOutput, error) {
+		existing, err := s.store.GetTypeByID(ctx, input.ID)
+		if err != nil {
+			return nil, huma.Error404NotFound("type not found")
+		}
 
-	httputil.JSON(w, http.StatusOK, updated)
-}
+		updated, err := s.store.UpdateType(ctx, &models.NotificationType{
+			ID: input.ID, Name: input.Body.Name,
+			EmailSubject: input.Body.EmailSubject, EmailBody: input.Body.EmailBody,
+			SMSBody: input.Body.SMSBody, InboxTitle: input.Body.InboxTitle, InboxBody: input.Body.InboxBody,
+		})
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
 
-// @Summary Delete a notification type
-// @Tags types
-// @Param id path string true "Type ID"
-// @Success 204
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/types/{id} [delete]
-// @Security ApiKeyAuth
-func (s *Server) handleDeleteType(w http.ResponseWriter, r *http.Request) {
-	typeID := r.PathValue("id")
+		if s.cache != nil {
+			s.cache.InvalidateTypeConfig(ctx, existing.Slug)
+		}
 
-	existing, err := s.store.GetTypeByID(r.Context(), typeID)
-	if err != nil {
-		httputil.ClientError(w, http.StatusNotFound, "type not found")
-		return
-	}
+		return &typeOutput{Body: *updated}, nil
+	})
 
-	if err := s.store.DeleteType(r.Context(), typeID); err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
+	huma.Register(s.api, huma.Operation{
+		OperationID:   "delete-type",
+		Method:        http.MethodDelete,
+		Path:          "/v1/types/{id}",
+		Summary:       "Delete a notification type",
+		Tags:          []string{"Types"},
+		DefaultStatus: http.StatusNoContent,
+	}, func(ctx context.Context, input *deleteTypeInput) (*struct{}, error) {
+		existing, err := s.store.GetTypeByID(ctx, input.ID)
+		if err != nil {
+			return nil, huma.Error404NotFound("type not found")
+		}
 
-	if s.cache != nil {
-		s.cache.InvalidateTypeConfig(r.Context(), existing.Slug)
-	}
-	w.WriteHeader(http.StatusNoContent)
+		if err := s.store.DeleteType(ctx, input.ID); err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+
+		if s.cache != nil {
+			s.cache.InvalidateTypeConfig(ctx, existing.Slug)
+		}
+		return nil, nil
+	})
 }

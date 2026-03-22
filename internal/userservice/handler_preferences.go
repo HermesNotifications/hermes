@@ -1,118 +1,106 @@
 package userservice
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-type setPreferenceRequest struct {
-	Channels []string `json:"channels"`
+type groupIDInput struct {
+	GroupID string `path:"group_id" doc:"Group ID"`
 }
 
-// @Summary List notification preferences
-// @Tags preferences
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/users/me/preferences [get]
-// @Security BearerAuth
-func (s *Server) handleListPreferences(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
-		return
+type setPreferenceInput struct {
+	GroupID string `path:"group_id" doc:"Group ID"`
+	Body    struct {
+		Channels []string `json:"channels" required:"true" minItems:"1" doc:"Preferred delivery channels"`
 	}
-
-	prefs, err := s.store.GetUserPreferences(r.Context(), userID)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-
-	var data any = prefs
-	if prefs == nil {
-		data = []struct{}{}
-	}
-
-	httputil.JSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
-// @Summary Set notification preference for a group
-// @Tags preferences
-// @Accept json
-// @Produce json
-// @Param group_id path string true "Group ID"
-// @Param body body setPreferenceRequest true "Preferred channels"
-// @Success 200 {object} models.UserPreference
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/users/me/preferences/{group_id} [put]
-// @Security BearerAuth
-func (s *Server) handleSetPreference(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
-		return
+type preferenceListOutput struct {
+	Body struct {
+		Data []models.UserPreference `json:"data" doc:"List of notification preferences"`
 	}
-
-	groupID := r.PathValue("group_id")
-	if groupID == "" {
-		httputil.ClientError(w, http.StatusBadRequest, "group_id is required")
-		return
-	}
-
-	var req setPreferenceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-
-	if len(req.Channels) == 0 {
-		httputil.ClientError(w, http.StatusBadRequest, "channels must not be empty")
-		return
-	}
-
-	pref, err := s.store.SetUserPreference(r.Context(), userID, groupID, req.Channels)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-
-	httputil.JSON(w, http.StatusOK, pref)
 }
 
-// @Summary Delete notification preference for a group
-// @Tags preferences
-// @Produce json
-// @Param group_id path string true "Group ID"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/users/me/preferences/{group_id} [delete]
-// @Security BearerAuth
-func (s *Server) handleDeletePreference(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
-		return
-	}
+type preferenceOutput struct {
+	Body models.UserPreference
+}
 
-	groupID := r.PathValue("group_id")
-	if groupID == "" {
-		httputil.ClientError(w, http.StatusBadRequest, "group_id is required")
-		return
+type statusOutput struct {
+	Body struct {
+		Status string `json:"status" example:"ok" doc:"Operation result"`
 	}
+}
 
-	if err := s.store.DeleteUserPreference(r.Context(), userID, groupID); err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
+func (s *Server) registerPreferenceRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "list-preferences",
+		Method:      http.MethodGet,
+		Path:        "/v1/users/me/preferences",
+		Summary:     "List notification preferences",
+		Tags:        []string{"Preferences"},
+	}, func(ctx context.Context, input *struct{}) (*preferenceListOutput, error) {
+		userID := auth.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, huma.Error401Unauthorized("missing user")
+		}
 
-	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		prefs, err := s.store.GetUserPreferences(ctx, userID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+
+		if prefs == nil {
+			prefs = []models.UserPreference{}
+		}
+
+		resp := &preferenceListOutput{}
+		resp.Body.Data = prefs
+		return resp, nil
+	})
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "set-preference",
+		Method:      http.MethodPut,
+		Path:        "/v1/users/me/preferences/{group_id}",
+		Summary:     "Set notification preference for a group",
+		Tags:        []string{"Preferences"},
+	}, func(ctx context.Context, input *setPreferenceInput) (*preferenceOutput, error) {
+		userID := auth.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, huma.Error401Unauthorized("missing user")
+		}
+
+		pref, err := s.store.SetUserPreference(ctx, userID, input.GroupID, input.Body.Channels)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+
+		return &preferenceOutput{Body: *pref}, nil
+	})
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "delete-preference",
+		Method:      http.MethodDelete,
+		Path:        "/v1/users/me/preferences/{group_id}",
+		Summary:     "Delete notification preference for a group",
+		Tags:        []string{"Preferences"},
+	}, func(ctx context.Context, input *groupIDInput) (*statusOutput, error) {
+		userID := auth.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, huma.Error401Unauthorized("missing user")
+		}
+
+		if err := s.store.DeleteUserPreference(ctx, userID, input.GroupID); err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+
+		resp := &statusOutput{}
+		resp.Body.Status = "ok"
+		return resp, nil
+	})
 }

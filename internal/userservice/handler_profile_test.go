@@ -115,6 +115,7 @@ func TestHandleUpdateContacts_InvalidJSON(t *testing.T) {
 
 	srv.Handler().ServeHTTP(rec, req)
 
+	// huma returns 400 for unparseable JSON
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}

@@ -1,68 +1,62 @@
 package inbox
 
 import (
+	"context"
 	"net/http"
-	"strconv"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-type listInboxResponse struct {
-	Data        any    `json:"data"`
-	UnreadCount int    `json:"unread_count"`
-	Cursor      string `json:"cursor,omitempty"`
+type listInboxInput struct {
+	Archived bool   `query:"archived" default:"false" doc:"Filter archived notifications"`
+	Cursor   string `query:"cursor" doc:"Pagination cursor"`
+	Limit    int    `query:"limit" default:"20" minimum:"1" maximum:"100" doc:"Page size"`
 }
 
-// @Summary List inbox notifications
-// @Tags inbox
-// @Produce json
-// @Param archived query bool false "Filter archived notifications"
-// @Param cursor query string false "Pagination cursor"
-// @Param limit query int false "Page size (default 20)"
-// @Success 200 {object} listInboxResponse
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/inbox [get]
-// @Security BearerAuth
-func (s *Server) handleListInbox(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
-		return
+type listInboxOutput struct {
+	Body struct {
+		Data        []models.Notification `json:"data" doc:"List of notifications"`
+		UnreadCount int                   `json:"unread_count" doc:"Total unread notification count"`
+		Cursor      string                `json:"cursor,omitempty" doc:"Cursor for next page"`
 	}
+}
 
-	archived := r.URL.Query().Get("archived") == "true"
-	cursor := r.URL.Query().Get("cursor")
-	limit := 20
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
+func (s *Server) registerListRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "list-inbox",
+		Method:      http.MethodGet,
+		Path:        "/v1/inbox",
+		Summary:     "List inbox notifications",
+		Tags:        []string{"Inbox"},
+	}, func(ctx context.Context, input *listInboxInput) (*listInboxOutput, error) {
+		userID := auth.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, huma.Error401Unauthorized("missing user")
 		}
-	}
 
-	notifications, unreadCount, nextCursor, err := s.store.ListInbox(r.Context(), userID, archived, cursor, limit)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-
-	// Populate unread count cache from the authoritative DB result
-	if s.cache != nil {
-		if err := s.cache.SetUnreadCount(r.Context(), userID, unreadCount, unreadCountTTL); err != nil {
-			s.logger.Error("failed to cache unread count", "error", err)
+		notifications, unreadCount, nextCursor, err := s.store.ListInbox(ctx, userID, input.Archived, input.Cursor, input.Limit)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
 		}
-	}
 
-	// Ensure we return [] not null in JSON
-	var data any = notifications
-	if notifications == nil {
-		data = []struct{}{}
-	}
+		// Populate unread count cache from the authoritative DB result
+		if s.cache != nil {
+			if err := s.cache.SetUnreadCount(ctx, userID, unreadCount, unreadCountTTL); err != nil {
+				s.logger.Error("failed to cache unread count", "error", err)
+			}
+		}
 
-	httputil.JSON(w, http.StatusOK, listInboxResponse{
-		Data:        data,
-		UnreadCount: unreadCount,
-		Cursor:      nextCursor,
+		// Ensure we return [] not null in JSON
+		if notifications == nil {
+			notifications = []models.Notification{}
+		}
+
+		resp := &listInboxOutput{}
+		resp.Body.Data = notifications
+		resp.Body.UnreadCount = unreadCount
+		resp.Body.Cursor = nextCursor
+		return resp, nil
 	})
 }

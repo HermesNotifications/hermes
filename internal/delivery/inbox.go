@@ -43,7 +43,7 @@ func (p *InboxProvider) Send(ctx context.Context, req DeliveryRequest) (Delivery
 	// Increment cached unread count for the user
 	if p.cache != nil {
 		if _, err := p.cache.IncrUnreadCount(ctx, req.UserID); err != nil {
-			// Non-fatal: cache will self-correct on next ListInbox
+			_ = err // Non-fatal: cache will self-correct on next ListInbox
 		}
 	}
 

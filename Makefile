@@ -23,12 +23,16 @@ lint:              ## Run golangci-lint
 	golangci-lint run
 
 # --- API Docs ---
-.PHONY: swagger swagger-check asyncapi-check
-swagger:           ## Generate OpenAPI specs
-	swag init -g main.go -d cmd/admin,internal/admin,internal/models -o api/admin --parseInternal --outputTypes json,yaml
-	swag init -g doc.go -d cmd/swagger-user,internal/inbox,internal/userservice,internal/models -o api/user --parseInternal --outputTypes json,yaml
-swagger-check:     ## Verify specs are up to date (for CI)
-	$(MAKE) swagger
+.PHONY: openapi openapi-check asyncapi-check
+openapi:           ## Generate OpenAPI 3.1 specs from huma
+	go run ./cmd/openapi -service admin -format yaml -out api/admin/openapi.yaml
+	go run ./cmd/openapi -service admin -format json -out api/admin/openapi.json
+	go run ./cmd/openapi -service inbox -format yaml -out api/inbox/openapi.yaml
+	go run ./cmd/openapi -service inbox -format json -out api/inbox/openapi.json
+	go run ./cmd/openapi -service user -format yaml -out api/user/openapi.yaml
+	go run ./cmd/openapi -service user -format json -out api/user/openapi.json
+openapi-check:     ## Verify specs are up to date (for CI)
+	$(MAKE) openapi
 	git diff --exit-code api/
 asyncapi-check:    ## Validate AsyncAPI spec
 	npx --yes @asyncapi/cli validate api/async/asyncapi.yaml

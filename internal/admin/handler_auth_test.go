@@ -16,6 +16,7 @@ func TestHandleAuthToken(t *testing.T) {
 
 	body := `{"user_id":"ext-user-1","tenant_id":"test-tenant-id"}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -55,6 +56,7 @@ func TestHandleAuthToken_UnknownTenant(t *testing.T) {
 
 	body := `{"user_id":"ext-user-1","tenant_id":"unknown-tenant"}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -68,10 +70,11 @@ func TestHandleAuthToken_MissingFields(t *testing.T) {
 
 	body := `{"user_id":"ext-user-1"}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rec.Code)
 	}
 }

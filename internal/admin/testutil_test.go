@@ -20,7 +20,7 @@ type mockStore struct {
 	users         []models.User
 	notifications []models.Notification
 	events        []models.NotificationEvent
-	apiKeys []models.APIKey
+	apiKeys       []models.APIKey
 }
 
 // --- Tenants ---

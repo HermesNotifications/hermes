@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-chi/chi/v5"
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
@@ -40,7 +43,8 @@ type Server struct {
 	centrifugo     *centrifugo.Client
 	nats           *messaging.Client
 	logger         *slog.Logger
-	mux            *http.ServeMux
+	router         chi.Router
+	api            huma.API
 	skipAuth       bool
 	jwtKeyProvider auth.JWTKeyProvider
 }
@@ -58,29 +62,34 @@ func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client
 		nats:           nats,
 		jwtKeyProvider: keyProvider,
 		logger:         logger,
-		mux:            http.NewServeMux(),
+		router:         chi.NewRouter(),
 	}
+
+	config := huma.DefaultConfig("Hermes Inbox API", "1.0.0")
+	config.Info.Description = "User-facing API for inbox notification management."
+	config.Servers = []*huma.Server{{URL: "/"}}
+
+	s.api = humachi.New(s.router, config)
 	s.routes()
 	return s
 }
 
 func (s *Server) routes() {
-	// Health
-	s.mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	s.mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
+	// Health checks registered directly on chi (not in OpenAPI spec)
+	s.router.Get("/healthz", httputil.HealthzHandler())
+	s.router.Get("/readyz", httputil.ReadyzHandler())
 
-	// Inbox
-	s.mux.HandleFunc("GET /v1/inbox", s.handleListInbox)
-	s.mux.HandleFunc("PUT /v1/inbox/read-all", s.handleMarkAllRead)
-	s.mux.HandleFunc("PUT /v1/inbox/{id}/read", s.handleMarkRead)
-	s.mux.HandleFunc("DELETE /v1/inbox/{id}/read", s.handleMarkUnread)
-	s.mux.HandleFunc("PUT /v1/inbox/{id}/archive", s.handleArchive)
-	s.mux.HandleFunc("DELETE /v1/inbox/{id}/archive", s.handleUnarchive)
-	s.mux.HandleFunc("DELETE /v1/inbox/{id}", s.handleSoftDelete)
+	s.registerListRoutes()
+	s.registerActionRoutes()
+}
+
+// API returns the huma API instance for spec generation.
+func (s *Server) API() huma.API {
+	return s.api
 }
 
 func (s *Server) Handler() http.Handler {
-	var h http.Handler = s.mux
+	var h http.Handler = s.router
 	if !s.skipAuth {
 		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}
@@ -111,7 +120,7 @@ func (s *Server) getUnreadCount(ctx context.Context, userID string) int {
 	return count
 }
 
-// publishInboxEvent publishes a control event to the user's Centrifugo channel.
+// publishInboxEvent publishes a control event to the user's real-time channel.
 func (s *Server) publishInboxEvent(ctx context.Context, userID, notificationID, action string, unreadCount int) {
 	if s.centrifugo == nil {
 		return
@@ -125,6 +134,6 @@ func (s *Server) publishInboxEvent(ctx context.Context, userID, notificationID, 
 	}
 	channel := "user#" + userID
 	if err := s.centrifugo.Publish(ctx, channel, event); err != nil {
-		s.logger.Error("failed to publish centrifugo event", "error", err, "channel", channel, "action", action)
+		s.logger.Error("failed to publish real-time event", "error", err, "channel", channel, "action", action)
 	}
 }

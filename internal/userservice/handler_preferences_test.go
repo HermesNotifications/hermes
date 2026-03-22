@@ -110,8 +110,9 @@ func TestHandleSetPreference_EmptyChannels(t *testing.T) {
 
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	// huma validates minItems:1 and returns 422
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

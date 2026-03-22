@@ -1,88 +1,75 @@
 package admin
 
 import (
+	"context"
 	"crypto/rand"
-	"encoding/json"
 	"math/big"
 	"net/http"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
-type tokenRequest struct {
-	UserID   string `json:"user_id"`
-	TenantID string `json:"tenant_id"`
+type tokenInput struct {
+	Body struct {
+		UserID   string `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
+		TenantID string `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
+	}
 }
 
-type tokenResponse struct {
-	Token     string `json:"token"`
-	ExpiresAt string `json:"expires_at"`
+type tokenOutput struct {
+	Body struct {
+		Token     string `json:"token" doc:"JWT token for user-facing API access"`
+		ExpiresAt string `json:"expires_at" doc:"Token expiration time in RFC3339 format"`
+	}
 }
 
-// @Summary Exchange credentials for a user JWT token
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param body body tokenRequest true "User and tenant to issue token for"
-// @Success 200 {object} tokenResponse
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/auth/token [post]
-// @Security ApiKeyAuth
-func (s *Server) handleAuthToken(w http.ResponseWriter, r *http.Request) {
-	var req tokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-	if req.UserID == "" || req.TenantID == "" {
-		httputil.ClientError(w, http.StatusBadRequest, "user_id and tenant_id are required")
-		return
-	}
+func (s *Server) registerAuthRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "exchange-token",
+		Method:      http.MethodPost,
+		Path:        "/v1/auth/token",
+		Summary:     "Exchange credentials for a user JWT token",
+		Tags:        []string{"Auth"},
+	}, func(ctx context.Context, input *tokenInput) (*tokenOutput, error) {
+		// Validate tenant exists
+		if _, err := s.store.GetTenantByID(ctx, input.Body.TenantID); err != nil {
+			return nil, huma.Error400BadRequest("unknown tenant_id")
+		}
 
-	ctx := r.Context()
+		// Ensure user exists (auto-create on first token request)
+		user, err := s.store.EnsureUser(ctx, input.Body.TenantID, input.Body.UserID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
 
-	// Validate tenant exists
-	if _, err := s.store.GetTenantByID(ctx, req.TenantID); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "unknown tenant_id")
-		return
-	}
+		// 1h base TTL with ±10% jitter (54-66 minutes)
+		baseTTL := time.Hour
+		jitterRange := big.NewInt(int64(baseTTL / 5)) // 12 minutes range
+		jitterBig, _ := rand.Int(rand.Reader, jitterRange)
+		jitter := time.Duration(jitterBig.Int64()) - baseTTL/10
+		exp := time.Now().Add(baseTTL + jitter)
 
-	// Ensure user exists (auto-create on first token request)
-	user, err := s.store.EnsureUser(ctx, req.TenantID, req.UserID)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
+		claims := &auth.HermesClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				Subject:   user.ID,
+				ExpiresAt: jwt.NewNumericDate(exp),
+				IssuedAt:  jwt.NewNumericDate(time.Now()),
+			},
+			TenantID: input.Body.TenantID,
+		}
 
-	// 1h base TTL with ±10% jitter (54-66 minutes)
-	baseTTL := time.Hour
-	jitterRange := big.NewInt(int64(baseTTL / 5)) // 12 minutes range
-	jitterBig, _ := rand.Int(rand.Reader, jitterRange)
-	jitter := time.Duration(jitterBig.Int64()) - baseTTL/10
-	exp := time.Now().Add(baseTTL + jitter)
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenStr, err := token.SignedString(s.jwtSecret)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
 
-	claims := &auth.HermesClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   user.ID,
-			ExpiresAt: jwt.NewNumericDate(exp),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-		TenantID: req.TenantID,
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString(s.jwtSecret)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-
-	httputil.JSON(w, http.StatusOK, tokenResponse{
-		Token:     tokenStr,
-		ExpiresAt: exp.UTC().Format(time.RFC3339),
+		resp := &tokenOutput{}
+		resp.Body.Token = tokenStr
+		resp.Body.ExpiresAt = exp.UTC().Format(time.RFC3339)
+		return resp, nil
 	})
 }

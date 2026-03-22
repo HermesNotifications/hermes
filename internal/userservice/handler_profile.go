@@ -1,76 +1,67 @@
 package userservice
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-type updateContactsRequest struct {
-	Email *string `json:"email"`
-	Phone *string `json:"phone"`
+type updateContactsInput struct {
+	Body struct {
+		Email *string `json:"email,omitempty" doc:"Email address"`
+		Phone *string `json:"phone,omitempty" doc:"Phone number"`
+	}
 }
 
-// @Summary Get current user profile
-// @Tags users
-// @Produce json
-// @Success 200 {object} models.User
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/users/me [get]
-// @Security BearerAuth
-func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
-		return
-	}
-
-	user, err := s.store.GetUserByID(r.Context(), userID)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-
-	httputil.JSON(w, http.StatusOK, user)
+type userOutput struct {
+	Body models.User
 }
 
-// @Summary Update user contact information
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param body body updateContactsRequest true "Contact fields to update"
-// @Success 200 {object} models.User
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/users/me/contacts [put]
-// @Security BearerAuth
-func (s *Server) handleUpdateContacts(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
-		return
-	}
+func (s *Server) registerProfileRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "get-profile",
+		Method:      http.MethodGet,
+		Path:        "/v1/users/me",
+		Summary:     "Get current user profile",
+		Tags:        []string{"Users"},
+	}, func(ctx context.Context, input *struct{}) (*userOutput, error) {
+		userID := auth.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, huma.Error401Unauthorized("missing user")
+		}
 
-	var req updateContactsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
+		user, err := s.store.GetUserByID(ctx, userID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
 
-	if req.Email == nil && req.Phone == nil {
-		httputil.ClientError(w, http.StatusBadRequest, "at least one of email or phone must be provided")
-		return
-	}
+		return &userOutput{Body: *user}, nil
+	})
 
-	user, err := s.store.UpdateUserContacts(r.Context(), userID, req.Email, req.Phone)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
+	huma.Register(s.api, huma.Operation{
+		OperationID: "update-contacts",
+		Method:      http.MethodPut,
+		Path:        "/v1/users/me/contacts",
+		Summary:     "Update user contact information",
+		Tags:        []string{"Users"},
+	}, func(ctx context.Context, input *updateContactsInput) (*userOutput, error) {
+		userID := auth.UserIDFromContext(ctx)
+		if userID == "" {
+			return nil, huma.Error401Unauthorized("missing user")
+		}
 
-	httputil.JSON(w, http.StatusOK, user)
+		if input.Body.Email == nil && input.Body.Phone == nil {
+			return nil, huma.Error400BadRequest("at least one of email or phone must be provided")
+		}
+
+		user, err := s.store.UpdateUserContacts(ctx, userID, input.Body.Email, input.Body.Phone)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+
+		return &userOutput{Body: *user}, nil
+	})
 }

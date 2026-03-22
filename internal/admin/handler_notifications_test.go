@@ -14,6 +14,7 @@ func TestHandleGetNotification(t *testing.T) {
 	// Create a group first
 	groupBody := `{"slug":"alerts","name":"Alerts","default_channels":["inbox"]}`
 	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -31,6 +32,7 @@ func TestHandleGetNotification(t *testing.T) {
 		}
 	}`
 	req = httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(sendBody))
+	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {

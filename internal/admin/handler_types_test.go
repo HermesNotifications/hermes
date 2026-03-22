@@ -15,6 +15,7 @@ func TestHandleCreateType(t *testing.T) {
 	// First create a group (types need group_id)
 	groupBody := `{"slug":"billing","name":"Billing","default_channels":["email"]}`
 	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -27,6 +28,7 @@ func TestHandleCreateType(t *testing.T) {
 	// Create type
 	body := fmt.Sprintf(`{"group_id":"%s","slug":"invoice.paid","name":"Invoice Paid"}`, groupID)
 	req = httptest.NewRequest("POST", "/v1/types", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -39,11 +41,12 @@ func TestHandleCreateType_MissingFields(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"slug":"invoice.paid"}`
 	req := httptest.NewRequest("POST", "/v1/types", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rec.Code)
 	}
 }
 
@@ -53,6 +56,7 @@ func TestHandleDeleteType(t *testing.T) {
 	// Create group + type
 	groupBody := `{"slug":"billing","name":"Billing","default_channels":["email"]}`
 	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	var group map[string]any
@@ -61,6 +65,7 @@ func TestHandleDeleteType(t *testing.T) {
 
 	body := fmt.Sprintf(`{"group_id":"%s","slug":"invoice.paid","name":"Invoice Paid"}`, groupID)
 	req = httptest.NewRequest("POST", "/v1/types", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	var typ map[string]any

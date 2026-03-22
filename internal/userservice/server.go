@@ -5,6 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-chi/chi/v5"
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/middleware"
@@ -25,7 +28,8 @@ type UserStore interface {
 type Server struct {
 	store          UserStore
 	logger         *slog.Logger
-	mux            *http.ServeMux
+	router         chi.Router
+	api            huma.API
 	skipAuth       bool
 	jwtKeyProvider auth.JWTKeyProvider
 }
@@ -40,29 +44,34 @@ func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Lo
 		store:          store,
 		jwtKeyProvider: keyProvider,
 		logger:         logger,
-		mux:            http.NewServeMux(),
+		router:         chi.NewRouter(),
 	}
+
+	config := huma.DefaultConfig("Hermes User API", "1.0.0")
+	config.Info.Description = "User-facing API for profile management and notification preferences."
+	config.Servers = []*huma.Server{{URL: "/"}}
+
+	s.api = humachi.New(s.router, config)
 	s.routes()
 	return s
 }
 
 func (s *Server) routes() {
-	// Health
-	s.mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	s.mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
+	// Health checks registered directly on chi (not in OpenAPI spec)
+	s.router.Get("/healthz", httputil.HealthzHandler())
+	s.router.Get("/readyz", httputil.ReadyzHandler())
 
-	// Profile
-	s.mux.HandleFunc("GET /v1/users/me", s.handleGetProfile)
-	s.mux.HandleFunc("PUT /v1/users/me/contacts", s.handleUpdateContacts)
+	s.registerProfileRoutes()
+	s.registerPreferenceRoutes()
+}
 
-	// Preferences
-	s.mux.HandleFunc("GET /v1/users/me/preferences", s.handleListPreferences)
-	s.mux.HandleFunc("PUT /v1/users/me/preferences/{group_id}", s.handleSetPreference)
-	s.mux.HandleFunc("DELETE /v1/users/me/preferences/{group_id}", s.handleDeletePreference)
+// API returns the huma API instance for spec generation.
+func (s *Server) API() huma.API {
+	return s.api
 }
 
 func (s *Server) Handler() http.Handler {
-	var h http.Handler = s.mux
+	var h http.Handler = s.router
 	if !s.skipAuth {
 		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}
@@ -70,4 +79,3 @@ func (s *Server) Handler() http.Handler {
 	h = middleware.Recovery(s.logger)(h)
 	return h
 }
-

@@ -14,6 +14,7 @@ func TestHandleSend_DirectContent(t *testing.T) {
 	// Create a group first
 	groupBody := `{"slug":"billing","name":"Billing","default_channels":["email","inbox"]}`
 	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -31,6 +32,7 @@ func TestHandleSend_DirectContent(t *testing.T) {
 		}
 	}`
 	req = httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -49,6 +51,7 @@ func TestHandleSend_MissingTypeAndContent(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"tenant_id": "test-tenant-id", "user_id": "ext-1"}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -61,6 +64,7 @@ func TestHandleSend_BothTypeAndContent(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"tenant_id": "test-tenant-id", "user_id": "ext-1", "type": "foo", "content": {"title": "x", "body": "y"}}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -73,6 +77,7 @@ func TestHandleSend_UnknownTenant(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"tenant_id": "unknown-tenant", "user_id": "ext-1", "content": {"title": "x", "body": "y"}, "group": "billing"}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -85,6 +90,7 @@ func TestHandleSend_MissingGroupForDirectSend(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"tenant_id": "test-tenant-id", "user_id": "ext-1", "content": {"title": "x", "body": "y"}}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 

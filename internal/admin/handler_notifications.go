@@ -1,42 +1,45 @@
 package admin
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-type notificationStatusResponse struct {
-	Notification any `json:"notification"`
-	Events       any `json:"events"`
+type getNotificationInput struct {
+	ID string `path:"id" doc:"Notification ID"`
 }
 
-// @Summary Get notification status and events
-// @Tags notifications
-// @Produce json
-// @Param id path string true "Notification ID"
-// @Success 200 {object} notificationStatusResponse
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/notifications/{id} [get]
-// @Security ApiKeyAuth
-func (s *Server) handleGetNotification(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-
-	n, err := s.store.GetNotificationByID(r.Context(), id)
-	if err != nil {
-		httputil.ClientError(w, http.StatusNotFound, "notification not found")
-		return
+type notificationStatusOutput struct {
+	Body struct {
+		Notification models.Notification      `json:"notification" doc:"The notification record"`
+		Events       []models.NotificationEvent `json:"events" doc:"Timeline of notification events"`
 	}
+}
 
-	events, err := s.store.GetNotificationEvents(r.Context(), id)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
+func (s *Server) registerNotificationRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "get-notification",
+		Method:      http.MethodGet,
+		Path:        "/v1/notifications/{id}",
+		Summary:     "Get notification status and events",
+		Tags:        []string{"Notifications"},
+	}, func(ctx context.Context, input *getNotificationInput) (*notificationStatusOutput, error) {
+		n, err := s.store.GetNotificationByID(ctx, input.ID)
+		if err != nil {
+			return nil, huma.Error404NotFound("notification not found")
+		}
 
-	httputil.JSON(w, http.StatusOK, notificationStatusResponse{
-		Notification: n,
-		Events:       events,
+		events, err := s.store.GetNotificationEvents(ctx, input.ID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+
+		resp := &notificationStatusOutput{}
+		resp.Body.Notification = *n
+		resp.Body.Events = events
+		return resp, nil
 	})
 }

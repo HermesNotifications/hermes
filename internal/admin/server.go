@@ -5,6 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-chi/chi/v5"
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/httputil"
@@ -57,7 +60,8 @@ type Server struct {
 	cache     *cache.Client
 	pool      *pgxpool.Pool
 	logger    *slog.Logger
-	mux       *http.ServeMux
+	router    chi.Router
+	api       huma.API
 	skipAuth  bool
 	jwtSecret []byte
 }
@@ -75,40 +79,41 @@ func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, po
 		pool:      pool,
 		jwtSecret: jwtSecret,
 		logger:    logger,
-		mux:       http.NewServeMux(),
+		router:    chi.NewRouter(),
 	}
+
+	config := huma.DefaultConfig("Hermes Admin API", "1.0.0")
+	config.Info.Description = "Server-to-server API for managing notification groups, types, and sending notifications."
+	config.Servers = []*huma.Server{{URL: "/"}}
+
+	s.api = humachi.New(s.router, config)
 	s.routes()
 	return s
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	s.mux.HandleFunc("GET /readyz", httputil.ReadyzHandler(s.pool.Ping))
+	// Health checks registered directly on chi (not in OpenAPI spec)
+	s.router.Get("/healthz", httputil.HealthzHandler())
+	if s.pool != nil {
+		s.router.Get("/readyz", httputil.ReadyzHandler(s.pool.Ping))
+	} else {
+		s.router.Get("/readyz", httputil.ReadyzHandler())
+	}
 
-	// Groups
-	s.mux.HandleFunc("GET /v1/groups", s.handleListGroups)
-	s.mux.HandleFunc("POST /v1/groups", s.handleCreateGroup)
-	s.mux.HandleFunc("PUT /v1/groups/{id}", s.handleUpdateGroup)
+	s.registerGroupRoutes()
+	s.registerTypeRoutes()
+	s.registerSendRoutes()
+	s.registerNotificationRoutes()
+	s.registerAuthRoutes()
+}
 
-	// Types
-	s.mux.HandleFunc("GET /v1/types", s.handleListTypes)
-	s.mux.HandleFunc("POST /v1/types", s.handleCreateType)
-	s.mux.HandleFunc("PUT /v1/types/{id}", s.handleUpdateType)
-	s.mux.HandleFunc("DELETE /v1/types/{id}", s.handleDeleteType)
-
-	// Send
-	s.mux.HandleFunc("POST /v1/send", s.handleSend)
-
-	// Notifications
-	s.mux.HandleFunc("GET /v1/notifications/{id}", s.handleGetNotification)
-
-	// Auth token exchange
-	s.mux.HandleFunc("POST /v1/auth/token", s.handleAuthToken)
-
+// API returns the huma API instance for spec generation.
+func (s *Server) API() huma.API {
+	return s.api
 }
 
 func (s *Server) Handler() http.Handler {
-	var h http.Handler = s.mux
+	var h http.Handler = s.router
 	h = middleware.RateLimit(func(r *http.Request) string {
 		return r.Header.Get("Authorization")
 	}, 1000, 500)(h)

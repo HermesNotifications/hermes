@@ -1,91 +1,78 @@
 package admin
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-type createGroupRequest struct {
-	Slug            string   `json:"slug"`
-	Name            string   `json:"name"`
-	DefaultChannels []string `json:"default_channels"`
+type createGroupInput struct {
+	Body struct {
+		Slug            string   `json:"slug" required:"true" minLength:"1" doc:"URL-friendly identifier"`
+		Name            string   `json:"name" required:"true" minLength:"1" doc:"Human-readable name"`
+		DefaultChannels []string `json:"default_channels,omitempty" doc:"Default delivery channels for this group"`
+	}
 }
 
-type updateGroupRequest struct {
-	Name            string   `json:"name"`
-	DefaultChannels []string `json:"default_channels"`
+type updateGroupInput struct {
+	ID string `path:"id" doc:"Group ID"`
+	Body struct {
+		Name            string   `json:"name" doc:"Human-readable name"`
+		DefaultChannels []string `json:"default_channels" doc:"Default delivery channels for this group"`
+	}
 }
 
-// @Summary List notification groups
-// @Tags groups
-// @Produce json
-// @Success 200 {array} models.NotificationGroup
-// @Failure 500 {object} map[string]string
-// @Router /v1/groups [get]
-// @Security ApiKeyAuth
-func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
-	groups, err := s.store.ListGroups(r.Context())
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, groups)
+type groupOutput struct {
+	Body models.NotificationGroup
 }
 
-// @Summary Create a notification group
-// @Tags groups
-// @Accept json
-// @Produce json
-// @Param body body createGroupRequest true "Group to create"
-// @Success 201 {object} models.NotificationGroup
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/groups [post]
-// @Security ApiKeyAuth
-func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
-	var req createGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-	if req.Slug == "" || req.Name == "" {
-		httputil.ClientError(w, http.StatusBadRequest, "slug and name are required")
-		return
-	}
-
-	g, err := s.store.CreateGroup(r.Context(), req.Slug, req.Name, req.DefaultChannels)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-	httputil.JSON(w, http.StatusCreated, g)
+type groupListOutput struct {
+	Body []models.NotificationGroup
 }
 
-// @Summary Update a notification group
-// @Tags groups
-// @Accept json
-// @Produce json
-// @Param id path string true "Group ID"
-// @Param body body updateGroupRequest true "Fields to update"
-// @Success 200 {object} models.NotificationGroup
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /v1/groups/{id} [put]
-// @Security ApiKeyAuth
-func (s *Server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	var req updateGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
+func (s *Server) registerGroupRoutes() {
+	huma.Register(s.api, huma.Operation{
+		OperationID: "list-groups",
+		Method:      http.MethodGet,
+		Path:        "/v1/groups",
+		Summary:     "List notification groups",
+		Tags:        []string{"Groups"},
+	}, func(ctx context.Context, input *struct{}) (*groupListOutput, error) {
+		groups, err := s.store.ListGroups(ctx)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		return &groupListOutput{Body: groups}, nil
+	})
 
-	g, err := s.store.UpdateGroup(r.Context(), id, req.Name, req.DefaultChannels)
-	if err != nil {
-		httputil.ServerError(w, s.logger, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, g)
+	huma.Register(s.api, huma.Operation{
+		OperationID:   "create-group",
+		Method:        http.MethodPost,
+		Path:          "/v1/groups",
+		Summary:       "Create a notification group",
+		Tags:          []string{"Groups"},
+		DefaultStatus: http.StatusCreated,
+	}, func(ctx context.Context, input *createGroupInput) (*groupOutput, error) {
+		g, err := s.store.CreateGroup(ctx, input.Body.Slug, input.Body.Name, input.Body.DefaultChannels)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		return &groupOutput{Body: *g}, nil
+	})
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "update-group",
+		Method:      http.MethodPut,
+		Path:        "/v1/groups/{id}",
+		Summary:     "Update a notification group",
+		Tags:        []string{"Groups"},
+	}, func(ctx context.Context, input *updateGroupInput) (*groupOutput, error) {
+		g, err := s.store.UpdateGroup(ctx, input.ID, input.Body.Name, input.Body.DefaultChannels)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		return &groupOutput{Body: *g}, nil
+	})
 }
