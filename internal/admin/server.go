@@ -7,6 +7,7 @@ import (
 
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/middleware"
 	"github.com/hermes-notifications/hermes/internal/models"
@@ -81,8 +82,8 @@ func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, po
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
-	s.mux.HandleFunc("GET /readyz", s.handleReadyz)
+	s.mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
+	s.mux.HandleFunc("GET /readyz", httputil.ReadyzHandler(s.pool.Ping))
 
 	// Groups
 	s.mux.HandleFunc("GET /v1/groups", s.handleListGroups)

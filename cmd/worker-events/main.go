@@ -2,45 +2,31 @@ package main
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
+	"github.com/hermes-notifications/hermes/internal/bootstrap"
 	"github.com/hermes-notifications/hermes/internal/config"
-	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := bootstrap.NewLogger()
 	cfg := config.Load()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
-	if err != nil {
-		logger.Error("database", "error", err)
-		os.Exit(1)
-	}
+	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
 	defer pool.Close()
 
-	natsClient, err := messaging.Connect(cfg.NATSUrl)
-	if err != nil {
-		logger.Error("nats", "error", err)
-		os.Exit(1)
-	}
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger)
+	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
-
-	if err := natsClient.SetupStreams(ctx); err != nil {
-		logger.Error("nats stream setup", "error", err)
-		os.Exit(1)
-	}
 
 	st := store.New(pool)
 	w := eventwriter.New(natsClient, st, logger)
@@ -51,24 +37,8 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		if err := pool.Ping(r.Context()); err != nil {
-			http.Error(w, "not ready", http.StatusServiceUnavailable)
-			return
-		}
-		w.Write([]byte("ok"))
-	})
-	go http.ListenAndServe(":8082", mux)
+	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
+	mux.HandleFunc("GET /readyz", httputil.ReadyzHandler(pool.Ping))
 
-	logger.Info("event writer started")
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	logger.Info("shutting down")
-	w.Stop()
+	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger, w.Stop)
 }

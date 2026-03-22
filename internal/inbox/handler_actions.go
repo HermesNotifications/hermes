@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
 // @Summary Mark a notification as read
@@ -18,18 +19,18 @@ import (
 func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 	id := r.PathValue("id")
 
 	if err := s.store.MarkRead(r.Context(), userID, id); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
 	s.publishInboxEvent(r.Context(), userID, id, "read")
-	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // @Summary Mark a notification as unread
@@ -44,18 +45,18 @@ func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMarkUnread(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 	id := r.PathValue("id")
 
 	if err := s.store.MarkUnread(r.Context(), userID, id); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
 	s.publishInboxEvent(r.Context(), userID, id, "unread")
-	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // @Summary Archive a notification
@@ -70,18 +71,18 @@ func (s *Server) handleMarkUnread(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleArchive(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 	id := r.PathValue("id")
 
 	if err := s.store.Archive(r.Context(), userID, id); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
 	s.publishInboxEvent(r.Context(), userID, id, "archive")
-	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // @Summary Unarchive a notification
@@ -96,18 +97,18 @@ func (s *Server) handleArchive(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUnarchive(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 	id := r.PathValue("id")
 
 	if err := s.store.Unarchive(r.Context(), userID, id); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
 	s.publishInboxEvent(r.Context(), userID, id, "unarchive")
-	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // @Summary Delete a notification
@@ -122,18 +123,18 @@ func (s *Server) handleUnarchive(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSoftDelete(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 	id := r.PathValue("id")
 
 	if err := s.store.SoftDelete(r.Context(), userID, id); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
 	s.publishInboxEvent(r.Context(), userID, id, "delete")
-	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // @Summary Mark all notifications as read
@@ -147,15 +148,15 @@ func (s *Server) handleSoftDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 
 	if err := s.store.MarkAllRead(r.Context(), userID); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
 	s.publishInboxEvent(r.Context(), userID, "", "read-all")
-	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -2,12 +2,12 @@ package inbox
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/middleware"
 	"github.com/hermes-notifications/hermes/internal/models"
@@ -59,8 +59,8 @@ func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client
 
 func (s *Server) routes() {
 	// Health
-	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
-	s.mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	s.mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
+	s.mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
 
 	// Inbox
 	s.mux.HandleFunc("GET /v1/inbox", s.handleListInbox)
@@ -80,24 +80,6 @@ func (s *Server) Handler() http.Handler {
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)
 	return h
-}
-
-// jsonResponse writes a JSON-encoded response with the given status code.
-func (s *Server) jsonResponse(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-// clientError writes a JSON error response with the given status and message.
-func (s *Server) clientError(w http.ResponseWriter, status int, message string) {
-	s.jsonResponse(w, status, map[string]string{"error": message})
-}
-
-// serverError logs the error and writes a 500 JSON response.
-func (s *Server) serverError(w http.ResponseWriter, err error) {
-	s.logger.Error("internal error", "error", err)
-	s.clientError(w, http.StatusInternalServerError, "internal server error")
 }
 
 // publishInboxEvent publishes a control event to the user's Centrifugo channel.

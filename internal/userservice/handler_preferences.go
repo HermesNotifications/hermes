@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
 type setPreferenceRequest struct {
@@ -22,13 +23,13 @@ type setPreferenceRequest struct {
 func (s *Server) handleListPreferences(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 
 	prefs, err := s.store.GetUserPreferences(r.Context(), userID)
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
@@ -37,7 +38,7 @@ func (s *Server) handleListPreferences(w http.ResponseWriter, r *http.Request) {
 		data = []struct{}{}
 	}
 
-	s.jsonResponse(w, http.StatusOK, map[string]any{"data": data})
+	httputil.JSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
 // @Summary Set notification preference for a group
@@ -55,34 +56,34 @@ func (s *Server) handleListPreferences(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSetPreference(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 
 	groupID := r.PathValue("group_id")
 	if groupID == "" {
-		s.clientError(w, http.StatusBadRequest, "group_id is required")
+		httputil.ClientError(w, http.StatusBadRequest, "group_id is required")
 		return
 	}
 
 	var req setPreferenceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.clientError(w, http.StatusBadRequest, "invalid JSON")
+		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	if len(req.Channels) == 0 {
-		s.clientError(w, http.StatusBadRequest, "channels must not be empty")
+		httputil.ClientError(w, http.StatusBadRequest, "channels must not be empty")
 		return
 	}
 
 	pref, err := s.store.SetUserPreference(r.Context(), userID, groupID, req.Channels)
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.jsonResponse(w, http.StatusOK, pref)
+	httputil.JSON(w, http.StatusOK, pref)
 }
 
 // @Summary Delete notification preference for a group
@@ -98,20 +99,20 @@ func (s *Server) handleSetPreference(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeletePreference(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
-		s.clientError(w, http.StatusUnauthorized, "missing user")
+		httputil.ClientError(w, http.StatusUnauthorized, "missing user")
 		return
 	}
 
 	groupID := r.PathValue("group_id")
 	if groupID == "" {
-		s.clientError(w, http.StatusBadRequest, "group_id is required")
+		httputil.ClientError(w, http.StatusBadRequest, "group_id is required")
 		return
 	}
 
 	if err := s.store.DeleteUserPreference(r.Context(), userID, groupID); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

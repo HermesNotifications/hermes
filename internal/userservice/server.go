@@ -2,11 +2,11 @@ package userservice
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/middleware"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
@@ -48,8 +48,8 @@ func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Lo
 
 func (s *Server) routes() {
 	// Health
-	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
-	s.mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	s.mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
+	s.mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
 
 	// Profile
 	s.mux.HandleFunc("GET /v1/users/me", s.handleGetProfile)
@@ -71,20 +71,3 @@ func (s *Server) Handler() http.Handler {
 	return h
 }
 
-// jsonResponse writes a JSON-encoded response with the given status code.
-func (s *Server) jsonResponse(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-// clientError writes a JSON error response with the given status and message.
-func (s *Server) clientError(w http.ResponseWriter, status int, message string) {
-	s.jsonResponse(w, status, map[string]string{"error": message})
-}
-
-// serverError logs the error and writes a 500 JSON response.
-func (s *Server) serverError(w http.ResponseWriter, err error) {
-	s.logger.Error("internal error", "error", err)
-	s.clientError(w, http.StatusInternalServerError, "internal server error")
-}

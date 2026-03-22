@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/id"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
@@ -44,17 +45,17 @@ type sendResponse struct {
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	var req sendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.clientError(w, http.StatusBadRequest, "invalid JSON")
+		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	// Validate: exactly one of type or content
 	if (req.Type == "" && req.Content == nil) || (req.Type != "" && req.Content != nil) {
-		s.clientError(w, http.StatusBadRequest, "exactly one of 'type' or 'content' must be provided")
+		httputil.ClientError(w, http.StatusBadRequest, "exactly one of 'type' or 'content' must be provided")
 		return
 	}
 	if req.TenantID == "" || req.UserID == "" {
-		s.clientError(w, http.StatusBadRequest, "tenant_id and user_id are required")
+		httputil.ClientError(w, http.StatusBadRequest, "tenant_id and user_id are required")
 		return
 	}
 
@@ -62,7 +63,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	// Validate tenant exists
 	if _, err := s.store.GetTenantByID(ctx, req.TenantID); err != nil {
-		s.clientError(w, http.StatusBadRequest, "unknown tenant_id")
+		httputil.ClientError(w, http.StatusBadRequest, "unknown tenant_id")
 		return
 	}
 
@@ -75,7 +76,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		// Try Redis SetNX with the real notification ID
 		existing, err := s.cache.SetIdempotencyKey(ctx, req.TenantID+":"+idemKey, notifID, time.Hour)
 		if err == nil && existing != "" {
-			s.jsonResponse(w, http.StatusAccepted, sendResponse{NotificationID: existing})
+			httputil.JSON(w, http.StatusAccepted, sendResponse{NotificationID: existing})
 			return
 		}
 		// On Redis error, fall back to Postgres
@@ -83,7 +84,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 			n, dbErr := s.store.GetNotificationByIdempotencyKey(ctx, req.TenantID, idemKey)
 			if dbErr == nil && n != nil {
 				s.cache.SetIdempotencyKey(ctx, req.TenantID+":"+idemKey, n.ID, time.Hour)
-				s.jsonResponse(w, http.StatusAccepted, sendResponse{NotificationID: n.ID})
+				httputil.JSON(w, http.StatusAccepted, sendResponse{NotificationID: n.ID})
 				return
 			}
 		}
@@ -95,19 +96,19 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	if req.Type != "" {
 		nt, err := s.store.GetTypeBySlug(ctx, req.Type)
 		if err != nil {
-			s.clientError(w, http.StatusBadRequest, "unknown notification type")
+			httputil.ClientError(w, http.StatusBadRequest, "unknown notification type")
 			return
 		}
 		groupID = nt.GroupID
 		typeID = &nt.ID
 	} else {
 		if req.Group == "" {
-			s.clientError(w, http.StatusBadRequest, "group is required for direct sends")
+			httputil.ClientError(w, http.StatusBadRequest, "group is required for direct sends")
 			return
 		}
 		g, err := s.store.GetGroupBySlug(ctx, req.Group)
 		if err != nil {
-			s.clientError(w, http.StatusBadRequest, "unknown group")
+			httputil.ClientError(w, http.StatusBadRequest, "unknown group")
 			return
 		}
 		groupID = g.ID
@@ -116,7 +117,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	// Ensure user exists
 	user, err := s.store.EnsureUser(ctx, req.TenantID, req.UserID)
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
@@ -152,7 +153,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	// Persist
 	if _, err := s.store.CreateNotification(ctx, n); err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
@@ -186,5 +187,5 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.jsonResponse(w, http.StatusAccepted, sendResponse{NotificationID: notifID})
+	httputil.JSON(w, http.StatusAccepted, sendResponse{NotificationID: notifID})
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
 type tokenRequest struct {
@@ -34,11 +35,11 @@ type tokenResponse struct {
 func (s *Server) handleAuthToken(w http.ResponseWriter, r *http.Request) {
 	var req tokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.clientError(w, http.StatusBadRequest, "invalid JSON")
+		httputil.ClientError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 	if req.UserID == "" || req.TenantID == "" {
-		s.clientError(w, http.StatusBadRequest, "user_id and tenant_id are required")
+		httputil.ClientError(w, http.StatusBadRequest, "user_id and tenant_id are required")
 		return
 	}
 
@@ -46,14 +47,14 @@ func (s *Server) handleAuthToken(w http.ResponseWriter, r *http.Request) {
 
 	// Validate tenant exists
 	if _, err := s.store.GetTenantByID(ctx, req.TenantID); err != nil {
-		s.clientError(w, http.StatusBadRequest, "unknown tenant_id")
+		httputil.ClientError(w, http.StatusBadRequest, "unknown tenant_id")
 		return
 	}
 
 	// Ensure user exists (auto-create on first token request)
 	user, err := s.store.EnsureUser(ctx, req.TenantID, req.UserID)
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
@@ -76,11 +77,11 @@ func (s *Server) handleAuthToken(w http.ResponseWriter, r *http.Request) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenStr, err := token.SignedString(s.jwtSecret)
 	if err != nil {
-		s.serverError(w, err)
+		httputil.ServerError(w, s.logger, err)
 		return
 	}
 
-	s.jsonResponse(w, http.StatusOK, tokenResponse{
+	httputil.JSON(w, http.StatusOK, tokenResponse{
 		Token:     tokenStr,
 		ExpiresAt: exp.UTC().Format(time.RFC3339),
 	})
