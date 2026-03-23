@@ -137,6 +137,29 @@ func (c *Client) DeleteUnreadCount(ctx context.Context, userID string) error {
 	return c.rdb.Del(ctx, "unread:"+userID).Err()
 }
 
+// GetAPIKey returns the cached API key data (JSON bytes) for the given key ID.
+// Returns (data, nil) on hit, (nil, nil) on miss.
+func (c *Client) GetAPIKey(ctx context.Context, keyID string) ([]byte, error) {
+	val, err := c.rdb.Get(ctx, "apikey:"+keyID).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get api key: %w", err)
+	}
+	return val, nil
+}
+
+// SetAPIKey caches API key data (JSON bytes) for the given key ID.
+func (c *Client) SetAPIKey(ctx context.Context, keyID string, data []byte, ttl time.Duration) error {
+	return c.rdb.Set(ctx, "apikey:"+keyID, data, ttl).Err()
+}
+
+// InvalidateAPIKey removes the cached API key for the given key ID.
+func (c *Client) InvalidateAPIKey(ctx context.Context, keyID string) error {
+	return c.rdb.Del(ctx, "apikey:"+keyID).Err()
+}
+
 func (c *Client) Close() {
 	err := c.rdb.Close()
 	if err != nil {
