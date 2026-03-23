@@ -27,7 +27,7 @@ type MessageMetadata struct {
 	Type  string `json:"type,omitempty"`
 }
 
-// DeliveryMessage is published to delivery.{channel} by the Router.
+// DeliveryMessage is published to delivery.{channel} by the Dispatch service.
 type DeliveryMessage struct {
 	NotificationID string          `json:"notification_id"`
 	TenantID       string          `json:"tenant_id"`
@@ -38,7 +38,7 @@ type DeliveryMessage struct {
 	Attempt        int             `json:"attempt"`
 }
 
-// EventMessage is published to notification.events by Router and Workers.
+// EventMessage is published to notification.events by Dispatch and Workers.
 type EventMessage struct {
 	NotificationID string         `json:"notification_id"`
 	Channel        string         `json:"channel"`

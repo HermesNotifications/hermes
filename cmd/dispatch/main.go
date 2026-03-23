@@ -9,8 +9,8 @@ import (
 
 	"github.com/hermes-notifications/hermes/internal/bootstrap"
 	"github.com/hermes-notifications/hermes/internal/config"
+	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/router"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
@@ -32,12 +32,12 @@ func main() {
 	defer redisClient.Close()
 
 	st := store.New(pool)
-	templateResolver := router.NewTemplateResolver(st, redisClient)
-	channelResolver := router.NewChannelResolver(st)
-	r := router.NewRouter(natsClient, st, templateResolver, channelResolver, logger)
+	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
+	channelResolver := dispatch.NewChannelResolver(st)
+	d := dispatch.NewDispatch(natsClient, st, templateResolver, channelResolver, logger)
 
-	if err := r.Start(); err != nil {
-		logger.Error("router start failed", "error", err)
+	if err := d.Start(); err != nil {
+		logger.Error("dispatch start failed", "error", err)
 		os.Exit(1)
 	}
 

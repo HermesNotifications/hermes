@@ -24,7 +24,7 @@ spec:
                       - -c
                       - |
                         # Wait for each deployment rollout to complete
-                        for deploy in admin router inbox user worker-events worker-email worker-sms worker-inbox; do
+                        for deploy in admin dispatch inbox user worker-events worker-email worker-sms worker-inbox; do
                           echo "Checking hermes-${deploy}..."
                           kubectl rollout status deployment/hermes-${deploy} -n hermes --timeout=120s
                         done

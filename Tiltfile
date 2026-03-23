@@ -10,7 +10,7 @@ goarch = "arm64" if host_arch == "arm64" else "amd64"
 
 services = {
     "admin":         {"port": 8080},
-    "router":        {"port": 8081},
+    "dispatch":      {"port": 8081},
     "worker-events": {"port": 8082},
     "worker-email":  {"port": 8083},
     "worker-sms":    {"port": 8084},

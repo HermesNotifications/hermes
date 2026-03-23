@@ -23,7 +23,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hermes-router
+  name: hermes-dispatch
 spec:
   template:
     spec:
@@ -33,13 +33,13 @@ spec:
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
-              app.kubernetes.io/name: hermes-router
+              app.kubernetes.io/name: hermes-dispatch
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
-              app.kubernetes.io/name: hermes-router
+              app.kubernetes.io/name: hermes-dispatch
 ---
 apiVersion: apps/v1
 kind: Deployment

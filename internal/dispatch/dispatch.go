@@ -1,4 +1,4 @@
-package router
+package dispatch
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
-type Router struct {
+type Dispatch struct {
 	nats             *messaging.Client
 	store            *store.Store
 	templateResolver *TemplateResolver
@@ -20,8 +20,8 @@ type Router struct {
 	logger           *slog.Logger
 }
 
-func NewRouter(nats *messaging.Client, store *store.Store, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Router {
-	return &Router{
+func NewDispatch(nats *messaging.Client, store *store.Store, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
+	return &Dispatch{
 		nats:             nats,
 		store:            store,
 		templateResolver: templateResolver,
@@ -30,19 +30,19 @@ func NewRouter(nats *messaging.Client, store *store.Store, templateResolver *Tem
 	}
 }
 
-func (r *Router) Start() error {
-	return r.nats.Subscribe("notification.send", "router", r.handleSend)
+func (d *Dispatch) Start() error {
+	return d.nats.Subscribe("notification.send", "dispatch", d.handleSend)
 }
 
-func (r *Router) handleSend(data []byte) error {
+func (d *Dispatch) handleSend(data []byte) error {
 	msg, err := hermenats.UnmarshalSend(data)
 	if err != nil {
-		r.logger.Error("unmarshal send message", "error", err)
+		d.logger.Error("unmarshal send message", "error", err)
 		return fmt.Errorf("unmarshal send: %w", err)
 	}
 
 	ctx := context.Background()
-	log := r.logger.With("notification_id", msg.NotificationID)
+	log := d.logger.With("notification_id", msg.NotificationID)
 
 	var nt *models.NotificationType
 	var rendered *RenderedContent
@@ -50,10 +50,10 @@ func (r *Router) handleSend(data []byte) error {
 
 	if msg.Metadata.Type != "" {
 		// Type-based send: resolve type and render templates
-		nt, err = r.templateResolver.Resolve(ctx, msg.Metadata.Type)
+		nt, err = d.templateResolver.Resolve(ctx, msg.Metadata.Type)
 		if err != nil {
 			log.Error("resolve type", "error", err, "type", msg.Metadata.Type)
-			r.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+			d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			return fmt.Errorf("resolve type: %w", err)
@@ -62,7 +62,7 @@ func (r *Router) handleSend(data []byte) error {
 		rendered, err = RenderTemplates(nt, msg.Data)
 		if err != nil {
 			log.Error("render templates", "error", err)
-			r.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+			d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			return fmt.Errorf("render templates: %w", err)
@@ -72,7 +72,7 @@ func (r *Router) handleSend(data []byte) error {
 		title, body, err := RenderDirectContent(content.Title, content.Body, msg.Data)
 		if err != nil {
 			log.Error("render direct content", "error", err)
-			r.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+			d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			return fmt.Errorf("render direct content: %w", err)
@@ -82,10 +82,10 @@ func (r *Router) handleSend(data []byte) error {
 	}
 
 	// Resolve channels
-	channels, err := r.channelResolver.ResolveChannels(ctx, msg.Channels, msg.UserID, msg.GroupID)
+	channels, err := d.channelResolver.ResolveChannels(ctx, msg.Channels, msg.UserID, msg.GroupID)
 	if err != nil {
 		log.Error("resolve channels", "error", err)
-		r.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+		d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
 			"error": err.Error(),
 		})
 		return fmt.Errorf("resolve channels: %w", err)
@@ -96,12 +96,12 @@ func (r *Router) handleSend(data []byte) error {
 
 	if len(channels) == 0 {
 		log.Warn("no channels after filtering")
-		r.publishEvent(msg.NotificationID, "", "routing.no_channels", "warn", nil)
+		d.publishEvent(msg.NotificationID, "", "routing.no_channels", "warn", nil)
 		return nil
 	}
 
 	// Update notification channels in DB
-	if err := r.store.UpdateNotificationChannels(ctx, msg.NotificationID, channels); err != nil {
+	if err := d.store.UpdateNotificationChannels(ctx, msg.NotificationID, channels); err != nil {
 		log.Error("update notification channels", "error", err)
 		return fmt.Errorf("update notification channels: %w", err)
 	}
@@ -127,16 +127,16 @@ func (r *Router) handleSend(data []byte) error {
 		}
 
 		subject := "delivery." + ch
-		if err := r.nats.Publish(subject, dmBytes); err != nil {
+		if err := d.nats.Publish(subject, dmBytes); err != nil {
 			log.Error("publish delivery", "error", err, "channel", ch)
-			r.publishEvent(msg.NotificationID, ch, "delivery.publish_failed", "error", map[string]any{
+			d.publishEvent(msg.NotificationID, ch, "delivery.publish_failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			continue
 		}
 
 		log.Info("published to delivery", "channel", ch)
-		r.publishEvent(msg.NotificationID, ch, "routing.dispatched", "info", nil)
+		d.publishEvent(msg.NotificationID, ch, "routing.dispatched", "info", nil)
 	}
 
 	return nil
@@ -169,7 +169,7 @@ func contentForChannel(channel string, original hermenats.MessageContent, render
 	return mc
 }
 
-func (r *Router) publishEvent(notificationID, channel, event, severity string, metadata map[string]any) {
+func (d *Dispatch) publishEvent(notificationID, channel, event, severity string, metadata map[string]any) {
 	em := &hermenats.EventMessage{
 		NotificationID: notificationID,
 		Channel:        channel,
@@ -179,10 +179,10 @@ func (r *Router) publishEvent(notificationID, channel, event, severity string, m
 	}
 	emBytes, err := em.Marshal()
 	if err != nil {
-		r.logger.Error("marshal event message", "error", err)
+		d.logger.Error("marshal event message", "error", err)
 		return
 	}
-	if err := r.nats.Publish("notification.events", emBytes); err != nil {
-		r.logger.Error("publish event", "error", err)
+	if err := d.nats.Publish("notification.events", emBytes); err != nil {
+		d.logger.Error("publish event", "error", err)
 	}
 }

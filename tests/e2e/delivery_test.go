@@ -24,7 +24,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/router"
+	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
@@ -74,10 +74,10 @@ func TestDeliveryPipeline(t *testing.T) {
 	srv.SetSkipAuth(false)
 	handler := srv.Handler()
 
-	// Router
-	templateResolver := router.NewTemplateResolver(st, redisClient)
-	channelResolver := router.NewChannelResolver(st)
-	rtr := router.NewRouter(natsClient, st, templateResolver, channelResolver, logger)
+	// Dispatch
+	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
+	channelResolver := dispatch.NewChannelResolver(st)
+	rtr := dispatch.NewDispatch(natsClient, st, templateResolver, channelResolver, logger)
 
 	// Event Writer
 	ew := eventwriter.New(natsClient, st, logger)
@@ -187,7 +187,7 @@ func TestDeliveryPipeline(t *testing.T) {
 
 	// ── Start all services BEFORE sending ───────────────────────────────
 	if err := rtr.Start(); err != nil {
-		t.Fatalf("start router: %v", err)
+		t.Fatalf("start dispatch: %v", err)
 	}
 	if err := ew.Start(ctx); err != nil {
 		t.Fatalf("start event writer: %v", err)

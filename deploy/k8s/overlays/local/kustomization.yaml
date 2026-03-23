@@ -45,8 +45,8 @@ configMapGenerator:
 images:
   - name: hermes-admin
     newName: k3d-hermes-registry.localhost:5111/hermes-admin
-  - name: hermes-router
-    newName: k3d-hermes-registry.localhost:5111/hermes-router
+  - name: hermes-dispatch
+    newName: k3d-hermes-registry.localhost:5111/hermes-dispatch
   - name: hermes-inbox
     newName: k3d-hermes-registry.localhost:5111/hermes-inbox
   - name: hermes-user

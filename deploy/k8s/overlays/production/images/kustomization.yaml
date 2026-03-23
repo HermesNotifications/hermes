@@ -12,8 +12,8 @@ images:
 - name: hermes-migrate
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
   newTag: SET_BY_CD_PIPELINE
-- name: hermes-router
-  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-router
+- name: hermes-dispatch
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-dispatch
   newTag: SET_BY_CD_PIPELINE
 - name: hermes-user
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user

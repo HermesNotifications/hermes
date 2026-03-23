@@ -36,9 +36,9 @@ spec:
               - image: hermes-admin
                 newName: ${{ vars.registry }}/hermes-admin
                 tag: ${{ imageFrom(vars.registry + "/hermes-admin").Tag }}
-              - image: hermes-router
-                newName: ${{ vars.registry }}/hermes-router
-                tag: ${{ imageFrom(vars.registry + "/hermes-router").Tag }}
+              - image: hermes-dispatch
+                newName: ${{ vars.registry }}/hermes-dispatch
+                tag: ${{ imageFrom(vars.registry + "/hermes-dispatch").Tag }}
               - image: hermes-inbox
                 newName: ${{ vars.registry }}/hermes-inbox
                 tag: ${{ imageFrom(vars.registry + "/hermes-inbox").Tag }}

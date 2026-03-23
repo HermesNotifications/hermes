@@ -1,10 +1,10 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: hermes-router
+  name: hermes-dispatch
   namespace: hermes
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: hermes-router
+      app.kubernetes.io/name: hermes-dispatch

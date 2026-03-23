@@ -20,13 +20,13 @@ import (
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/router"
+	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/store"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-func TestPipeline_RouterAndEventWriter(t *testing.T) {
+func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	ctx := context.Background()
 	dbURL := envOr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable")
 	natsURL := envOr("HERMES_NATS_URL", "nats://localhost:4222")
@@ -74,10 +74,10 @@ func TestPipeline_RouterAndEventWriter(t *testing.T) {
 	srv.SetSkipAuth(false)
 	handler := srv.Handler()
 
-	// Router
-	templateResolver := router.NewTemplateResolver(st, redisClient)
-	channelResolver := router.NewChannelResolver(st)
-	rtr := router.NewRouter(natsClient, st, templateResolver, channelResolver, logger)
+	// Dispatch
+	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
+	channelResolver := dispatch.NewChannelResolver(st)
+	rtr := dispatch.NewDispatch(natsClient, st, templateResolver, channelResolver, logger)
 
 	// Event Writer
 	ew := eventwriter.New(natsClient, st, logger)
@@ -143,9 +143,9 @@ func TestPipeline_RouterAndEventWriter(t *testing.T) {
 		t.Fatalf("create type: expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	// ── Start Router + Event Writer BEFORE sending ─────────────────────
+	// ── Start Dispatch + Event Writer BEFORE sending ───────────────────
 	if err := rtr.Start(); err != nil {
-		t.Fatalf("start router: %v", err)
+		t.Fatalf("start dispatch: %v", err)
 	}
 	if err := ew.Start(ctx); err != nil {
 		t.Fatalf("start event writer: %v", err)
@@ -172,7 +172,7 @@ func TestPipeline_RouterAndEventWriter(t *testing.T) {
 	t.Logf("notification_id = %s", notifID)
 
 	// ── Wait for async processing ──────────────────────────────────────
-	// Router picks up from notification.send, fans out to delivery.*,
+	// Dispatch picks up from notification.send, fans out to delivery.*,
 	// and publishes routing events. Event Writer picks up events and writes to DB.
 	// Give it up to 5 seconds with polling.
 	var events []interface{}
@@ -221,11 +221,11 @@ func TestPipeline_RouterAndEventWriter(t *testing.T) {
 		t.Fatalf("get notification: %v", err)
 	}
 	if len(notif.Channels) == 0 {
-		t.Fatal("expected notification channels to be set by router")
+		t.Fatal("expected notification channels to be set by dispatch")
 	}
 	t.Logf("notification channels: %v", notif.Channels)
 
-	// The router publishes "routing.dispatched" events which don't trigger a status
+	// The dispatch service publishes "routing.dispatched" events which don't trigger a status
 	// update (only email.routed, inbox.routed etc. do). Without a delivery worker
 	// running, status stays "pending". This is correct behavior — the pipeline
 	// delivered the message to the delivery streams but no worker consumed them.

@@ -11,10 +11,10 @@ images:
   newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
 - name: hermes-migrate
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
-- name: hermes-router
-  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-router
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
+  newTag: f3cef4d7a2000bd5417ac74c638248a2bb19e4c0
+- name: hermes-dispatch
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-dispatch
+  newTag: f3cef4d7a2000bd5417ac74c638248a2bb19e4c0
 - name: hermes-user
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
   newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c

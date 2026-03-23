@@ -1,10 +1,10 @@
-package router_test
+package dispatch_test
 
 import (
 	"testing"
 
+	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/router"
 )
 
 func strPtr(s string) *string { return &s }
@@ -18,7 +18,7 @@ func TestRenderTemplates(t *testing.T) {
 	}
 	data := map[string]any{"number": "INV-001", "name": "Alice"}
 
-	rc, err := router.RenderTemplates(nt, data)
+	rc, err := dispatch.RenderTemplates(nt, data)
 	if err != nil {
 		t.Fatalf("RenderTemplates: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestRenderTemplates_HTMLEscaping(t *testing.T) {
 		EmailBody: strPtr("<p>Hello {{.name}}</p>"),
 	}
 	data := map[string]any{"name": "<script>alert('xss')</script>"}
-	rc, err := router.RenderTemplates(nt, data)
+	rc, err := dispatch.RenderTemplates(nt, data)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestRenderTemplates_HTMLEscaping(t *testing.T) {
 }
 
 func TestRenderDirectContent_WithData(t *testing.T) {
-	title, body, err := router.RenderDirectContent("Invoice {{.number}}", "Paid: {{.amount}}", map[string]any{"number": "123", "amount": "$99"})
+	title, body, err := dispatch.RenderDirectContent("Invoice {{.number}}", "Paid: {{.amount}}", map[string]any{"number": "123", "amount": "$99"})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestRenderDirectContent_WithData(t *testing.T) {
 }
 
 func TestRenderDirectContent_NoData(t *testing.T) {
-	title, body, err := router.RenderDirectContent("Hello", "World", nil)
+	title, body, err := dispatch.RenderDirectContent("Hello", "World", nil)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

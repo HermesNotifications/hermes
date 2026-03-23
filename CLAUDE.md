@@ -50,15 +50,15 @@ make help
 Hermes is an event-driven notification platform built as a Go monorepo of 8 microservices. Notifications flow through an async pipeline via NATS JetStream:
 
 ```
-SaaS Backend → Admin Service → NATS [notification.send] → Router → NATS [delivery.*] → Workers → NATS [notification.events] → Event Writer → Postgres
+SaaS Backend → Admin Service → NATS [notification.send] → Dispatch → NATS [delivery.*] → Workers → NATS [notification.events] → Event Writer → Postgres
 ```
 
-**Write path (API key auth):** Admin Service validates, persists to Postgres, publishes to NATS. Router resolves templates (Redis-cached) and channels, fans out to delivery subjects. Workers deliver (email/SMS via webhook, inbox via Centrifugo push). Event Writer batch-inserts events and updates notification status.
+**Write path (API key auth):** Admin Service validates, persists to Postgres, publishes to NATS. Dispatch resolves templates (Redis-cached) and channels, fans out to delivery subjects. Workers deliver (email/SMS via webhook, inbox via Centrifugo push). Event Writer batch-inserts events and updates notification status.
 
 **Read path (JWT auth):** Inbox Service serves paginated inbox with cursor-based pagination. User Service manages profiles and notification preferences. Centrifugo provides real-time WebSocket push.
 
 ### Service Ports (local dev defaults)
-- Admin: 8080, Router: 8081, Event Writer: 8082
+- Admin: 8080, Dispatch: 8081, Event Writer: 8082
 - Email Worker: 8083, SMS Worker: 8084, Inbox Worker: 8085
 - Inbox Service: 8086, User Service: 8087
 

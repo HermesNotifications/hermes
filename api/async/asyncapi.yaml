@@ -25,7 +25,7 @@ channels:
     address: notification.send
     description: |
       Incoming notification requests. Published by the Admin Service after
-      validating and persisting the notification. Consumed by the Router.
+      validating and persisting the notification. Consumed by the Dispatch service.
     servers:
       - $ref: '#/servers/nats'
     messages:
@@ -44,7 +44,7 @@ channels:
   # ---------------------------------------------------------------------------
   deliveryEmail:
     address: delivery.email
-    description: Email delivery tasks dispatched by the Router.
+    description: Email delivery tasks dispatched by the Dispatch service.
     servers:
       - $ref: '#/servers/nats'
     messages:
@@ -57,7 +57,7 @@ channels:
 
   deliverySms:
     address: delivery.sms
-    description: SMS delivery tasks dispatched by the Router.
+    description: SMS delivery tasks dispatched by the Dispatch service.
     servers:
       - $ref: '#/servers/nats'
     messages:
@@ -70,7 +70,7 @@ channels:
 
   deliveryInbox:
     address: delivery.inbox
-    description: In-app inbox delivery tasks dispatched by the Router.
+    description: In-app inbox delivery tasks dispatched by the Dispatch service.
     servers:
       - $ref: '#/servers/nats'
     messages:
@@ -87,7 +87,7 @@ channels:
   notificationEvents:
     address: notification.events
     description: |
-      Delivery lifecycle events. Published by the Router (routing outcomes)
+      Delivery lifecycle events. Published by the Dispatch service (routing outcomes)
       and delivery workers (send/fail outcomes). Consumed by the Event Writer
       for batch insert and notification status rollup.
     servers:
@@ -134,29 +134,29 @@ operations:
       After validating the request and persisting the notification to Postgres,
       the Admin Service publishes a SendMessage to the NOTIFICATIONS stream.
 
-  routeToEmail:
+  dispatchToEmail:
     action: send
     channel:
       $ref: '#/channels/deliveryEmail'
-    summary: Router dispatches email delivery
+    summary: Dispatch service dispatches email delivery
 
-  routeToSms:
+  dispatchToSms:
     action: send
     channel:
       $ref: '#/channels/deliverySms'
-    summary: Router dispatches SMS delivery
+    summary: Dispatch service dispatches SMS delivery
 
-  routeToInbox:
+  dispatchToInbox:
     action: send
     channel:
       $ref: '#/channels/deliveryInbox'
-    summary: Router dispatches inbox delivery
+    summary: Dispatch service dispatches inbox delivery
 
   publishEvent:
     action: send
     channel:
       $ref: '#/channels/notificationEvents'
-    summary: Router or worker publishes a delivery lifecycle event
+    summary: Dispatch service or worker publishes a delivery lifecycle event
 
   pushInboxUpdate:
     action: send
@@ -169,8 +169,8 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/notificationSend'
-    summary: Router consumes notifications for channel resolution and fan-out
-    description: "NATS consumer: router"
+    summary: Dispatch service consumes notifications for channel resolution and fan-out
+    description: "NATS consumer: dispatch"
 
   consumeEmailDelivery:
     action: receive
@@ -328,7 +328,7 @@ components:
         event:
           type: string
           description: |
-            Event type. Router events: routing.dispatched, routing.failed,
+            Event type. Dispatch events: routing.dispatched, routing.failed,
             routing.no_channels. Worker events: {channel}.sent, {channel}.failed.
           examples:
             - routing.dispatched

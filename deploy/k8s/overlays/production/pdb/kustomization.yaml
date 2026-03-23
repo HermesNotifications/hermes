@@ -3,7 +3,7 @@ kind: Kustomization
 
 resources:
   - admin-pdb.yaml
-  - router-pdb.yaml
+  - dispatch-pdb.yaml
   - inbox-pdb.yaml
   - nats-pdb.yaml
   - centrifugo-pdb.yaml

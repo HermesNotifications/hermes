@@ -23,7 +23,7 @@ jobs:
       matrix:
         service:
           - admin
-          - router
+          - dispatch
           - worker-events
           - worker-email
           - worker-sms

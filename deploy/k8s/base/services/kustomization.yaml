@@ -3,7 +3,7 @@ kind: Kustomization
 
 resources:
   - admin.yaml
-  - router.yaml
+  - dispatch.yaml
   - inbox.yaml
   - user.yaml
   - worker-events.yaml

@@ -8,7 +8,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hermes-router
+  name: hermes-dispatch
 spec:
   replicas: 2
 ---

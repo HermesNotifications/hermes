@@ -111,7 +111,7 @@ jobs:
       - name: Build all services
         run: |
           go build ./cmd/admin/
-          go build ./cmd/router/
+          go build ./cmd/dispatch/
           go build ./cmd/worker-events/
           go build ./cmd/worker-email/
           go build ./cmd/worker-sms/
@@ -128,7 +128,7 @@ jobs:
       matrix:
         service:
           - admin
-          - router
+          - dispatch
           - worker-events
           - worker-email
           - worker-sms

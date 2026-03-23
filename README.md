@@ -7,7 +7,7 @@ Event-driven notification platform. Send notifications across email, SMS, and in
 Go monorepo with 8 microservices connected via NATS JetStream:
 
 ```
-API Client ──> Admin Service ──> NATS ──> Router ──> NATS ──> Workers ──> NATS ──> Event Writer ──> Postgres
+API Client ──> Admin Service ──> NATS ──> Dispatch ──> NATS ──> Workers ──> NATS ──> Event Writer ──> Postgres
                                            │
                                      ┌─────┼─────┐
                                      │     │     │
@@ -18,7 +18,7 @@ API Client ──> Admin Service ──> NATS ──> Router ──> NATS ──
                                                   (WebSocket)
 ```
 
-**Write path (API key auth):** Admin Service validates and persists notifications, publishes to NATS. Router resolves templates and channels, fans out to delivery workers. Workers deliver via webhooks (email/SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status.
+**Write path (API key auth):** Admin Service validates and persists notifications, publishes to NATS. Dispatch resolves templates and channels, fans out to delivery workers. Workers deliver via webhooks (email/SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status.
 
 **Read path (JWT auth):** Inbox Service serves paginated inbox. User Service manages profiles and notification preferences. Centrifugo provides real-time WebSocket push.
 
@@ -27,7 +27,7 @@ API Client ──> Admin Service ──> NATS ──> Router ──> NATS ──
 | Service | Port | Description |
 |---------|------|-------------|
 | Admin | 8080 | Server-to-server API — tenants, groups, types, send |
-| Router | 8081 | Resolves channels and templates, fans out to workers |
+| Dispatch | 8081 | Resolves channels and templates, fans out to workers |
 | Event Writer | 8082 | Batch-inserts delivery events, updates notification status |
 | Email Worker | 8083 | Delivers email notifications via webhook |
 | SMS Worker | 8084 | Delivers SMS notifications via webhook |
@@ -163,7 +163,7 @@ See [docs/deployment-guide.md](docs/deployment-guide.md) for the full deployment
 ```
 cmd/                    # Service entry points
   admin/                #   Admin API server
-  router/               #   Notification router
+  dispatch/             #   Notification dispatch
   worker-{email,sms,inbox,events}/  # Delivery workers
   inbox/                #   User inbox API
   user/                 #   User service API

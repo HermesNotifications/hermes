@@ -18,12 +18,12 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hermes-router
+  name: hermes-dispatch
 spec:
   template:
     spec:
       containers:
-        - name: router
+        - name: dispatch
           resources:
             requests:
               cpu: 200m
