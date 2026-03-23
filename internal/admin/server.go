@@ -2,8 +2,10 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -48,22 +50,26 @@ type AdminStore interface {
 	GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error)
 
 	// API Keys
+	CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error)
 	ListAPIKeys(ctx context.Context) ([]models.APIKey, error)
+	GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
+	DeleteAPIKey(ctx context.Context, id string) error
 
 	// JWT Signing Keys
 	EnsureHermesSigningKey(ctx context.Context, secret string) error
 }
 
 type Server struct {
-	store     AdminStore
-	nats      *messaging.Client
-	cache     *cache.Client
-	pool      *pgxpool.Pool
-	logger    *slog.Logger
-	router    chi.Router
-	api       huma.API
-	skipAuth  bool
-	jwtSecret []byte
+	store      AdminStore
+	nats       *messaging.Client
+	cache      *cache.Client
+	pool       *pgxpool.Pool
+	logger     *slog.Logger
+	router     chi.Router
+	api        huma.API
+	skipAuth   bool
+	jwtSecret  []byte
+	hmacSecret string
 }
 
 // SetSkipAuth disables API key authentication. Intended for use in tests only.
@@ -71,15 +77,16 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, logger *slog.Logger) *Server {
+func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
 	s := &Server{
-		store:     store,
-		nats:      nats,
-		cache:     cache,
-		pool:      pool,
-		jwtSecret: jwtSecret,
-		logger:    logger,
-		router:    chi.NewRouter(),
+		store:      store,
+		nats:       nats,
+		cache:      cache,
+		pool:       pool,
+		jwtSecret:  jwtSecret,
+		hmacSecret: hmacSecret,
+		logger:     logger,
+		router:     chi.NewRouter(),
 	}
 
 	config := huma.DefaultConfig("Hermes Admin API", "1.0.0")
@@ -125,16 +132,56 @@ func (s *Server) Handler() http.Handler {
 	return h
 }
 
-func (s *Server) validateAPIKey(rawKey string) bool {
-	keys, err := s.store.ListAPIKeys(context.Background())
+func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
+	keyID, secret, err := auth.ParseAPIKey(rawKey)
 	if err != nil {
-		s.logger.Error("failed to load API keys", "error", err)
-		return false
+		return nil
 	}
-	for _, k := range keys {
-		if auth.VerifyAPIKey(rawKey, k.KeyHash) {
-			return true
+
+	var keyHash string
+	var permissions []string
+
+	// Try cache first
+	if s.cache != nil {
+		cached, err := s.cache.GetAPIKey(context.Background(), keyID)
+		if err != nil {
+			s.logger.Error("cache get api key failed", "error", err)
+		} else if cached != nil {
+			var entry struct {
+				KeyHash     string   `json:"key_hash"`
+				Permissions []string `json:"permissions"`
+			}
+			if json.Unmarshal(cached, &entry) == nil {
+				keyHash = entry.KeyHash
+				permissions = entry.Permissions
+			}
 		}
 	}
-	return false
+
+	// Cache miss — load from store
+	if keyHash == "" {
+		k, err := s.store.GetAPIKeyByID(context.Background(), keyID)
+		if err != nil || k == nil {
+			return nil
+		}
+		keyHash = k.KeyHash
+		permissions = k.Permissions
+
+		// Populate cache
+		if s.cache != nil {
+			entry, _ := json.Marshal(struct {
+				KeyHash     string   `json:"key_hash"`
+				Permissions []string `json:"permissions"`
+			}{keyHash, permissions})
+			if err := s.cache.SetAPIKey(context.Background(), keyID, entry, 5*time.Minute); err != nil {
+				s.logger.Error("cache set api key failed", "error", err)
+			}
+		}
+	}
+
+	if !auth.HMACVerifyAPIKey(secret, keyHash, s.hmacSecret) {
+		return nil
+	}
+
+	return &auth.ValidatedKey{ID: keyID, Permissions: permissions}
 }

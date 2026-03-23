@@ -195,8 +195,39 @@ func (m *mockStore) GetNotificationEvents(ctx context.Context, notificationID st
 
 // --- API Keys ---
 
+func (m *mockStore) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error) {
+	k := models.APIKey{
+		ID:          id,
+		KeyHash:     keyHash,
+		Name:        name,
+		Permissions: permissions,
+		CreatedAt:   time.Now(),
+	}
+	m.apiKeys = append(m.apiKeys, k)
+	return &k, nil
+}
+
 func (m *mockStore) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 	return m.apiKeys, nil
+}
+
+func (m *mockStore) GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error) {
+	for _, k := range m.apiKeys {
+		if k.ID == id {
+			return &k, nil
+		}
+	}
+	return nil, fmt.Errorf("api key not found: %s", id)
+}
+
+func (m *mockStore) DeleteAPIKey(ctx context.Context, id string) error {
+	for i, k := range m.apiKeys {
+		if k.ID == id {
+			m.apiKeys = append(m.apiKeys[:i], m.apiKeys[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("api key not found: %s", id)
 }
 
 // --- JWT Signing Keys ---
@@ -216,7 +247,7 @@ func newTestServer(t *testing.T) *admin.Server {
 		},
 	}
 	// Pass nil for nats, cache, pool — most handlers don't need them.
-	srv := admin.NewServer(store, nil, nil, nil, []byte("test-jwt-secret"), logger)
+	srv := admin.NewServer(store, nil, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(true)
 	return srv
 }
