@@ -66,12 +66,19 @@ Full key format: `hms_[<env>_]key_<key_id>_<secret>`
 **Examples:**
 - Production: `hms_key_a8f3B2_a8f3B2c1D4e5f6g7H8j9Kw`
 - Staging: `hms_stg_key_a8f3B2_a8f3B2c1D4e5f6g7H8j9Kw`
-- Dev: `hms_dev_key` (hardcoded, backward compatible)
+- Dev: `hms_dev_key_a8f3B2_a8f3B2c1D4e5f6g7H8j9Kw` (generated, no longer hardcoded — see Migration Path)
 
-**Generation:** 16 bytes from `crypto/rand` for the secret, encoded as base64url without padding. New function in `internal/auth/`:
+**Generation:** 16 bytes from `crypto/rand` for the secret, encoded as base64url without padding. New functions in `internal/auth/`:
 
 ```go
-func GenerateAPIKey(prefix string) (raw string, keyID string, err error)
+// GenerateAPIKey creates a new API key with the given environment prefix.
+// Returns the full raw key string and the extracted key ID.
+func GenerateAPIKey(envPrefix string) (raw string, keyID string, err error)
+
+// ParseAPIKey extracts the key ID and secret from a raw API key string.
+// Handles all formats: hms_key_<id>_<secret>, hms_stg_key_<id>_<secret>, hms_dev_key_<id>_<secret>.
+// Returns an error if the format is invalid (used in the auth hot path).
+func ParseAPIKey(raw string) (keyID string, secret string, err error)
 ```
 
 ### HMAC-SHA256 Hashing
@@ -87,7 +94,7 @@ func HMACHashAPIKey(secret, hmacKey string) string       // hex-encoded HMAC
 func HMACVerifyAPIKey(secret, hash, hmacKey string) bool  // constant-time comparison
 ```
 
-Existing Argon2 functions remain for backward compatibility but are not used by new code.
+Existing Argon2 functions are removed. The dev seed key switches to the new HMAC format (see Migration Path), so there is no need for backward-compatible Argon2 verification.
 
 **Security properties:**
 - HMAC-SHA256 verification is microseconds vs. Argon2's milliseconds
@@ -99,8 +106,14 @@ Existing Argon2 functions remain for backward compatibility but are not used by 
 
 **Migration:** Add permissions column to `api_keys`.
 
+Up migration:
 ```sql
 ALTER TABLE api_keys ADD COLUMN permissions TEXT[] NOT NULL DEFAULT '{}';
+```
+
+Down migration:
+```sql
+ALTER TABLE api_keys DROP COLUMN permissions;
 ```
 
 No new tables. The `api_keys` table stores:
@@ -109,6 +122,20 @@ No new tables. The `api_keys` table stores:
 - `name` — human-readable name
 - `permissions` — array of permission strings
 - `created_at` — timestamp
+
+**New store methods:**
+
+```go
+// GetAPIKeyByID looks up a single API key by its ID. Returns nil if not found.
+func (s *Store) GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
+
+// DeleteAPIKey removes an API key by ID. Returns an error if not found.
+func (s *Store) DeleteAPIKey(ctx context.Context, id string) error
+```
+
+These are added to the `AdminStore` interface and implemented in `internal/store/apikeys.go`.
+
+**Tenant scoping:** API keys are platform-level, not tenant-scoped. Any valid key can operate on any tenant (subject to its permissions). Tenant-scoped keys are out of scope for this design.
 
 ### Permissions
 
@@ -125,6 +152,8 @@ No new tables. The `api_keys` table stores:
 - Seed tool creates keys with all permissions
 - API-created keys default to all except `apikeys:manage`
 
+**Validation on create:** The `POST /v1/apikeys` endpoint validates the `permissions` array against the known permission set. Unknown permissions return 400. A key with `apikeys:manage` can be created via the API (the caller already has `apikeys:manage` to reach the endpoint), enabling delegation.
+
 **Enforcement:** New middleware `RequirePermission(perm string)` reads permissions from request context (set during key validation) and returns 403 if the required permission is missing.
 
 **Route mapping:**
@@ -140,7 +169,7 @@ No new tables. The `api_keys` table stores:
 
 **Strategy:** Per-key caching with TTL and invalidation on mutation.
 
-**Cache key:** `hermes:apikey:<key_id>`
+**Cache key:** `apikey:<key_id>` (follows existing short-prefix convention: `idem:`, `type:`, `jwt:`, etc.)
 **Value:** JSON `{key_hash, permissions}`
 **TTL:** 5 minutes
 
@@ -151,7 +180,7 @@ Bearer hms_[env_]key_<id>_<secret>
     ↓
 Parse → extract key_id + secret
     ↓
-Check Redis: hermes:apikey:<key_id>
+Check Redis: apikey:<key_id>
     ├─ Hit → deserialize {key_hash, permissions}
     └─ Miss → SELECT by key_id from Postgres, cache in Redis with TTL
     ↓
@@ -161,11 +190,11 @@ HMAC verify secret against key_hash (constant-time)
 ```
 
 **Invalidation:**
-- On revoke: delete `hermes:apikey:<key_id>` from Redis
+- On revoke: delete `apikey:<key_id>` from Redis
 - On create: no action needed (cache miss handles it)
 - TTL provides fallback if invalidation fails
 
-**Implementation:** New `internal/cache/apikeys.go` with `APIKeyCache` struct providing `Get`, `Set`, `Invalidate` methods. The Admin service receives a cache instance at construction.
+**Implementation:** Add `GetAPIKey`, `SetAPIKey`, `InvalidateAPIKey` methods to the existing `cache.Client` in `internal/cache/redis.go`, following the established pattern used by idempotency, type config, and other cache operations.
 
 ### Admin API Endpoints
 
@@ -215,7 +244,7 @@ Response (200):
 Response: 204 No Content
 
 - Deletes the key from Postgres
-- Invalidates `hermes:apikey:<key_id>` in Redis
+- Invalidates `apikey:<key_id>` in Redis
 - Prevents self-deletion (cannot revoke the key used to authenticate the request)
 - Returns 404 if not found
 
@@ -246,7 +275,9 @@ Response: 204 No Content
 2. Hash and insert new row in Postgres
 3. Update `admin_api_key` property in Secrets Manager
 4. Old key remains in Postgres (still valid)
-5. Print warning: old key is still valid, revoke via `hermes apikey revoke` if needed
+5. Print the old key's ID and a warning: "Previous key <old_id> is still valid. Revoke it via `hermes apikey revoke --id <old_id>` if needed."
+
+Optional `--revoke-previous` flag: atomically revokes the old bootstrap key during rotation (deletes from Postgres, invalidates Redis cache).
 
 ### CLI Commands
 
@@ -273,11 +304,9 @@ Uses existing `--url`, `--api-key`, `--output` root flags. Calls Admin API endpo
   remoteRef:
     key: hermes/<env>
     property: api_key_hmac_secret
-- secretKey: HERMES_ADMIN_API_KEY
-  remoteRef:
-    key: hermes/<env>
-    property: admin_api_key
 ```
+
+`admin_api_key` is stored in Secrets Manager by the seed tool but is **not** injected into pods via External Secrets. It is operator-facing only — retrieved via AWS CLI or CI/CD when configuring clients that call the Admin API.
 
 **Config** — Add to `internal/config/config.go`:
 - `APIKeyHMACSecret string` — `HERMES_API_KEY_HMAC_SECRET`, required in staging/production
@@ -287,7 +316,8 @@ Uses existing `--url`, `--api-key`, `--output` root flags. Calls Admin API endpo
 1. Deploy the new code (HMAC auth + permissions)
 2. Run seed tool with `--env staging` and `--env production` to create bootstrap keys
 3. Update any CI/CD or operator scripts to use the new key format
-4. The old dev seed key format is replaced on next local seed run — local dev only, no production concern
+4. Locally: run `make seed` to replace the old hardcoded `hms_dev_key` with a new-format dev key. The old Argon2-hashed row becomes orphaned and can be cleaned up manually (`DELETE FROM api_keys WHERE id = 'dev000000000000000000000001'`). The seed tool prints the new dev key to stdout.
+5. Remove Argon2 functions from `internal/auth/` once all environments are migrated
 
 ### Testing Strategy
 
