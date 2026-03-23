@@ -15,6 +15,7 @@ type Config struct {
 	CentrifugoAPIKey string
 	EmailWebhookURL  string
 	SMSWebhookURL    string
+	APIKeyHMACSecret string
 }
 
 func Load() Config {
@@ -28,6 +29,7 @@ func Load() Config {
 		CentrifugoAPIKey: envStr("HERMES_CENTRIFUGO_API_KEY", "centrifugo-api-key"),
 		EmailWebhookURL:  envStr("HERMES_EMAIL_WEBHOOK_URL", "http://localhost:9090/email"),
 		SMSWebhookURL:    envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
+		APIKeyHMACSecret: envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
 	}
 }
 
