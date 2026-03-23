@@ -66,7 +66,7 @@ func TestSendNotification_E2E(t *testing.T) {
 	// Create store and server
 	st := postgres.New(pool)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), logger)
+	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(false) // Test with auth enabled
 
 	handler := srv.Handler()
@@ -79,12 +79,18 @@ func TestSendNotification_E2E(t *testing.T) {
 	}
 
 	// 2. Create an API key
-	rawKey := "hms_e2e_test_key_" + uuid.New().String()
-	keyHash, err := auth.HashAPIKey(rawKey)
+	hmacSecret := "test-hmac-secret"
+	rawKey, keyID, err := auth.GenerateAPIKey("")
 	if err != nil {
-		t.Fatalf("hash key: %v", err)
+		t.Fatalf("generate key: %v", err)
 	}
-	_, err = pool.Exec(ctx, "INSERT INTO api_keys (id, key_hash, name) VALUES ($1, $2, $3)", uuid.New().String(), keyHash, "E2E Test Key")
+	_, secret, err := auth.ParseAPIKey(rawKey)
+	if err != nil {
+		t.Fatalf("parse key: %v", err)
+	}
+	keyHash := auth.HMACHashAPIKey(secret, hmacSecret)
+	allPerms := []string{"apikeys:manage", "notifications:send", "templates:manage", "tenants:manage"}
+	_, err = pool.Exec(ctx, "INSERT INTO api_keys (id, key_hash, name, permissions) VALUES ($1, $2, $3, $4)", keyID, keyHash, "E2E Test Key", allPerms)
 	if err != nil {
 		t.Fatalf("create api key: %v", err)
 	}

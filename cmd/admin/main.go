@@ -37,7 +37,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte(cfg.JWTSecret), logger)
+	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }

@@ -11,17 +11,17 @@ import (
 	"github.com/hermes-notifications/hermes/internal/database"
 )
 
-const (
-	devKeyID  = "dev000000000000000000000001"
-	devKeyRaw = "hms_dev_key"
-)
-
 func main() {
 	dbURL := flag.String("database-url", os.Getenv("HERMES_DATABASE_URL"), "PostgreSQL connection URL")
+	hmacSecret := flag.String("hmac-secret", os.Getenv("HERMES_API_KEY_HMAC_SECRET"), "HMAC secret for key hashing")
 	flag.Parse()
 
 	if *dbURL == "" {
 		log.Fatal("database-url is required (or set HERMES_DATABASE_URL)")
+	}
+
+	if *hmacSecret == "" {
+		*hmacSecret = "hermes-dev-hmac-secret"
 	}
 
 	ctx := context.Background()
@@ -31,22 +31,30 @@ func main() {
 	}
 	defer pool.Close()
 
-	keyHash, err := auth.HashAPIKey(devKeyRaw)
+	rawKey, keyID, err := auth.GenerateAPIKey("dev")
 	if err != nil {
-		log.Fatalf("hash API key: %v", err)
+		log.Fatalf("generate api key: %v", err)
 	}
 
+	_, secret, err := auth.ParseAPIKey(rawKey)
+	if err != nil {
+		log.Fatalf("parse api key: %v", err)
+	}
+
+	keyHash := auth.HMACHashAPIKey(secret, *hmacSecret)
+	allPerms := []string{auth.PermAPIKeysManage, auth.PermNotificationsSend, auth.PermTemplatesManage, auth.PermTenantsManage}
+
 	tag, err := pool.Exec(ctx,
-		`INSERT INTO api_keys (id, key_hash, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
-		devKeyID, keyHash, "Development",
+		`INSERT INTO api_keys (id, key_hash, name, permissions) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+		keyID, keyHash, "Development", allPerms,
 	)
 	if err != nil {
 		log.Fatalf("insert dev API key: %v", err)
 	}
 
 	if tag.RowsAffected() == 0 {
-		fmt.Println("dev API key already exists")
+		fmt.Println("dev API key already exists (delete old key from DB and re-run to generate new one)")
 	} else {
-		fmt.Printf("dev API key seeded: %s\n", devKeyRaw)
+		fmt.Printf("Dev API key seeded:\n  %s\n", rawKey)
 	}
 }
