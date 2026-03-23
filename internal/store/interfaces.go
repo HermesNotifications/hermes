@@ -77,8 +77,10 @@ type InboxRepository interface {
 
 // AuthRepository defines operations for API keys and JWT signing keys.
 type AuthRepository interface {
-	CreateAPIKey(ctx context.Context, keyHash, name string) (*models.APIKey, error)
+	CreateAPIKey(ctx context.Context, keyHash, name string, permissions []string) (*models.APIKey, error)
 	ListAPIKeys(ctx context.Context) ([]models.APIKey, error)
+	GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
+	DeleteAPIKey(ctx context.Context, id string) error
 	ListActiveJWTSigningKeys(ctx context.Context) ([]models.JWTSigningKey, error)
 	EnsureHermesSigningKey(ctx context.Context, secret string) error
 }
