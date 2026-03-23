@@ -44,6 +44,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newNotificationsCmd())
 	cmd.AddCommand(newAuthCmd())
 	cmd.AddCommand(newInboxCmd())
+	cmd.AddCommand(newAPIKeysCmd())
 	return cmd
 }
 
