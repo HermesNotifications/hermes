@@ -5,14 +5,13 @@ import (
 	"strings"
 )
 
-// APIKeyValidator validates a raw API key. Returns true if valid.
-type APIKeyValidator func(rawKey string) bool
+// APIKeyValidator validates a raw API key and returns the validated key on success.
+type APIKeyValidator func(rawKey string) *ValidatedKey
 
 // APIKeyMiddleware returns HTTP middleware that validates API keys from the Authorization header.
 func APIKeyMiddleware(validate APIKeyValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip auth for health checks
 			if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 				next.ServeHTTP(w, r)
 				return
@@ -25,11 +24,14 @@ func APIKeyMiddleware(validate APIKeyValidator) func(http.Handler) http.Handler 
 			}
 			key = strings.TrimPrefix(key, "Bearer ")
 
-			if !validate(key) {
+			validated := validate(key)
+			if validated == nil {
 				http.Error(w, `{"error":"invalid api key"}`, http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r)
+
+			ctx := WithValidatedKey(r.Context(), validated)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
