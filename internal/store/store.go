@@ -1,11 +1,3 @@
+// Package store defines the repository interfaces for the Hermes notification platform.
+// Implementations live in subpackages (e.g., store/postgres).
 package store
-
-import "github.com/jackc/pgx/v5/pgxpool"
-
-type Store struct {
-	pool *pgxpool.Pool
-}
-
-func New(pool *pgxpool.Pool) *Store {
-	return &Store{pool: pool}
-}

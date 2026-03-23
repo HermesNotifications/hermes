@@ -11,7 +11,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
 
-	st := store.New(pool)
+	st := postgres.New(pool)
 	w := eventwriter.New(natsClient, st, logger)
 
 	if err := w.Start(context.Background()); err != nil {

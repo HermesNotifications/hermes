@@ -15,11 +15,11 @@ import (
 )
 
 type TemplateResolver struct {
-	store *store.Store
+	store store.TypeRepository
 	cache *cache.Client
 }
 
-func NewTemplateResolver(store *store.Store, cache *cache.Client) *TemplateResolver {
+func NewTemplateResolver(store store.TypeRepository, cache *cache.Client) *TemplateResolver {
 	return &TemplateResolver{store: store, cache: cache}
 }
 

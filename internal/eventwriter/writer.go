@@ -14,12 +14,12 @@ import (
 
 type Writer struct {
 	nats   *messaging.Client
-	store  *store.Store
+	store  store.EventRepository
 	logger *slog.Logger
 	batch  *Batch[*hermenats.EventMessage]
 }
 
-func New(nats *messaging.Client, st *store.Store, logger *slog.Logger) *Writer {
+func New(nats *messaging.Client, st store.EventRepository, logger *slog.Logger) *Writer {
 	w := &Writer{
 		nats:   nats,
 		store:  st,

@@ -1,6 +1,6 @@
 //go:build integration
 
-package store_test
+package postgres_test
 
 import (
 	"context"
@@ -8,17 +8,17 @@ import (
 	"testing"
 
 	"github.com/hermes-notifications/hermes/internal/database"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func testStore(t *testing.T) (*store.Store, *pgxpool.Pool) {
+func testStore(t *testing.T) (*postgres.Store, *pgxpool.Pool) {
 	t.Helper()
 	url := os.Getenv("HERMES_DATABASE_URL")
 	if url == "" {
 		url = "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"
 	}
-	if err := database.RunMigrations(url, "../../migrations"); err != nil {
+	if err := database.RunMigrations(url, "../../../migrations"); err != nil {
 		t.Fatalf("migrations: %v", err)
 	}
 	pool, err := database.NewPool(context.Background(), url)
@@ -26,7 +26,7 @@ func testStore(t *testing.T) (*store.Store, *pgxpool.Pool) {
 		t.Fatalf("pool: %v", err)
 	}
 	t.Cleanup(func() { pool.Close() })
-	return store.New(pool), pool
+	return postgres.New(pool), pool
 }
 
 // cleanTable truncates a table for test isolation

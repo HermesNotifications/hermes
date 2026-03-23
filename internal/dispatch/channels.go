@@ -7,11 +7,17 @@ import (
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
-type ChannelResolver struct {
-	store *store.Store
+// channelStore composes the repository interfaces needed for channel resolution.
+type channelStore interface {
+	store.PreferenceRepository
+	store.GroupRepository
 }
 
-func NewChannelResolver(store *store.Store) *ChannelResolver {
+type ChannelResolver struct {
+	store channelStore
+}
+
+func NewChannelResolver(store channelStore) *ChannelResolver {
 	return &ChannelResolver{store: store}
 }
 

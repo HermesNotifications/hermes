@@ -21,7 +21,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/dispatch"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -67,7 +67,7 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	defer redisClient.Close()
 
 	// ── Store + Services ────────────────────────────────────────────────
-	st := store.New(pool)
+	st := postgres.New(pool)
 
 	// Admin server (with auth)
 	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), logger)

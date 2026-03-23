@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -20,6 +20,27 @@ func (s *Store) GetUserPreference(ctx context.Context, userID, groupID string) (
 		return nil, fmt.Errorf("get user preference: %w", err)
 	}
 	return p, nil
+}
+
+func (s *Store) GetUserPreferences(ctx context.Context, userID string) ([]models.UserPreference, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT user_id, group_id, channels
+		 FROM user_preferences WHERE user_id = $1`, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get user preferences: %w", err)
+	}
+	defer rows.Close()
+
+	var prefs []models.UserPreference
+	for rows.Next() {
+		var p models.UserPreference
+		if err := rows.Scan(&p.UserID, &p.GroupID, &p.Channels); err != nil {
+			return nil, fmt.Errorf("scan user preference: %w", err)
+		}
+		prefs = append(prefs, p)
+	}
+	return prefs, rows.Err()
 }
 
 func (s *Store) SetUserPreference(ctx context.Context, userID, groupID string, channels []string) (*models.UserPreference, error) {

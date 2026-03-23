@@ -9,7 +9,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/bootstrap"
 	"github.com/hermes-notifications/hermes/internal/config"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 	"github.com/hermes-notifications/hermes/internal/userservice"
 )
 
@@ -26,7 +26,7 @@ func main() {
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
 	defer redisClient.Close()
 
-	st := store.New(pool)
+	st := postgres.New(pool)
 
 	// Ensure Hermes internal signing key exists
 	if err := st.EnsureHermesSigningKey(ctx, cfg.JWTSecret); err != nil {

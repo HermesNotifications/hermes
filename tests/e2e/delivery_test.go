@@ -25,7 +25,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/dispatch"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
 func TestDeliveryPipeline(t *testing.T) {
@@ -67,7 +67,7 @@ func TestDeliveryPipeline(t *testing.T) {
 	defer redisClient.Close()
 
 	// ── Store + Services ────────────────────────────────────────────────
-	st := store.New(pool)
+	st := postgres.New(pool)
 
 	// Admin server (with auth)
 	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), logger)

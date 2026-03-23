@@ -19,7 +19,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
 func envOr(key, fallback string) string {
@@ -64,7 +64,7 @@ func TestSendNotification_E2E(t *testing.T) {
 	defer redisClient.Close()
 
 	// Create store and server
-	st := store.New(pool)
+	st := postgres.New(pool)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), logger)
 	srv.SetSkipAuth(false) // Test with auth enabled

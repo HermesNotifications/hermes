@@ -11,7 +11,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
 func main() {
@@ -31,7 +31,7 @@ func main() {
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
 	defer redisClient.Close()
 
-	st := store.New(pool)
+	st := postgres.New(pool)
 	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
 	channelResolver := dispatch.NewChannelResolver(st)
 	d := dispatch.NewDispatch(natsClient, st, templateResolver, channelResolver, logger)

@@ -1,6 +1,6 @@
 //go:build integration
 
-package store_test
+package postgres_test
 
 import (
 	"context"
@@ -119,7 +119,7 @@ func TestInbox(t *testing.T) {
 
 	// 2. MarkRead
 	t.Run("MarkRead", func(t *testing.T) {
-		err := s.MarkRead(ctx, user.ID, notifIDs[0])
+		_, err := s.MarkRead(ctx, user.ID, notifIDs[0])
 		if err != nil {
 			t.Fatalf("MarkRead: %v", err)
 		}
@@ -143,7 +143,7 @@ func TestInbox(t *testing.T) {
 
 	// 3. MarkUnread
 	t.Run("MarkUnread", func(t *testing.T) {
-		err := s.MarkUnread(ctx, user.ID, notifIDs[0])
+		_, err := s.MarkUnread(ctx, user.ID, notifIDs[0])
 		if err != nil {
 			t.Fatalf("MarkUnread: %v", err)
 		}
@@ -167,7 +167,7 @@ func TestInbox(t *testing.T) {
 
 	// 4. Archive
 	t.Run("Archive", func(t *testing.T) {
-		err := s.Archive(ctx, user.ID, notifIDs[0])
+		_, err := s.Archive(ctx, user.ID, notifIDs[0])
 		if err != nil {
 			t.Fatalf("Archive: %v", err)
 		}
@@ -193,7 +193,7 @@ func TestInbox(t *testing.T) {
 
 	// 5. Unarchive
 	t.Run("Unarchive", func(t *testing.T) {
-		err := s.Unarchive(ctx, user.ID, notifIDs[0])
+		_, err := s.Unarchive(ctx, user.ID, notifIDs[0])
 		if err != nil {
 			t.Fatalf("Unarchive: %v", err)
 		}
@@ -209,7 +209,7 @@ func TestInbox(t *testing.T) {
 
 	// 6. SoftDelete
 	t.Run("SoftDelete", func(t *testing.T) {
-		err := s.SoftDelete(ctx, user.ID, notifIDs[0])
+		_, err := s.SoftDelete(ctx, user.ID, notifIDs[0])
 		if err != nil {
 			t.Fatalf("SoftDelete: %v", err)
 		}

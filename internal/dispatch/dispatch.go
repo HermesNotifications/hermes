@@ -14,13 +14,13 @@ import (
 
 type Dispatch struct {
 	nats             *messaging.Client
-	store            *store.Store
+	store            store.NotificationRepository
 	templateResolver *TemplateResolver
 	channelResolver  *ChannelResolver
 	logger           *slog.Logger
 }
 
-func NewDispatch(nats *messaging.Client, store *store.Store, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
+func NewDispatch(nats *messaging.Client, store store.NotificationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
 	return &Dispatch{
 		nats:             nats,
 		store:            store,

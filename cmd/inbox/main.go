@@ -11,7 +11,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/inbox"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
 func main() {
@@ -32,7 +32,7 @@ func main() {
 
 	centrifugoClient := centrifugo.NewClient(cfg.CentrifugoAPIURL, cfg.CentrifugoAPIKey)
 
-	st := store.New(pool)
+	st := postgres.New(pool)
 
 	// Ensure Hermes internal signing key exists
 	if err := st.EnsureHermesSigningKey(ctx, cfg.JWTSecret); err != nil {

@@ -19,7 +19,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/inbox"
 	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
 const testJWTSecret = "test-inbox-jwt-secret-for-integration"
@@ -59,7 +59,7 @@ func TestInbox_ReadPath(t *testing.T) {
 	}
 	defer pool.Close()
 
-	st := store.New(pool)
+	st := postgres.New(pool)
 
 	// ── Seed Data ───────────────────────────────────────────────────────
 	tenantID := uuid.New().String()
