@@ -11,10 +11,11 @@ type Tenant struct {
 }
 
 type APIKey struct {
-	ID        string    `json:"id"`
-	KeyHash   string    `json:"-"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	KeyHash     string    `json:"-"`
+	Name        string    `json:"name"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type User struct {
