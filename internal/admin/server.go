@@ -112,6 +112,7 @@ func (s *Server) routes() {
 	s.registerSendRoutes()
 	s.registerNotificationRoutes()
 	s.registerAuthRoutes()
+	s.registerAPIKeyRoutes()
 }
 
 // API returns the huma API instance for spec generation.
