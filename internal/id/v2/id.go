@@ -66,18 +66,23 @@ func (g *Generator) MustNew() string {
 	return g.New()
 }
 
-// Parse splits an ID into its prefix and raw decoded bytes.
-// Callers that know the config can split time/random portions themselves.
+// Parse splits a prefixed ID into its prefix and raw decoded bytes.
+// The prefix is the part before the first underscore.
+// For IDs without a prefix, use ParseRaw instead.
 func Parse(id string) (prefix string, raw []byte) {
-	data := id
-	if idx := strings.Index(id, "_"); idx >= 0 {
-		prefix = id[:idx]
-		data = id[idx+1:]
+	idx := strings.Index(id, "_")
+	if idx < 0 {
+		decoded, _ := base64.RawURLEncoding.DecodeString(id)
+		return "", decoded
 	}
-
-	decoded, err := base64.RawURLEncoding.DecodeString(data)
-	if err != nil {
-		return prefix, nil
-	}
+	prefix = id[:idx]
+	data := id[idx+1:]
+	decoded, _ := base64.RawURLEncoding.DecodeString(data)
 	return prefix, decoded
+}
+
+// ParseRaw decodes an ID that has no prefix (raw base64url).
+func ParseRaw(id string) []byte {
+	decoded, _ := base64.RawURLEncoding.DecodeString(id)
+	return decoded
 }

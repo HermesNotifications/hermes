@@ -31,13 +31,14 @@ func TestGenerator_New_WithoutPrefix(t *testing.T) {
 	g := id.NewGenerator(id.Config{RandBits: 64})
 	got := g.New()
 
-	if strings.Contains(got, "_") {
-		t.Fatalf("expected no underscore without prefix, got %s", got)
-	}
-
-	_, err := base64.RawURLEncoding.DecodeString(got)
+	// Without a prefix, the entire string is base64url-encoded random bytes.
+	// base64url can contain '_' so we just verify it decodes correctly.
+	decoded, err := base64.RawURLEncoding.DecodeString(got)
 	if err != nil {
 		t.Fatalf("not valid base64url: %v", err)
+	}
+	if len(decoded) == 0 {
+		t.Fatal("expected non-empty decoded bytes")
 	}
 }
 
@@ -86,15 +87,16 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestParse_NoPrefix(t *testing.T) {
+func TestParseRaw(t *testing.T) {
 	g := id.NewGenerator(id.Config{RandBits: 64})
 	original := g.New()
 
-	prefix, raw := id.Parse(original)
-	if prefix != "" {
-		t.Fatalf("expected empty prefix, got %s", prefix)
-	}
+	raw := id.ParseRaw(original)
 	if len(raw) == 0 {
 		t.Fatal("expected raw bytes")
+	}
+	// 64 bits = 8 bytes
+	if len(raw) != 8 {
+		t.Fatalf("expected 8 bytes, got %d", len(raw))
 	}
 }
