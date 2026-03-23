@@ -123,9 +123,14 @@ No new tables. The `api_keys` table stores:
 - `permissions` — array of permission strings
 - `created_at` — timestamp
 
-**New store methods:**
+**Updated store methods:**
 
 ```go
+// CreateAPIKey now accepts permissions. Signature changes from:
+//   CreateAPIKey(ctx context.Context, keyHash, name string) (*models.APIKey, error)
+// to:
+func (s *Store) CreateAPIKey(ctx context.Context, keyHash, name string, permissions []string) (*models.APIKey, error)
+
 // GetAPIKeyByID looks up a single API key by its ID. Returns nil if not found.
 func (s *Store) GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
 
@@ -133,7 +138,13 @@ func (s *Store) GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, e
 func (s *Store) DeleteAPIKey(ctx context.Context, id string) error
 ```
 
-These are added to the `AdminStore` interface and implemented in `internal/store/apikeys.go`.
+`ListAPIKeys` query updated to include `permissions` in the SELECT.
+
+`models.APIKey` struct updated to include `Permissions []string`.
+
+All changes reflected in the `AdminStore` interface in `internal/admin/server.go` and the mock in `testutil_test.go`.
+
+**Existing unique index on `key_hash`:** The `idx_api_keys_key_hash` unique index is retained. With HMAC-SHA256, different secrets always produce different hashes (deterministic but collision-resistant), so the uniqueness constraint remains valid and provides an extra safety net against duplicate key insertion.
 
 **Tenant scoping:** API keys are platform-level, not tenant-scoped. Any valid key can operate on any tenant (subject to its permissions). Tenant-scoped keys are out of scope for this design.
 
@@ -154,7 +165,24 @@ These are added to the `AdminStore` interface and implemented in `internal/store
 
 **Validation on create:** The `POST /v1/apikeys` endpoint validates the `permissions` array against the known permission set. Unknown permissions return 400. A key with `apikeys:manage` can be created via the API (the caller already has `apikeys:manage` to reach the endpoint), enabling delegation.
 
-**Enforcement:** New middleware `RequirePermission(perm string)` reads permissions from request context (set during key validation) and returns 403 if the required permission is missing.
+**Enforcement:**
+
+The `APIKeyValidator` type in `internal/auth/middleware.go` changes from `func(rawKey string) bool` to:
+
+```go
+// ValidatedKey holds the result of a successful API key validation.
+type ValidatedKey struct {
+    ID          string
+    Permissions []string
+}
+
+// APIKeyValidator returns the validated key on success, or nil on failure.
+type APIKeyValidator func(rawKey string) *ValidatedKey
+```
+
+`APIKeyMiddleware` calls the validator, and on success attaches `ValidatedKey` to the request context. This enables downstream middleware to read the key's identity and permissions.
+
+New middleware `RequirePermission(perm string)` reads the `ValidatedKey` from request context and returns 403 if the required permission is missing.
 
 **Route mapping:**
 
