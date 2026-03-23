@@ -27,6 +27,7 @@ type Client struct {
 	Types         *TypesService
 	Notifications *NotificationsService
 	Auth          *AuthService
+	APIKeys       *APIKeysService
 }
 
 type Option func(*Client)
@@ -50,6 +51,7 @@ func New(baseURL, apiKey string, opts ...Option) *Client {
 	c.Types = &TypesService{client: c}
 	c.Notifications = &NotificationsService{client: c}
 	c.Auth = &AuthService{client: c}
+	c.APIKeys = &APIKeysService{client: c}
 	return c
 }
 
