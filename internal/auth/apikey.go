@@ -1,48 +1,90 @@
 package auth
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
-	"crypto/subtle"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
-	"golang.org/x/crypto/argon2"
+	id "github.com/hermes-notifications/hermes/internal/id/v2"
 )
 
-const (
-	argonTime    = 1
-	argonMemory  = 64 * 1024
-	argonThreads = 4
-	argonKeyLen  = 32
-	saltLen      = 16
-)
+var apiKeyIDGen = id.NewGenerator(id.Config{Prefix: "key", RandBits: 36})
 
-func HashAPIKey(raw string) (string, error) {
-	salt := make([]byte, saltLen)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("generate salt: %w", err)
-	}
-	hash := argon2.IDKey([]byte(raw), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
-	return fmt.Sprintf("%s$%s",
-		base64.RawStdEncoding.EncodeToString(salt),
-		base64.RawStdEncoding.EncodeToString(hash),
-	), nil
+// HMACHashAPIKey computes an HMAC-SHA256 hash of the secret using hmacKey.
+// Returns the hex-encoded HMAC.
+func HMACHashAPIKey(secret, hmacKey string) string {
+	mac := hmac.New(sha256.New, []byte(hmacKey))
+	mac.Write([]byte(secret))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func VerifyAPIKey(raw, encoded string) bool {
-	parts := strings.SplitN(encoded, "$", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+// HMACVerifyAPIKey verifies a secret against an HMAC hash using constant-time comparison.
+func HMACVerifyAPIKey(secret, hash, hmacKey string) bool {
+	expected, err := hex.DecodeString(hash)
 	if err != nil {
 		return false
 	}
-	expected, err := base64.RawStdEncoding.DecodeString(parts[1])
-	if err != nil {
-		return false
+	mac := hmac.New(sha256.New, []byte(hmacKey))
+	mac.Write([]byte(secret))
+	return hmac.Equal(mac.Sum(nil), expected)
+}
+
+// GenerateAPIKey creates a new API key with the given environment prefix.
+// envPrefix is "" for production, "stg" for staging, "dev" for development.
+// Returns the full raw key string and the key ID (e.g., "key_a8f3B2").
+func GenerateAPIKey(envPrefix string) (raw string, keyID string, err error) {
+	keyID = apiKeyIDGen.New()
+
+	secretBytes := make([]byte, 16) // 128 bits
+	if _, err := rand.Read(secretBytes); err != nil {
+		return "", "", fmt.Errorf("generate secret: %w", err)
 	}
-	hash := argon2.IDKey([]byte(raw), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
-	return subtle.ConstantTimeCompare(hash, expected) == 1
+	secret := base64.RawURLEncoding.EncodeToString(secretBytes)
+
+	if envPrefix != "" {
+		raw = fmt.Sprintf("hms_%s_%s_%s", envPrefix, keyID, secret)
+	} else {
+		raw = fmt.Sprintf("hms_%s_%s", keyID, secret)
+	}
+	return raw, keyID, nil
+}
+
+// ParseAPIKey extracts the key ID and secret from a raw API key string.
+// Handles formats:
+//   - hms_key_<id>_<secret>       (production)
+//   - hms_stg_key_<id>_<secret>   (staging)
+//   - hms_dev_key_<id>_<secret>   (dev)
+func ParseAPIKey(raw string) (keyID string, secret string, err error) {
+	if !strings.HasPrefix(raw, "hms_") {
+		return "", "", fmt.Errorf("invalid api key format: missing hms_ prefix")
+	}
+
+	trimmed := strings.TrimPrefix(raw, "hms_")
+
+	// Remove optional environment prefix (stg_, dev_)
+	for _, env := range []string{"stg_", "dev_"} {
+		trimmed = strings.TrimPrefix(trimmed, env)
+	}
+
+	// Now trimmed should be "key_<id>_<secret>"
+	if !strings.HasPrefix(trimmed, "key_") {
+		return "", "", fmt.Errorf("invalid api key format: missing key_ prefix")
+	}
+	trimmed = strings.TrimPrefix(trimmed, "key_")
+
+	// Split into <id>_<secret>
+	idx := strings.Index(trimmed, "_")
+	if idx <= 0 || idx >= len(trimmed)-1 {
+		return "", "", fmt.Errorf("invalid api key format: cannot split id and secret")
+	}
+
+	idPart := trimmed[:idx]
+	secret = trimmed[idx+1:]
+
+	keyID = "key_" + idPart
+	return keyID, secret, nil
 }
