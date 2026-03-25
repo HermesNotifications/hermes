@@ -6,12 +6,11 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/hermes-notifications/hermes/internal/id"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-func (s *Store) CreateAPIKey(ctx context.Context, keyHash, name string, permissions []string) (*models.APIKey, error) {
-	k := &models.APIKey{ID: id.New(), KeyHash: keyHash, Name: name, Permissions: permissions}
+func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error) {
+	k := &models.APIKey{ID: id, KeyHash: keyHash, Name: name, Permissions: permissions}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO api_keys (id, key_hash, name, permissions) VALUES ($1, $2, $3, $4) RETURNING created_at`,
 		k.ID, k.KeyHash, k.Name, k.Permissions,

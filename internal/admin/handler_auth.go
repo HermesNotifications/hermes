@@ -14,8 +14,9 @@ import (
 
 type tokenInput struct {
 	Body struct {
-		UserID   string `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
-		TenantID string `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
+		UserID    string `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
+		TenantID  string `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
+		ExpiresIn *int   `json:"expires_in,omitempty" minimum:"3600" maximum:"604800" doc:"Requested token lifetime in seconds (min 3600 = 1h, max 604800 = 7d, default 14400 = 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes."`
 	}
 }
 
@@ -45,9 +46,13 @@ func (s *Server) registerAuthRoutes() {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
 
-		// 1h base TTL with ±10% jitter (54-66 minutes)
-		baseTTL := time.Hour
-		jitterRange := big.NewInt(int64(baseTTL / 5)) // 12 minutes range
+		// Default 4h base TTL, overridable via expires_in
+		baseTTL := 4 * time.Hour
+		if input.Body.ExpiresIn != nil {
+			baseTTL = time.Duration(*input.Body.ExpiresIn) * time.Second
+		}
+		// ±10% jitter to prevent thundering-herd token refreshes
+		jitterRange := big.NewInt(int64(baseTTL / 5))
 		jitterBig, _ := rand.Int(rand.Reader, jitterRange)
 		jitter := time.Duration(jitterBig.Int64()) - baseTTL/10
 		exp := time.Now().Add(baseTTL + jitter)
