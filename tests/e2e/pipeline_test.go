@@ -77,7 +77,7 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	// Dispatch
 	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
 	channelResolver := dispatch.NewChannelResolver(st)
-	rtr := dispatch.NewDispatch(natsClient, st, templateResolver, channelResolver, logger)
+	rtr := dispatch.NewDispatch(natsClient, st, st, templateResolver, channelResolver, logger)
 
 	// Event Writer
 	ew := eventwriter.New(natsClient, st, logger)

@@ -41,6 +41,8 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte) error {
 		Channel:        w.channel,
 		Title:          msg.Content.Title,
 		Body:           msg.Content.Body,
+		EmailTo:        msg.Recipient.Email,
+		PhoneTo:        msg.Recipient.Phone,
 	}
 	if msg.Content.ActionURL != nil {
 		req.ActionURL = *msg.Content.ActionURL

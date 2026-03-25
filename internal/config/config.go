@@ -5,6 +5,17 @@ import (
 	"strconv"
 )
 
+type EmailConfig struct {
+	Provider     string
+	From         string
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SESRegion    string
+	LayoutPath   string
+}
+
 type Config struct {
 	HTTPPort         int
 	DatabaseURL      string
@@ -13,7 +24,7 @@ type Config struct {
 	JWTSecret        string
 	CentrifugoAPIURL string
 	CentrifugoAPIKey string
-	EmailWebhookURL  string
+	Email            EmailConfig
 	SMSWebhookURL    string
 	APIKeyHMACSecret string
 }
@@ -27,7 +38,16 @@ func Load() Config {
 		JWTSecret:        envStr("HERMES_JWT_SECRET", "hermes-jwt-secret"),
 		CentrifugoAPIURL: envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000"),
 		CentrifugoAPIKey: envStr("HERMES_CENTRIFUGO_API_KEY", "centrifugo-api-key"),
-		EmailWebhookURL:  envStr("HERMES_EMAIL_WEBHOOK_URL", "http://localhost:9090/email"),
+		Email: EmailConfig{
+			Provider:     envStr("HERMES_EMAIL_PROVIDER", "smtp"),
+			From:         envStr("HERMES_EMAIL_FROM", "noreply@example.com"),
+			SMTPHost:     envStr("HERMES_EMAIL_SMTP_HOST", "localhost"),
+			SMTPPort:     envInt("HERMES_EMAIL_SMTP_PORT", 1025),
+			SMTPUsername: envStr("HERMES_EMAIL_SMTP_USERNAME", ""),
+			SMTPPassword: envStr("HERMES_EMAIL_SMTP_PASSWORD", ""),
+			SESRegion:    envStr("HERMES_EMAIL_SES_REGION", "us-east-1"),
+			LayoutPath:   envStr("HERMES_EMAIL_LAYOUT_PATH", ""),
+		},
 		SMSWebhookURL:    envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
 		APIKeyHMACSecret: envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
 	}
