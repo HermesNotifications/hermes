@@ -15,15 +15,17 @@ import (
 type Dispatch struct {
 	nats             *messaging.Client
 	store            store.NotificationRepository
+	users            store.UserRepository
 	templateResolver *TemplateResolver
 	channelResolver  *ChannelResolver
 	logger           *slog.Logger
 }
 
-func NewDispatch(nats *messaging.Client, store store.NotificationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
+func NewDispatch(nats *messaging.Client, store store.NotificationRepository, users store.UserRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
 	return &Dispatch{
 		nats:             nats,
 		store:            store,
+		users:            users,
 		templateResolver: templateResolver,
 		channelResolver:  channelResolver,
 		logger:           logger,
@@ -100,6 +102,52 @@ func (d *Dispatch) handleSend(data []byte) error {
 		return nil
 	}
 
+	// Resolve user contact info for recipient fields
+	user, err := d.users.GetUserByID(ctx, msg.UserID)
+	if err != nil {
+		log.Error("resolve user", "error", err)
+		return fmt.Errorf("resolve user: %w", err)
+	}
+
+	recipient := hermenats.Recipient{}
+	if user.Email != nil {
+		recipient.Email = *user.Email
+	}
+	if user.Phone != nil {
+		recipient.Phone = *user.Phone
+	}
+
+	// Filter channels that require contact info the user doesn't have
+	var filteredChannels []string
+	for _, ch := range channels {
+		switch ch {
+		case "email":
+			if recipient.Email == "" {
+				log.Warn("skipping email channel: user has no email", "user_id", msg.UserID)
+				d.publishEvent(msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
+					"reason": "user has no email address",
+				})
+				continue
+			}
+		case "sms":
+			if recipient.Phone == "" {
+				log.Warn("skipping sms channel: user has no phone", "user_id", msg.UserID)
+				d.publishEvent(msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
+					"reason": "user has no phone number",
+				})
+				continue
+			}
+		}
+		filteredChannels = append(filteredChannels, ch)
+	}
+	channels = filteredChannels
+
+	if len(channels) == 0 {
+		log.Warn("no channels after contact filtering")
+		d.publishEvent(msg.NotificationID, "", "routing.no_channels", "warn", nil)
+		return nil
+	}
+
 	// Update notification channels in DB
 	if err := d.store.UpdateNotificationChannels(ctx, msg.NotificationID, channels); err != nil {
 		log.Error("update notification channels", "error", err)
@@ -117,6 +165,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 			Channel:        ch,
 			Content:        deliveryContent,
 			Metadata:       msg.Metadata,
+			Recipient:      recipient,
 			Attempt:        msg.Attempt,
 		}
 

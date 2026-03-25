@@ -27,6 +27,12 @@ type MessageMetadata struct {
 	Type  string `json:"type,omitempty"`
 }
 
+// Recipient holds resolved contact information for the notification target.
+type Recipient struct {
+	Email string `json:"email,omitempty"`
+	Phone string `json:"phone,omitempty"`
+}
+
 // DeliveryMessage is published to delivery.{channel} by the Dispatch service.
 type DeliveryMessage struct {
 	NotificationID string          `json:"notification_id"`
@@ -35,6 +41,7 @@ type DeliveryMessage struct {
 	Channel        string          `json:"channel"`
 	Content        MessageContent  `json:"content"`
 	Metadata       MessageMetadata `json:"metadata"`
+	Recipient      Recipient       `json:"recipient"`
 	Attempt        int             `json:"attempt"`
 }
 

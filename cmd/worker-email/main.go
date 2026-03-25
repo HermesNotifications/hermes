@@ -10,6 +10,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/bootstrap"
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/delivery"
+	"github.com/hermes-notifications/hermes/internal/email"
 	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
@@ -24,9 +25,27 @@ func main() {
 	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
 
-	provider := delivery.NewWebhookProvider("email", cfg.EmailWebhookURL)
+	emailCfg := email.Config{
+		Provider:     cfg.Email.Provider,
+		From:         cfg.Email.From,
+		SMTPHost:     cfg.Email.SMTPHost,
+		SMTPPort:     cfg.Email.SMTPPort,
+		SMTPUsername: cfg.Email.SMTPUsername,
+		SMTPPassword: cfg.Email.SMTPPassword,
+		SESRegion:    cfg.Email.SESRegion,
+		LayoutPath:   cfg.Email.LayoutPath,
+	}
 
-	worker := delivery.NewWorker(natsClient, provider, "email", "worker-email", logger)
+	emailProvider, err := email.NewProvider(emailCfg)
+	if err != nil {
+		logger.Error("create email provider", "error", err)
+		os.Exit(1)
+	}
+
+	layout := email.MustLoadLayout(cfg.Email.LayoutPath, logger)
+	adapter := email.NewDeliveryAdapter(emailProvider, cfg.Email.From, layout)
+
+	worker := delivery.NewWorker(natsClient, adapter, "email", "worker-email", logger)
 	if err := worker.Start(context.Background()); err != nil {
 		logger.Error("start worker", "error", err)
 		os.Exit(1)
