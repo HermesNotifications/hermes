@@ -19,7 +19,7 @@ Deployment + Service following the same pattern as `postgres.yaml` and `redis.ya
 
 - **Image:** `axllent/mailpit:latest`
 - **Ports:** 1025 (SMTP), 8025 (HTTP UI)
-- **Readiness probe:** HTTP GET on port 8025 at `/livez`
+- **Readiness probe:** TCP socket on port 1025 (consistent with exec-based probes used by postgres/redis)
 - **Service:** ClusterIP exposing both ports
 - **Labels:** `app.kubernetes.io/name: mailpit`, `app.kubernetes.io/component: email`
 
@@ -38,7 +38,7 @@ k8s_resource("mailpit", labels=["infra"], port_forwards=["8025:8025"])
 
 ## What stays the same
 
-- Email worker already defaults to SMTP port 1025 and provider `smtp` — no change needed
+- `HERMES_EMAIL_SMTP_PORT` defaults to `1025` and `HERMES_EMAIL_PROVIDER` defaults to `smtp` — both match Mailpit, no override needed
 - `HERMES_EMAIL_FROM` default (`noreply@example.com`) works fine for local dev
 - Docker Compose Mailpit for `make test-e2e` is unchanged
 - No base manifest changes — Mailpit is local-dev-only (production/staging use real email providers)
