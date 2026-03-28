@@ -1,6 +1,9 @@
 load("ext://restart_process", "docker_build_with_restart")
 load("ext://helm_remote", "helm_remote")
 
+config.define_bool("datadog", args=True, usage="Enable Datadog Agent (requires DD_API_KEY)")
+cfg = config.parse()
+
 # --- Config ---
 k3d_registry = "k3d-hermes-registry.localhost:5111"
 
@@ -78,7 +81,7 @@ for svc_name, svc_cfg in services.items():
     # Output to bin/<svc>/service so it matches the Dockerfile COPY path
     local_resource(
         "compile-" + svc_name,
-        cmd="CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
+        cmd="CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go run github.com/DataDog/orchestrion go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
             goarch=goarch, svc=svc_name,
         ),
         deps=[
@@ -111,3 +114,8 @@ for svc_name, svc_cfg in services.items():
         resource_deps=["compile-" + svc_name],
         labels=["services"],
     )
+
+# --- Datadog (opt-in) ---
+if cfg.get("datadog", False):
+    k8s_yaml(kustomize("deploy/k8s/overlays/local/datadog"))
+    k8s_resource("datadog-agent", labels=["infra"])

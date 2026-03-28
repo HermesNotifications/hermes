@@ -40,6 +40,8 @@ spec:
           env:
             - name: HERMES_HTTP_PORT
               value: "8080"
+            - name: DD_SERVICE
+              value: hermes-admin
           resources:
             requests:
               cpu: 50m

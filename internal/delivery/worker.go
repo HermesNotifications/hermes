@@ -21,8 +21,8 @@ func NewWorker(nats *messaging.Client, provider Provider, channel, consumer stri
 	return &Worker{nats: nats, provider: provider, channel: channel, consumer: consumer, logger: logger}
 }
 
-func (w *Worker) Start(ctx context.Context) error {
-	return w.nats.Subscribe("delivery."+w.channel, w.consumer, func(data []byte) error {
+func (w *Worker) Start(_ context.Context) error {
+	return w.nats.Subscribe("delivery."+w.channel, w.consumer, func(ctx context.Context, data []byte) error {
 		return w.handleMessage(ctx, data)
 	})
 }
@@ -54,18 +54,18 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte) error {
 	result, err := w.provider.Send(ctx, req)
 	if err != nil {
 		w.logger.Error("delivery failed", "notification_id", msg.NotificationID, "channel", w.channel, "error", err)
-		w.publishEvent(msg.NotificationID, w.channel+".failed", "error", map[string]any{"error": err.Error()})
+		w.publishEvent(ctx, msg.NotificationID, w.channel+".failed", "error", map[string]any{"error": err.Error()})
 		return nil
 	}
 
 	w.logger.Info("delivery succeeded", "notification_id", msg.NotificationID, "channel", w.channel)
-	w.publishEvent(msg.NotificationID, w.channel+".sent", "info", map[string]any{
+	w.publishEvent(ctx, msg.NotificationID, w.channel+".sent", "info", map[string]any{
 		"provider": result.ProviderName, "provider_id": result.ProviderID,
 	})
 	return nil
 }
 
-func (w *Worker) publishEvent(notificationID, event, severity string, metadata map[string]any) {
+func (w *Worker) publishEvent(ctx context.Context, notificationID, event, severity string, metadata map[string]any) {
 	if w.nats == nil {
 		return
 	}
@@ -77,7 +77,7 @@ func (w *Worker) publishEvent(notificationID, event, severity string, metadata m
 		Metadata:       metadata,
 	}
 	evtBytes, _ := json.Marshal(evt)
-	if err := w.nats.Publish("notification.events", evtBytes); err != nil {
+	if err := w.nats.Publish(ctx, "notification.events", evtBytes); err != nil {
 		w.logger.Error("publish event failed", "error", err)
 	}
 }

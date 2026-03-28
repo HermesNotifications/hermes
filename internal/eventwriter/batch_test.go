@@ -1,6 +1,7 @@
 package eventwriter_test
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -12,15 +13,20 @@ func TestBatch_FlushOnSize(t *testing.T) {
 	var mu sync.Mutex
 	var flushed [][]int
 
-	batch := eventwriter.NewBatch[int](3, time.Minute, func(items []int) {
+	batch := eventwriter.NewBatch[int](3, time.Minute, func(items []eventwriter.BatchItem[int]) {
 		mu.Lock()
-		flushed = append(flushed, items)
+		msgs := make([]int, len(items))
+		for i, item := range items {
+			msgs[i] = item.Msg
+		}
+		flushed = append(flushed, msgs)
 		mu.Unlock()
 	})
 
-	batch.Add(1)
-	batch.Add(2)
-	batch.Add(3) // triggers flush
+	ctx := context.Background()
+	batch.Add(ctx, 1)
+	batch.Add(ctx, 2)
+	batch.Add(ctx, 3) // triggers flush
 
 	mu.Lock()
 	if len(flushed) != 1 || len(flushed[0]) != 3 {
@@ -33,14 +39,19 @@ func TestBatch_FlushOnInterval(t *testing.T) {
 	var mu sync.Mutex
 	var flushed [][]int
 
-	batch := eventwriter.NewBatch[int](100, 50*time.Millisecond, func(items []int) {
+	batch := eventwriter.NewBatch[int](100, 50*time.Millisecond, func(items []eventwriter.BatchItem[int]) {
 		mu.Lock()
-		flushed = append(flushed, items)
+		msgs := make([]int, len(items))
+		for i, item := range items {
+			msgs[i] = item.Msg
+		}
+		flushed = append(flushed, msgs)
 		mu.Unlock()
 	})
 
-	batch.Add(1)
-	batch.Add(2)
+	ctx := context.Background()
+	batch.Add(ctx, 1)
+	batch.Add(ctx, 2)
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -54,11 +65,15 @@ func TestBatch_FlushOnInterval(t *testing.T) {
 func TestBatch_ManualFlush(t *testing.T) {
 	var flushed [][]int
 
-	batch := eventwriter.NewBatch[int](100, time.Minute, func(items []int) {
-		flushed = append(flushed, items)
+	batch := eventwriter.NewBatch[int](100, time.Minute, func(items []eventwriter.BatchItem[int]) {
+		msgs := make([]int, len(items))
+		for i, item := range items {
+			msgs[i] = item.Msg
+		}
+		flushed = append(flushed, msgs)
 	})
 
-	batch.Add(1)
+	batch.Add(context.Background(), 1)
 	batch.Flush()
 
 	if len(flushed) != 1 || len(flushed[0]) != 1 {

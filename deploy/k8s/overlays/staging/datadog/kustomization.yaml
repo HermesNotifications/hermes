@@ -1,0 +1,51 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../base/datadog
+
+patches:
+  - target:
+      kind: Deployment
+      name: "hermes-.*"
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: unused
+      spec:
+        template:
+          spec:
+            containers:
+              - name: "*"
+                env:
+                  - name: DD_AGENT_HOST
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: status.hostIP
+                  - name: DD_ENV
+                    value: staging
+                  - name: DD_VERSION
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: metadata.labels['app.kubernetes.io/version']
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: datadog-secret
+  namespace: hermes
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: datadog-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: api-key
+      remoteRef:
+        key: hermes/staging
+        property: datadog_api_key

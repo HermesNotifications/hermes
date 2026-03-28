@@ -2,6 +2,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 RUN apk --no-cache add tzdata ca-certificates
+RUN go install github.com/DataDog/orchestrion@v1.8.0
 
 ARG SERVICE
 ARG VERSION=dev
@@ -12,7 +13,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+    orchestrion go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
     -o /service ./cmd/${SERVICE}/
 

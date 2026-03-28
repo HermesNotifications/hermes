@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"time"
 
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/DataDog/dd-trace-go/v2/datastreams"
+	"github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/models"
+	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
@@ -29,14 +31,14 @@ func New(nats *messaging.Client, st store.EventRepository, logger *slog.Logger) 
 	return w
 }
 
-func (w *Writer) Start(ctx context.Context) error {
-	return w.nats.Subscribe("notification.events", "event-writer", func(data []byte) error {
+func (w *Writer) Start(_ context.Context) error {
+	return w.nats.Subscribe("notification.events", "event-writer", func(ctx context.Context, data []byte) error {
 		msg, err := hermenats.UnmarshalEvent(data)
 		if err != nil {
 			w.logger.Error("unmarshal event", "error", err)
 			return nil // don't retry bad messages
 		}
-		w.batch.Add(msg)
+		w.batch.Add(ctx, msg)
 		return nil
 	})
 }
@@ -45,12 +47,38 @@ func (w *Writer) Stop() {
 	w.batch.Flush()
 }
 
-func (w *Writer) flush(events []*hermenats.EventMessage) {
-	ctx := context.Background()
+func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
+	// Merge DSM pathways (fan-in) from all batched messages.
+	ctxs := make([]context.Context, len(items))
+	for i, item := range items {
+		ctxs[i] = item.Ctx
+	}
+	ctx := datastreams.MergeContexts(ctxs...)
 
-	// Convert to models for DB insert
-	dbEvents := make([]models.NotificationEvent, len(events))
-	for i, e := range events {
+	// Create flush span with links back to each originating trace.
+	var links []tracer.SpanLink
+	for _, item := range items {
+		if sp, ok := tracer.SpanFromContext(item.Ctx); ok {
+			links = append(links, tracer.SpanLink{
+				TraceID:     sp.Context().TraceIDLower(),
+				TraceIDHigh: sp.Context().TraceIDUpper(),
+				SpanID:      sp.Context().SpanID(),
+			})
+		}
+	}
+	opts := []tracer.StartSpanOption{
+		tracer.ResourceName("notification.events"),
+	}
+	if len(links) > 0 {
+		opts = append(opts, tracer.WithSpanLinks(links))
+	}
+	span, ctx := tracer.StartSpanFromContext(ctx, "eventwriter.flush", opts...)
+	defer span.Finish()
+
+	// Convert to models for DB insert.
+	dbEvents := make([]models.NotificationEvent, len(items))
+	for i, item := range items {
+		e := item.Msg
 		var metadata []byte
 		if e.Metadata != nil {
 			metadata, _ = json.Marshal(e.Metadata)
@@ -64,14 +92,17 @@ func (w *Writer) flush(events []*hermenats.EventMessage) {
 		}
 	}
 
-	// Batch insert events
+	// Batch insert events.
 	if err := w.store.InsertEvents(ctx, dbEvents); err != nil {
-		w.logger.Error("batch insert events", "error", err, "count", len(events))
+		span.SetTag("error", true)
+		span.SetTag("error.message", err.Error())
+		w.logger.Error("batch insert events", "error", err, "count", len(items))
 		return
 	}
 
-	// Update notification statuses based on events
-	for _, e := range events {
+	// Update notification statuses based on events.
+	for _, item := range items {
+		e := item.Msg
 		status := eventToStatus(e.Event)
 		if status != "" {
 			if err := w.store.UpdateNotificationStatus(ctx, e.NotificationID, status, time.Now()); err != nil {
@@ -80,7 +111,7 @@ func (w *Writer) flush(events []*hermenats.EventMessage) {
 		}
 	}
 
-	w.logger.Info("flushed events", "count", len(events))
+	w.logger.Info("flushed events", "count", len(items))
 }
 
 // eventToStatus maps event names to notification statuses.

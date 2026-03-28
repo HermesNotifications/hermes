@@ -1,20 +1,27 @@
 package eventwriter
 
 import (
+	"context"
 	"sync"
 	"time"
 )
 
+// BatchItem pairs a message with its originating trace context.
+type BatchItem[T any] struct {
+	Ctx context.Context
+	Msg T
+}
+
 type Batch[T any] struct {
-	items    []T
+	items    []BatchItem[T]
 	maxSize  int
-	flushFn  func([]T)
+	flushFn  func([]BatchItem[T])
 	mu       sync.Mutex
 	timer    *time.Timer
 	interval time.Duration
 }
 
-func NewBatch[T any](maxSize int, interval time.Duration, flushFn func([]T)) *Batch[T] {
+func NewBatch[T any](maxSize int, interval time.Duration, flushFn func([]BatchItem[T])) *Batch[T] {
 	return &Batch[T]{
 		maxSize:  maxSize,
 		interval: interval,
@@ -22,9 +29,9 @@ func NewBatch[T any](maxSize int, interval time.Duration, flushFn func([]T)) *Ba
 	}
 }
 
-func (b *Batch[T]) Add(item T) {
+func (b *Batch[T]) Add(ctx context.Context, item T) {
 	b.mu.Lock()
-	b.items = append(b.items, item)
+	b.items = append(b.items, BatchItem[T]{Ctx: ctx, Msg: item})
 
 	if len(b.items) >= b.maxSize {
 		items := b.items
