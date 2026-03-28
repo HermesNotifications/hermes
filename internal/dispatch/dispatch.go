@@ -33,17 +33,18 @@ func NewDispatch(nats *messaging.Client, store store.NotificationRepository, use
 }
 
 func (d *Dispatch) Start() error {
-	return d.nats.Subscribe("notification.send", "dispatch", d.handleSend)
+	return d.nats.Subscribe("notification.send", "dispatch", func(ctx context.Context, data []byte) error {
+		return d.handleSend(ctx, data)
+	})
 }
 
-func (d *Dispatch) handleSend(data []byte) error {
+func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 	msg, err := hermenats.UnmarshalSend(data)
 	if err != nil {
 		d.logger.Error("unmarshal send message", "error", err)
 		return fmt.Errorf("unmarshal send: %w", err)
 	}
 
-	ctx := context.Background()
 	log := d.logger.With("notification_id", msg.NotificationID)
 
 	var nt *models.NotificationType
@@ -55,7 +56,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 		nt, err = d.templateResolver.Resolve(ctx, msg.Metadata.Type)
 		if err != nil {
 			log.Error("resolve type", "error", err, "type", msg.Metadata.Type)
-			d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+			d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			return fmt.Errorf("resolve type: %w", err)
@@ -64,7 +65,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 		rendered, err = RenderTemplates(nt, msg.Data)
 		if err != nil {
 			log.Error("render templates", "error", err)
-			d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+			d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			return fmt.Errorf("render templates: %w", err)
@@ -74,7 +75,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 		title, body, err := RenderDirectContent(content.Title, content.Body, msg.Data)
 		if err != nil {
 			log.Error("render direct content", "error", err)
-			d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+			d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			return fmt.Errorf("render direct content: %w", err)
@@ -87,7 +88,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 	channels, err := d.channelResolver.ResolveChannels(ctx, msg.Channels, msg.UserID, msg.GroupID)
 	if err != nil {
 		log.Error("resolve channels", "error", err)
-		d.publishEvent(msg.NotificationID, "", "routing.failed", "error", map[string]any{
+		d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
 			"error": err.Error(),
 		})
 		return fmt.Errorf("resolve channels: %w", err)
@@ -98,7 +99,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 
 	if len(channels) == 0 {
 		log.Warn("no channels after filtering")
-		d.publishEvent(msg.NotificationID, "", "routing.no_channels", "warn", nil)
+		d.publishEvent(ctx, msg.NotificationID, "", "routing.no_channels", "warn", nil)
 		return nil
 	}
 
@@ -124,7 +125,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 		case "email":
 			if recipient.Email == "" {
 				log.Warn("skipping email channel: user has no email", "user_id", msg.UserID)
-				d.publishEvent(msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
+				d.publishEvent(ctx, msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
 					"reason": "user has no email address",
 				})
 				continue
@@ -132,7 +133,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 		case "sms":
 			if recipient.Phone == "" {
 				log.Warn("skipping sms channel: user has no phone", "user_id", msg.UserID)
-				d.publishEvent(msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
+				d.publishEvent(ctx, msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
 					"reason": "user has no phone number",
 				})
 				continue
@@ -144,7 +145,7 @@ func (d *Dispatch) handleSend(data []byte) error {
 
 	if len(channels) == 0 {
 		log.Warn("no channels after contact filtering")
-		d.publishEvent(msg.NotificationID, "", "routing.no_channels", "warn", nil)
+		d.publishEvent(ctx, msg.NotificationID, "", "routing.no_channels", "warn", nil)
 		return nil
 	}
 
@@ -176,16 +177,16 @@ func (d *Dispatch) handleSend(data []byte) error {
 		}
 
 		subject := "delivery." + ch
-		if err := d.nats.Publish(subject, dmBytes); err != nil {
+		if err := d.nats.Publish(ctx, subject, dmBytes); err != nil {
 			log.Error("publish delivery", "error", err, "channel", ch)
-			d.publishEvent(msg.NotificationID, ch, "delivery.publish_failed", "error", map[string]any{
+			d.publishEvent(ctx, msg.NotificationID, ch, "delivery.publish_failed", "error", map[string]any{
 				"error": err.Error(),
 			})
 			continue
 		}
 
 		log.Info("published to delivery", "channel", ch)
-		d.publishEvent(msg.NotificationID, ch, "routing.dispatched", "info", nil)
+		d.publishEvent(ctx, msg.NotificationID, ch, "routing.dispatched", "info", nil)
 	}
 
 	return nil
@@ -218,7 +219,7 @@ func contentForChannel(channel string, original hermenats.MessageContent, render
 	return mc
 }
 
-func (d *Dispatch) publishEvent(notificationID, channel, event, severity string, metadata map[string]any) {
+func (d *Dispatch) publishEvent(ctx context.Context, notificationID, channel, event, severity string, metadata map[string]any) {
 	em := &hermenats.EventMessage{
 		NotificationID: notificationID,
 		Channel:        channel,
@@ -231,7 +232,7 @@ func (d *Dispatch) publishEvent(notificationID, channel, event, severity string,
 		d.logger.Error("marshal event message", "error", err)
 		return
 	}
-	if err := d.nats.Publish("notification.events", emBytes); err != nil {
+	if err := d.nats.Publish(ctx, "notification.events", emBytes); err != nil {
 		d.logger.Error("publish event", "error", err)
 	}
 }

@@ -29,8 +29,8 @@ func New(nats *messaging.Client, st store.EventRepository, logger *slog.Logger) 
 	return w
 }
 
-func (w *Writer) Start(ctx context.Context) error {
-	return w.nats.Subscribe("notification.events", "event-writer", func(data []byte) error {
+func (w *Writer) Start(_ context.Context) error {
+	return w.nats.Subscribe("notification.events", "event-writer", func(_ context.Context, data []byte) error {
 		msg, err := hermenats.UnmarshalEvent(data)
 		if err != nil {
 			w.logger.Error("unmarshal event", "error", err)

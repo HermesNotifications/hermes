@@ -44,7 +44,7 @@ func TestPublish_And_Subscribe(t *testing.T) {
 	}
 
 	payload := []byte(`{"test": true}`)
-	if err := client.Publish("notification.send", payload); err != nil {
+	if err := client.Publish(context.Background(), "notification.send", payload); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 
@@ -52,7 +52,7 @@ func TestPublish_And_Subscribe(t *testing.T) {
 	defer cancel()
 
 	received := make(chan []byte, 1)
-	if err := client.Subscribe("notification.send", "test-consumer", func(data []byte) error {
+	if err := client.Subscribe("notification.send", "test-consumer", func(_ context.Context, data []byte) error {
 		received <- data
 		return nil
 	}); err != nil {

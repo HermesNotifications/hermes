@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hermes-notifications/hermes/internal/tracing"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -54,12 +55,16 @@ func (c *Client) SetupStreams(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) Publish(subject string, data []byte) error {
-	_, err := c.js.Publish(context.Background(), subject, data)
+func (c *Client) Publish(ctx context.Context, subject string, data []byte) error {
+	msg := &nats.Msg{Subject: subject, Data: data}
+	_, span := tracing.InjectNATS(ctx, msg)
+	defer span.Finish()
+
+	_, err := c.js.PublishMsg(ctx, msg)
 	return err
 }
 
-func (c *Client) Subscribe(subject, consumer string, handler func(data []byte) error) error {
+func (c *Client) Subscribe(subject, consumer string, handler func(ctx context.Context, data []byte) error) error {
 	streamName := ""
 	for _, s := range Streams {
 		for _, subj := range s.Subjects {
@@ -83,7 +88,10 @@ func (c *Client) Subscribe(subject, consumer string, handler func(data []byte) e
 	}
 
 	_, err = cons.Consume(func(msg jetstream.Msg) {
-		if err := handler(msg.Data()); err != nil {
+		ctx, span := tracing.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
+		defer span.Finish()
+
+		if err := handler(ctx, msg.Data()); err != nil {
 			_ = msg.Nak()
 			return
 		}

@@ -168,7 +168,7 @@ func (s *Server) registerSendRoutes() {
 			}
 
 			msgBytes, _ := json.Marshal(msg)
-			if err := s.nats.Publish("notification.send", msgBytes); err != nil {
+			if err := s.nats.Publish(ctx, "notification.send", msgBytes); err != nil {
 				s.logger.Error("failed to publish to NATS", "error", err, "notification_id", notifID)
 			}
 		}
