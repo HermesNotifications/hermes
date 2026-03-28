@@ -14,6 +14,10 @@ import (
 
 var apiKeyIDGen = id.NewGenerator(id.Config{Prefix: "key", RandBits: 36})
 
+// apiKeyIDLen is the length of the encoded random part of an API key ID.
+// 36 bits → 5 bytes → 7 base64url chars. The full key ID is "key_" + 7 chars.
+const apiKeyIDLen = 7
+
 // HMACHashAPIKey computes an HMAC-SHA256 hash of the secret using hmacKey.
 // Returns the hex-encoded HMAC.
 func HMACHashAPIKey(secret, hmacKey string) string {
@@ -76,14 +80,17 @@ func ParseAPIKey(raw string) (keyID string, secret string, err error) {
 	}
 	trimmed = strings.TrimPrefix(trimmed, "key_")
 
-	// Split into <id>_<secret>
-	idx := strings.Index(trimmed, "_")
-	if idx <= 0 || idx >= len(trimmed)-1 {
-		return "", "", fmt.Errorf("invalid api key format: cannot split id and secret")
+	// The ID part is a fixed length (apiKeyIDLen chars of base64url).
+	// We can't split on "_" because base64url encoding can contain underscores.
+	if len(trimmed) < apiKeyIDLen+2 { // +1 for separator, +1 for min secret length
+		return "", "", fmt.Errorf("invalid api key format: too short")
+	}
+	if trimmed[apiKeyIDLen] != '_' {
+		return "", "", fmt.Errorf("invalid api key format: expected separator at position %d", apiKeyIDLen)
 	}
 
-	idPart := trimmed[:idx]
-	secret = trimmed[idx+1:]
+	idPart := trimmed[:apiKeyIDLen]
+	secret = trimmed[apiKeyIDLen+1:]
 
 	keyID = "key_" + idPart
 	return keyID, secret, nil
