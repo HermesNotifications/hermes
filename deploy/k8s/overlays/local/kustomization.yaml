@@ -5,6 +5,7 @@ resources:
   - ../../base
   - postgres.yaml
   - redis.yaml
+  - mailpit.yaml
   - secrets.yaml
 
 patches:
@@ -32,6 +33,7 @@ configMapGenerator:
     literals:
       - HERMES_DATABASE_URL=postgres://hermes:hermes@postgres:5432/hermes?sslmode=disable
       - HERMES_REDIS_URL=redis://redis:6379/0
+      - HERMES_EMAIL_SMTP_HOST=mailpit
     options:
       disableNameSuffixHash: true
   # Override centrifugo config for local dev (admin enabled, dev secrets)
