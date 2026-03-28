@@ -81,7 +81,7 @@ for svc_name, svc_cfg in services.items():
     # Output to bin/<svc>/service so it matches the Dockerfile COPY path
     local_resource(
         "compile-" + svc_name,
-        cmd="CGO_ENABLED=0 GOOS=linux GOARCH={goarch} orchestrion go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
+        cmd="CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go run github.com/DataDog/orchestrion go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
             goarch=goarch, svc=svc_name,
         ),
         deps=[

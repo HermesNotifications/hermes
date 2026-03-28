@@ -52,16 +52,22 @@ spec:
             limits:
               memory: 512Mi
           volumeMounts:
-            - name: dockersocket
-              mountPath: /var/run/docker.sock
+            - name: logpods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: logcontainers
+              mountPath: /var/log/containers
               readOnly: true
             - name: proc
               mountPath: /host/proc
               readOnly: true
       volumes:
-        - name: dockersocket
+        - name: logpods
           hostPath:
-            path: /var/run/docker.sock
+            path: /var/log/pods
+        - name: logcontainers
+          hostPath:
+            path: /var/log/containers
         - name: proc
           hostPath:
             path: /proc

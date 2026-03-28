@@ -2,7 +2,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 RUN apk --no-cache add tzdata ca-certificates
-RUN go install github.com/DataDog/orchestrion@latest
+RUN go install github.com/DataDog/orchestrion@v1.8.0
 
 ARG SERVICE
 ARG VERSION=dev

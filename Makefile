@@ -6,7 +6,7 @@ DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 .PHONY: build build-%
 build: $(addprefix build-,$(SERVICES))   ## Build all services
 build-%:                                  ## Build a single service (e.g. make build-admin)
-	orchestrion go build -o bin/$*/service ./cmd/$*/
+	go run github.com/DataDog/orchestrion go build -o bin/$*/service ./cmd/$*/
 
 # --- Test ---
 .PHONY: test test-integration test-e2e

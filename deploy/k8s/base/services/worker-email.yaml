@@ -40,6 +40,8 @@ spec:
           env:
             - name: HERMES_HTTP_PORT
               value: "8083"
+            - name: DD_SERVICE
+              value: hermes-worker-email
           resources:
             requests:
               cpu: 50m
