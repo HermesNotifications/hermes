@@ -8,12 +8,17 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/hermes-notifications/hermes/internal/tracing"
 )
 
 // ListenAndServe starts the HTTP server, blocks until SIGINT/SIGTERM,
 // then gracefully shuts down. Optional onShutdown callbacks run before
 // the HTTP server is stopped (e.g., flushing batches, stopping consumers).
 func ListenAndServe(addr string, handler http.Handler, logger *slog.Logger, onShutdown ...func()) {
+	tracing.Start()
+	defer tracing.Shutdown()
+
 	server := &http.Server{
 		Addr:    addr,
 		Handler: handler,
