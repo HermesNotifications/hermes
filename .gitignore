@@ -15,6 +15,9 @@
 # Superpowers
 .superpowers/
 
+# Worktrees
+.worktrees/
+
 # Environment
 .env
 .env.local
