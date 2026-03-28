@@ -41,7 +41,7 @@ func (a *DeliveryAdapter) Send(ctx context.Context, req delivery.DeliveryRequest
 	htmlBody := req.Body
 	if a.layout != nil {
 		var buf bytes.Buffer
-		if err := a.layout.Execute(&buf, map[string]string{"Content": htmlBody}); err != nil {
+		if err := a.layout.Execute(&buf, map[string]string{"Content": htmlBody, "Title": req.Title}); err != nil {
 			return delivery.DeliveryResult{}, fmt.Errorf("execute layout: %w", err)
 		}
 		htmlBody = buf.String()

@@ -1,6 +1,6 @@
 module github.com/hermes-notifications/hermes
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/DataDog/dd-trace-go/contrib/aws/aws-sdk-go-v2/v2 v2.7.0

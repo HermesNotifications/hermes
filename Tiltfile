@@ -82,9 +82,12 @@ for svc_name, svc_cfg in services.items():
     # Output to bin/<svc>/service so it matches the Dockerfile COPY path
     local_resource(
         "compile-" + svc_name,
-        cmd="CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go run github.com/DataDog/orchestrion go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
-            goarch=goarch, svc=svc_name,
-        ),
+        cmd=" && ".join([
+            "go build -o ./bin/_tools/orchestrion github.com/DataDog/orchestrion",
+            "CGO_ENABLED=0 GOOS=linux GOARCH={goarch} ./bin/_tools/orchestrion go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
+                goarch=goarch, svc=svc_name,
+            ),
+        ]),
         deps=[
             "cmd/" + svc_name + "/",
             "internal/",
@@ -102,9 +105,9 @@ for svc_name, svc_cfg in services.items():
         dockerfile="deploy/docker/Dockerfile.dev",
         build_args={"SERVICE": svc_name},
         only=["bin/" + svc_name + "/service", "migrations/"],
-        entrypoint=["/service"],
+        entrypoint=["/app/service"],
         live_update=[
-            sync("./bin/" + svc_name + "/service", "/service"),
+            sync("./bin/" + svc_name + "/service", "/app/service"),
         ],
     )
 
