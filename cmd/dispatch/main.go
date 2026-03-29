@@ -33,7 +33,7 @@ func main() {
 
 	st := postgres.New(pool)
 	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
-	channelResolver := dispatch.NewChannelResolver(st)
+	channelResolver := dispatch.NewChannelResolver(st, redisClient)
 	d := dispatch.NewDispatch(natsClient, st, st, st, templateResolver, channelResolver, logger)
 
 	if err := d.Start(); err != nil {

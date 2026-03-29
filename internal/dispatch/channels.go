@@ -2,8 +2,11 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
@@ -17,10 +20,55 @@ type channelStore interface {
 
 type ChannelResolver struct {
 	store channelStore
+	cache *cache.Client
 }
 
-func NewChannelResolver(store channelStore) *ChannelResolver {
-	return &ChannelResolver{store: store}
+func NewChannelResolver(store channelStore, cache *cache.Client) *ChannelResolver {
+	return &ChannelResolver{store: store, cache: cache}
+}
+
+func (cr *ChannelResolver) resolveSubscription(ctx context.Context, id string) (*models.Subscription, error) {
+	if cr.cache != nil {
+		data, err := cr.cache.GetSubscription(ctx, id)
+		if err == nil && data != nil {
+			var sub models.Subscription
+			if err := json.Unmarshal(data, &sub); err == nil {
+				return &sub, nil
+			}
+		}
+	}
+	sub, err := cr.store.GetSubscriptionByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if cr.cache != nil {
+		if data, err := json.Marshal(sub); err == nil {
+			_ = cr.cache.SetSubscription(ctx, id, data, 5*time.Minute)
+		}
+	}
+	return sub, nil
+}
+
+func (cr *ChannelResolver) resolveCategory(ctx context.Context, id string) (*models.SubscriptionCategory, error) {
+	if cr.cache != nil {
+		data, err := cr.cache.GetCategory(ctx, id)
+		if err == nil && data != nil {
+			var cat models.SubscriptionCategory
+			if err := json.Unmarshal(data, &cat); err == nil {
+				return &cat, nil
+			}
+		}
+	}
+	cat, err := cr.store.GetCategoryByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if cr.cache != nil {
+		if data, err := json.Marshal(cat); err == nil {
+			_ = cr.cache.SetCategory(ctx, id, data, 5*time.Minute)
+		}
+	}
+	return cat, nil
 }
 
 // ResolveChannels determines target channels for a template-based send.
@@ -39,11 +87,11 @@ func (cr *ChannelResolver) ResolveChannels(ctx context.Context, explicitChannels
 	}
 
 	// Template with subscription — resolve category
-	sub, err := cr.store.GetSubscriptionByID(ctx, *template.SubscriptionID)
+	sub, err := cr.resolveSubscription(ctx, *template.SubscriptionID)
 	if err != nil {
 		return nil, err
 	}
-	cat, err := cr.store.GetCategoryByID(ctx, sub.CategoryID)
+	cat, err := cr.resolveCategory(ctx, sub.CategoryID)
 	if err != nil {
 		return nil, err
 	}

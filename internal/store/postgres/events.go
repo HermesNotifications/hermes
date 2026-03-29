@@ -7,6 +7,7 @@ import (
 
 	"github.com/hermes-notifications/hermes/internal/id"
 	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermes-notifications/hermes/internal/store"
 )
 
 // InsertEvent inserts a single notification event.
@@ -48,6 +49,61 @@ func (s *Store) InsertEvents(ctx context.Context, events []models.NotificationEv
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
+// BatchUpdateNotificationStatuses advances statuses for multiple notifications in a single query.
+// It deduplicates per notification ID (keeping the highest rank) before executing, and uses
+// the same rank-based WHERE clause as UpdateNotificationStatus to prevent status regression.
+func (s *Store) BatchUpdateNotificationStatuses(ctx context.Context, updates []store.StatusUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	// Deduplicate: keep only the highest-rank status per notification ID.
+	best := make(map[string]store.StatusUpdate)
+	for _, u := range updates {
+		if existing, ok := best[u.NotificationID]; !ok || u.NewStatus.Rank() > existing.NewStatus.Rank() {
+			best[u.NotificationID] = u
+		}
+	}
+
+	ids := make([]string, 0, len(best))
+	statuses := make([]string, 0, len(best))
+	ranks := make([]int, 0, len(best))
+	times := make([]time.Time, 0, len(best))
+	for _, u := range best {
+		ids = append(ids, u.NotificationID)
+		statuses = append(statuses, string(u.NewStatus))
+		ranks = append(ranks, u.NewStatus.Rank())
+		times = append(times, u.EventTime)
+	}
+
+	_, err := s.pool.Exec(ctx, `
+		UPDATE notifications n
+		SET status = v.new_status,
+		    sent_at = COALESCE(n.sent_at, CASE WHEN v.rank >= 1 THEN v.event_time ELSE NULL END),
+		    delivered_at = COALESCE(n.delivered_at, CASE WHEN v.rank >= 2 THEN v.event_time ELSE NULL END)
+		FROM (
+			SELECT unnest($1::text[]) AS id,
+			       unnest($2::text[]) AS new_status,
+			       unnest($3::int[]) AS rank,
+			       unnest($4::timestamptz[]) AS event_time
+		) v
+		WHERE n.id = v.id
+		  AND (CASE n.status
+		        WHEN 'pending' THEN 0
+		        WHEN 'sent' THEN 1
+		        WHEN 'delivered' THEN 2
+		        WHEN 'read' THEN 3
+		        WHEN 'archived' THEN 4
+		        ELSE 0
+		      END) < v.rank`,
+		ids, statuses, ranks, times,
+	)
+	if err != nil {
+		return fmt.Errorf("batch update notification statuses: %w", err)
 	}
 	return nil
 }

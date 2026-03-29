@@ -66,11 +66,19 @@ type NotificationRepository interface {
 	UpdateNotificationChannels(ctx context.Context, notificationID string, channels []string) error
 }
 
+// StatusUpdate represents a notification status change for batch processing.
+type StatusUpdate struct {
+	NotificationID string
+	NewStatus      models.NotificationStatus
+	EventTime      time.Time
+}
+
 // EventRepository defines operations for notification event storage and status updates.
 type EventRepository interface {
 	InsertEvent(ctx context.Context, notificationID, channel, event, severity string, metadata []byte) error
 	InsertEvents(ctx context.Context, events []models.NotificationEvent) error
 	UpdateNotificationStatus(ctx context.Context, notificationID string, newStatus models.NotificationStatus, eventTime time.Time) error
+	BatchUpdateNotificationStatuses(ctx context.Context, updates []StatusUpdate) error
 }
 
 // InboxRepository defines operations for the user-facing inbox read path.

@@ -100,14 +100,25 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 		return
 	}
 
-	// Update notification statuses based on events.
+	// Collect status updates from events.
+	var updates []store.StatusUpdate
+	now := time.Now()
 	for _, item := range items {
 		e := item.Msg
 		status := eventToStatus(e.Event)
 		if status != "" {
-			if err := w.store.UpdateNotificationStatus(ctx, e.NotificationID, status, time.Now()); err != nil {
-				w.logger.Error("update status", "error", err, "notification_id", e.NotificationID)
-			}
+			updates = append(updates, store.StatusUpdate{
+				NotificationID: e.NotificationID,
+				NewStatus:      status,
+				EventTime:      now,
+			})
+		}
+	}
+
+	// Batch update notification statuses.
+	if len(updates) > 0 {
+		if err := w.store.BatchUpdateNotificationStatuses(ctx, updates); err != nil {
+			w.logger.Error("batch update statuses", "error", err, "count", len(updates))
 		}
 	}
 

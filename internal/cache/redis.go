@@ -65,6 +65,44 @@ func (c *Client) InvalidateTemplateConfig(ctx context.Context, slug string) erro
 	return c.rdb.Del(ctx, "template:"+slug).Err()
 }
 
+func (c *Client) GetSubscription(ctx context.Context, id string) ([]byte, error) {
+	val, err := c.rdb.Get(ctx, "subscription:"+id).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get subscription: %w", err)
+	}
+	return val, nil
+}
+
+func (c *Client) SetSubscription(ctx context.Context, id string, data []byte, ttl time.Duration) error {
+	return c.rdb.Set(ctx, "subscription:"+id, data, ttl).Err()
+}
+
+func (c *Client) InvalidateSubscription(ctx context.Context, id string) error {
+	return c.rdb.Del(ctx, "subscription:"+id).Err()
+}
+
+func (c *Client) GetCategory(ctx context.Context, id string) ([]byte, error) {
+	val, err := c.rdb.Get(ctx, "category:"+id).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get category: %w", err)
+	}
+	return val, nil
+}
+
+func (c *Client) SetCategory(ctx context.Context, id string, data []byte, ttl time.Duration) error {
+	return c.rdb.Set(ctx, "category:"+id, data, ttl).Err()
+}
+
+func (c *Client) InvalidateCategory(ctx context.Context, id string) error {
+	return c.rdb.Del(ctx, "category:"+id).Err()
+}
+
 func (c *Client) GetJWTSigningKeys(ctx context.Context) ([]byte, error) {
 	val, err := c.rdb.Get(ctx, "jwt:signing_keys").Bytes()
 	if errors.Is(err, redis.Nil) {
