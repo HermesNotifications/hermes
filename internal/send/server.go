@@ -1,4 +1,4 @@
-package admin
+package send
 
 import (
 	"context"
@@ -13,65 +13,27 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/middleware"
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// AdminStore defines the database operations the admin service needs.
-// The concrete *store.Store satisfies this interface.
-type AdminStore interface {
-	// Tenants
-	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
-
-	// Subscription Categories
-	CreateCategory(ctx context.Context, slug, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error)
-	GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error)
-	ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error)
-	UpdateCategory(ctx context.Context, id, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error)
-	DeleteCategory(ctx context.Context, id string) error
-
-	// Subscriptions
-	CreateSubscription(ctx context.Context, categoryID, slug, name string, sortOrder int) (*models.Subscription, error)
-	GetSubscriptionByID(ctx context.Context, id string) (*models.Subscription, error)
-	ListSubscriptionsByCategory(ctx context.Context, categoryID string) ([]models.Subscription, error)
-	UpdateSubscription(ctx context.Context, id, name string, sortOrder int) (*models.Subscription, error)
-	DeleteSubscription(ctx context.Context, id string) error
-
-	// Templates
-	CreateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
-	GetTemplateByID(ctx context.Context, id string) (*models.NotificationTemplate, error)
-	GetTemplateBySlug(ctx context.Context, slug string) (*models.NotificationTemplate, error)
-	ListTemplates(ctx context.Context) ([]models.NotificationTemplate, error)
-	UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
-	DeleteTemplate(ctx context.Context, id string) error
-
-	// Users
-	EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error)
-
-	// Notifications
-	GetNotificationByID(ctx context.Context, id string) (*models.Notification, error)
-	GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error)
-
-	// API Keys
-	CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error)
-	ListAPIKeys(ctx context.Context) ([]models.APIKey, error)
+// SendStore defines the database operations the send service needs.
+// Only API key lookup is required (for cache-miss fallback).
+type SendStore interface {
 	GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
-	DeleteAPIKey(ctx context.Context, id string) error
-
-	// JWT Signing Keys
-	EnsureHermesSigningKey(ctx context.Context, secret string) error
 }
 
 type Server struct {
-	store      AdminStore
+	store      SendStore
+	nats       *messaging.Client
 	cache      *cache.Client
 	pool       *pgxpool.Pool
 	logger     *slog.Logger
 	router     chi.Router
 	api        huma.API
 	skipAuth   bool
-	jwtSecret  []byte
 	hmacSecret string
 }
 
@@ -80,19 +42,19 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store AdminStore, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
+func NewServer(store SendStore, nats *messaging.Client, cache *cache.Client, pool *pgxpool.Pool, hmacSecret string, logger *slog.Logger) *Server {
 	s := &Server{
 		store:      store,
+		nats:       nats,
 		cache:      cache,
 		pool:       pool,
-		jwtSecret:  jwtSecret,
 		hmacSecret: hmacSecret,
 		logger:     logger,
 		router:     chi.NewRouter(),
 	}
 
-	config := huma.DefaultConfig("Hermes Admin API", "1.0.0")
-	config.Info.Description = "Server-to-server API for managing subscription categories, templates, and notifications."
+	config := huma.DefaultConfig("Hermes Send API", "1.0.0")
+	config.Info.Description = "Ultra-lightweight send endpoint for publishing notifications."
 	config.Servers = []*huma.Server{{URL: "/"}}
 
 	s.api = humachi.New(s.router, config)
@@ -109,12 +71,7 @@ func (s *Server) routes() {
 		s.router.Get("/readyz", httputil.ReadyzHandler())
 	}
 
-	s.registerCategoryRoutes()
-	s.registerSubscriptionRoutes()
-	s.registerTemplateRoutes()
-	s.registerNotificationRoutes()
-	s.registerAuthRoutes()
-	s.registerAPIKeyRoutes()
+	s.registerSendRoutes()
 }
 
 // API returns the huma API instance for spec generation.
@@ -126,7 +83,7 @@ func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.router
 	h = middleware.RateLimit(func(r *http.Request) string {
 		return r.Header.Get("Authorization")
-	}, 1000, 500)(h)
+	}, 5000, 2000)(h)
 	if !s.skipAuth {
 		h = auth.APIKeyMiddleware(s.validateAPIKey)(h)
 	}

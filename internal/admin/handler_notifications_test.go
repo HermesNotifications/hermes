@@ -1,46 +1,39 @@
 package admin_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
 func TestHandleGetNotification(t *testing.T) {
-	srv := newTestServer(t)
-
-	// Send a notification with direct content and channels
-	sendBody := `{
-		"tenant_id": "test-tenant-id",
-		"user_id": "ext-user-1",
-		"content": {
-			"title": "Test Alert",
-			"body": "This is a test."
+	// Seed a notification directly via the mock store
+	notificationID := "ntf-test-123"
+	store := &mockStore{
+		tenants: []models.Tenant{
+			{ID: "test-tenant-id", Name: "Test Tenant", CreatedAt: time.Now()},
 		},
-		"channels": ["inbox"]
-	}`
-	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(sendBody))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("send notification: %d %s", rec.Code, rec.Body.String())
+		notifications: []models.Notification{
+			{
+				ID:       notificationID,
+				TenantID: "test-tenant-id",
+				UserID:   "usr-1",
+				Title:    "Test Alert",
+				Body:     "This is a test.",
+				Channels: []string{"inbox"},
+				Status:   models.StatusPending,
+			},
+		},
 	}
-
-	var sendResp map[string]string
-	if err := json.NewDecoder(rec.Body).Decode(&sendResp); err != nil {
-		t.Fatalf("decode send response: %v", err)
-	}
-	notificationID := sendResp["notification_id"]
-	if notificationID == "" {
-		t.Fatal("expected notification_id in send response")
-	}
+	srv := newTestServerWithStore(t, store)
 
 	// GET /v1/notifications/{id}
-	req = httptest.NewRequest("GET", "/v1/notifications/"+notificationID, nil)
-	rec = httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/v1/notifications/"+notificationID, nil)
+	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {

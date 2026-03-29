@@ -209,16 +209,6 @@ func (m *mockStore) EnsureUser(ctx context.Context, tenantID, externalID string)
 
 // --- Notifications ---
 
-func (m *mockStore) CreateNotification(ctx context.Context, n *models.Notification) (*models.Notification, error) {
-	created := *n
-	if created.ID == "" {
-		created.ID = fmt.Sprintf("ntf-%d", len(m.notifications)+1)
-	}
-	created.CreatedAt = time.Now()
-	m.notifications = append(m.notifications, created)
-	return &created, nil
-}
-
 func (m *mockStore) GetNotificationByID(ctx context.Context, id string) (*models.Notification, error) {
 	for _, n := range m.notifications {
 		if n.ID == id {
@@ -226,15 +216,6 @@ func (m *mockStore) GetNotificationByID(ctx context.Context, id string) (*models
 		}
 	}
 	return nil, fmt.Errorf("notification not found: %s", id)
-}
-
-func (m *mockStore) GetNotificationByIdempotencyKey(ctx context.Context, tenantID, key string) (*models.Notification, error) {
-	for _, n := range m.notifications {
-		if n.TenantID == tenantID && n.IdempotencyKey != nil && *n.IdempotencyKey == key {
-			return &n, nil
-		}
-	}
-	return nil, fmt.Errorf("notification not found for key: %s", key)
 }
 
 func (m *mockStore) GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error) {
@@ -300,8 +281,16 @@ func newTestServer(t *testing.T) *admin.Server {
 			{ID: "test-tenant-id", Name: "Test Tenant", CreatedAt: time.Now()},
 		},
 	}
-	// Pass nil for nats, cache, pool — most handlers don't need them.
-	srv := admin.NewServer(store, nil, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	// Pass nil for cache, pool — most handlers don't need them.
+	srv := admin.NewServer(store, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	srv.SetSkipAuth(true)
+	return srv
+}
+
+func newTestServerWithStore(t *testing.T, store *mockStore) *admin.Server {
+	t.Helper()
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	srv := admin.NewServer(store, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(true)
 	return srv
 }

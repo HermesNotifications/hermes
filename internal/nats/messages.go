@@ -2,17 +2,16 @@ package hermenats
 
 import "encoding/json"
 
-// SendMessage is published to notification.send by the Admin service.
+// SendMessage is published to notification.send by the Send service.
 type SendMessage struct {
 	NotificationID string          `json:"notification_id"`
 	TenantID       string          `json:"tenant_id"`
-	UserID         string          `json:"user_id"`
-	CategoryID     string          `json:"category_id"`
-	SubscriptionID string          `json:"subscription_id,omitempty"`
-	Content        MessageContent  `json:"content"`
+	ExternalUserID string          `json:"external_user_id"`
+	Content        *MessageContent `json:"content,omitempty"`
 	Metadata       MessageMetadata `json:"metadata"`
 	Data           map[string]any  `json:"data,omitempty"`
 	Channels       []string        `json:"channels,omitempty"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty"`
 	Attempt        int             `json:"attempt"`
 }
 

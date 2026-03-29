@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 
@@ -16,16 +17,18 @@ type Dispatch struct {
 	nats             *messaging.Client
 	store            store.NotificationRepository
 	users            store.UserRepository
+	tenants          store.TenantRepository
 	templateResolver *TemplateResolver
 	channelResolver  *ChannelResolver
 	logger           *slog.Logger
 }
 
-func NewDispatch(nats *messaging.Client, store store.NotificationRepository, users store.UserRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
+func NewDispatch(nats *messaging.Client, store store.NotificationRepository, users store.UserRepository, tenants store.TenantRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
 	return &Dispatch{
 		nats:             nats,
 		store:            store,
 		users:            users,
+		tenants:          tenants,
 		templateResolver: templateResolver,
 		channelResolver:  channelResolver,
 		logger:           logger,
@@ -47,9 +50,33 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 
 	log := d.logger.With("notification_id", msg.NotificationID)
 
+	// Validate tenant
+	if _, err := d.tenants.GetTenantByID(ctx, msg.TenantID); err != nil {
+		log.Error("validate tenant", "error", err, "tenant_id", msg.TenantID)
+		d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
+			"error": "unknown tenant",
+		})
+		return fmt.Errorf("validate tenant: %w", err)
+	}
+
+	// Ensure user exists
+	user, err := d.users.EnsureUser(ctx, msg.TenantID, msg.ExternalUserID)
+	if err != nil {
+		log.Error("ensure user", "error", err)
+		return fmt.Errorf("ensure user: %w", err)
+	}
+
 	var nt *models.NotificationTemplate
 	var rendered *RenderedContent
-	content := msg.Content
+	var content hermenats.MessageContent
+	if msg.Content != nil {
+		content = *msg.Content
+	}
+
+	// Resolve category and subscription from template
+	var categoryID string
+	var subscriptionID string
+	var templateID *string
 
 	if msg.Metadata.Template != "" {
 		// Template-based send: resolve template and render
@@ -60,6 +87,16 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 				"error": err.Error(),
 			})
 			return fmt.Errorf("resolve template: %w", err)
+		}
+
+		templateID = &nt.ID
+		if nt.SubscriptionID != nil {
+			subscriptionID = *nt.SubscriptionID
+			// Resolve category from subscription via channel resolver's store
+			sub, subErr := d.channelResolver.store.GetSubscriptionByID(ctx, subscriptionID)
+			if subErr == nil {
+				categoryID = sub.CategoryID
+			}
 		}
 
 		rendered, err = RenderTemplates(nt, msg.Data)
@@ -84,10 +121,49 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		content.Body = body
 	}
 
+	// Create notification in DB
+	channels := msg.Channels
+	if channels == nil {
+		channels = []string{}
+	}
+	n := &models.Notification{
+		ID:         msg.NotificationID,
+		TenantID:   msg.TenantID,
+		UserID:     user.ID,
+		TemplateID: templateID,
+		CategoryID: categoryID,
+		Channels:   channels,
+		Status:     models.StatusPending,
+	}
+
+	if msg.Content != nil {
+		n.Title = msg.Content.Title
+		n.Body = msg.Content.Body
+		n.ActionURL = msg.Content.ActionURL
+		n.ActionLabel = msg.Content.ActionLabel
+	} else if rendered != nil {
+		// For template sends, use inbox title/body as the notification record content
+		n.Title = rendered.InboxTitle
+		n.Body = rendered.InboxBody
+	}
+
+	if msg.IdempotencyKey != "" {
+		n.IdempotencyKey = &msg.IdempotencyKey
+	}
+
+	if _, err := d.store.CreateNotification(ctx, n); err != nil {
+		// On retry: if notification already exists (unique constraint), fetch and continue
+		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already exists") {
+			log.Info("notification already exists (retry), continuing", "notification_id", msg.NotificationID)
+		} else {
+			log.Error("create notification", "error", err)
+			return fmt.Errorf("create notification: %w", err)
+		}
+	}
+
 	// Resolve channels
-	var channels []string
 	if nt != nil {
-		channels, err = d.channelResolver.ResolveChannels(ctx, msg.Channels, msg.UserID, nt)
+		channels, err = d.channelResolver.ResolveChannels(ctx, msg.Channels, user.ID, nt)
 	} else {
 		// Direct send: use explicit channels
 		channels = msg.Channels
@@ -110,18 +186,18 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 	}
 
 	// Resolve user contact info for recipient fields
-	user, err := d.users.GetUserByID(ctx, msg.UserID)
+	userFull, err := d.users.GetUserByID(ctx, user.ID)
 	if err != nil {
 		log.Error("resolve user", "error", err)
 		return fmt.Errorf("resolve user: %w", err)
 	}
 
 	recipient := hermenats.Recipient{}
-	if user.Email != nil {
-		recipient.Email = *user.Email
+	if userFull.Email != nil {
+		recipient.Email = *userFull.Email
 	}
-	if user.Phone != nil {
-		recipient.Phone = *user.Phone
+	if userFull.Phone != nil {
+		recipient.Phone = *userFull.Phone
 	}
 
 	// Filter channels that require contact info the user doesn't have
@@ -130,7 +206,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		switch ch {
 		case "email":
 			if recipient.Email == "" {
-				log.Warn("skipping email channel: user has no email", "user_id", msg.UserID)
+				log.Warn("skipping email channel: user has no email", "user_id", user.ID)
 				d.publishEvent(ctx, msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
 					"reason": "user has no email address",
 				})
@@ -138,7 +214,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 			}
 		case "sms":
 			if recipient.Phone == "" {
-				log.Warn("skipping sms channel: user has no phone", "user_id", msg.UserID)
+				log.Warn("skipping sms channel: user has no phone", "user_id", user.ID)
 				d.publishEvent(ctx, msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
 					"reason": "user has no phone number",
 				})
@@ -168,7 +244,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		dm := &hermenats.DeliveryMessage{
 			NotificationID: msg.NotificationID,
 			TenantID:       msg.TenantID,
-			UserID:         msg.UserID,
+			UserID:         user.ID,
 			Channel:        ch,
 			Content:        deliveryContent,
 			Metadata:       msg.Metadata,

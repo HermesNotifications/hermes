@@ -24,7 +24,7 @@ func main() {
 
 	switch *service {
 	case "admin":
-		srv := admin.NewServer(nil, nil, nil, nil, nil, "", logger)
+		srv := admin.NewServer(nil, nil, nil, nil, "", logger)
 		writeSpec(srv.API(), *out, *format)
 	case "inbox":
 		srv := inbox.NewServer(nil, nil, nil, nil, nil, logger)

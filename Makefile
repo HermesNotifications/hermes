@@ -1,5 +1,5 @@
 # --- Variables ---
-SERVICES := admin dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate seed
+SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate seed
 DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 
 # --- Build ---
