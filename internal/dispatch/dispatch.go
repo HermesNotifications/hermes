@@ -200,6 +200,14 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		recipient.Phone = *userFull.Phone
 	}
 
+	// Override with send-request provided contact info
+	if msg.Email != "" {
+		recipient.Email = msg.Email
+	}
+	if msg.Phone != "" {
+		recipient.Phone = msg.Phone
+	}
+
 	// Filter channels that require contact info the user doesn't have
 	var filteredChannels []string
 	for _, ch := range channels {

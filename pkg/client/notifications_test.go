@@ -31,7 +31,7 @@ func TestNotificationsSend(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
-		if body.TenantID != "tenant1" || body.UserID != "user1" {
+		if body.To.TenantID != "tenant1" || body.To.UserID != "user1" {
 			t.Errorf("unexpected body: %+v", body)
 		}
 
@@ -43,8 +43,10 @@ func TestNotificationsSend(t *testing.T) {
 
 	c := client.New(srv.URL, "test-key")
 	result, err := c.Notifications.Send(context.Background(), client.SendRequest{
-		TenantID: "tenant1",
-		UserID:   "user1",
+		To: client.Recipient{
+			TenantID: "tenant1",
+			UserID:   "user1",
+		},
 		Template: "welcome",
 	})
 	if err != nil {
@@ -72,8 +74,10 @@ func TestNotificationsSendWithIdempotencyKey(t *testing.T) {
 
 	c := client.New(srv.URL, "test-key")
 	result, err := c.Notifications.Send(context.Background(), client.SendRequest{
-		TenantID: "tenant1",
-		UserID:   "user1",
+		To: client.Recipient{
+			TenantID: "tenant1",
+			UserID:   "user1",
+		},
 	}, client.WithIdempotencyKey("my-idempotency-key"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

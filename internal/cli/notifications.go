@@ -17,7 +17,7 @@ func newNotificationsCmd() *cobra.Command {
 }
 
 func newNotifSendCmd() *cobra.Command {
-	var tenantID, userID, template, data, title, body, actionURL, actionLabel, idempotencyKey string
+	var tenantID, userID, email, phone, template, data, title, body, actionURL, actionLabel, idempotencyKey string
 	var channels []string
 
 	cmd := &cobra.Command{
@@ -25,8 +25,12 @@ func newNotifSendCmd() *cobra.Command {
 		Short: "Send a notification",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req := client.SendRequest{
-				TenantID: tenantID,
-				UserID:   userID,
+				To: client.Recipient{
+					TenantID: tenantID,
+					UserID:   userID,
+					Email:    email,
+					Phone:    phone,
+				},
 				Template: template,
 				Channels: channels,
 			}
@@ -68,6 +72,8 @@ func newNotifSendCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
+	cmd.Flags().StringVar(&email, "email", "", "Email address override for this notification")
+	cmd.Flags().StringVar(&phone, "phone", "", "Phone number override for this notification")
 	cmd.Flags().StringVar(&template, "template", "", "Notification template slug")
 	cmd.Flags().StringSliceVar(&channels, "channels", nil, "Delivery channels (comma-separated)")
 	cmd.Flags().StringVar(&data, "data", "", "Notification data as raw JSON")

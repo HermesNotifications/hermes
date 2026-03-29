@@ -13,9 +13,15 @@ type Content struct {
 	ActionLabel string `json:"action_label,omitempty"`
 }
 
+type Recipient struct {
+	TenantID string `json:"tenant_id"`
+	UserID   string `json:"user_id"`
+	Email    string `json:"email,omitempty"`
+	Phone    string `json:"phone,omitempty"`
+}
+
 type SendRequest struct {
-	TenantID string         `json:"tenant_id"`
-	UserID   string         `json:"user_id"`
+	To       Recipient      `json:"to"`
 	Template string         `json:"template,omitempty"`
 	Content  *Content       `json:"content,omitempty"`
 	Data     map[string]any `json:"data,omitempty"`

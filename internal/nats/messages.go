@@ -7,6 +7,8 @@ type SendMessage struct {
 	NotificationID string          `json:"notification_id"`
 	TenantID       string          `json:"tenant_id"`
 	ExternalUserID string          `json:"external_user_id"`
+	Email          string          `json:"email,omitempty"`
+	Phone          string          `json:"phone,omitempty"`
 	Content        *MessageContent `json:"content,omitempty"`
 	Metadata       MessageMetadata `json:"metadata"`
 	Data           map[string]any  `json:"data,omitempty"`

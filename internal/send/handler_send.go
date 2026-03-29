@@ -10,6 +10,13 @@ import (
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 )
 
+type sendRecipient struct {
+	TenantID string `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
+	UserID   string `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
+	Email    string `json:"email,omitempty" doc:"Optional email address for this notification"`
+	Phone    string `json:"phone,omitempty" doc:"Optional phone number for this notification"`
+}
+
 type sendContent struct {
 	Title       string `json:"title" doc:"Notification title"`
 	Body        string `json:"body" doc:"Notification body"`
@@ -20,8 +27,7 @@ type sendContent struct {
 type sendInput struct {
 	IdempotencyKey string `header:"X-Idempotency-Key" required:"false" doc:"Idempotency key for deduplication"`
 	Body           struct {
-		TenantID string         `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
-		UserID   string         `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
+		To       sendRecipient  `json:"to" required:"true" doc:"Notification recipient"`
 		Template string         `json:"template,omitempty" doc:"Notification template slug (mutually exclusive with content)"`
 		Content  *sendContent   `json:"content,omitempty" doc:"Direct content (mutually exclusive with template)"`
 		Data     map[string]any `json:"data,omitempty" doc:"Template data for rendering"`
@@ -62,7 +68,7 @@ func (s *Server) registerSendRoutes() {
 		// Idempotency check via Redis SET NX
 		idemKey := input.IdempotencyKey
 		if idemKey != "" && s.cache != nil {
-			existing, err := s.cache.SetIdempotencyKey(ctx, req.TenantID+":"+idemKey, notifID, time.Hour)
+			existing, err := s.cache.SetIdempotencyKey(ctx, req.To.TenantID+":"+idemKey, notifID, time.Hour)
 			if err == nil && existing != "" {
 				resp := &sendOutput{}
 				resp.Body.NotificationID = existing
@@ -73,8 +79,10 @@ func (s *Server) registerSendRoutes() {
 		// Build SendMessage
 		msg := &hermenats.SendMessage{
 			NotificationID: notifID,
-			TenantID:       req.TenantID,
-			ExternalUserID: req.UserID,
+			TenantID:       req.To.TenantID,
+			ExternalUserID: req.To.UserID,
+			Email:          req.To.Email,
+			Phone:          req.To.Phone,
 			Metadata: hermenats.MessageMetadata{
 				Template: req.Template,
 			},

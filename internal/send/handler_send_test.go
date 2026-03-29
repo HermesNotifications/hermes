@@ -11,7 +11,7 @@ import (
 func TestSendHandler_TemplateSend(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"tenant_id":"t1","user_id":"u1","template":"welcome","data":{"name":"Alice"}}`
+	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome","data":{"name":"Alice"}}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -27,7 +27,7 @@ func TestSendHandler_TemplateSend(t *testing.T) {
 func TestSendHandler_DirectContentSend(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"tenant_id":"t1","user_id":"u1","content":{"title":"Hi","body":"Hello"},"channels":["inbox"]}`
+	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"content":{"title":"Hi","body":"Hello"},"channels":["inbox"]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -47,8 +47,8 @@ func TestSendHandler_ExactlyOneRequired(t *testing.T) {
 		name string
 		body string
 	}{
-		{"neither", `{"tenant_id":"t1","user_id":"u1"}`},
-		{"both", `{"tenant_id":"t1","user_id":"u1","template":"welcome","content":{"title":"Hi","body":"Hello"}}`},
+		{"neither", `{"to":{"tenant_id":"t1","user_id":"u1"}}`},
+		{"both", `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome","content":{"title":"Hi","body":"Hello"}}`},
 	}
 
 	for _, tt := range tests {
@@ -69,7 +69,7 @@ func TestSendHandler_ExactlyOneRequired(t *testing.T) {
 func TestSendHandler_DirectSendWithoutChannels(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"tenant_id":"t1","user_id":"u1","content":{"title":"Hi","body":"Hello"}}`
+	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"content":{"title":"Hi","body":"Hello"}}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -86,7 +86,7 @@ func TestSendHandler_ResponseContainsNotificationID(t *testing.T) {
 	// The notification ID should still be generated even on failure
 	srv := newTestServer(t)
 
-	body := `{"tenant_id":"t1","user_id":"u1","template":"welcome"}`
+	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
