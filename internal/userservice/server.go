@@ -23,6 +23,8 @@ type UserStore interface {
 	DeleteUserSubscription(ctx context.Context, userID, subscriptionID string) error
 	ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error)
 	ListSubscriptionsByCategory(ctx context.Context, categoryID string) ([]models.Subscription, error)
+	GetSubscriptionByID(ctx context.Context, id string) (*models.Subscription, error)
+	GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error)
 }
 
 // Server is the user-facing HTTP service.

@@ -15,11 +15,11 @@ import (
 
 func TestInbox(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notification_events", "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "notification_events", "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 
-	// Setup: tenant, user, group
+	// Setup: tenant, user, category
 	tenantID := uuid.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Inbox Test Tenant")
 	if err != nil {
@@ -31,9 +31,9 @@ func TestInbox(t *testing.T) {
 		t.Fatalf("EnsureUser: %v", err)
 	}
 
-	group, err := s.CreateGroup(ctx, "inbox-test-group", "Inbox Test Group", []string{"inbox"})
+	cat, err := s.CreateCategory(ctx, "inbox-test-cat", "Inbox Test Category", []string{"inbox"}, "on", 0)
 	if err != nil {
-		t.Fatalf("CreateGroup: %v", err)
+		t.Fatalf("CreateCategory: %v", err)
 	}
 
 	// Create 5 notifications with slight time gaps to ensure ordering
@@ -41,14 +41,14 @@ func TestInbox(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		notifIDs[i] = id.New()
 		n := &models.Notification{
-			ID:       notifIDs[i],
-			TenantID: tenantID,
-			UserID:   user.ID,
-			GroupID:  group.ID,
-			Title:    fmt.Sprintf("Notification %d", i+1),
-			Body:     fmt.Sprintf("Body %d", i+1),
-			Channels: []string{"inbox"},
-			Status:   models.StatusDelivered,
+			ID:         notifIDs[i],
+			TenantID:   tenantID,
+			UserID:     user.ID,
+			CategoryID: cat.ID,
+			Title:      fmt.Sprintf("Notification %d", i+1),
+			Body:       fmt.Sprintf("Body %d", i+1),
+			Channels:   []string{"inbox"},
+			Status:     models.StatusDelivered,
 		}
 		_, err := s.CreateNotification(ctx, n)
 		if err != nil {

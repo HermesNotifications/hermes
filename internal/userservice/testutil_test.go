@@ -95,6 +95,24 @@ func (m *mockUserStore) ListSubscriptionsByCategory(ctx context.Context, categor
 	return result, nil
 }
 
+func (m *mockUserStore) GetSubscriptionByID(ctx context.Context, id string) (*models.Subscription, error) {
+	for _, s := range m.subscriptions {
+		if s.ID == id {
+			return &s, nil
+		}
+	}
+	return nil, fmt.Errorf("subscription not found: %s", id)
+}
+
+func (m *mockUserStore) GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error) {
+	for _, c := range m.categories {
+		if c.ID == id {
+			return &c, nil
+		}
+	}
+	return nil, fmt.Errorf("category not found: %s", id)
+}
+
 const testUserID = "test-user-id"
 
 func newTestServer(t *testing.T) (*userservice.Server, *mockUserStore) {

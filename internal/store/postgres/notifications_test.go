@@ -13,7 +13,7 @@ import (
 
 func TestCreateNotification_And_GetByID(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 	tenantID := uuid.New().String()
@@ -27,21 +27,21 @@ func TestCreateNotification_And_GetByID(t *testing.T) {
 		t.Fatalf("EnsureUser: %v", err)
 	}
 
-	group, err := s.CreateGroup(ctx, "general", "General", []string{"inbox"})
+	cat, err := s.CreateCategory(ctx, "general", "General", []string{"inbox"}, "on", 0)
 	if err != nil {
-		t.Fatalf("CreateGroup: %v", err)
+		t.Fatalf("CreateCategory: %v", err)
 	}
 
 	notifID := id.New()
 	n := &models.Notification{
-		ID:       notifID,
-		TenantID: tenantID,
-		UserID:   user.ID,
-		GroupID:  group.ID,
-		Title:    "Hello",
-		Body:     "World",
-		Channels: []string{"inbox"},
-		Status:   models.StatusPending,
+		ID:         notifID,
+		TenantID:   tenantID,
+		UserID:     user.ID,
+		CategoryID: cat.ID,
+		Title:      "Hello",
+		Body:       "World",
+		Channels:   []string{"inbox"},
+		Status:     models.StatusPending,
 	}
 
 	created, err := s.CreateNotification(ctx, n)
@@ -69,7 +69,7 @@ func TestCreateNotification_And_GetByID(t *testing.T) {
 
 func TestGetNotificationByIdempotencyKey(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 	tenantID := uuid.New().String()
@@ -83,9 +83,9 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 		t.Fatalf("EnsureUser: %v", err)
 	}
 
-	group, err := s.CreateGroup(ctx, "alerts", "Alerts", []string{"inbox"})
+	cat, err := s.CreateCategory(ctx, "alerts", "Alerts", []string{"inbox"}, "on", 0)
 	if err != nil {
-		t.Fatalf("CreateGroup: %v", err)
+		t.Fatalf("CreateCategory: %v", err)
 	}
 
 	idemKey := "unique-key-" + id.New()
@@ -93,7 +93,7 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 		ID:             id.New(),
 		TenantID:       tenantID,
 		UserID:         user.ID,
-		GroupID:        group.ID,
+		CategoryID:     cat.ID,
 		Title:          "Alert",
 		Body:           "Something happened",
 		Channels:       []string{"inbox"},

@@ -11,7 +11,7 @@ import (
 
 func TestEnsureUser_CreatesOnFirstCall(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 	tenantID := uuid.New().String()
@@ -34,7 +34,7 @@ func TestEnsureUser_CreatesOnFirstCall(t *testing.T) {
 
 func TestEnsureUser_ReturnsSameOnSecondCall(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 	tenantID := uuid.New().String()
@@ -60,7 +60,7 @@ func TestEnsureUser_ReturnsSameOnSecondCall(t *testing.T) {
 
 func TestUpdateUserContacts(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "user_preferences", "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 	tenantID := uuid.New().String()
@@ -115,55 +115,64 @@ func TestUpdateUserContacts(t *testing.T) {
 	}
 }
 
-func TestGetUserPreferences(t *testing.T) {
+func TestGetUserSubscriptions(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "user_preferences", "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Prefs List Tenant")
+	_, err := s.CreateTenant(ctx, tenantID, "Subs List Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-prefs-list-1")
+	user, err := s.EnsureUser(ctx, tenantID, "ext-subs-list-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
 
-	// Empty preferences
-	prefs, err := s.GetUserPreferences(ctx, user.ID)
+	// Empty subscriptions
+	subs, err := s.GetUserSubscriptions(ctx, user.ID)
 	if err != nil {
-		t.Fatalf("GetUserPreferences (empty): %v", err)
+		t.Fatalf("GetUserSubscriptions (empty): %v", err)
 	}
-	if len(prefs) != 0 {
-		t.Fatalf("expected 0 preferences, got %d", len(prefs))
+	if len(subs) != 0 {
+		t.Fatalf("expected 0 subscriptions, got %d", len(subs))
 	}
 
-	// Create two groups and set preferences
-	g1, err := s.CreateGroup(ctx, "prefs-group-1", "Group 1", []string{"email"})
+	// Create two categories + subscriptions and set user subscriptions
+	cat1, err := s.CreateCategory(ctx, "subs-cat-1", "Category 1", []string{"email"}, "on", 0)
 	if err != nil {
-		t.Fatalf("CreateGroup 1: %v", err)
+		t.Fatalf("CreateCategory 1: %v", err)
 	}
-	g2, err := s.CreateGroup(ctx, "prefs-group-2", "Group 2", []string{"sms"})
+	cat2, err := s.CreateCategory(ctx, "subs-cat-2", "Category 2", []string{"sms"}, "off", 1)
 	if err != nil {
-		t.Fatalf("CreateGroup 2: %v", err)
-	}
-
-	_, err = s.SetUserPreference(ctx, user.ID, g1.ID, []string{"email", "inbox"})
-	if err != nil {
-		t.Fatalf("SetUserPreference 1: %v", err)
-	}
-	_, err = s.SetUserPreference(ctx, user.ID, g2.ID, []string{"sms"})
-	if err != nil {
-		t.Fatalf("SetUserPreference 2: %v", err)
+		t.Fatalf("CreateCategory 2: %v", err)
 	}
 
-	prefs, err = s.GetUserPreferences(ctx, user.ID)
+	sub1, err := s.CreateSubscription(ctx, cat1.ID, "subs-item-1", "Sub Item 1", 0)
 	if err != nil {
-		t.Fatalf("GetUserPreferences: %v", err)
+		t.Fatalf("CreateSubscription 1: %v", err)
 	}
-	if len(prefs) != 2 {
-		t.Fatalf("expected 2 preferences, got %d", len(prefs))
+	sub2, err := s.CreateSubscription(ctx, cat2.ID, "subs-item-2", "Sub Item 2", 0)
+	if err != nil {
+		t.Fatalf("CreateSubscription 2: %v", err)
+	}
+
+	_, err = s.SetUserSubscription(ctx, user.ID, sub1.ID, true)
+	if err != nil {
+		t.Fatalf("SetUserSubscription 1: %v", err)
+	}
+	_, err = s.SetUserSubscription(ctx, user.ID, sub2.ID, false)
+	if err != nil {
+		t.Fatalf("SetUserSubscription 2: %v", err)
+	}
+
+	subs, err = s.GetUserSubscriptions(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserSubscriptions: %v", err)
+	}
+	if len(subs) != 2 {
+		t.Fatalf("expected 2 subscriptions, got %d", len(subs))
 	}
 }

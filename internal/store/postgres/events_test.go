@@ -14,11 +14,11 @@ import (
 
 func TestEventInsertAndStatusRollup(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notification_events", "notifications", "users", "notification_groups", "tenants")
+	cleanTable(t, pool, "notification_events", "notifications", "users", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 
-	// 1. Create tenant, user, group, notification (status: pending)
+	// 1. Create tenant, user, category, notification (status: pending)
 	tenantID := uuid.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Event Rollup Tenant")
 	if err != nil {
@@ -30,21 +30,21 @@ func TestEventInsertAndStatusRollup(t *testing.T) {
 		t.Fatalf("EnsureUser: %v", err)
 	}
 
-	group, err := s.CreateGroup(ctx, "events-test-group", "Events Test Group", []string{"email", "inbox"})
+	cat, err := s.CreateCategory(ctx, "events-test-cat", "Events Test Category", []string{"email", "inbox"}, "on", 0)
 	if err != nil {
-		t.Fatalf("CreateGroup: %v", err)
+		t.Fatalf("CreateCategory: %v", err)
 	}
 
 	notifID := id.New()
 	n := &models.Notification{
-		ID:       notifID,
-		TenantID: tenantID,
-		UserID:   user.ID,
-		GroupID:  group.ID,
-		Title:    "Test Notification",
-		Body:     "Testing event insert and status rollup",
-		Channels: []string{"email", "inbox"},
-		Status:   models.StatusPending,
+		ID:         notifID,
+		TenantID:   tenantID,
+		UserID:     user.ID,
+		CategoryID: cat.ID,
+		Title:      "Test Notification",
+		Body:       "Testing event insert and status rollup",
+		Channels:   []string{"email", "inbox"},
+		Status:     models.StatusPending,
 	}
 
 	_, err = s.CreateNotification(ctx, n)

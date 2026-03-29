@@ -130,6 +130,20 @@ func (s *Server) registerPreferenceRoutes() {
 			return nil, huma.Error401Unauthorized("missing user")
 		}
 
+		sub, err := s.store.GetSubscriptionByID(ctx, input.SubscriptionID)
+		if err != nil {
+			return nil, huma.Error404NotFound("subscription not found")
+		}
+
+		cat, err := s.store.GetCategoryByID(ctx, sub.CategoryID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+
+		if cat.DefaultState == "required" {
+			return nil, huma.Error403Forbidden("cannot modify required subscription preferences")
+		}
+
 		if _, err := s.store.SetUserSubscription(ctx, userID, input.SubscriptionID, input.Body.OptedIn); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}

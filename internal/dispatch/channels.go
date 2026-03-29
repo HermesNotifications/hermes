@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/store"
@@ -34,7 +35,7 @@ func (cr *ChannelResolver) ResolveChannels(ctx context.Context, explicitChannels
 		if len(template.DefaultChannels) > 0 {
 			return template.DefaultChannels, nil
 		}
-		return nil, nil
+		return nil, fmt.Errorf("standalone template %s has no default channels and no explicit channels provided", template.Slug)
 	}
 
 	// Template with subscription — resolve category
