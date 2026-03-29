@@ -50,8 +50,8 @@ func TestRunMigrations(t *testing.T) {
 	}
 	defer pool.Close()
 
-	tables := []string{"tenants", "api_keys", "users", "notification_groups",
-		"notification_types", "notifications", "notification_events", "user_preferences"}
+	tables := []string{"tenants", "api_keys", "users", "subscription_categories",
+		"subscriptions", "notification_templates", "notifications", "notification_events", "user_subscriptions"}
 
 	for _, table := range tables {
 		var exists bool

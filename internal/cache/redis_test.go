@@ -57,7 +57,7 @@ func TestIdempotencyKey_SetNX(t *testing.T) {
 	}
 }
 
-func TestTypeConfig_Cache(t *testing.T) {
+func TestTemplateConfig_Cache(t *testing.T) {
 	c, err := cache.Connect(testRedisURL(t))
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
@@ -65,39 +65,39 @@ func TestTypeConfig_Cache(t *testing.T) {
 	defer c.Close()
 
 	ctx := context.Background()
-	slug := "test.type." + time.Now().Format(time.RFC3339Nano)
+	slug := "test.template." + time.Now().Format(time.RFC3339Nano)
 	data := []byte(`{"slug":"test","email_subject":"Hello"}`)
 
 	// Cache miss
-	got, err := c.GetTypeConfig(ctx, slug)
+	got, err := c.GetTemplateConfig(ctx, slug)
 	if err != nil {
-		t.Fatalf("GetTypeConfig: %v", err)
+		t.Fatalf("GetTemplateConfig: %v", err)
 	}
 	if got != nil {
 		t.Fatal("expected nil on cache miss")
 	}
 
 	// Set
-	if err := c.SetTypeConfig(ctx, slug, data, 5*time.Minute); err != nil {
-		t.Fatalf("SetTypeConfig: %v", err)
+	if err := c.SetTemplateConfig(ctx, slug, data, 5*time.Minute); err != nil {
+		t.Fatalf("SetTemplateConfig: %v", err)
 	}
 
 	// Cache hit
-	got, err = c.GetTypeConfig(ctx, slug)
+	got, err = c.GetTemplateConfig(ctx, slug)
 	if err != nil {
-		t.Fatalf("GetTypeConfig: %v", err)
+		t.Fatalf("GetTemplateConfig: %v", err)
 	}
 	if string(got) != string(data) {
 		t.Fatalf("expected %s, got %s", data, got)
 	}
 
 	// Invalidate
-	if err := c.InvalidateTypeConfig(ctx, slug); err != nil {
-		t.Fatalf("InvalidateTypeConfig: %v", err)
+	if err := c.InvalidateTemplateConfig(ctx, slug); err != nil {
+		t.Fatalf("InvalidateTemplateConfig: %v", err)
 	}
-	got, err = c.GetTypeConfig(ctx, slug)
+	got, err = c.GetTemplateConfig(ctx, slug)
 	if err != nil {
-		t.Fatalf("GetTypeConfig after invalidate: %v", err)
+		t.Fatalf("GetTemplateConfig after invalidate: %v", err)
 	}
 	if got != nil {
 		t.Fatal("expected nil after invalidation")

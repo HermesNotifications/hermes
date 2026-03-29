@@ -19,10 +19,11 @@ func TestCreateTemplate_And_GetBySlug(t *testing.T) {
 	catID := cat.ID
 	subject := "Invoice {{.invoice_number}} paid"
 	nt, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
-		SubscriptionID: &catID,
-		Slug:           "invoice.paid",
-		Name:           "Invoice Paid",
-		EmailSubject:   &subject,
+		SubscriptionID:  &catID,
+		Slug:            "invoice.paid",
+		Name:            "Invoice Paid",
+		DefaultChannels: []string{"email"},
+		EmailSubject:    &subject,
 	})
 	if err != nil {
 		t.Fatalf("CreateTemplate: %v", err)
@@ -43,8 +44,9 @@ func TestDeleteTemplate(t *testing.T) {
 
 	ctx := context.Background()
 	nt, _ := s.CreateTemplate(ctx, &models.NotificationTemplate{
-		Slug: "standalone.alert",
-		Name: "Standalone Alert",
+		Slug:            "standalone.alert",
+		Name:            "Standalone Alert",
+		DefaultChannels: []string{},
 	})
 
 	if err := s.DeleteTemplate(ctx, nt.ID); err != nil {

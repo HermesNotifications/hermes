@@ -17,6 +17,13 @@ func TestSMTPProvider_SendToMailpit(t *testing.T) {
 	smtpPort := 1025
 	mailpitAPI := envOr("MAILPIT_API_URL", "http://localhost:8025")
 
+	// Skip if Mailpit is not running (not available in CI)
+	resp, err := http.Get(mailpitAPI + "/api/v1/messages")
+	if err != nil {
+		t.Skip("Mailpit not available, skipping SMTP integration test")
+	}
+	resp.Body.Close()
+
 	// Delete existing messages to start clean
 	req, _ := http.NewRequest(http.MethodDelete, mailpitAPI+"/api/v1/messages", nil)
 	http.DefaultClient.Do(req)
