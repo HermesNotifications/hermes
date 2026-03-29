@@ -11,17 +11,19 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@hermes-notifications/client": "workspace:*",
-    "lit": "^3.0.0"
+    "lit": "^3.3.2"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "typescript": "^5.9.3"
   },
   "license": "MIT"
 }

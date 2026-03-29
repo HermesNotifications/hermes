@@ -11,18 +11,20 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
     "generate": "openapi-typescript ../../../../api/admin/openapi.yaml -o src/generated/admin-api.d.ts"
   },
   "dependencies": {
-    "openapi-fetch": "^0.13.0"
+    "openapi-fetch": "^0.13.8"
   },
   "devDependencies": {
-    "openapi-typescript": "^7.6.0",
-    "typescript": "^5.8.0"
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3"
   },
   "license": "MIT"
 }

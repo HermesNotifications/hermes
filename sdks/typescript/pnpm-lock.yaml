@@ -11,17 +11,17 @@ importers:
   packages/hermes-client:
     dependencies:
       centrifuge:
-        specifier: ^5.0.0
+        specifier: ^5.5.3
         version: 5.5.3
       openapi-fetch:
-        specifier: ^0.13.0
+        specifier: ^0.13.8
         version: 0.13.8
     devDependencies:
       openapi-typescript:
-        specifier: ^7.6.0
+        specifier: ^7.13.0
         version: 7.13.0(typescript@5.9.3)
       typescript:
-        specifier: ^5.8.0
+        specifier: ^5.9.3
         version: 5.9.3
 
   packages/hermes-react:
@@ -31,26 +31,26 @@ importers:
         version: link:../hermes-client
     devDependencies:
       '@types/react':
-        specifier: ^19.0.0
+        specifier: ^19.2.14
         version: 19.2.14
       react:
-        specifier: ^19.0.0
+        specifier: ^19.2.4
         version: 19.2.4
       typescript:
-        specifier: ^5.8.0
+        specifier: ^5.9.3
         version: 5.9.3
 
   packages/hermes-server:
     dependencies:
       openapi-fetch:
-        specifier: ^0.13.0
+        specifier: ^0.13.8
         version: 0.13.8
     devDependencies:
       openapi-typescript:
-        specifier: ^7.6.0
+        specifier: ^7.13.0
         version: 7.13.0(typescript@5.9.3)
       typescript:
-        specifier: ^5.8.0
+        specifier: ^5.9.3
         version: 5.9.3
 
   packages/hermes-web:
@@ -59,11 +59,11 @@ importers:
         specifier: workspace:*
         version: link:../hermes-client
       lit:
-        specifier: ^3.0.0
+        specifier: ^3.3.2
         version: 3.3.2
     devDependencies:
       typescript:
-        specifier: ^5.8.0
+        specifier: ^5.9.3
         version: 5.9.3
 
 packages:
@@ -145,8 +145,8 @@ packages:
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
 
-  brace-expansion@2.0.2:
-    resolution: {integrity: sha512-Jt0vHyM+jmUBqojB7E1NIYadt0vI0Qxjxd2TErW94wDz+E2LAm5vKMXXwg6ZZBTHPuUlDgQHKXvjGBdfcF1ZDQ==}
+  brace-expansion@2.0.3:
+    resolution: {integrity: sha512-MCV/fYJEbqx68aE58kv2cA/kiky1G8vux3OR6/jbS+jIMe/6fJWa0DTzJU7dqijOWYwHi1t29FlfYI9uytqlpA==}
 
   centrifuge@5.5.3:
     resolution: {integrity: sha512-LPkWnsAxu7JaE5S738XiREzJIko3Pf/qnWb3kd0q/OR0OJONUbSdnZ5pKsEI2yFi/odQ89SYsHPhLuEeZFhp/g==}
@@ -358,7 +358,7 @@ snapshots:
 
   balanced-match@1.0.2: {}
 
-  brace-expansion@2.0.2:
+  brace-expansion@2.0.3:
     dependencies:
       balanced-match: 1.0.2
 
@@ -422,7 +422,7 @@ snapshots:
 
   minimatch@5.1.9:
     dependencies:
-      brace-expansion: 2.0.2
+      brace-expansion: 2.0.3
 
   ms@2.1.3: {}
 

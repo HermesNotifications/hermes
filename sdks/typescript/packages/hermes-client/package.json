@@ -11,7 +11,9 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
@@ -20,12 +22,12 @@
     "generate": "pnpm generate:inbox && pnpm generate:user"
   },
   "dependencies": {
-    "openapi-fetch": "^0.13.0",
-    "centrifuge": "^5.0.0"
+    "centrifuge": "^5.5.3",
+    "openapi-fetch": "^0.13.8"
   },
   "devDependencies": {
-    "openapi-typescript": "^7.6.0",
-    "typescript": "^5.8.0"
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3"
   },
   "license": "MIT"
 }
