@@ -170,7 +170,7 @@ func TestSendNotification_E2E(t *testing.T) {
 
 	// 7. Verify NATS message was published
 	received := make(chan []byte, 1)
-	err = natsClient.Subscribe("notification.send", "test-consumer", func(_ context.Context, data []byte) error {
+	err = natsClient.Subscribe("notification.send", "test-consumer", 256, 1, func(_ context.Context, data []byte) error {
 		select {
 		case received <- data:
 		default:

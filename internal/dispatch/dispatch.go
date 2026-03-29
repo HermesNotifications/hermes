@@ -36,7 +36,7 @@ func NewDispatch(nats *messaging.Client, store store.NotificationRepository, use
 }
 
 func (d *Dispatch) Start() error {
-	return d.nats.Subscribe("notification.send", "dispatch", 256, func(ctx context.Context, data []byte) error {
+	return d.nats.Subscribe("notification.send", "dispatch", 256, 1, func(ctx context.Context, data []byte) error {
 		return d.handleSend(ctx, data)
 	})
 }

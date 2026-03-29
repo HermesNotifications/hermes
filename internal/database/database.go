@@ -11,7 +11,13 @@ import (
 )
 
 func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	// Allow pool tuning via connection string params (pool_max_conns, pool_min_conns, etc.)
+	// pgxpool.ParseConfig already respects these from the URL.
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}

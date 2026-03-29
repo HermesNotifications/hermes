@@ -52,7 +52,7 @@ func TestPublish_And_Subscribe(t *testing.T) {
 	defer cancel()
 
 	received := make(chan []byte, 1)
-	if err := client.Subscribe("notification.send", "test-consumer", func(_ context.Context, data []byte) error {
+	if err := client.Subscribe("notification.send", "test-consumer", 256, 1, func(_ context.Context, data []byte) error {
 		received <- data
 		return nil
 	}); err != nil {

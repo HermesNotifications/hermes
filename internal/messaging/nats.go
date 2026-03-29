@@ -64,7 +64,7 @@ func (c *Client) Publish(ctx context.Context, subject string, data []byte) error
 	return err
 }
 
-func (c *Client) Subscribe(subject, consumer string, maxAckPending int, handler func(ctx context.Context, data []byte) error) error {
+func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency int, handler func(ctx context.Context, data []byte) error) error {
 	streamName := ""
 	for _, s := range Streams {
 		for _, subj := range s.Subjects {
@@ -88,17 +88,22 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending int, handler 
 		return fmt.Errorf("create consumer: %w", err)
 	}
 
-	_, err = cons.Consume(func(msg jetstream.Msg) {
-		ctx, span := tracing.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
-		defer span.Finish()
+	for i := 0; i < concurrency; i++ {
+		_, err = cons.Consume(func(msg jetstream.Msg) {
+			ctx, span := tracing.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
+			defer span.Finish()
 
-		if err := handler(ctx, msg.Data()); err != nil {
-			_ = msg.Nak()
-			return
+			if err := handler(ctx, msg.Data()); err != nil {
+				_ = msg.Nak()
+				return
+			}
+			_ = msg.Ack()
+		})
+		if err != nil {
+			return fmt.Errorf("start consumer %d: %w", i, err)
 		}
-		_ = msg.Ack()
-	})
-	return err
+	}
+	return nil
 }
 
 func (c *Client) Close() {

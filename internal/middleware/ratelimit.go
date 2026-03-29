@@ -36,6 +36,24 @@ func (b *tokenBucket) allow() bool {
 func RateLimit(keyFunc func(*http.Request) string, burst int, sustained int) func(http.Handler) http.Handler {
 	buckets := sync.Map{}
 
+	// Evict stale entries every 5 minutes
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			buckets.Range(func(key, value any) bool {
+				b := value.(*tokenBucket)
+				b.mu.Lock()
+				stale := time.Since(b.lastRefill) > 30*time.Minute
+				b.mu.Unlock()
+				if stale {
+					buckets.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := keyFunc(r)

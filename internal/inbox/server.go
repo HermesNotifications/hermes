@@ -90,6 +90,9 @@ func (s *Server) API() huma.API {
 
 func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.router
+	h = middleware.RateLimit(func(r *http.Request) string {
+		return auth.UserIDFromContext(r.Context())
+	}, 50, 20)(h)
 	if !s.skipAuth {
 		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}
