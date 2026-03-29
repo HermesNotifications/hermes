@@ -32,7 +32,7 @@ func New(nats *messaging.Client, st store.EventRepository, logger *slog.Logger) 
 }
 
 func (w *Writer) Start(_ context.Context) error {
-	return w.nats.Subscribe("notification.events", "event-writer", func(ctx context.Context, data []byte) error {
+	return w.nats.Subscribe("notification.events", "event-writer", 1000, func(ctx context.Context, data []byte) error {
 		msg, err := hermenats.UnmarshalEvent(data)
 		if err != nil {
 			w.logger.Error("unmarshal event", "error", err)

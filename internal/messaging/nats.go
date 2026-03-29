@@ -64,7 +64,7 @@ func (c *Client) Publish(ctx context.Context, subject string, data []byte) error
 	return err
 }
 
-func (c *Client) Subscribe(subject, consumer string, handler func(ctx context.Context, data []byte) error) error {
+func (c *Client) Subscribe(subject, consumer string, maxAckPending int, handler func(ctx context.Context, data []byte) error) error {
 	streamName := ""
 	for _, s := range Streams {
 		for _, subj := range s.Subjects {
@@ -82,6 +82,7 @@ func (c *Client) Subscribe(subject, consumer string, handler func(ctx context.Co
 		Durable:       consumer,
 		FilterSubject: subject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
+		MaxAckPending: maxAckPending,
 	})
 	if err != nil {
 		return fmt.Errorf("create consumer: %w", err)
