@@ -47,3 +47,11 @@ sdks/java/hermes-server-sdk/build/
 # SDKs - .NET
 sdks/dotnet/Hermes.ServerSdk/src/*/bin/
 sdks/dotnet/Hermes.ServerSdk/src/*/obj/
+
+# Admin portal
+web/admin/node_modules/
+web/admin/.next/
+web/admin/.env.local
+
+# pnpm workspace root
+node_modules/
