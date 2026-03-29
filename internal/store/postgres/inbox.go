@@ -48,7 +48,7 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 	}
 
 	// Build the query
-	query := fmt.Sprintf(`SELECT id, tenant_id, user_id, type_id, group_id, title, body,
+	query := fmt.Sprintf(`SELECT id, tenant_id, user_id, template_id, category_id, title, body,
 	        action_url, action_label, idempotency_key, channels, status,
 	        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 	 FROM notifications
@@ -81,7 +81,7 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 	for rows.Next() {
 		var n models.Notification
 		if err := rows.Scan(
-			&n.ID, &n.TenantID, &n.UserID, &n.TypeID, &n.GroupID,
+			&n.ID, &n.TenantID, &n.UserID, &n.TemplateID, &n.CategoryID,
 			&n.Title, &n.Body, &n.ActionURL, &n.ActionLabel,
 			&n.IdempotencyKey, &n.Channels, &n.Status,
 			&n.CreatedAt, &n.SentAt, &n.DeliveredAt, &n.ReadAt, &n.ArchivedAt, &n.DeletedAt,

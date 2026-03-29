@@ -11,29 +11,19 @@ import (
 func TestHandleSend_DirectContent(t *testing.T) {
 	srv := newTestServer(t)
 
-	// Create a group first
-	groupBody := `{"slug":"billing","name":"Billing","default_channels":["email","inbox"]}`
-	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create group: %d %s", rec.Code, rec.Body.String())
-	}
-
-	// Send notification with direct content
+	// Send notification with direct content and explicit channels
 	body := `{
 		"tenant_id": "test-tenant-id",
 		"user_id": "ext-user-1",
-		"group": "billing",
 		"content": {
 			"title": "Invoice Paid",
 			"body": "Your invoice has been paid."
-		}
+		},
+		"channels": ["email"]
 	}`
-	req = httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
+	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	rec = httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusAccepted {
@@ -47,7 +37,7 @@ func TestHandleSend_DirectContent(t *testing.T) {
 	}
 }
 
-func TestHandleSend_MissingTypeAndContent(t *testing.T) {
+func TestHandleSend_MissingTemplateAndContent(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"tenant_id": "test-tenant-id", "user_id": "ext-1"}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
@@ -60,9 +50,9 @@ func TestHandleSend_MissingTypeAndContent(t *testing.T) {
 	}
 }
 
-func TestHandleSend_BothTypeAndContent(t *testing.T) {
+func TestHandleSend_BothTemplateAndContent(t *testing.T) {
 	srv := newTestServer(t)
-	body := `{"tenant_id": "test-tenant-id", "user_id": "ext-1", "type": "foo", "content": {"title": "x", "body": "y"}}`
+	body := `{"tenant_id": "test-tenant-id", "user_id": "ext-1", "template": "foo", "content": {"title": "x", "body": "y"}}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -75,7 +65,7 @@ func TestHandleSend_BothTypeAndContent(t *testing.T) {
 
 func TestHandleSend_UnknownTenant(t *testing.T) {
 	srv := newTestServer(t)
-	body := `{"tenant_id": "unknown-tenant", "user_id": "ext-1", "content": {"title": "x", "body": "y"}, "group": "billing"}`
+	body := `{"tenant_id": "unknown-tenant", "user_id": "ext-1", "content": {"title": "x", "body": "y"}, "channels": ["email"]}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -86,7 +76,7 @@ func TestHandleSend_UnknownTenant(t *testing.T) {
 	}
 }
 
-func TestHandleSend_MissingGroupForDirectSend(t *testing.T) {
+func TestHandleSend_MissingChannelsForDirectSend(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"tenant_id": "test-tenant-id", "user_id": "ext-1", "content": {"title": "x", "body": "y"}}`
 	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(body))

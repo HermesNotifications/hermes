@@ -23,8 +23,8 @@ type Client struct {
 	apiKey     string
 	httpClient *http.Client
 
-	Groups        *GroupsService
-	Types         *TypesService
+	Categories    *CategoriesService
+	Templates     *TemplatesService
 	Notifications *NotificationsService
 	Auth          *AuthService
 	APIKeys       *APIKeysService
@@ -47,8 +47,8 @@ func New(baseURL, apiKey string, opts ...Option) *Client {
 	for _, opt := range opts {
 		opt(c)
 	}
-	c.Groups = &GroupsService{client: c}
-	c.Types = &TypesService{client: c}
+	c.Categories = &CategoriesService{client: c}
+	c.Templates = &TemplatesService{client: c}
 	c.Notifications = &NotificationsService{client: c}
 	c.Auth = &AuthService{client: c}
 	c.APIKeys = &APIKeysService{client: c}

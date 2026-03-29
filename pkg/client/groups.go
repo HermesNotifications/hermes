@@ -7,61 +7,75 @@ import (
 	"time"
 )
 
-type Group struct {
+type SubscriptionCategory struct {
 	ID              string    `json:"id"`
 	Slug            string    `json:"slug"`
 	Name            string    `json:"name"`
 	DefaultChannels []string  `json:"default_channels"`
+	DefaultState    string    `json:"default_state"`
+	SortOrder       int       `json:"sort_order"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
-type CreateGroupRequest struct {
+type CreateCategoryRequest struct {
 	Slug            string   `json:"slug"`
 	Name            string   `json:"name"`
 	DefaultChannels []string `json:"default_channels,omitempty"`
+	DefaultState    string   `json:"default_state"`
+	SortOrder       int      `json:"sort_order,omitempty"`
 }
 
-type UpdateGroupRequest struct {
-	Name            *string  `json:"name,omitempty"`
+type UpdateCategoryRequest struct {
+	Name            string   `json:"name"`
 	DefaultChannels []string `json:"default_channels"`
+	DefaultState    string   `json:"default_state"`
+	SortOrder       int      `json:"sort_order"`
 }
 
-type GroupsService struct {
+type CategoriesService struct {
 	client *Client
 }
 
-func (s *GroupsService) List(ctx context.Context) ([]Group, error) {
-	req, err := s.client.newRequest(ctx, http.MethodGet, "/v1/groups", nil)
+func (s *CategoriesService) List(ctx context.Context) ([]SubscriptionCategory, error) {
+	req, err := s.client.newRequest(ctx, http.MethodGet, "/v1/subscriptions/categories", nil)
 	if err != nil {
 		return nil, err
 	}
-	var groups []Group
-	if err := s.client.do(req, &groups); err != nil {
+	var categories []SubscriptionCategory
+	if err := s.client.do(req, &categories); err != nil {
 		return nil, err
 	}
-	return groups, nil
+	return categories, nil
 }
 
-func (s *GroupsService) Create(ctx context.Context, body CreateGroupRequest) (*Group, error) {
-	req, err := s.client.newRequest(ctx, http.MethodPost, "/v1/groups", body)
+func (s *CategoriesService) Create(ctx context.Context, body CreateCategoryRequest) (*SubscriptionCategory, error) {
+	req, err := s.client.newRequest(ctx, http.MethodPost, "/v1/subscriptions/categories", body)
 	if err != nil {
 		return nil, err
 	}
-	var group Group
-	if err := s.client.do(req, &group); err != nil {
+	var cat SubscriptionCategory
+	if err := s.client.do(req, &cat); err != nil {
 		return nil, err
 	}
-	return &group, nil
+	return &cat, nil
 }
 
-func (s *GroupsService) Update(ctx context.Context, id string, body UpdateGroupRequest) (*Group, error) {
-	req, err := s.client.newRequest(ctx, http.MethodPut, fmt.Sprintf("/v1/groups/%s", id), body)
+func (s *CategoriesService) Update(ctx context.Context, id string, body UpdateCategoryRequest) (*SubscriptionCategory, error) {
+	req, err := s.client.newRequest(ctx, http.MethodPut, fmt.Sprintf("/v1/subscriptions/categories/%s", id), body)
 	if err != nil {
 		return nil, err
 	}
-	var group Group
-	if err := s.client.do(req, &group); err != nil {
+	var cat SubscriptionCategory
+	if err := s.client.do(req, &cat); err != nil {
 		return nil, err
 	}
-	return &group, nil
+	return &cat, nil
+}
+
+func (s *CategoriesService) Delete(ctx context.Context, id string) error {
+	req, err := s.client.newRequest(ctx, http.MethodDelete, fmt.Sprintf("/v1/subscriptions/categories/%s", id), nil)
+	if err != nil {
+		return err
+	}
+	return s.client.do(req, nil)
 }

@@ -6,28 +6,40 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-type groupIDInput struct {
-	GroupID string `path:"group_id" doc:"Group ID"`
+type subscriptionIDInput struct {
+	SubscriptionID string `path:"subscription_id" doc:"Subscription ID"`
 }
 
 type setPreferenceInput struct {
-	GroupID string `path:"group_id" doc:"Group ID"`
-	Body    struct {
-		Channels []string `json:"channels" required:"true" minItems:"1" doc:"Preferred delivery channels"`
+	SubscriptionID string `path:"subscription_id" doc:"Subscription ID"`
+	Body           struct {
+		OptedIn bool `json:"opted_in" required:"true" doc:"Whether the user is subscribed"`
 	}
 }
 
-type preferenceListOutput struct {
+type preferenceSubscription struct {
+	ID         string `json:"id"`
+	Slug       string `json:"slug"`
+	Name       string `json:"name"`
+	OptedIn    bool   `json:"opted_in"`
+	Toggleable bool   `json:"toggleable"`
+}
+
+type preferenceCategory struct {
+	ID              string                   `json:"id"`
+	Slug            string                   `json:"slug"`
+	Name            string                   `json:"name"`
+	DefaultChannels []string                 `json:"default_channels"`
+	DefaultState    string                   `json:"default_state"`
+	Subscriptions   []preferenceSubscription `json:"subscriptions"`
+}
+
+type preferenceCenterOutput struct {
 	Body struct {
-		Data []models.UserPreference `json:"data" doc:"List of notification preferences"`
+		Categories []preferenceCategory `json:"categories"`
 	}
-}
-
-type preferenceOutput struct {
-	Body models.UserPreference
 }
 
 type statusOutput struct {
@@ -38,64 +50,108 @@ type statusOutput struct {
 
 func (s *Server) registerPreferenceRoutes() {
 	huma.Register(s.api, huma.Operation{
-		OperationID: "list-preferences",
+		OperationID: "get-preference-center",
 		Method:      http.MethodGet,
 		Path:        "/v1/users/me/preferences",
-		Summary:     "List notification preferences",
+		Summary:     "Get notification preference center",
 		Tags:        []string{"Preferences"},
-	}, func(ctx context.Context, input *struct{}) (*preferenceListOutput, error) {
+	}, func(ctx context.Context, input *struct{}) (*preferenceCenterOutput, error) {
 		userID := auth.UserIDFromContext(ctx)
 		if userID == "" {
 			return nil, huma.Error401Unauthorized("missing user")
 		}
 
-		prefs, err := s.store.GetUserPreferences(ctx, userID)
+		categories, err := s.store.ListCategories(ctx)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
 
-		if prefs == nil {
-			prefs = []models.UserPreference{}
+		userSubs, err := s.store.GetUserSubscriptions(ctx, userID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
 		}
 
-		resp := &preferenceListOutput{}
-		resp.Body.Data = prefs
+		// Build lookup of user's explicit preferences
+		userSubMap := make(map[string]bool)
+		for _, us := range userSubs {
+			userSubMap[us.SubscriptionID] = us.OptedIn
+		}
+
+		var result []preferenceCategory
+		for _, cat := range categories {
+			subs, err := s.store.ListSubscriptionsByCategory(ctx, cat.ID)
+			if err != nil {
+				return nil, huma.Error500InternalServerError("internal server error")
+			}
+
+			var prefSubs []preferenceSubscription
+			for _, sub := range subs {
+				optedIn := cat.DefaultState == "on" || cat.DefaultState == "required"
+				if explicit, ok := userSubMap[sub.ID]; ok {
+					optedIn = explicit
+				}
+				if cat.DefaultState == "required" {
+					optedIn = true // required always on
+				}
+
+				prefSubs = append(prefSubs, preferenceSubscription{
+					ID:         sub.ID,
+					Slug:       sub.Slug,
+					Name:       sub.Name,
+					OptedIn:    optedIn,
+					Toggleable: cat.DefaultState != "required",
+				})
+			}
+
+			result = append(result, preferenceCategory{
+				ID:              cat.ID,
+				Slug:            cat.Slug,
+				Name:            cat.Name,
+				DefaultChannels: cat.DefaultChannels,
+				DefaultState:    cat.DefaultState,
+				Subscriptions:   prefSubs,
+			})
+		}
+
+		resp := &preferenceCenterOutput{}
+		resp.Body.Categories = result
 		return resp, nil
 	})
 
 	huma.Register(s.api, huma.Operation{
 		OperationID: "set-preference",
 		Method:      http.MethodPut,
-		Path:        "/v1/users/me/preferences/{group_id}",
-		Summary:     "Set notification preference for a group",
+		Path:        "/v1/users/me/preferences/{subscription_id}",
+		Summary:     "Set subscription preference",
 		Tags:        []string{"Preferences"},
-	}, func(ctx context.Context, input *setPreferenceInput) (*preferenceOutput, error) {
+	}, func(ctx context.Context, input *setPreferenceInput) (*statusOutput, error) {
 		userID := auth.UserIDFromContext(ctx)
 		if userID == "" {
 			return nil, huma.Error401Unauthorized("missing user")
 		}
 
-		pref, err := s.store.SetUserPreference(ctx, userID, input.GroupID, input.Body.Channels)
-		if err != nil {
+		if _, err := s.store.SetUserSubscription(ctx, userID, input.SubscriptionID, input.Body.OptedIn); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
 
-		return &preferenceOutput{Body: *pref}, nil
+		resp := &statusOutput{}
+		resp.Body.Status = "ok"
+		return resp, nil
 	})
 
 	huma.Register(s.api, huma.Operation{
 		OperationID: "delete-preference",
 		Method:      http.MethodDelete,
-		Path:        "/v1/users/me/preferences/{group_id}",
-		Summary:     "Delete notification preference for a group",
+		Path:        "/v1/users/me/preferences/{subscription_id}",
+		Summary:     "Delete subscription preference (revert to default)",
 		Tags:        []string{"Preferences"},
-	}, func(ctx context.Context, input *groupIDInput) (*statusOutput, error) {
+	}, func(ctx context.Context, input *subscriptionIDInput) (*statusOutput, error) {
 		userID := auth.UserIDFromContext(ctx)
 		if userID == "" {
 			return nil, huma.Error401Unauthorized("missing user")
 		}
 
-		if err := s.store.DeleteUserPreference(ctx, userID, input.GroupID); err != nil {
+		if err := s.store.DeleteUserSubscription(ctx, userID, input.SubscriptionID); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
 

@@ -17,7 +17,7 @@ func newNotificationsCmd() *cobra.Command {
 }
 
 func newNotifSendCmd() *cobra.Command {
-	var tenantID, userID, notifType, group, data, title, body, actionURL, actionLabel, idempotencyKey string
+	var tenantID, userID, template, data, title, body, actionURL, actionLabel, idempotencyKey string
 	var channels []string
 
 	cmd := &cobra.Command{
@@ -27,8 +27,7 @@ func newNotifSendCmd() *cobra.Command {
 			req := client.SendRequest{
 				TenantID: tenantID,
 				UserID:   userID,
-				Type:     notifType,
-				Group:    group,
+				Template: template,
 				Channels: channels,
 			}
 
@@ -69,8 +68,7 @@ func newNotifSendCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
-	cmd.Flags().StringVar(&notifType, "type", "", "Notification type")
-	cmd.Flags().StringVar(&group, "group", "", "Notification group")
+	cmd.Flags().StringVar(&template, "template", "", "Notification template slug")
 	cmd.Flags().StringSliceVar(&channels, "channels", nil, "Delivery channels (comma-separated)")
 	cmd.Flags().StringVar(&data, "data", "", "Notification data as raw JSON")
 	cmd.Flags().StringVar(&title, "title", "", "Content title")

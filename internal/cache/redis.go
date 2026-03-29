@@ -46,23 +46,23 @@ func (c *Client) SetIdempotencyKey(ctx context.Context, key, notificationID stri
 	return existing, nil
 }
 
-func (c *Client) GetTypeConfig(ctx context.Context, slug string) ([]byte, error) {
-	val, err := c.rdb.Get(ctx, "type:"+slug).Bytes()
+func (c *Client) GetTemplateConfig(ctx context.Context, slug string) ([]byte, error) {
+	val, err := c.rdb.Get(ctx, "template:"+slug).Bytes()
 	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get type config: %w", err)
+		return nil, fmt.Errorf("get template config: %w", err)
 	}
 	return val, nil
 }
 
-func (c *Client) SetTypeConfig(ctx context.Context, slug string, data []byte, ttl time.Duration) error {
-	return c.rdb.Set(ctx, "type:"+slug, data, ttl).Err()
+func (c *Client) SetTemplateConfig(ctx context.Context, slug string, data []byte, ttl time.Duration) error {
+	return c.rdb.Set(ctx, "template:"+slug, data, ttl).Err()
 }
 
-func (c *Client) InvalidateTypeConfig(ctx context.Context, slug string) error {
-	return c.rdb.Del(ctx, "type:"+slug).Err()
+func (c *Client) InvalidateTemplateConfig(ctx context.Context, slug string) error {
+	return c.rdb.Del(ctx, "template:"+slug).Err()
 }
 
 func (c *Client) GetJWTSigningKeys(ctx context.Context) ([]byte, error) {

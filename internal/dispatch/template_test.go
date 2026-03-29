@@ -10,7 +10,7 @@ import (
 func strPtr(s string) *string { return &s }
 
 func TestRenderTemplates(t *testing.T) {
-	nt := &models.NotificationType{
+	nt := &models.NotificationTemplate{
 		EmailSubject: strPtr("Invoice {{.number}} paid"),
 		EmailBody:    strPtr("<p>Hi {{.name}}, invoice {{.number}} is paid.</p>"),
 		InboxTitle:   strPtr("Invoice {{.number}} paid"),
@@ -34,7 +34,7 @@ func TestRenderTemplates(t *testing.T) {
 }
 
 func TestRenderTemplates_HTMLEscaping(t *testing.T) {
-	nt := &models.NotificationType{
+	nt := &models.NotificationTemplate{
 		EmailBody: strPtr("<p>Hello {{.name}}</p>"),
 	}
 	data := map[string]any{"name": "<script>alert('xss')</script>"}

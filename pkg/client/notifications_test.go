@@ -45,7 +45,7 @@ func TestNotificationsSend(t *testing.T) {
 	result, err := c.Notifications.Send(context.Background(), client.SendRequest{
 		TenantID: "tenant1",
 		UserID:   "user1",
-		Type:     "welcome",
+		Template: "welcome",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

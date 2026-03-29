@@ -14,7 +14,7 @@ type InboxNotification struct {
 	ID          string    `json:"id"`
 	TenantID    string    `json:"tenant_id"`
 	UserID      string    `json:"user_id"`
-	GroupID     string    `json:"group_id"`
+	CategoryID  string    `json:"category_id"`
 	Title       string    `json:"title"`
 	Body        string    `json:"body"`
 	ActionURL   *string   `json:"action_url,omitempty"`

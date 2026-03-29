@@ -13,23 +13,33 @@ type TenantRepository interface {
 	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
 }
 
-// GroupRepository defines operations for managing notification groups.
-type GroupRepository interface {
-	CreateGroup(ctx context.Context, slug, name string, defaultChannels []string) (*models.NotificationGroup, error)
-	GetGroupByID(ctx context.Context, id string) (*models.NotificationGroup, error)
-	GetGroupBySlug(ctx context.Context, slug string) (*models.NotificationGroup, error)
-	ListGroups(ctx context.Context) ([]models.NotificationGroup, error)
-	UpdateGroup(ctx context.Context, id, name string, defaultChannels []string) (*models.NotificationGroup, error)
+// SubscriptionCategoryRepository defines operations for managing subscription categories.
+type SubscriptionCategoryRepository interface {
+	CreateCategory(ctx context.Context, slug, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error)
+	GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error)
+	GetCategoryBySlug(ctx context.Context, slug string) (*models.SubscriptionCategory, error)
+	ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error)
+	UpdateCategory(ctx context.Context, id, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error)
+	DeleteCategory(ctx context.Context, id string) error
 }
 
-// TypeRepository defines operations for managing notification types (templates).
-type TypeRepository interface {
-	CreateType(ctx context.Context, input *models.NotificationType) (*models.NotificationType, error)
-	GetTypeByID(ctx context.Context, id string) (*models.NotificationType, error)
-	GetTypeBySlug(ctx context.Context, slug string) (*models.NotificationType, error)
-	ListTypes(ctx context.Context) ([]models.NotificationType, error)
-	UpdateType(ctx context.Context, input *models.NotificationType) (*models.NotificationType, error)
-	DeleteType(ctx context.Context, id string) error
+// SubscriptionRepository defines operations for managing subscriptions.
+type SubscriptionRepository interface {
+	CreateSubscription(ctx context.Context, categoryID, slug, name string, sortOrder int) (*models.Subscription, error)
+	GetSubscriptionByID(ctx context.Context, id string) (*models.Subscription, error)
+	ListSubscriptionsByCategory(ctx context.Context, categoryID string) ([]models.Subscription, error)
+	UpdateSubscription(ctx context.Context, id, name string, sortOrder int) (*models.Subscription, error)
+	DeleteSubscription(ctx context.Context, id string) error
+}
+
+// TemplateRepository defines operations for managing notification templates.
+type TemplateRepository interface {
+	CreateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
+	GetTemplateByID(ctx context.Context, id string) (*models.NotificationTemplate, error)
+	GetTemplateBySlug(ctx context.Context, slug string) (*models.NotificationTemplate, error)
+	ListTemplates(ctx context.Context) ([]models.NotificationTemplate, error)
+	UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
+	DeleteTemplate(ctx context.Context, id string) error
 }
 
 // UserRepository defines operations for managing users.
@@ -39,12 +49,12 @@ type UserRepository interface {
 	UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error)
 }
 
-// PreferenceRepository defines operations for managing user notification preferences.
-type PreferenceRepository interface {
-	GetUserPreference(ctx context.Context, userID, groupID string) (*models.UserPreference, error)
-	GetUserPreferences(ctx context.Context, userID string) ([]models.UserPreference, error)
-	SetUserPreference(ctx context.Context, userID, groupID string, channels []string) (*models.UserPreference, error)
-	DeleteUserPreference(ctx context.Context, userID, groupID string) error
+// UserSubscriptionRepository defines operations for managing user subscription preferences.
+type UserSubscriptionRepository interface {
+	GetUserSubscription(ctx context.Context, userID, subscriptionID string) (*models.UserSubscription, error)
+	GetUserSubscriptions(ctx context.Context, userID string) ([]models.UserSubscription, error)
+	SetUserSubscription(ctx context.Context, userID, subscriptionID string, optedIn bool) (*models.UserSubscription, error)
+	DeleteUserSubscription(ctx context.Context, userID, subscriptionID string) error
 }
 
 // NotificationRepository defines operations for the notification write path.
@@ -88,10 +98,11 @@ type AuthRepository interface {
 // Repository is the composite interface satisfied by any complete store backend.
 type Repository interface {
 	TenantRepository
-	GroupRepository
-	TypeRepository
+	SubscriptionCategoryRepository
+	SubscriptionRepository
+	TemplateRepository
 	UserRepository
-	PreferenceRepository
+	UserSubscriptionRepository
 	NotificationRepository
 	EventRepository
 	InboxRepository

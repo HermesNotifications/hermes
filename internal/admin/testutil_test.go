@@ -15,8 +15,9 @@ import (
 // mockStore implements admin.AdminStore with in-memory storage.
 type mockStore struct {
 	tenants       []models.Tenant
-	groups        []models.NotificationGroup
-	types         []models.NotificationType
+	categories    []models.SubscriptionCategory
+	subscriptions []models.Subscription
+	templates     []models.NotificationTemplate
 	users         []models.User
 	notifications []models.Notification
 	events        []models.NotificationEvent
@@ -34,105 +35,158 @@ func (m *mockStore) GetTenantByID(ctx context.Context, id string) (*models.Tenan
 	return nil, fmt.Errorf("tenant not found: %s", id)
 }
 
-// --- Groups ---
+// --- Subscription Categories ---
 
-func (m *mockStore) CreateGroup(ctx context.Context, slug, name string, channels []string) (*models.NotificationGroup, error) {
-	g := models.NotificationGroup{
-		ID:              fmt.Sprintf("grp-%d", len(m.groups)+1),
-		Slug:            slug,
-		Name:            name,
-		DefaultChannels: channels,
-		CreatedAt:       time.Now(),
+func (m *mockStore) CreateCategory(ctx context.Context, slug, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error) {
+	c := models.SubscriptionCategory{
+		ID: fmt.Sprintf("sct-%d", len(m.categories)+1), Slug: slug, Name: name,
+		DefaultChannels: defaultChannels, DefaultState: defaultState, SortOrder: sortOrder,
+		CreatedAt: time.Now(),
 	}
-	m.groups = append(m.groups, g)
-	return &g, nil
+	m.categories = append(m.categories, c)
+	return &c, nil
 }
 
-func (m *mockStore) GetGroupByID(ctx context.Context, id string) (*models.NotificationGroup, error) {
-	for _, g := range m.groups {
-		if g.ID == id {
-			return &g, nil
+func (m *mockStore) GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error) {
+	for _, c := range m.categories {
+		if c.ID == id {
+			return &c, nil
 		}
 	}
-	return nil, fmt.Errorf("group not found: %s", id)
+	return nil, fmt.Errorf("category not found: %s", id)
 }
 
-func (m *mockStore) GetGroupBySlug(ctx context.Context, slug string) (*models.NotificationGroup, error) {
-	for _, g := range m.groups {
-		if g.Slug == slug {
-			return &g, nil
-		}
-	}
-	return nil, fmt.Errorf("group not found: %s", slug)
+func (m *mockStore) ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error) {
+	return m.categories, nil
 }
 
-func (m *mockStore) ListGroups(ctx context.Context) ([]models.NotificationGroup, error) {
-	return m.groups, nil
-}
-
-func (m *mockStore) UpdateGroup(ctx context.Context, id, name string, channels []string) (*models.NotificationGroup, error) {
-	for i, g := range m.groups {
-		if g.ID == id {
-			m.groups[i].Name = name
-			m.groups[i].DefaultChannels = channels
-			updated := m.groups[i]
+func (m *mockStore) UpdateCategory(ctx context.Context, id, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error) {
+	for i, c := range m.categories {
+		if c.ID == id {
+			m.categories[i].Name = name
+			m.categories[i].DefaultChannels = defaultChannels
+			m.categories[i].DefaultState = defaultState
+			m.categories[i].SortOrder = sortOrder
+			updated := m.categories[i]
 			return &updated, nil
 		}
 	}
-	return nil, fmt.Errorf("group not found: %s", id)
+	return nil, fmt.Errorf("category not found: %s", id)
 }
 
-// --- Types ---
+func (m *mockStore) DeleteCategory(ctx context.Context, id string) error {
+	for i, c := range m.categories {
+		if c.ID == id {
+			m.categories = append(m.categories[:i], m.categories[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("category not found: %s", id)
+}
 
-func (m *mockStore) CreateType(ctx context.Context, input *models.NotificationType) (*models.NotificationType, error) {
+// --- Subscriptions ---
+
+func (m *mockStore) CreateSubscription(ctx context.Context, categoryID, slug, name string, sortOrder int) (*models.Subscription, error) {
+	s := models.Subscription{
+		ID: fmt.Sprintf("sub-%d", len(m.subscriptions)+1), CategoryID: categoryID,
+		Slug: slug, Name: name, SortOrder: sortOrder, CreatedAt: time.Now(),
+	}
+	m.subscriptions = append(m.subscriptions, s)
+	return &s, nil
+}
+
+func (m *mockStore) GetSubscriptionByID(ctx context.Context, id string) (*models.Subscription, error) {
+	for _, s := range m.subscriptions {
+		if s.ID == id {
+			return &s, nil
+		}
+	}
+	return nil, fmt.Errorf("subscription not found: %s", id)
+}
+
+func (m *mockStore) ListSubscriptionsByCategory(ctx context.Context, categoryID string) ([]models.Subscription, error) {
+	var result []models.Subscription
+	for _, s := range m.subscriptions {
+		if s.CategoryID == categoryID {
+			result = append(result, s)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockStore) UpdateSubscription(ctx context.Context, id, name string, sortOrder int) (*models.Subscription, error) {
+	for i, s := range m.subscriptions {
+		if s.ID == id {
+			m.subscriptions[i].Name = name
+			m.subscriptions[i].SortOrder = sortOrder
+			updated := m.subscriptions[i]
+			return &updated, nil
+		}
+	}
+	return nil, fmt.Errorf("subscription not found: %s", id)
+}
+
+func (m *mockStore) DeleteSubscription(ctx context.Context, id string) error {
+	for i, s := range m.subscriptions {
+		if s.ID == id {
+			m.subscriptions = append(m.subscriptions[:i], m.subscriptions[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("subscription not found: %s", id)
+}
+
+// --- Templates ---
+
+func (m *mockStore) CreateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error) {
 	t := *input
-	t.ID = fmt.Sprintf("typ-%d", len(m.types)+1)
+	t.ID = fmt.Sprintf("ntpl-%d", len(m.templates)+1)
 	t.CreatedAt = time.Now()
-	m.types = append(m.types, t)
+	m.templates = append(m.templates, t)
 	return &t, nil
 }
 
-func (m *mockStore) GetTypeByID(ctx context.Context, id string) (*models.NotificationType, error) {
-	for _, t := range m.types {
+func (m *mockStore) GetTemplateByID(ctx context.Context, id string) (*models.NotificationTemplate, error) {
+	for _, t := range m.templates {
 		if t.ID == id {
 			return &t, nil
 		}
 	}
-	return nil, fmt.Errorf("type not found: %s", id)
+	return nil, fmt.Errorf("template not found: %s", id)
 }
 
-func (m *mockStore) GetTypeBySlug(ctx context.Context, slug string) (*models.NotificationType, error) {
-	for _, t := range m.types {
+func (m *mockStore) GetTemplateBySlug(ctx context.Context, slug string) (*models.NotificationTemplate, error) {
+	for _, t := range m.templates {
 		if t.Slug == slug {
 			return &t, nil
 		}
 	}
-	return nil, fmt.Errorf("type not found: %s", slug)
+	return nil, fmt.Errorf("template not found: %s", slug)
 }
 
-func (m *mockStore) ListTypes(ctx context.Context) ([]models.NotificationType, error) {
-	return m.types, nil
+func (m *mockStore) ListTemplates(ctx context.Context) ([]models.NotificationTemplate, error) {
+	return m.templates, nil
 }
 
-func (m *mockStore) UpdateType(ctx context.Context, input *models.NotificationType) (*models.NotificationType, error) {
-	for i, t := range m.types {
+func (m *mockStore) UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error) {
+	for i, t := range m.templates {
 		if t.ID == input.ID {
-			m.types[i] = *input
-			updated := m.types[i]
+			m.templates[i] = *input
+			updated := m.templates[i]
 			return &updated, nil
 		}
 	}
-	return nil, fmt.Errorf("type not found: %s", input.ID)
+	return nil, fmt.Errorf("template not found: %s", input.ID)
 }
 
-func (m *mockStore) DeleteType(ctx context.Context, id string) error {
-	for i, t := range m.types {
+func (m *mockStore) DeleteTemplate(ctx context.Context, id string) error {
+	for i, t := range m.templates {
 		if t.ID == id {
-			m.types = append(m.types[:i], m.types[i+1:]...)
+			m.templates = append(m.templates[:i], m.templates[i+1:]...)
 			return nil
 		}
 	}
-	return fmt.Errorf("type not found: %s", id)
+	return fmt.Errorf("template not found: %s", id)
 }
 
 // --- Users ---

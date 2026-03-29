@@ -32,8 +32,8 @@ type InboxStore interface {
 	SoftDelete(ctx context.Context, userID, notificationID string) (bool, error)
 	MarkAllRead(ctx context.Context, userID string) error
 
-	// Groups (for slug resolution)
-	GetGroupByID(ctx context.Context, id string) (*models.NotificationGroup, error)
+	// Categories (for slug resolution)
+	GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error)
 }
 
 // Server is the inbox HTTP service.

@@ -10,11 +10,11 @@ import (
 	"github.com/hermes-notifications/hermes/internal/cli"
 )
 
-func TestGroupsListTableOutput(t *testing.T) {
+func TestCategoriesListTableOutput(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/groups" && r.Method == "GET" {
+		if r.URL.Path == "/v1/subscriptions/categories" && r.Method == "GET" {
 			json.NewEncoder(w).Encode([]map[string]any{
-				{"id": "g1", "slug": "alerts", "name": "Alerts", "default_channels": []string{"email"}, "created_at": "2026-01-01T00:00:00Z"},
+				{"id": "sct-1", "slug": "general", "name": "General", "default_channels": []string{"email"}, "default_state": "on", "created_at": "2026-01-01T00:00:00Z"},
 			})
 			return
 		}
@@ -25,19 +25,19 @@ func TestGroupsListTableOutput(t *testing.T) {
 	cmd := cli.NewRootCmdForTest()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--url", srv.URL, "--api-key", "test", "groups", "list"})
+	cmd.SetArgs([]string{"--url", srv.URL, "--api-key", "test", "categories", "list"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(out.Bytes(), []byte("alerts")) {
-		t.Errorf("expected 'alerts' in output, got: %s", out.String())
+	if !bytes.Contains(out.Bytes(), []byte("general")) {
+		t.Errorf("expected 'general' in output, got: %s", out.String())
 	}
 }
 
-func TestGroupsListJSONOutput(t *testing.T) {
+func TestCategoriesListJSONOutput(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode([]map[string]any{
-			{"id": "g1", "slug": "alerts", "name": "Alerts", "default_channels": []string{"email"}, "created_at": "2026-01-01T00:00:00Z"},
+			{"id": "sct-1", "slug": "general", "name": "General", "default_channels": []string{"email"}, "default_state": "on", "created_at": "2026-01-01T00:00:00Z"},
 		})
 	}))
 	defer srv.Close()
@@ -45,11 +45,11 @@ func TestGroupsListJSONOutput(t *testing.T) {
 	cmd := cli.NewRootCmdForTest()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--url", srv.URL, "--api-key", "test", "-o", "json", "groups", "list"})
+	cmd.SetArgs([]string{"--url", srv.URL, "--api-key", "test", "-o", "json", "categories", "list"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(out.Bytes(), []byte("alerts")) {
-		t.Errorf("expected 'alerts' in JSON output, got: %s", out.String())
+	if !bytes.Contains(out.Bytes(), []byte("general")) {
+		t.Errorf("expected 'general' in JSON output, got: %s", out.String())
 	}
 }

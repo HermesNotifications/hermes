@@ -6,11 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-func TestHandleListPreferences(t *testing.T) {
+func TestHandleGetPreferenceCenter(t *testing.T) {
 	srv, _ := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/users/me/preferences", nil)
@@ -24,20 +22,50 @@ func TestHandleListPreferences(t *testing.T) {
 	}
 
 	var resp struct {
-		Data []models.UserPreference `json:"data"`
+		Categories []struct {
+			ID            string `json:"id"`
+			Slug          string `json:"slug"`
+			DefaultState  string `json:"default_state"`
+			Subscriptions []struct {
+				ID      string `json:"id"`
+				Slug    string `json:"slug"`
+				OptedIn bool   `json:"opted_in"`
+			} `json:"subscriptions"`
+		} `json:"categories"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(resp.Data) != 1 {
-		t.Fatalf("expected 1 preference, got %d", len(resp.Data))
+	if len(resp.Categories) != 2 {
+		t.Fatalf("expected 2 categories, got %d", len(resp.Categories))
 	}
-	if resp.Data[0].GroupID != "group-1" {
-		t.Fatalf("expected group_id group-1, got %q", resp.Data[0].GroupID)
+
+	// General category: default_state=on, user has no explicit pref -> opted_in=true
+	general := resp.Categories[0]
+	if general.Slug != "general" {
+		t.Fatalf("expected general category first, got %q", general.Slug)
+	}
+	if len(general.Subscriptions) != 1 {
+		t.Fatalf("expected 1 subscription in general, got %d", len(general.Subscriptions))
+	}
+	if !general.Subscriptions[0].OptedIn {
+		t.Fatal("expected general subscription to be opted in by default")
+	}
+
+	// Marketing category: default_state=off, user has explicit opted_in=true
+	marketing := resp.Categories[1]
+	if marketing.Slug != "marketing" {
+		t.Fatalf("expected marketing category second, got %q", marketing.Slug)
+	}
+	if len(marketing.Subscriptions) != 1 {
+		t.Fatalf("expected 1 subscription in marketing, got %d", len(marketing.Subscriptions))
+	}
+	if !marketing.Subscriptions[0].OptedIn {
+		t.Fatal("expected marketing subscription to be opted in (explicit user pref)")
 	}
 }
 
-func TestHandleListPreferences_NoUser(t *testing.T) {
+func TestHandleGetPreferenceCenter_NoUser(t *testing.T) {
 	srv, _ := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/users/me/preferences", nil)
@@ -53,8 +81,8 @@ func TestHandleListPreferences_NoUser(t *testing.T) {
 func TestHandleSetPreference(t *testing.T) {
 	srv, store := newTestServer(t)
 
-	body := `{"channels":["sms","inbox"]}`
-	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/preferences/group-1", bytes.NewBufferString(body))
+	body := `{"opted_in":false}`
+	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/preferences/sub-2", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUser(req, testUserID)
 	rec := httptest.NewRecorder()
@@ -65,25 +93,27 @@ func TestHandleSetPreference(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var pref models.UserPreference
-	if err := json.NewDecoder(rec.Body).Decode(&pref); err != nil {
+	var resp struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(pref.Channels) != 2 {
-		t.Fatalf("expected 2 channels, got %d", len(pref.Channels))
+	if resp.Status != "ok" {
+		t.Fatalf("expected status ok, got %q", resp.Status)
 	}
 
 	// Verify store was updated
-	if len(store.preferences[0].Channels) != 2 || store.preferences[0].Channels[0] != "sms" {
-		t.Fatalf("store preference not updated: %v", store.preferences[0].Channels)
+	if store.userSubscriptions[0].OptedIn != false {
+		t.Fatal("expected user subscription to be opted out")
 	}
 }
 
-func TestHandleSetPreference_NewGroup(t *testing.T) {
+func TestHandleSetPreference_NewSubscription(t *testing.T) {
 	srv, store := newTestServer(t)
 
-	body := `{"channels":["email"]}`
-	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/preferences/group-2", bytes.NewBufferString(body))
+	body := `{"opted_in":true}`
+	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/preferences/sub-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUser(req, testUserID)
 	rec := httptest.NewRecorder()
@@ -94,32 +124,15 @@ func TestHandleSetPreference_NewGroup(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	if len(store.preferences) != 2 {
-		t.Fatalf("expected 2 preferences, got %d", len(store.preferences))
-	}
-}
-
-func TestHandleSetPreference_EmptyChannels(t *testing.T) {
-	srv, _ := newTestServer(t)
-
-	body := `{"channels":[]}`
-	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/preferences/group-1", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = requestWithUser(req, testUserID)
-	rec := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(rec, req)
-
-	// huma validates minItems:1 and returns 422
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
+	if len(store.userSubscriptions) != 2 {
+		t.Fatalf("expected 2 user subscriptions, got %d", len(store.userSubscriptions))
 	}
 }
 
 func TestHandleDeletePreference(t *testing.T) {
 	srv, store := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodDelete, "/v1/users/me/preferences/group-1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/users/me/preferences/sub-2", nil)
 	req = requestWithUser(req, testUserID)
 	rec := httptest.NewRecorder()
 
@@ -129,8 +142,8 @@ func TestHandleDeletePreference(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	if len(store.preferences) != 0 {
-		t.Fatalf("expected 0 preferences after delete, got %d", len(store.preferences))
+	if len(store.userSubscriptions) != 0 {
+		t.Fatalf("expected 0 user subscriptions after delete, got %d", len(store.userSubscriptions))
 	}
 }
 

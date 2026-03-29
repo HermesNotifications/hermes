@@ -47,19 +47,19 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 
 	log := d.logger.With("notification_id", msg.NotificationID)
 
-	var nt *models.NotificationType
+	var nt *models.NotificationTemplate
 	var rendered *RenderedContent
 	content := msg.Content
 
-	if msg.Metadata.Type != "" {
-		// Type-based send: resolve type and render templates
-		nt, err = d.templateResolver.Resolve(ctx, msg.Metadata.Type)
+	if msg.Metadata.Template != "" {
+		// Template-based send: resolve template and render
+		nt, err = d.templateResolver.Resolve(ctx, msg.Metadata.Template)
 		if err != nil {
-			log.Error("resolve type", "error", err, "type", msg.Metadata.Type)
+			log.Error("resolve template", "error", err, "template", msg.Metadata.Template)
 			d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
 				"error": err.Error(),
 			})
-			return fmt.Errorf("resolve type: %w", err)
+			return fmt.Errorf("resolve template: %w", err)
 		}
 
 		rendered, err = RenderTemplates(nt, msg.Data)
@@ -85,7 +85,13 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 	}
 
 	// Resolve channels
-	channels, err := d.channelResolver.ResolveChannels(ctx, msg.Channels, msg.UserID, msg.GroupID)
+	var channels []string
+	if nt != nil {
+		channels, err = d.channelResolver.ResolveChannels(ctx, msg.Channels, msg.UserID, nt)
+	} else {
+		// Direct send: use explicit channels
+		channels = msg.Channels
+	}
 	if err != nil {
 		log.Error("resolve channels", "error", err)
 		d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
@@ -94,8 +100,8 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		return fmt.Errorf("resolve channels: %w", err)
 	}
 
-	// Filter channels by type templates
-	channels = FilterChannelsForType(channels, nt)
+	// Filter channels by template content
+	channels = FilterChannelsForTemplate(channels, nt)
 
 	if len(channels) == 0 {
 		log.Warn("no channels after filtering")
@@ -193,7 +199,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 }
 
 // contentForChannel returns the appropriate MessageContent for a given channel.
-// For type-based sends, it uses the already-rendered templates.
+// For template-based sends, it uses the already-rendered templates.
 // For direct sends (rendered == nil), it passes through the original content.
 func contentForChannel(channel string, original hermenats.MessageContent, rendered *RenderedContent) hermenats.MessageContent {
 	if rendered == nil {

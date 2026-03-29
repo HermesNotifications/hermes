@@ -3,44 +3,36 @@ package admin_test
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-func TestHandleCreateType(t *testing.T) {
+func TestHandleCreateTemplate(t *testing.T) {
 	srv := newTestServer(t)
 
-	// First create a group (types need group_id)
-	groupBody := `{"slug":"billing","name":"Billing","default_channels":["email"]}`
-	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
+	// Create template
+	body := `{"slug":"invoice.paid","name":"Invoice Paid","email_subject":"Invoice paid"}`
+	req := httptest.NewRequest("POST", "/v1/templates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create group: expected 201, got %d", rec.Code)
-	}
-	var group map[string]any
-	json.NewDecoder(rec.Body).Decode(&group)
-	groupID := group["id"].(string)
-
-	// Create type
-	body := fmt.Sprintf(`{"group_id":"%s","slug":"invoice.paid","name":"Invoice Paid"}`, groupID)
-	req = httptest.NewRequest("POST", "/v1/types", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
+
+	var tmpl map[string]any
+	json.NewDecoder(rec.Body).Decode(&tmpl)
+	if tmpl["slug"] != "invoice.paid" {
+		t.Errorf("expected slug invoice.paid, got %v", tmpl["slug"])
+	}
 }
 
-func TestHandleCreateType_MissingFields(t *testing.T) {
+func TestHandleCreateTemplate_MissingFields(t *testing.T) {
 	srv := newTestServer(t)
 	body := `{"slug":"invoice.paid"}`
-	req := httptest.NewRequest("POST", "/v1/types", bytes.NewBufferString(body))
+	req := httptest.NewRequest("POST", "/v1/templates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -50,30 +42,25 @@ func TestHandleCreateType_MissingFields(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteType(t *testing.T) {
+func TestHandleDeleteTemplate(t *testing.T) {
 	srv := newTestServer(t)
 
-	// Create group + type
-	groupBody := `{"slug":"billing","name":"Billing","default_channels":["email"]}`
-	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
+	// Create template
+	body := `{"slug":"invoice.paid","name":"Invoice Paid"}`
+	req := httptest.NewRequest("POST", "/v1/templates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	var group map[string]any
-	json.NewDecoder(rec.Body).Decode(&group)
-	groupID := group["id"].(string)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create template: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
 
-	body := fmt.Sprintf(`{"group_id":"%s","slug":"invoice.paid","name":"Invoice Paid"}`, groupID)
-	req = httptest.NewRequest("POST", "/v1/types", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec = httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	var typ map[string]any
-	json.NewDecoder(rec.Body).Decode(&typ)
-	typeID := typ["id"].(string)
+	var tmpl map[string]any
+	json.NewDecoder(rec.Body).Decode(&tmpl)
+	templateID := tmpl["id"].(string)
 
 	// Delete
-	req = httptest.NewRequest("DELETE", "/v1/types/"+typeID, nil)
+	req = httptest.NewRequest("DELETE", "/v1/templates/"+templateID, nil)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {

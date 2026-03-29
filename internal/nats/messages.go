@@ -7,7 +7,8 @@ type SendMessage struct {
 	NotificationID string          `json:"notification_id"`
 	TenantID       string          `json:"tenant_id"`
 	UserID         string          `json:"user_id"`
-	GroupID        string          `json:"group_id"`
+	CategoryID     string          `json:"category_id"`
+	SubscriptionID string          `json:"subscription_id,omitempty"`
 	Content        MessageContent  `json:"content"`
 	Metadata       MessageMetadata `json:"metadata"`
 	Data           map[string]any  `json:"data,omitempty"`
@@ -23,8 +24,7 @@ type MessageContent struct {
 }
 
 type MessageMetadata struct {
-	Group string `json:"group"`
-	Type  string `json:"type,omitempty"`
+	Template string `json:"template,omitempty"`
 }
 
 // Recipient holds resolved contact information for the notification target.

@@ -15,9 +15,10 @@ import (
 
 // mockUserStore implements userservice.UserStore with in-memory storage.
 type mockUserStore struct {
-	users       []models.User
-	preferences []models.UserPreference
-	groups      []models.NotificationGroup
+	users             []models.User
+	userSubscriptions []models.UserSubscription
+	categories        []models.SubscriptionCategory
+	subscriptions     []models.Subscription
 }
 
 func (m *mockUserStore) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
@@ -45,45 +46,53 @@ func (m *mockUserStore) UpdateUserContacts(ctx context.Context, userID string, e
 	return nil, fmt.Errorf("user not found: %s", userID)
 }
 
-func (m *mockUserStore) GetUserPreferences(ctx context.Context, userID string) ([]models.UserPreference, error) {
-	var result []models.UserPreference
-	for _, p := range m.preferences {
-		if p.UserID == userID {
-			result = append(result, p)
+func (m *mockUserStore) GetUserSubscriptions(ctx context.Context, userID string) ([]models.UserSubscription, error) {
+	var result []models.UserSubscription
+	for _, us := range m.userSubscriptions {
+		if us.UserID == userID {
+			result = append(result, us)
 		}
 	}
 	return result, nil
 }
 
-func (m *mockUserStore) SetUserPreference(ctx context.Context, userID, groupID string, channels []string) (*models.UserPreference, error) {
-	for i, p := range m.preferences {
-		if p.UserID == userID && p.GroupID == groupID {
-			m.preferences[i].Channels = channels
-			updated := m.preferences[i]
+func (m *mockUserStore) SetUserSubscription(ctx context.Context, userID, subscriptionID string, optedIn bool) (*models.UserSubscription, error) {
+	for i, us := range m.userSubscriptions {
+		if us.UserID == userID && us.SubscriptionID == subscriptionID {
+			m.userSubscriptions[i].OptedIn = optedIn
+			updated := m.userSubscriptions[i]
 			return &updated, nil
 		}
 	}
-	pref := models.UserPreference{
-		UserID:   userID,
-		GroupID:  groupID,
-		Channels: channels,
+	us := models.UserSubscription{
+		UserID: userID, SubscriptionID: subscriptionID, OptedIn: optedIn,
 	}
-	m.preferences = append(m.preferences, pref)
-	return &pref, nil
+	m.userSubscriptions = append(m.userSubscriptions, us)
+	return &us, nil
 }
 
-func (m *mockUserStore) DeleteUserPreference(ctx context.Context, userID, groupID string) error {
-	for i, p := range m.preferences {
-		if p.UserID == userID && p.GroupID == groupID {
-			m.preferences = append(m.preferences[:i], m.preferences[i+1:]...)
+func (m *mockUserStore) DeleteUserSubscription(ctx context.Context, userID, subscriptionID string) error {
+	for i, us := range m.userSubscriptions {
+		if us.UserID == userID && us.SubscriptionID == subscriptionID {
+			m.userSubscriptions = append(m.userSubscriptions[:i], m.userSubscriptions[i+1:]...)
 			return nil
 		}
 	}
-	return fmt.Errorf("delete user preference: %w", pgx.ErrNoRows)
+	return fmt.Errorf("delete user subscription: %w", pgx.ErrNoRows)
 }
 
-func (m *mockUserStore) ListGroups(ctx context.Context) ([]models.NotificationGroup, error) {
-	return m.groups, nil
+func (m *mockUserStore) ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error) {
+	return m.categories, nil
+}
+
+func (m *mockUserStore) ListSubscriptionsByCategory(ctx context.Context, categoryID string) ([]models.Subscription, error) {
+	var result []models.Subscription
+	for _, s := range m.subscriptions {
+		if s.CategoryID == categoryID {
+			result = append(result, s)
+		}
+	}
+	return result, nil
 }
 
 const testUserID = "test-user-id"
@@ -94,19 +103,18 @@ func newTestServer(t *testing.T) (*userservice.Server, *mockUserStore) {
 	email := "user@example.com"
 	store := &mockUserStore{
 		users: []models.User{
-			{
-				ID:         testUserID,
-				TenantID:   "tenant-1",
-				ExternalID: "ext-1",
-				Email:      &email,
-				CreatedAt:  time.Now(),
-			},
+			{ID: testUserID, TenantID: "tenant-1", ExternalID: "ext-1", Email: &email, CreatedAt: time.Now()},
 		},
-		groups: []models.NotificationGroup{
-			{ID: "group-1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"email"}},
+		categories: []models.SubscriptionCategory{
+			{ID: "sct-1", Slug: "general", Name: "General", DefaultChannels: []string{"email", "inbox"}, DefaultState: "on"},
+			{ID: "sct-2", Slug: "marketing", Name: "Marketing", DefaultChannels: []string{"email"}, DefaultState: "off"},
 		},
-		preferences: []models.UserPreference{
-			{UserID: testUserID, GroupID: "group-1", Channels: []string{"email", "inbox"}},
+		subscriptions: []models.Subscription{
+			{ID: "sub-1", CategoryID: "sct-1", Slug: "general", Name: "General"},
+			{ID: "sub-2", CategoryID: "sct-2", Slug: "marketing", Name: "Marketing"},
+		},
+		userSubscriptions: []models.UserSubscription{
+			{UserID: testUserID, SubscriptionID: "sub-2", OptedIn: true},
 		},
 	}
 	srv := userservice.NewServer(store, nil, logger)

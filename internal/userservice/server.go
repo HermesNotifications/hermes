@@ -18,10 +18,11 @@ import (
 type UserStore interface {
 	GetUserByID(ctx context.Context, userID string) (*models.User, error)
 	UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error)
-	GetUserPreferences(ctx context.Context, userID string) ([]models.UserPreference, error)
-	SetUserPreference(ctx context.Context, userID, groupID string, channels []string) (*models.UserPreference, error)
-	DeleteUserPreference(ctx context.Context, userID, groupID string) error
-	ListGroups(ctx context.Context) ([]models.NotificationGroup, error)
+	GetUserSubscriptions(ctx context.Context, userID string) ([]models.UserSubscription, error)
+	SetUserSubscription(ctx context.Context, userID, subscriptionID string, optedIn bool) (*models.UserSubscription, error)
+	DeleteUserSubscription(ctx context.Context, userID, subscriptionID string) error
+	ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error)
+	ListSubscriptionsByCategory(ctx context.Context, categoryID string) ([]models.Subscription, error)
 }
 
 // Server is the user-facing HTTP service.

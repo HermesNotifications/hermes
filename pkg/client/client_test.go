@@ -42,7 +42,7 @@ func TestAPIErrorOnBadRequest(t *testing.T) {
 	defer srv.Close()
 
 	c := client.New(srv.URL, "test-key")
-	_, err := c.Groups.List(context.Background())
+	_, err := c.Categories.List(context.Background())
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

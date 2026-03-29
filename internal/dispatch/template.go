@@ -15,31 +15,31 @@ import (
 )
 
 type TemplateResolver struct {
-	store store.TypeRepository
+	store store.TemplateRepository
 	cache *cache.Client
 }
 
-func NewTemplateResolver(store store.TypeRepository, cache *cache.Client) *TemplateResolver {
+func NewTemplateResolver(store store.TemplateRepository, cache *cache.Client) *TemplateResolver {
 	return &TemplateResolver{store: store, cache: cache}
 }
 
-func (tr *TemplateResolver) Resolve(ctx context.Context, slug string) (*models.NotificationType, error) {
+func (tr *TemplateResolver) Resolve(ctx context.Context, slug string) (*models.NotificationTemplate, error) {
 	if tr.cache != nil {
-		data, err := tr.cache.GetTypeConfig(ctx, slug)
+		data, err := tr.cache.GetTemplateConfig(ctx, slug)
 		if err == nil && data != nil {
-			var nt models.NotificationType
+			var nt models.NotificationTemplate
 			if err := json.Unmarshal(data, &nt); err == nil {
 				return &nt, nil
 			}
 		}
 	}
-	nt, err := tr.store.GetTypeBySlug(ctx, slug)
+	nt, err := tr.store.GetTemplateBySlug(ctx, slug)
 	if err != nil {
-		return nil, fmt.Errorf("resolve type %s: %w", slug, err)
+		return nil, fmt.Errorf("resolve template %s: %w", slug, err)
 	}
 	if tr.cache != nil {
 		if data, err := json.Marshal(nt); err == nil {
-			tr.cache.SetTypeConfig(ctx, slug, data, 5*time.Minute)
+			_ = tr.cache.SetTemplateConfig(ctx, slug, data, 5*time.Minute)
 		}
 	}
 	return nt, nil
@@ -53,7 +53,7 @@ type RenderedContent struct {
 	InboxBody    string
 }
 
-func RenderTemplates(nt *models.NotificationType, data map[string]any) (*RenderedContent, error) {
+func RenderTemplates(nt *models.NotificationTemplate, data map[string]any) (*RenderedContent, error) {
 	rc := &RenderedContent{}
 	var err error
 	if nt.EmailSubject != nil {

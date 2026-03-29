@@ -9,16 +9,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newTypesCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "types", Short: "Manage notification types"}
-	cmd.AddCommand(newTypesListCmd())
-	cmd.AddCommand(newTypesCreateCmd())
-	cmd.AddCommand(newTypesUpdateCmd())
-	cmd.AddCommand(newTypesDeleteCmd())
+func newTemplatesCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "templates", Short: "Manage notification templates"}
+	cmd.AddCommand(newTemplatesListCmd())
+	cmd.AddCommand(newTemplatesCreateCmd())
+	cmd.AddCommand(newTemplatesUpdateCmd())
+	cmd.AddCommand(newTemplatesDeleteCmd())
 	return cmd
 }
 
-func typeChannels(t client.NotificationType) string {
+func templateChannels(t client.NotificationTemplate) string {
 	var channels []string
 	if t.EmailSubject != nil {
 		channels = append(channels, "email")
@@ -32,40 +32,47 @@ func typeChannels(t client.NotificationType) string {
 	return strings.Join(channels, ",")
 }
 
-func newTypesListCmd() *cobra.Command {
+func newTemplatesListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use: "list", Short: "List all notification types",
+		Use: "list", Short: "List all notification templates",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := newClientFromCmd(cmd)
-			types, err := c.Types.List(cmd.Context())
+			templates, err := c.Templates.List(cmd.Context())
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
 			if getOutput(cmd) == "json" {
-				return printJSON(out, types)
+				return printJSON(out, templates)
 			}
 			var rows [][]string
-			for _, t := range types {
-				rows = append(rows, []string{t.ID, t.Slug, bold(t.Name), t.GroupID, typeChannels(t), fmtTime(t.CreatedAt.Format(time.RFC3339))})
+			for _, t := range templates {
+				subID := ""
+				if t.SubscriptionID != nil {
+					subID = *t.SubscriptionID
+				}
+				rows = append(rows, []string{t.ID, t.Slug, bold(t.Name), subID, templateChannels(t), fmtTime(t.CreatedAt.Format(time.RFC3339))})
 			}
-			printTable(out, []string{"ID", "SLUG", "NAME", "GROUP_ID", "CHANNELS", "CREATED"}, rows)
+			printTable(out, []string{"ID", "SLUG", "NAME", "SUBSCRIPTION", "CHANNELS", "CREATED"}, rows)
 			return nil
 		},
 	}
 }
 
-func newTypesCreateCmd() *cobra.Command {
-	var groupID, slug, name string
+func newTemplatesCreateCmd() *cobra.Command {
+	var slug, name string
+	var subscriptionID string
 	var emailSubject, emailBody, smsBody, inboxTitle, inboxBody string
 
 	cmd := &cobra.Command{
-		Use: "create", Short: "Create a notification type",
+		Use: "create", Short: "Create a notification template",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			req := client.CreateTypeRequest{
-				GroupID: groupID,
-				Slug:    slug,
-				Name:    name,
+			req := client.CreateTemplateRequest{
+				Slug: slug,
+				Name: name,
+			}
+			if cmd.Flags().Changed("subscription-id") {
+				req.SubscriptionID = &subscriptionID
 			}
 			setOptionalString(cmd, "email-subject", &req.EmailSubject, emailSubject)
 			setOptionalString(cmd, "email-body", &req.EmailBody, emailBody)
@@ -74,7 +81,7 @@ func newTypesCreateCmd() *cobra.Command {
 			setOptionalString(cmd, "inbox-body", &req.InboxBody, inboxBody)
 
 			c := newClientFromCmd(cmd)
-			t, err := c.Types.Create(cmd.Context(), req)
+			t, err := c.Templates.Create(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -82,32 +89,31 @@ func newTypesCreateCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, t)
 			}
-			fmt.Fprintf(out, "%s %s %s\n", success("Created type"), bold(t.ID), dim("("+t.Slug+")"))
+			fmt.Fprintf(out, "%s %s %s\n", success("Created template"), bold(t.ID), dim("("+t.Slug+")"))
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&groupID, "group-id", "", "Group ID (required)")
-	cmd.Flags().StringVar(&slug, "slug", "", "Type slug (required)")
-	cmd.Flags().StringVar(&name, "name", "", "Type name (required)")
+	cmd.Flags().StringVar(&slug, "slug", "", "Template slug (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Template name (required)")
+	cmd.Flags().StringVar(&subscriptionID, "subscription-id", "", "Subscription ID (optional)")
 	cmd.Flags().StringVar(&emailSubject, "email-subject", "", "Email subject template")
 	cmd.Flags().StringVar(&emailBody, "email-body", "", "Email body template")
 	cmd.Flags().StringVar(&smsBody, "sms-body", "", "SMS body template")
 	cmd.Flags().StringVar(&inboxTitle, "inbox-title", "", "Inbox title template")
 	cmd.Flags().StringVar(&inboxBody, "inbox-body", "", "Inbox body template")
-	cmd.MarkFlagRequired("group-id")
 	cmd.MarkFlagRequired("slug")
 	cmd.MarkFlagRequired("name")
 	return cmd
 }
 
-func newTypesUpdateCmd() *cobra.Command {
+func newTemplatesUpdateCmd() *cobra.Command {
 	var id, name string
 	var emailSubject, emailBody, smsBody, inboxTitle, inboxBody string
 
 	cmd := &cobra.Command{
-		Use: "update", Short: "Update a notification type",
+		Use: "update", Short: "Update a notification template",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var req client.UpdateTypeRequest
+			var req client.UpdateTemplateRequest
 			if cmd.Flags().Changed("name") {
 				req.Name = name
 			}
@@ -118,7 +124,7 @@ func newTypesUpdateCmd() *cobra.Command {
 			setOptionalString(cmd, "inbox-body", &req.InboxBody, inboxBody)
 
 			c := newClientFromCmd(cmd)
-			t, err := c.Types.Update(cmd.Context(), id, req)
+			t, err := c.Templates.Update(cmd.Context(), id, req)
 			if err != nil {
 				return err
 			}
@@ -126,12 +132,12 @@ func newTypesUpdateCmd() *cobra.Command {
 			if getOutput(cmd) == "json" {
 				return printJSON(out, t)
 			}
-			fmt.Fprintf(out, "%s %s\n", success("Updated type"), bold(t.ID))
+			fmt.Fprintf(out, "%s %s\n", success("Updated template"), bold(t.ID))
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&id, "id", "", "Type ID (required)")
-	cmd.Flags().StringVar(&name, "name", "", "Type name")
+	cmd.Flags().StringVar(&id, "id", "", "Template ID (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Template name")
 	cmd.Flags().StringVar(&emailSubject, "email-subject", "", "Email subject template")
 	cmd.Flags().StringVar(&emailBody, "email-body", "", "Email body template")
 	cmd.Flags().StringVar(&smsBody, "sms-body", "", "SMS body template")
@@ -141,24 +147,24 @@ func newTypesUpdateCmd() *cobra.Command {
 	return cmd
 }
 
-func newTypesDeleteCmd() *cobra.Command {
+func newTemplatesDeleteCmd() *cobra.Command {
 	var id string
 	cmd := &cobra.Command{
-		Use: "delete", Short: "Delete a notification type",
+		Use: "delete", Short: "Delete a notification template",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := newClientFromCmd(cmd)
-			if err := c.Types.Delete(cmd.Context(), id); err != nil {
+			if err := c.Templates.Delete(cmd.Context(), id); err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
 			if getOutput(cmd) == "json" {
 				return printJSON(out, map[string]string{"status": "deleted", "id": id})
 			}
-			fmt.Fprintf(out, "%s %s\n", success("Deleted type"), bold(id))
+			fmt.Fprintf(out, "%s %s\n", success("Deleted template"), bold(id))
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&id, "id", "", "Type ID (required)")
+	cmd.Flags().StringVar(&id, "id", "", "Template ID (required)")
 	cmd.MarkFlagRequired("id")
 	return cmd
 }

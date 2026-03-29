@@ -7,79 +7,83 @@ import (
 	"time"
 )
 
-type NotificationType struct {
-	ID           string    `json:"id"`
-	GroupID      string    `json:"group_id"`
-	Slug         string    `json:"slug"`
-	Name         string    `json:"name"`
-	EmailSubject *string   `json:"email_subject,omitempty"`
-	EmailBody    *string   `json:"email_body,omitempty"`
-	SMSBody      *string   `json:"sms_body,omitempty"`
-	InboxTitle   *string   `json:"inbox_title,omitempty"`
-	InboxBody    *string   `json:"inbox_body,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
+type NotificationTemplate struct {
+	ID              string    `json:"id"`
+	SubscriptionID  *string   `json:"subscription_id,omitempty"`
+	Slug            string    `json:"slug"`
+	Name            string    `json:"name"`
+	DefaultChannels []string  `json:"default_channels"`
+	EmailSubject    *string   `json:"email_subject,omitempty"`
+	EmailBody       *string   `json:"email_body,omitempty"`
+	SMSBody         *string   `json:"sms_body,omitempty"`
+	InboxTitle      *string   `json:"inbox_title,omitempty"`
+	InboxBody       *string   `json:"inbox_body,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
-type CreateTypeRequest struct {
-	GroupID      string  `json:"group_id"`
-	Slug         string  `json:"slug"`
-	Name         string  `json:"name"`
-	EmailSubject *string `json:"email_subject,omitempty"`
-	EmailBody    *string `json:"email_body,omitempty"`
-	SMSBody      *string `json:"sms_body,omitempty"`
-	InboxTitle   *string `json:"inbox_title,omitempty"`
-	InboxBody    *string `json:"inbox_body,omitempty"`
+type CreateTemplateRequest struct {
+	Slug            string   `json:"slug"`
+	Name            string   `json:"name"`
+	SubscriptionID  *string  `json:"subscription_id,omitempty"`
+	DefaultChannels []string `json:"default_channels,omitempty"`
+	EmailSubject    *string  `json:"email_subject,omitempty"`
+	EmailBody       *string  `json:"email_body,omitempty"`
+	SMSBody         *string  `json:"sms_body,omitempty"`
+	InboxTitle      *string  `json:"inbox_title,omitempty"`
+	InboxBody       *string  `json:"inbox_body,omitempty"`
 }
 
-type UpdateTypeRequest struct {
-	Name         string  `json:"name"`
-	EmailSubject *string `json:"email_subject,omitempty"`
-	EmailBody    *string `json:"email_body,omitempty"`
-	SMSBody      *string `json:"sms_body,omitempty"`
-	InboxTitle   *string `json:"inbox_title,omitempty"`
-	InboxBody    *string `json:"inbox_body,omitempty"`
+type UpdateTemplateRequest struct {
+	Name            string   `json:"name"`
+	SubscriptionID  *string  `json:"subscription_id,omitempty"`
+	DefaultChannels []string `json:"default_channels,omitempty"`
+	EmailSubject    *string  `json:"email_subject,omitempty"`
+	EmailBody       *string  `json:"email_body,omitempty"`
+	SMSBody         *string  `json:"sms_body,omitempty"`
+	InboxTitle      *string  `json:"inbox_title,omitempty"`
+	InboxBody       *string  `json:"inbox_body,omitempty"`
 }
 
-type TypesService struct{ client *Client }
+type TemplatesService struct{ client *Client }
 
-func (s *TypesService) List(ctx context.Context) ([]NotificationType, error) {
-	req, err := s.client.newRequest(ctx, http.MethodGet, "/v1/types", nil)
+func (s *TemplatesService) List(ctx context.Context) ([]NotificationTemplate, error) {
+	req, err := s.client.newRequest(ctx, http.MethodGet, "/v1/templates", nil)
 	if err != nil {
 		return nil, err
 	}
-	var types []NotificationType
-	if err := s.client.do(req, &types); err != nil {
+	var templates []NotificationTemplate
+	if err := s.client.do(req, &templates); err != nil {
 		return nil, err
 	}
-	return types, nil
+	return templates, nil
 }
 
-func (s *TypesService) Create(ctx context.Context, body CreateTypeRequest) (*NotificationType, error) {
-	req, err := s.client.newRequest(ctx, http.MethodPost, "/v1/types", body)
+func (s *TemplatesService) Create(ctx context.Context, body CreateTemplateRequest) (*NotificationTemplate, error) {
+	req, err := s.client.newRequest(ctx, http.MethodPost, "/v1/templates", body)
 	if err != nil {
 		return nil, err
 	}
-	var nt NotificationType
+	var nt NotificationTemplate
 	if err := s.client.do(req, &nt); err != nil {
 		return nil, err
 	}
 	return &nt, nil
 }
 
-func (s *TypesService) Update(ctx context.Context, id string, body UpdateTypeRequest) (*NotificationType, error) {
-	req, err := s.client.newRequest(ctx, http.MethodPut, fmt.Sprintf("/v1/types/%s", id), body)
+func (s *TemplatesService) Update(ctx context.Context, id string, body UpdateTemplateRequest) (*NotificationTemplate, error) {
+	req, err := s.client.newRequest(ctx, http.MethodPut, fmt.Sprintf("/v1/templates/%s", id), body)
 	if err != nil {
 		return nil, err
 	}
-	var nt NotificationType
+	var nt NotificationTemplate
 	if err := s.client.do(req, &nt); err != nil {
 		return nil, err
 	}
 	return &nt, nil
 }
 
-func (s *TypesService) Delete(ctx context.Context, id string) error {
-	req, err := s.client.newRequest(ctx, http.MethodDelete, fmt.Sprintf("/v1/types/%s", id), nil)
+func (s *TemplatesService) Delete(ctx context.Context, id string) error {
+	req, err := s.client.newRequest(ctx, http.MethodDelete, fmt.Sprintf("/v1/templates/%s", id), nil)
 	if err != nil {
 		return err
 	}

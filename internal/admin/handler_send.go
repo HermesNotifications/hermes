@@ -23,11 +23,10 @@ type sendInput struct {
 	Body           struct {
 		TenantID string         `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
 		UserID   string         `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
-		Type     string         `json:"type,omitempty" doc:"Notification type slug (mutually exclusive with content)"`
-		Content  *sendContent   `json:"content,omitempty" doc:"Direct content (mutually exclusive with type)"`
+		Template string         `json:"template,omitempty" doc:"Notification template slug (mutually exclusive with content)"`
+		Content  *sendContent   `json:"content,omitempty" doc:"Direct content (mutually exclusive with template)"`
 		Data     map[string]any `json:"data,omitempty" doc:"Template data for rendering"`
 		Channels []string       `json:"channels,omitempty" doc:"Explicit delivery channels"`
-		Group    string         `json:"group,omitempty" doc:"Group slug (required for direct content sends)"`
 	}
 }
 
@@ -48,9 +47,9 @@ func (s *Server) registerSendRoutes() {
 	}, func(ctx context.Context, input *sendInput) (*sendOutput, error) {
 		req := &input.Body
 
-		// Validate: exactly one of type or content
-		if (req.Type == "" && req.Content == nil) || (req.Type != "" && req.Content != nil) {
-			return nil, huma.Error400BadRequest("exactly one of 'type' or 'content' must be provided")
+		// Validate: exactly one of template or content
+		if (req.Template == "" && req.Content == nil) || (req.Template != "" && req.Content != nil) {
+			return nil, huma.Error400BadRequest("exactly one of 'template' or 'content' must be provided")
 		}
 
 		// Validate tenant exists
@@ -81,25 +80,28 @@ func (s *Server) registerSendRoutes() {
 			}
 		}
 
-		// Resolve group
-		var groupID string
-		var typeID *string
-		if req.Type != "" {
-			nt, err := s.store.GetTypeBySlug(ctx, req.Type)
+		// Resolve category from template's subscription, or require channels for direct sends
+		var categoryID string
+		var templateID *string
+		var subscriptionID string
+		if req.Template != "" {
+			nt, err := s.store.GetTemplateBySlug(ctx, req.Template)
 			if err != nil {
-				return nil, huma.Error400BadRequest("unknown notification type")
+				return nil, huma.Error400BadRequest("unknown notification template")
 			}
-			groupID = nt.GroupID
-			typeID = &nt.ID
+			templateID = &nt.ID
+			if nt.SubscriptionID != nil {
+				sub, err := s.store.GetSubscriptionByID(ctx, *nt.SubscriptionID)
+				if err != nil {
+					return nil, huma.Error500InternalServerError("internal server error")
+				}
+				categoryID = sub.CategoryID
+				subscriptionID = sub.ID
+			}
 		} else {
-			if req.Group == "" {
-				return nil, huma.Error400BadRequest("group is required for direct sends")
+			if len(req.Channels) == 0 {
+				return nil, huma.Error400BadRequest("channels required for direct content sends")
 			}
-			g, err := s.store.GetGroupBySlug(ctx, req.Group)
-			if err != nil {
-				return nil, huma.Error400BadRequest("unknown group")
-			}
-			groupID = g.ID
 		}
 
 		// Ensure user exists
@@ -114,13 +116,13 @@ func (s *Server) registerSendRoutes() {
 			channels = []string{}
 		}
 		n := &models.Notification{
-			ID:       notifID,
-			TenantID: req.TenantID,
-			UserID:   user.ID,
-			TypeID:   typeID,
-			GroupID:  groupID,
-			Channels: channels,
-			Status:   models.StatusPending,
+			ID:         notifID,
+			TenantID:   req.TenantID,
+			UserID:     user.ID,
+			TemplateID: templateID,
+			CategoryID: categoryID,
+			Channels:   channels,
+			Status:     models.StatusPending,
 		}
 
 		if req.Content != nil {
@@ -146,9 +148,9 @@ func (s *Server) registerSendRoutes() {
 		// Publish to NATS
 		if s.nats != nil {
 			msg := map[string]any{
-				"notification_id": notifID,
-				"tenant_id":       req.TenantID,
-				"user_id":         user.ID,
+				"notification_id":  notifID,
+				"tenant_id":        req.TenantID,
+				"user_id":          user.ID,
 				"content": map[string]any{
 					"title":        n.Title,
 					"body":         n.Body,
@@ -156,12 +158,12 @@ func (s *Server) registerSendRoutes() {
 					"action_label": n.ActionLabel,
 				},
 				"metadata": map[string]any{
-					"group": req.Group,
-					"type":  req.Type,
+					"template": req.Template,
 				},
-				"group_id": groupID,
-				"data":     req.Data,
-				"attempt":  1,
+				"category_id":     categoryID,
+				"subscription_id": subscriptionID,
+				"data":            req.Data,
+				"attempt":         1,
 			}
 			if len(req.Channels) > 0 {
 				msg["channels"] = req.Channels

@@ -15,7 +15,7 @@ import (
 // mockInboxStore implements inbox.InboxStore with in-memory storage.
 type mockInboxStore struct {
 	notifications []models.Notification
-	groups        []models.NotificationGroup
+	categories    []models.SubscriptionCategory
 }
 
 func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, int, string, error) {
@@ -126,13 +126,13 @@ func (m *mockInboxStore) MarkAllRead(ctx context.Context, userID string) error {
 	return nil
 }
 
-func (m *mockInboxStore) GetGroupByID(ctx context.Context, id string) (*models.NotificationGroup, error) {
-	for _, g := range m.groups {
-		if g.ID == id {
-			return &g, nil
+func (m *mockInboxStore) GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error) {
+	for _, c := range m.categories {
+		if c.ID == id {
+			return &c, nil
 		}
 	}
-	return nil, fmt.Errorf("group not found: %s", id)
+	return nil, fmt.Errorf("category not found: %s", id)
 }
 
 const testUserID = "test-user-id"
@@ -143,30 +143,30 @@ func newTestServer(t *testing.T) (*inbox.Server, *mockInboxStore) {
 	store := &mockInboxStore{
 		notifications: []models.Notification{
 			{
-				ID:        "notif-1",
-				TenantID:  "tenant-1",
-				UserID:    testUserID,
-				GroupID:   "group-1",
-				Title:     "Test Notification 1",
-				Body:      "Body 1",
-				Channels:  []string{"inbox"},
-				Status:    models.StatusDelivered,
-				CreatedAt: time.Now(),
+				ID:         "notif-1",
+				TenantID:   "tenant-1",
+				UserID:     testUserID,
+				CategoryID: "sct-1",
+				Title:      "Test Notification 1",
+				Body:       "Body 1",
+				Channels:   []string{"inbox"},
+				Status:     models.StatusDelivered,
+				CreatedAt:  time.Now(),
 			},
 			{
-				ID:        "notif-2",
-				TenantID:  "tenant-1",
-				UserID:    testUserID,
-				GroupID:   "group-1",
-				Title:     "Test Notification 2",
-				Body:      "Body 2",
-				Channels:  []string{"inbox"},
-				Status:    models.StatusDelivered,
-				CreatedAt: time.Now(),
+				ID:         "notif-2",
+				TenantID:   "tenant-1",
+				UserID:     testUserID,
+				CategoryID: "sct-1",
+				Title:      "Test Notification 2",
+				Body:       "Body 2",
+				Channels:   []string{"inbox"},
+				Status:     models.StatusDelivered,
+				CreatedAt:  time.Now(),
 			},
 		},
-		groups: []models.NotificationGroup{
-			{ID: "group-1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"inbox"}},
+		categories: []models.SubscriptionCategory{
+			{ID: "sct-1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"inbox"}, DefaultState: "on"},
 		},
 	}
 	srv := inbox.NewServer(store, nil, nil, nil, nil, logger)

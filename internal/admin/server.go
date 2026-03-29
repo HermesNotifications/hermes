@@ -25,20 +25,27 @@ type AdminStore interface {
 	// Tenants
 	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
 
-	// Groups
-	CreateGroup(ctx context.Context, slug, name string, defaultChannels []string) (*models.NotificationGroup, error)
-	GetGroupByID(ctx context.Context, id string) (*models.NotificationGroup, error)
-	GetGroupBySlug(ctx context.Context, slug string) (*models.NotificationGroup, error)
-	ListGroups(ctx context.Context) ([]models.NotificationGroup, error)
-	UpdateGroup(ctx context.Context, id, name string, defaultChannels []string) (*models.NotificationGroup, error)
+	// Subscription Categories
+	CreateCategory(ctx context.Context, slug, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error)
+	GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error)
+	ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error)
+	UpdateCategory(ctx context.Context, id, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error)
+	DeleteCategory(ctx context.Context, id string) error
 
-	// Types
-	CreateType(ctx context.Context, input *models.NotificationType) (*models.NotificationType, error)
-	GetTypeByID(ctx context.Context, id string) (*models.NotificationType, error)
-	GetTypeBySlug(ctx context.Context, slug string) (*models.NotificationType, error)
-	ListTypes(ctx context.Context) ([]models.NotificationType, error)
-	UpdateType(ctx context.Context, input *models.NotificationType) (*models.NotificationType, error)
-	DeleteType(ctx context.Context, id string) error
+	// Subscriptions
+	CreateSubscription(ctx context.Context, categoryID, slug, name string, sortOrder int) (*models.Subscription, error)
+	GetSubscriptionByID(ctx context.Context, id string) (*models.Subscription, error)
+	ListSubscriptionsByCategory(ctx context.Context, categoryID string) ([]models.Subscription, error)
+	UpdateSubscription(ctx context.Context, id, name string, sortOrder int) (*models.Subscription, error)
+	DeleteSubscription(ctx context.Context, id string) error
+
+	// Templates
+	CreateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
+	GetTemplateByID(ctx context.Context, id string) (*models.NotificationTemplate, error)
+	GetTemplateBySlug(ctx context.Context, slug string) (*models.NotificationTemplate, error)
+	ListTemplates(ctx context.Context) ([]models.NotificationTemplate, error)
+	UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
+	DeleteTemplate(ctx context.Context, id string) error
 
 	// Users
 	EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error)
@@ -90,7 +97,7 @@ func NewServer(store AdminStore, nats *messaging.Client, cache *cache.Client, po
 	}
 
 	config := huma.DefaultConfig("Hermes Admin API", "1.0.0")
-	config.Info.Description = "Server-to-server API for managing notification groups, types, and sending notifications."
+	config.Info.Description = "Server-to-server API for managing subscription categories, templates, and sending notifications."
 	config.Servers = []*huma.Server{{URL: "/"}}
 
 	s.api = humachi.New(s.router, config)
@@ -107,8 +114,9 @@ func (s *Server) routes() {
 		s.router.Get("/readyz", httputil.ReadyzHandler())
 	}
 
-	s.registerGroupRoutes()
-	s.registerTypeRoutes()
+	s.registerCategoryRoutes()
+	s.registerSubscriptionRoutes()
+	s.registerTemplateRoutes()
 	s.registerSendRoutes()
 	s.registerNotificationRoutes()
 	s.registerAuthRoutes()

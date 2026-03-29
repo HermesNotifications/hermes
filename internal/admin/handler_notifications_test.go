@@ -11,29 +11,19 @@ import (
 func TestHandleGetNotification(t *testing.T) {
 	srv := newTestServer(t)
 
-	// Create a group first
-	groupBody := `{"slug":"alerts","name":"Alerts","default_channels":["inbox"]}`
-	req := httptest.NewRequest("POST", "/v1/groups", bytes.NewBufferString(groupBody))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create group: %d %s", rec.Code, rec.Body.String())
-	}
-
-	// Send a notification
+	// Send a notification with direct content and channels
 	sendBody := `{
 		"tenant_id": "test-tenant-id",
 		"user_id": "ext-user-1",
-		"group": "alerts",
 		"content": {
 			"title": "Test Alert",
 			"body": "This is a test."
-		}
+		},
+		"channels": ["inbox"]
 	}`
-	req = httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(sendBody))
+	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(sendBody))
 	req.Header.Set("Content-Type", "application/json")
-	rec = httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("send notification: %d %s", rec.Code, rec.Body.String())

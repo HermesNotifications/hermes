@@ -28,33 +28,45 @@ type User struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-type NotificationGroup struct {
+type SubscriptionCategory struct {
 	ID              string    `json:"id"`
 	Slug            string    `json:"slug"`
 	Name            string    `json:"name"`
 	DefaultChannels []string  `json:"default_channels"`
+	DefaultState    string    `json:"default_state"`
+	SortOrder       int       `json:"sort_order"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
-type NotificationType struct {
-	ID           string    `json:"id"`
-	GroupID      string    `json:"group_id"`
-	Slug         string    `json:"slug"`
-	Name         string    `json:"name"`
-	EmailSubject *string   `json:"email_subject,omitempty"`
-	EmailBody    *string   `json:"email_body,omitempty"`
-	SMSBody      *string   `json:"sms_body,omitempty"`
-	InboxTitle   *string   `json:"inbox_title,omitempty"`
-	InboxBody    *string   `json:"inbox_body,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
+type Subscription struct {
+	ID         string    `json:"id"`
+	CategoryID string    `json:"category_id"`
+	Slug       string    `json:"slug"`
+	Name       string    `json:"name"`
+	SortOrder  int       `json:"sort_order"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type NotificationTemplate struct {
+	ID              string    `json:"id"`
+	SubscriptionID  *string   `json:"subscription_id,omitempty"`
+	Slug            string    `json:"slug"`
+	Name            string    `json:"name"`
+	DefaultChannels []string  `json:"default_channels"`
+	EmailSubject    *string   `json:"email_subject,omitempty"`
+	EmailBody       *string   `json:"email_body,omitempty"`
+	SMSBody         *string   `json:"sms_body,omitempty"`
+	InboxTitle      *string   `json:"inbox_title,omitempty"`
+	InboxBody       *string   `json:"inbox_body,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type Notification struct {
 	ID             string             `json:"id"`
 	TenantID       string             `json:"tenant_id"`
 	UserID         string             `json:"user_id"`
-	TypeID         *string            `json:"type_id,omitempty"`
-	GroupID        string             `json:"group_id"`
+	TemplateID     *string            `json:"template_id,omitempty"`
+	CategoryID     string             `json:"category_id"`
 	Title          string             `json:"title"`
 	Body           string             `json:"body"`
 	ActionURL      *string            `json:"action_url,omitempty"`
@@ -80,10 +92,11 @@ type NotificationEvent struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-type UserPreference struct {
-	UserID   string   `json:"user_id"`
-	GroupID  string   `json:"group_id"`
-	Channels []string `json:"channels"`
+type UserSubscription struct {
+	UserID         string    `json:"user_id"`
+	SubscriptionID string    `json:"subscription_id"`
+	OptedIn        bool      `json:"opted_in"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type JWTSigningKey struct {

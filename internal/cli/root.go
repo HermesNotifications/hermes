@@ -39,8 +39,8 @@ func newRootCmd() *cobra.Command {
 	cmd.PersistentFlags().String("api-key", os.Getenv("HERMES_API_KEY"), "API key (env: HERMES_API_KEY)")
 	cmd.PersistentFlags().StringP("output", "o", "table", "Output format: table or json")
 
-	cmd.AddCommand(newGroupsCmd())
-	cmd.AddCommand(newTypesCmd())
+	cmd.AddCommand(newCategoriesCmd())
+	cmd.AddCommand(newTemplatesCmd())
 	cmd.AddCommand(newNotificationsCmd())
 	cmd.AddCommand(newAuthCmd())
 	cmd.AddCommand(newInboxCmd())

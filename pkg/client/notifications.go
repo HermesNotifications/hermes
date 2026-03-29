@@ -16,11 +16,10 @@ type Content struct {
 type SendRequest struct {
 	TenantID string         `json:"tenant_id"`
 	UserID   string         `json:"user_id"`
-	Type     string         `json:"type,omitempty"`
+	Template string         `json:"template,omitempty"`
 	Content  *Content       `json:"content,omitempty"`
 	Data     map[string]any `json:"data,omitempty"`
 	Channels []string       `json:"channels,omitempty"`
-	Group    string         `json:"group,omitempty"`
 }
 
 type SendResponse struct {
@@ -31,7 +30,7 @@ type NotificationDetail struct {
 	ID          string   `json:"id"`
 	TenantID    string   `json:"tenant_id"`
 	UserID      string   `json:"user_id"`
-	GroupID     string   `json:"group_id"`
+	CategoryID  string   `json:"category_id"`
 	Title       string   `json:"title"`
 	Body        string   `json:"body"`
 	Channels    []string `json:"channels"`

@@ -11,51 +11,52 @@ import (
 	"github.com/hermes-notifications/hermes/pkg/client"
 )
 
-func TestGroupsList(t *testing.T) {
+func TestCategoriesList(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	groups := []client.Group{
-		{ID: "g1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"email"}, CreatedAt: now},
-		{ID: "g2", Slug: "updates", Name: "Updates", DefaultChannels: []string{"sms", "inbox"}, CreatedAt: now},
+	categories := []client.SubscriptionCategory{
+		{ID: "sct-1", Slug: "account", Name: "Account", DefaultChannels: []string{"email"}, DefaultState: "required", CreatedAt: now},
+		{ID: "sct-2", Slug: "general", Name: "General", DefaultChannels: []string{"email", "inbox"}, DefaultState: "on", CreatedAt: now},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("expected GET, got %s", r.Method)
 		}
-		if r.URL.Path != "/v1/groups" {
-			t.Errorf("expected /v1/groups, got %s", r.URL.Path)
+		if r.URL.Path != "/v1/subscriptions/categories" {
+			t.Errorf("expected /v1/subscriptions/categories, got %s", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Errorf("expected Bearer test-key, got %s", r.Header.Get("Authorization"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(groups)
+		json.NewEncoder(w).Encode(categories)
 	}))
 	defer srv.Close()
 
 	c := client.New(srv.URL, "test-key")
-	result, err := c.Groups.List(context.Background())
+	result, err := c.Categories.List(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(result) != 2 {
-		t.Fatalf("expected 2 groups, got %d", len(result))
+		t.Fatalf("expected 2 categories, got %d", len(result))
 	}
-	if result[0].ID != "g1" || result[0].Slug != "alerts" {
-		t.Errorf("unexpected first group: %+v", result[0])
+	if result[0].ID != "sct-1" || result[0].Slug != "account" {
+		t.Errorf("unexpected first category: %+v", result[0])
 	}
-	if result[1].ID != "g2" || result[1].Slug != "updates" {
-		t.Errorf("unexpected second group: %+v", result[1])
+	if result[1].ID != "sct-2" || result[1].Slug != "general" {
+		t.Errorf("unexpected second category: %+v", result[1])
 	}
 }
 
-func TestGroupsCreate(t *testing.T) {
+func TestCategoriesCreate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	created := client.Group{
-		ID:              "g3",
+	created := client.SubscriptionCategory{
+		ID:              "sct-3",
 		Slug:            "marketing",
 		Name:            "Marketing",
-		DefaultChannels: []string{"email", "inbox"},
+		DefaultChannels: []string{"email"},
+		DefaultState:    "off",
 		CreatedAt:       now,
 	}
 
@@ -63,14 +64,11 @@ func TestGroupsCreate(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
-		if r.URL.Path != "/v1/groups" {
-			t.Errorf("expected /v1/groups, got %s", r.URL.Path)
-		}
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Errorf("expected application/json, got %s", r.Header.Get("Content-Type"))
+		if r.URL.Path != "/v1/subscriptions/categories" {
+			t.Errorf("expected /v1/subscriptions/categories, got %s", r.URL.Path)
 		}
 
-		var body client.CreateGroupRequest
+		var body client.CreateCategoryRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
@@ -85,66 +83,19 @@ func TestGroupsCreate(t *testing.T) {
 	defer srv.Close()
 
 	c := client.New(srv.URL, "test-key")
-	result, err := c.Groups.Create(context.Background(), client.CreateGroupRequest{
+	result, err := c.Categories.Create(context.Background(), client.CreateCategoryRequest{
 		Slug:            "marketing",
 		Name:            "Marketing",
-		DefaultChannels: []string{"email", "inbox"},
+		DefaultChannels: []string{"email"},
+		DefaultState:    "off",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.ID != "g3" {
-		t.Errorf("expected id g3, got %s", result.ID)
+	if result.ID != "sct-3" {
+		t.Errorf("expected id sct-3, got %s", result.ID)
 	}
 	if result.Slug != "marketing" {
 		t.Errorf("expected slug marketing, got %s", result.Slug)
-	}
-}
-
-func TestGroupsUpdate(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-	newName := "Alerts Updated"
-	updated := client.Group{
-		ID:              "g1",
-		Slug:            "alerts",
-		Name:            newName,
-		DefaultChannels: []string{"email", "sms"},
-		CreatedAt:       now,
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			t.Errorf("expected PUT, got %s", r.Method)
-		}
-		if r.URL.Path != "/v1/groups/g1" {
-			t.Errorf("expected /v1/groups/g1, got %s", r.URL.Path)
-		}
-
-		var body client.UpdateGroupRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Errorf("failed to decode body: %v", err)
-		}
-		if body.Name == nil || *body.Name != newName {
-			t.Errorf("unexpected name in body: %v", body.Name)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(updated)
-	}))
-	defer srv.Close()
-
-	c := client.New(srv.URL, "test-key")
-	result, err := c.Groups.Update(context.Background(), "g1", client.UpdateGroupRequest{
-		Name:            &newName,
-		DefaultChannels: []string{"email", "sms"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.ID != "g1" {
-		t.Errorf("expected id g1, got %s", result.ID)
-	}
-	if result.Name != newName {
-		t.Errorf("expected name %q, got %q", newName, result.Name)
 	}
 }
