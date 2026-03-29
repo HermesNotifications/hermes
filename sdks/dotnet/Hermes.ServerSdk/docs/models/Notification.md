@@ -5,8 +5,8 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Body** | **string** |  | 
+**CategoryId** | **string** |  | 
 **CreatedAt** | **DateTime** |  | 
-**GroupId** | **string** |  | 
 **Id** | **string** |  | 
 **Status** | **string** |  | 
 **TenantId** | **string** |  | 
@@ -21,7 +21,7 @@ Name | Type | Description | Notes
 **IdempotencyKey** | **string** |  | [optional] 
 **ReadAt** | **DateTime** |  | [optional] 
 **SentAt** | **DateTime** |  | [optional] 
-**TypeId** | **string** |  | [optional] 
+**TemplateId** | **string** |  | [optional] 
 
 [[Back to Model list]](../../README.md#documentation-for-models) [[Back to API list]](../../README.md#documentation-for-api-endpoints) [[Back to README]](../../README.md)
 

@@ -1,6 +1,6 @@
 /*
  * Hermes Admin API
- * Server-to-server API for managing notification groups, types, and sending notifications.
+ * Server-to-server API for managing subscription categories, templates, and notifications.
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -49,12 +49,17 @@ import com.hermes.sdk.JSON;
 /**
  * TokenInputBody
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-22T18:24:04.702920-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-29T15:48:54.030379-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
 public class TokenInputBody {
   public static final String SERIALIZED_NAME_$_SCHEMA = "$schema";
   @SerializedName(SERIALIZED_NAME_$_SCHEMA)
   @javax.annotation.Nullable
   private URI $schema;
+
+  public static final String SERIALIZED_NAME_EXPIRES_IN = "expires_in";
+  @SerializedName(SERIALIZED_NAME_EXPIRES_IN)
+  @javax.annotation.Nullable
+  private Long expiresIn;
 
   public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
   @SerializedName(SERIALIZED_NAME_TENANT_ID)
@@ -85,6 +90,27 @@ public class TokenInputBody {
     return $schema;
   }
 
+
+
+  public TokenInputBody expiresIn(@javax.annotation.Nullable Long expiresIn) {
+    this.expiresIn = expiresIn;
+    return this;
+  }
+
+  /**
+   * Requested token lifetime in seconds (min 3600 &#x3D; 1h, max 604800 &#x3D; 7d, default 14400 &#x3D; 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes.
+   * minimum: 3600
+   * maximum: 604800
+   * @return expiresIn
+   */
+  @javax.annotation.Nullable
+  public Long getExpiresIn() {
+    return expiresIn;
+  }
+
+  public void setExpiresIn(@javax.annotation.Nullable Long expiresIn) {
+    this.expiresIn = expiresIn;
+  }
 
 
   public TokenInputBody tenantId(@javax.annotation.Nonnull String tenantId) {
@@ -136,13 +162,14 @@ public class TokenInputBody {
     }
     TokenInputBody tokenInputBody = (TokenInputBody) o;
     return Objects.equals(this.$schema, tokenInputBody.$schema) &&
+        Objects.equals(this.expiresIn, tokenInputBody.expiresIn) &&
         Objects.equals(this.tenantId, tokenInputBody.tenantId) &&
         Objects.equals(this.userId, tokenInputBody.userId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, tenantId, userId);
+    return Objects.hash($schema, expiresIn, tenantId, userId);
   }
 
   @Override
@@ -150,6 +177,7 @@ public class TokenInputBody {
     StringBuilder sb = new StringBuilder();
     sb.append("class TokenInputBody {\n");
     sb.append("    $schema: ").append(toIndentedString($schema)).append("\n");
+    sb.append("    expiresIn: ").append(toIndentedString(expiresIn)).append("\n");
     sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
     sb.append("    userId: ").append(toIndentedString(userId)).append("\n");
     sb.append("}");
@@ -173,7 +201,7 @@ public class TokenInputBody {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "tenant_id", "user_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "expires_in", "tenant_id", "user_id"));
 
     // a set of required properties/fields (JSON key names)
     openapiRequiredFields = new HashSet<String>(Arrays.asList("tenant_id", "user_id"));

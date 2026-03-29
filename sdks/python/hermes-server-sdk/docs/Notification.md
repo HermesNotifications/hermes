@@ -9,19 +9,19 @@ Name | Type | Description | Notes
 **action_url** | **str** |  | [optional] 
 **archived_at** | **datetime** |  | [optional] 
 **body** | **str** |  | 
+**category_id** | **str** |  | 
 **channels** | **List[str]** |  | 
 **created_at** | **datetime** |  | 
 **deleted_at** | **datetime** |  | [optional] 
 **delivered_at** | **datetime** |  | [optional] 
-**group_id** | **str** |  | 
 **id** | **str** |  | 
 **idempotency_key** | **str** |  | [optional] 
 **read_at** | **datetime** |  | [optional] 
 **sent_at** | **datetime** |  | [optional] 
 **status** | **str** |  | 
+**template_id** | **str** |  | [optional] 
 **tenant_id** | **str** |  | 
 **title** | **str** |  | 
-**type_id** | **str** |  | [optional] 
 **user_id** | **str** |  | 
 
 ## Example

@@ -4,6 +4,41 @@
  */
 
 export interface paths {
+    "/v1/apikeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all API keys */
+        get: operations["list-api-keys"];
+        put?: never;
+        /** Create a new API key */
+        post: operations["create-api-key"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apikeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke an API key */
+        delete: operations["delete-api-key"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/token": {
         parameters: {
             query?: never;
@@ -15,41 +50,6 @@ export interface paths {
         put?: never;
         /** Exchange credentials for a user JWT token */
         post: operations["exchange-token"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/groups": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List notification groups */
-        get: operations["list-groups"];
-        put?: never;
-        /** Create a notification group */
-        post: operations["create-group"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/groups/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update a notification group */
-        put: operations["update-group"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -90,25 +90,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/types": {
+    "/v1/subscriptions/categories": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List notification types */
-        get: operations["list-types"];
+        /** List subscription categories */
+        get: operations["list-subscription-categories"];
         put?: never;
-        /** Create a notification type */
-        post: operations["create-type"];
+        /** Create a subscription category */
+        post: operations["create-subscription-category"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/types/{id}": {
+    "/v1/subscriptions/categories/{category_id}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List subscriptions in a category */
+        get: operations["list-subscriptions"];
+        put?: never;
+        /** Create a subscription */
+        post: operations["create-subscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscriptions/categories/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -116,11 +134,65 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Update a notification type */
-        put: operations["update-type"];
+        /** Update a subscription category */
+        put: operations["update-subscription-category"];
         post?: never;
-        /** Delete a notification type */
-        delete: operations["delete-type"];
+        /** Delete a subscription category */
+        delete: operations["delete-subscription-category"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a subscription */
+        put: operations["update-subscription"];
+        post?: never;
+        /** Delete a subscription */
+        delete: operations["delete-subscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List notification templates */
+        get: operations["list-templates"];
+        put?: never;
+        /** Create a notification template */
+        post: operations["create-template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a notification template */
+        put: operations["update-template"];
+        post?: never;
+        /** Delete a notification template */
+        delete: operations["delete-template"];
         options?: never;
         head?: never;
         patch?: never;
@@ -130,36 +202,89 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        CreateGroupInputBody: {
+        ApiKeyCreatedOutputBody: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateGroupInputBody.json
+             * @example https://example.com/schemas/ApiKeyCreatedOutputBody.json
              */
             readonly $schema?: string;
-            /** @description Default delivery channels for this group */
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            name: string;
+            permissions: string[] | null;
+            raw_key: string;
+        };
+        CreateAPIKeyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateAPIKeyInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Human-readable key name */
+            name: string;
+            /** @description Permission set (defaults to all except apikeys:manage) */
+            permissions?: string[] | null;
+        };
+        CreateCategoryInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateCategoryInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Default delivery channels */
             default_channels?: string[] | null;
+            /**
+             * @description Default subscription state
+             * @enum {string}
+             */
+            default_state: "on" | "off" | "required";
             /** @description Human-readable name */
             name: string;
             /** @description URL-friendly identifier */
             slug: string;
+            /**
+             * Format: int64
+             * @description Display order
+             */
+            sort_order?: number;
         };
-        CreateTypeInputBody: {
+        CreateSubscriptionInputBody: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateTypeInputBody.json
+             * @example https://example.com/schemas/CreateSubscriptionInputBody.json
              */
             readonly $schema?: string;
-            /** @description Email body template */
+            /** @description Human-readable name */
+            name: string;
+            /** @description URL-friendly identifier */
+            slug: string;
+            /**
+             * Format: int64
+             * @description Display order within category
+             */
+            sort_order?: number;
+        };
+        CreateTemplateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateTemplateInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Default channels (used when no subscription) */
+            default_channels?: string[] | null;
+            /** @description Email body template (HTML) */
             email_body?: string;
             /** @description Email subject template */
             email_subject?: string;
-            /** @description ID of the group this type belongs to */
-            group_id: string;
-            /** @description Inbox notification body template */
+            /** @description Inbox body template */
             inbox_body?: string;
-            /** @description Inbox notification title template */
+            /** @description Inbox title template */
             inbox_title?: string;
             /** @description Human-readable name */
             name: string;
@@ -167,6 +292,8 @@ export interface components {
             slug: string;
             /** @description SMS body template */
             sms_body?: string;
+            /** @description Subscription ID (null for standalone) */
+            subscription_id?: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -215,12 +342,20 @@ export interface components {
              */
             type: string;
         };
+        Item: {
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            name: string;
+            permissions: string[] | null;
+        };
         Notification: {
             action_label?: string;
             action_url?: string;
             /** Format: date-time */
             archived_at?: string;
             body: string;
+            category_id: string;
             channels: string[] | null;
             /** Format: date-time */
             created_at: string;
@@ -228,7 +363,6 @@ export interface components {
             deleted_at?: string;
             /** Format: date-time */
             delivered_at?: string;
-            group_id: string;
             id: string;
             idempotency_key?: string;
             /** Format: date-time */
@@ -236,9 +370,9 @@ export interface components {
             /** Format: date-time */
             sent_at?: string;
             status: string;
+            template_id?: string;
             tenant_id: string;
             title: string;
-            type_id?: string;
             user_id: string;
         };
         NotificationEvent: {
@@ -250,20 +384,6 @@ export interface components {
             metadata?: string;
             notification_id: string;
             severity: string;
-        };
-        NotificationGroup: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/NotificationGroup.json
-             */
-            readonly $schema?: string;
-            /** Format: date-time */
-            created_at: string;
-            default_channels: string[] | null;
-            id: string;
-            name: string;
-            slug: string;
         };
         NotificationStatusOutputBody: {
             /**
@@ -277,24 +397,25 @@ export interface components {
             /** @description The notification record */
             notification: components["schemas"]["Notification"];
         };
-        NotificationType: {
+        NotificationTemplate: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/NotificationType.json
+             * @example https://example.com/schemas/NotificationTemplate.json
              */
             readonly $schema?: string;
             /** Format: date-time */
             created_at: string;
+            default_channels: string[] | null;
             email_body?: string;
             email_subject?: string;
-            group_id: string;
             id: string;
             inbox_body?: string;
             inbox_title?: string;
             name: string;
             slug: string;
             sms_body?: string;
+            subscription_id?: string;
         };
         SendContent: {
             /** @description Optional action button label */
@@ -315,20 +436,16 @@ export interface components {
             readonly $schema?: string;
             /** @description Explicit delivery channels */
             channels?: string[] | null;
-            /** @description Direct content (mutually exclusive with type) */
+            /** @description Direct content (mutually exclusive with template) */
             content?: components["schemas"]["SendContent"];
             /** @description Template data for rendering */
             data?: {
                 [key: string]: unknown;
             };
-            /** @description Group slug (required for direct content sends) */
-            group?: string;
-            /** @description Tenant identifier */
-            tenant_id: string;
-            /** @description Notification type slug (mutually exclusive with content) */
-            type?: string;
-            /** @description External user identifier */
-            user_id: string;
+            /** @description Notification template slug (mutually exclusive with content) */
+            template?: string;
+            /** @description Notification recipient */
+            to: components["schemas"]["SendRecipient"];
         };
         SendOutputBody: {
             /**
@@ -340,6 +457,49 @@ export interface components {
             /** @description ID of the created notification */
             notification_id: string;
         };
+        SendRecipient: {
+            /** @description Optional email address for this notification */
+            email?: string;
+            /** @description Optional phone number for this notification */
+            phone?: string;
+            /** @description Tenant identifier */
+            tenant_id: string;
+            /** @description External user identifier */
+            user_id: string;
+        };
+        Subscription: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Subscription.json
+             */
+            readonly $schema?: string;
+            category_id: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            name: string;
+            slug: string;
+            /** Format: int64 */
+            sort_order: number;
+        };
+        SubscriptionCategory: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SubscriptionCategory.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            created_at: string;
+            default_channels: string[] | null;
+            default_state: string;
+            id: string;
+            name: string;
+            slug: string;
+            /** Format: int64 */
+            sort_order: number;
+        };
         TokenInputBody: {
             /**
              * Format: uri
@@ -347,6 +507,11 @@ export interface components {
              * @example https://example.com/schemas/TokenInputBody.json
              */
             readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Requested token lifetime in seconds (min 3600 = 1h, max 604800 = 7d, default 14400 = 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes.
+             */
+            expires_in?: number;
             /** @description Tenant identifier */
             tenant_id: string;
             /** @description External user identifier */
@@ -364,37 +529,66 @@ export interface components {
             /** @description JWT token for user-facing API access */
             token: string;
         };
-        UpdateGroupInputBody: {
+        UpdateCategoryInputBody: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateGroupInputBody.json
+             * @example https://example.com/schemas/UpdateCategoryInputBody.json
              */
             readonly $schema?: string;
-            /** @description Default delivery channels for this group */
+            /** @description Default delivery channels */
             default_channels: string[] | null;
+            /**
+             * @description Default subscription state
+             * @enum {string}
+             */
+            default_state: "on" | "off" | "required";
             /** @description Human-readable name */
             name: string;
+            /**
+             * Format: int64
+             * @description Display order
+             */
+            sort_order: number;
         };
-        UpdateTypeInputBody: {
+        UpdateSubscriptionInputBody: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateTypeInputBody.json
+             * @example https://example.com/schemas/UpdateSubscriptionInputBody.json
              */
             readonly $schema?: string;
-            /** @description Email body template */
+            /** @description Human-readable name */
+            name: string;
+            /**
+             * Format: int64
+             * @description Display order within category
+             */
+            sort_order: number;
+        };
+        UpdateTemplateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateTemplateInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Default channels (used when no subscription) */
+            default_channels?: string[] | null;
+            /** @description Email body template (HTML) */
             email_body?: string;
             /** @description Email subject template */
             email_subject?: string;
-            /** @description Inbox notification body template */
+            /** @description Inbox body template */
             inbox_body?: string;
-            /** @description Inbox notification title template */
+            /** @description Inbox title template */
             inbox_title?: string;
             /** @description Human-readable name */
             name: string;
             /** @description SMS body template */
             sms_body?: string;
+            /** @description Subscription ID (null for standalone) */
+            subscription_id?: string;
         };
     };
     responses: never;
@@ -405,6 +599,98 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "list-api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAPIKeyInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyCreatedOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-api-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description API key ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "exchange-token": {
         parameters: {
             query?: never;
@@ -425,104 +711,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "list-groups": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationGroup"][] | null;
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "create-group": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateGroupInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationGroup"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "update-group": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Group ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateGroupInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationGroup"];
                 };
             };
             /** @description Error */
@@ -604,7 +792,7 @@ export interface operations {
             };
         };
     };
-    "list-types": {
+    "list-subscription-categories": {
         parameters: {
             query?: never;
             header?: never;
@@ -619,7 +807,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NotificationType"][] | null;
+                    "application/json": components["schemas"]["SubscriptionCategory"][] | null;
                 };
             };
             /** @description Error */
@@ -633,7 +821,7 @@ export interface operations {
             };
         };
     };
-    "create-type": {
+    "create-subscription-category": {
         parameters: {
             query?: never;
             header?: never;
@@ -642,7 +830,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateTypeInputBody"];
+                "application/json": components["schemas"]["CreateCategoryInputBody"];
             };
         };
         responses: {
@@ -652,7 +840,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NotificationType"];
+                    "application/json": components["schemas"]["SubscriptionCategory"];
                 };
             };
             /** @description Error */
@@ -666,19 +854,87 @@ export interface operations {
             };
         };
     };
-    "update-type": {
+    "list-subscriptions": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Type ID */
+                /** @description Category ID */
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subscription"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Category ID */
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubscriptionInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subscription"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-subscription-category": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Category ID */
                 id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateTypeInputBody"];
+                "application/json": components["schemas"]["UpdateCategoryInputBody"];
             };
         };
         responses: {
@@ -688,7 +944,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NotificationType"];
+                    "application/json": components["schemas"]["SubscriptionCategory"];
                 };
             };
             /** @description Error */
@@ -702,12 +958,206 @@ export interface operations {
             };
         };
     };
-    "delete-type": {
+    "delete-subscription-category": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Type ID */
+                /** @description Category ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Subscription ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSubscriptionInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subscription"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Subscription ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTemplate"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTemplate"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Template ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTemplate"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Template ID */
                 id: string;
             };
             cookie?: never;

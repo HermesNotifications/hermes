@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/admin"
 	"github.com/hermes-notifications/hermes/internal/inbox"
+	"github.com/hermes-notifications/hermes/internal/send"
 	"github.com/hermes-notifications/hermes/internal/userservice"
 )
 
@@ -24,8 +25,30 @@ func main() {
 
 	switch *service {
 	case "admin":
-		srv := admin.NewServer(nil, nil, nil, nil, "", logger)
-		writeSpec(srv.API(), *out, *format)
+		adminSrv := admin.NewServer(nil, nil, nil, nil, "", logger)
+		sendSrv := send.NewServer(nil, nil, nil, nil, "", logger)
+		// Merge send paths into admin spec for a combined SDK spec
+		adminSpec := adminSrv.API().OpenAPI()
+		sendSpec := sendSrv.API().OpenAPI()
+		if adminSpec.Paths == nil {
+			adminSpec.Paths = map[string]*huma.PathItem{}
+		}
+		for path, pathItem := range sendSpec.Paths {
+			adminSpec.Paths[path] = pathItem
+		}
+		// Merge send schemas into admin spec
+		if sendSpec.Components != nil && sendSpec.Components.Schemas != nil {
+			if adminSpec.Components == nil {
+				adminSpec.Components = &huma.Components{}
+			}
+			if adminSpec.Components.Schemas == nil {
+				adminSpec.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", huma.DefaultSchemaNamer)
+			}
+			for name, schema := range sendSpec.Components.Schemas.Map() {
+				adminSpec.Components.Schemas.Map()[name] = schema
+			}
+		}
+		writeSpec(adminSrv.API(), *out, *format)
 	case "inbox":
 		srv := inbox.NewServer(nil, nil, nil, nil, nil, logger)
 		writeSpec(srv.API(), *out, *format)

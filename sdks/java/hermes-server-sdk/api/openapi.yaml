@@ -1,12 +1,92 @@
 openapi: 3.1.0
 info:
-  description: "Server-to-server API for managing notification groups, types, and\
-    \ sending notifications."
+  description: "Server-to-server API for managing subscription categories, templates,\
+    \ and notifications."
   title: Hermes Admin API
   version: 1.0.0
 servers:
 - url: /
 paths:
+  /v1/apikeys:
+    get:
+      operationId: list-api-keys
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Item"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List all API keys
+      tags:
+      - API Keys
+      x-accepts:
+      - application/json
+      - application/problem+json
+    post:
+      operationId: create-api-key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAPIKeyInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreatedOutputBody"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a new API key
+      tags:
+      - API Keys
+      x-content-type: application/json
+      x-accepts:
+      - application/json
+      - application/problem+json
+  /v1/apikeys/{id}:
+    delete:
+      operationId: delete-api-key
+      parameters:
+      - description: API key ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: API key ID
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Revoke an API key
+      tags:
+      - API Keys
+      x-accepts:
+      - application/problem+json
   /v1/auth/token:
     post:
       operationId: exchange-token
@@ -32,98 +112,6 @@ paths:
       summary: Exchange credentials for a user JWT token
       tags:
       - Auth
-      x-content-type: application/json
-      x-accepts:
-      - application/json
-      - application/problem+json
-  /v1/groups:
-    get:
-      operationId: list-groups
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/NotificationGroup"
-                nullable: true
-                type: array
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ErrorModel"
-          description: Error
-      summary: List notification groups
-      tags:
-      - Groups
-      x-accepts:
-      - application/json
-      - application/problem+json
-    post:
-      operationId: create-group
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateGroupInputBody"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NotificationGroup"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ErrorModel"
-          description: Error
-      summary: Create a notification group
-      tags:
-      - Groups
-      x-content-type: application/json
-      x-accepts:
-      - application/json
-      - application/problem+json
-  /v1/groups/{id}:
-    put:
-      operationId: update-group
-      parameters:
-      - description: Group ID
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          description: Group ID
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateGroupInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NotificationGroup"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ErrorModel"
-          description: Error
-      summary: Update a notification group
-      tags:
-      - Groups
       x-content-type: application/json
       x-accepts:
       - application/json
@@ -199,16 +187,16 @@ paths:
       x-accepts:
       - application/json
       - application/problem+json
-  /v1/types:
+  /v1/subscriptions/categories:
     get:
-      operationId: list-types
+      operationId: list-subscription-categories
       responses:
         "200":
           content:
             application/json:
               schema:
                 items:
-                  $ref: "#/components/schemas/NotificationType"
+                  $ref: "#/components/schemas/SubscriptionCategory"
                 nullable: true
                 type: array
           description: OK
@@ -218,26 +206,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
-      summary: List notification types
+      summary: List subscription categories
       tags:
-      - Types
+      - Subscriptions
       x-accepts:
       - application/json
       - application/problem+json
     post:
-      operationId: create-type
+      operationId: create-subscription-category
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateTypeInputBody"
+              $ref: "#/components/schemas/CreateCategoryInputBody"
         required: true
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NotificationType"
+                $ref: "#/components/schemas/SubscriptionCategory"
           description: Created
         default:
           content:
@@ -245,24 +233,97 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
-      summary: Create a notification type
+      summary: Create a subscription category
       tags:
-      - Types
+      - Subscriptions
       x-content-type: application/json
       x-accepts:
       - application/json
       - application/problem+json
-  /v1/types/{id}:
-    delete:
-      operationId: delete-type
+  /v1/subscriptions/categories/{category_id}/subscriptions:
+    get:
+      operationId: list-subscriptions
       parameters:
-      - description: Type ID
+      - description: Category ID
+        explode: false
+        in: path
+        name: category_id
+        required: true
+        schema:
+          description: Category ID
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Subscription"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List subscriptions in a category
+      tags:
+      - Subscriptions
+      x-accepts:
+      - application/json
+      - application/problem+json
+    post:
+      operationId: create-subscription
+      parameters:
+      - description: Category ID
+        explode: false
+        in: path
+        name: category_id
+        required: true
+        schema:
+          description: Category ID
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a subscription
+      tags:
+      - Subscriptions
+      x-content-type: application/json
+      x-accepts:
+      - application/json
+      - application/problem+json
+  /v1/subscriptions/categories/{id}:
+    delete:
+      operationId: delete-subscription-category
+      parameters:
+      - description: Category ID
         explode: false
         in: path
         name: id
         required: true
         schema:
-          description: Type ID
+          description: Category ID
           type: string
         style: simple
       responses:
@@ -274,35 +335,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
-      summary: Delete a notification type
+      summary: Delete a subscription category
       tags:
-      - Types
+      - Subscriptions
       x-accepts:
       - application/problem+json
     put:
-      operationId: update-type
+      operationId: update-subscription-category
       parameters:
-      - description: Type ID
+      - description: Category ID
         explode: false
         in: path
         name: id
         required: true
         schema:
-          description: Type ID
+          description: Category ID
           type: string
         style: simple
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateTypeInputBody"
+              $ref: "#/components/schemas/UpdateCategoryInputBody"
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NotificationType"
+                $ref: "#/components/schemas/SubscriptionCategory"
           description: OK
         default:
           content:
@@ -310,23 +371,271 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
-      summary: Update a notification type
+      summary: Update a subscription category
       tags:
-      - Types
+      - Subscriptions
+      x-content-type: application/json
+      x-accepts:
+      - application/json
+      - application/problem+json
+  /v1/subscriptions/{id}:
+    delete:
+      operationId: delete-subscription
+      parameters:
+      - description: Subscription ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Subscription ID
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete a subscription
+      tags:
+      - Subscriptions
+      x-accepts:
+      - application/problem+json
+    put:
+      operationId: update-subscription
+      parameters:
+      - description: Subscription ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Subscription ID
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubscriptionInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Update a subscription
+      tags:
+      - Subscriptions
+      x-content-type: application/json
+      x-accepts:
+      - application/json
+      - application/problem+json
+  /v1/templates:
+    get:
+      operationId: list-templates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/NotificationTemplate"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List notification templates
+      tags:
+      - Templates
+      x-accepts:
+      - application/json
+      - application/problem+json
+    post:
+      operationId: create-template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTemplate"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a notification template
+      tags:
+      - Templates
+      x-content-type: application/json
+      x-accepts:
+      - application/json
+      - application/problem+json
+  /v1/templates/{id}:
+    delete:
+      operationId: delete-template
+      parameters:
+      - description: Template ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Template ID
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete a notification template
+      tags:
+      - Templates
+      x-accepts:
+      - application/problem+json
+    put:
+      operationId: update-template
+      parameters:
+      - description: Template ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: Template ID
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTemplateInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTemplate"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Update a notification template
+      tags:
+      - Templates
       x-content-type: application/json
       x-accepts:
       - application/json
       - application/problem+json
 components:
   schemas:
-    CreateGroupInputBody:
+    ApiKeyCreatedOutputBody:
       additionalProperties: false
       example:
         $schema: https://openapi-generator.tech
+        permissions:
+        - permissions
+        - permissions
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        raw_key: raw_key
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        permissions:
+          items:
+            type: string
+          nullable: true
+          type: array
+        raw_key:
+          type: string
+      required:
+      - created_at
+      - id
+      - name
+      - permissions
+      - raw_key
+    CreateAPIKeyInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        permissions:
+        - permissions
+        - permissions
+        name: name
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Human-readable key name
+          minLength: 1
+          type: string
+        permissions:
+          description: Permission set (defaults to all except apikeys:manage)
+          items:
+            type: string
+          nullable: true
+          type: array
+      required:
+      - name
+    CreateCategoryInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        default_state: "on"
         default_channels:
         - default_channels
         - default_channels
         name: name
+        sort_order: 0
         slug: slug
       properties:
         $schema:
@@ -335,11 +644,18 @@ components:
           readOnly: true
           type: string
         default_channels:
-          description: Default delivery channels for this group
+          description: Default delivery channels
           items:
             type: string
           nullable: true
           type: array
+        default_state:
+          description: Default subscription state
+          enum:
+          - "on"
+          - "off"
+          - required
+          type: string
         name:
           description: Human-readable name
           minLength: 1
@@ -348,16 +664,52 @@ components:
           description: URL-friendly identifier
           minLength: 1
           type: string
+        sort_order:
+          description: Display order
+          format: int64
+          type: integer
+      required:
+      - default_state
+      - name
+      - slug
+    CreateSubscriptionInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        name: name
+        sort_order: 0
+        slug: slug
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Human-readable name
+          minLength: 1
+          type: string
+        slug:
+          description: URL-friendly identifier
+          minLength: 1
+          type: string
+        sort_order:
+          description: Display order within category
+          format: int64
+          type: integer
       required:
       - name
       - slug
-    CreateTypeInputBody:
+    CreateTemplateInputBody:
       additionalProperties: false
       example:
+        subscription_id: subscription_id
         inbox_title: inbox_title
         $schema: https://openapi-generator.tech
         email_body: email_body
-        group_id: group_id
+        default_channels:
+        - default_channels
+        - default_channels
         inbox_body: inbox_body
         name: name
         sms_body: sms_body
@@ -369,21 +721,23 @@ components:
           format: uri
           readOnly: true
           type: string
+        default_channels:
+          description: Default channels (used when no subscription)
+          items:
+            type: string
+          nullable: true
+          type: array
         email_body:
-          description: Email body template
+          description: Email body template (HTML)
           type: string
         email_subject:
           description: Email subject template
           type: string
-        group_id:
-          description: ID of the group this type belongs to
-          minLength: 1
-          type: string
         inbox_body:
-          description: Inbox notification body template
+          description: Inbox body template
           type: string
         inbox_title:
-          description: Inbox notification title template
+          description: Inbox title template
           type: string
         name:
           description: Human-readable name
@@ -396,8 +750,10 @@ components:
         sms_body:
           description: SMS body template
           type: string
+        subscription_id:
+          description: Subscription ID (null for standalone)
+          type: string
       required:
-      - group_id
       - name
       - slug
     ErrorDetail:
@@ -446,6 +802,33 @@ components:
           description: A URI reference to human-readable documentation for the error.
           format: uri
           type: string
+    Item:
+      additionalProperties: false
+      example:
+        permissions:
+        - permissions
+        - permissions
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        permissions:
+          items:
+            type: string
+          nullable: true
+          type: array
+      required:
+      - created_at
+      - id
+      - name
+      - permissions
     Notification:
       additionalProperties: false
       properties:
@@ -457,6 +840,8 @@ components:
           format: date-time
           type: string
         body:
+          type: string
+        category_id:
           type: string
         channels:
           items:
@@ -472,8 +857,6 @@ components:
         delivered_at:
           format: date-time
           type: string
-        group_id:
-          type: string
         id:
           type: string
         idempotency_key:
@@ -486,19 +869,19 @@ components:
           type: string
         status:
           type: string
+        template_id:
+          type: string
         tenant_id:
           type: string
         title:
-          type: string
-        type_id:
           type: string
         user_id:
           type: string
       required:
       - body
+      - category_id
       - channels
       - created_at
-      - group_id
       - id
       - status
       - tenant_id
@@ -537,43 +920,6 @@ components:
       - id
       - notification_id
       - severity
-    NotificationGroup:
-      additionalProperties: false
-      example:
-        $schema: https://openapi-generator.tech
-        default_channels:
-        - default_channels
-        - default_channels
-        name: name
-        created_at: 2000-01-23T04:56:07.000+00:00
-        id: id
-        slug: slug
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          format: uri
-          readOnly: true
-          type: string
-        created_at:
-          format: date-time
-          type: string
-        default_channels:
-          items:
-            type: string
-          nullable: true
-          type: array
-        id:
-          type: string
-        name:
-          type: string
-        slug:
-          type: string
-      required:
-      - created_at
-      - default_channels
-      - id
-      - name
-      - slug
     NotificationStatusOutputBody:
       additionalProperties: false
       example:
@@ -613,13 +959,16 @@ components:
       required:
       - events
       - notification
-    NotificationType:
+    NotificationTemplate:
       additionalProperties: false
       example:
+        subscription_id: subscription_id
         inbox_title: inbox_title
         $schema: https://openapi-generator.tech
         email_body: email_body
-        group_id: group_id
+        default_channels:
+        - default_channels
+        - default_channels
         inbox_body: inbox_body
         name: name
         created_at: 2000-01-23T04:56:07.000+00:00
@@ -636,11 +985,14 @@ components:
         created_at:
           format: date-time
           type: string
+        default_channels:
+          items:
+            type: string
+          nullable: true
+          type: array
         email_body:
           type: string
         email_subject:
-          type: string
-        group_id:
           type: string
         id:
           type: string
@@ -654,9 +1006,11 @@ components:
           type: string
         sms_body:
           type: string
+        subscription_id:
+          type: string
       required:
       - created_at
-      - group_id
+      - default_channels
       - id
       - name
       - slug
@@ -681,17 +1035,15 @@ components:
     SendInputBody:
       additionalProperties: false
       example:
-        tenant_id: tenant_id
+        template: template
         $schema: https://openapi-generator.tech
         channels:
         - channels
         - channels
         data:
           key: ""
-        user_id: user_id
-        type: type
+        to: ""
         content: ""
-        group: group
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
@@ -707,27 +1059,19 @@ components:
         content:
           allOf:
           - $ref: "#/components/schemas/SendContent"
-          description: Direct content (mutually exclusive with type)
+          description: Direct content (mutually exclusive with template)
         data:
           additionalProperties: {}
           description: Template data for rendering
-        group:
-          description: Group slug (required for direct content sends)
+        template:
+          description: Notification template slug (mutually exclusive with content)
           type: string
-        tenant_id:
-          description: Tenant identifier
-          minLength: 1
-          type: string
-        type:
-          description: Notification type slug (mutually exclusive with content)
-          type: string
-        user_id:
-          description: External user identifier
-          minLength: 1
-          type: string
+        to:
+          allOf:
+          - $ref: "#/components/schemas/SendRecipient"
+          description: Notification recipient
       required:
-      - tenant_id
-      - user_id
+      - to
     SendOutputBody:
       additionalProperties: false
       example:
@@ -744,18 +1088,130 @@ components:
           type: string
       required:
       - notification_id
-    TokenInputBody:
+    SendRecipient:
+      additionalProperties: false
+      properties:
+        email:
+          description: Optional email address for this notification
+          type: string
+        phone:
+          description: Optional phone number for this notification
+          type: string
+        tenant_id:
+          description: Tenant identifier
+          minLength: 1
+          type: string
+        user_id:
+          description: External user identifier
+          minLength: 1
+          type: string
+      required:
+      - tenant_id
+      - user_id
+    Subscription:
       additionalProperties: false
       example:
-        tenant_id: tenant_id
         $schema: https://openapi-generator.tech
-        user_id: user_id
+        category_id: category_id
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        sort_order: 0
+        slug: slug
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
           format: uri
           readOnly: true
           type: string
+        category_id:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        sort_order:
+          format: int64
+          type: integer
+      required:
+      - category_id
+      - created_at
+      - id
+      - name
+      - slug
+      - sort_order
+    SubscriptionCategory:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        default_state: default_state
+        default_channels:
+        - default_channels
+        - default_channels
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+        sort_order: 0
+        slug: slug
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        default_channels:
+          items:
+            type: string
+          nullable: true
+          type: array
+        default_state:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        sort_order:
+          format: int64
+          type: integer
+      required:
+      - created_at
+      - default_channels
+      - default_state
+      - id
+      - name
+      - slug
+      - sort_order
+    TokenInputBody:
+      additionalProperties: false
+      example:
+        tenant_id: tenant_id
+        $schema: https://openapi-generator.tech
+        user_id: user_id
+        expires_in: 51745
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        expires_in:
+          description: "Requested token lifetime in seconds (min 3600 = 1h, max 604800\
+            \ = 7d, default 14400 = 4h). The actual expiry includes ±10% random jitter\
+            \ to prevent thundering-herd token refreshes."
+          format: int64
+          maximum: 604800
+          minimum: 3600
+          type: integer
         tenant_id:
           description: Tenant identifier
           minLength: 1
@@ -788,14 +1244,16 @@ components:
       required:
       - expires_at
       - token
-    UpdateGroupInputBody:
+    UpdateCategoryInputBody:
       additionalProperties: false
       example:
         $schema: https://openapi-generator.tech
+        default_state: "on"
         default_channels:
         - default_channels
         - default_channels
         name: name
+        sort_order: 0
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
@@ -803,23 +1261,62 @@ components:
           readOnly: true
           type: string
         default_channels:
-          description: Default delivery channels for this group
+          description: Default delivery channels
           items:
             type: string
           nullable: true
           type: array
+        default_state:
+          description: Default subscription state
+          enum:
+          - "on"
+          - "off"
+          - required
+          type: string
         name:
           description: Human-readable name
           type: string
+        sort_order:
+          description: Display order
+          format: int64
+          type: integer
       required:
       - default_channels
+      - default_state
       - name
-    UpdateTypeInputBody:
+      - sort_order
+    UpdateSubscriptionInputBody:
       additionalProperties: false
       example:
+        $schema: https://openapi-generator.tech
+        name: name
+        sort_order: 0
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Human-readable name
+          type: string
+        sort_order:
+          description: Display order within category
+          format: int64
+          type: integer
+      required:
+      - name
+      - sort_order
+    UpdateTemplateInputBody:
+      additionalProperties: false
+      example:
+        subscription_id: subscription_id
         inbox_title: inbox_title
         $schema: https://openapi-generator.tech
         email_body: email_body
+        default_channels:
+        - default_channels
+        - default_channels
         inbox_body: inbox_body
         name: name
         sms_body: sms_body
@@ -830,23 +1327,32 @@ components:
           format: uri
           readOnly: true
           type: string
+        default_channels:
+          description: Default channels (used when no subscription)
+          items:
+            type: string
+          nullable: true
+          type: array
         email_body:
-          description: Email body template
+          description: Email body template (HTML)
           type: string
         email_subject:
           description: Email subject template
           type: string
         inbox_body:
-          description: Inbox notification body template
+          description: Inbox body template
           type: string
         inbox_title:
-          description: Inbox notification title template
+          description: Inbox title template
           type: string
         name:
           description: Human-readable name
           type: string
         sms_body:
           description: SMS body template
+          type: string
+        subscription_id:
+          description: Subscription ID (null for standalone)
           type: string
       required:
       - name

@@ -6,6 +6,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **var_schema** | **str** | A URL to the JSON Schema for this object. | [optional] [readonly] 
+**expires_in** | **int** | Requested token lifetime in seconds (min 3600 &#x3D; 1h, max 604800 &#x3D; 7d, default 14400 &#x3D; 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes. | [optional] 
 **tenant_id** | **str** | Tenant identifier | 
 **user_id** | **str** | External user identifier | 
 

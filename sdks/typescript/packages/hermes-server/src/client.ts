@@ -1,8 +1,9 @@
 import createClient, { type Middleware } from "openapi-fetch";
 import type { paths, components } from "./generated/admin-api.js";
 
-export type NotificationGroup = components["schemas"]["NotificationGroup"];
-export type NotificationType = components["schemas"]["NotificationType"];
+export type SubscriptionCategory = components["schemas"]["SubscriptionCategory"];
+export type Subscription = components["schemas"]["Subscription"];
+export type NotificationTemplate = components["schemas"]["NotificationTemplate"];
 export type Notification = components["schemas"]["Notification"];
 export type NotificationEvent = components["schemas"]["NotificationEvent"];
 
@@ -51,11 +52,11 @@ function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T
   return result.data as T;
 }
 
-export class GroupsService {
+export class CategoriesService {
   constructor(private client: ReturnType<typeof createApiClient>) {}
 
-  async list(): Promise<NotificationGroup[]> {
-    const result = await this.client.GET("/v1/groups");
+  async list(): Promise<SubscriptionCategory[]> {
+    const result = await this.client.GET("/v1/subscriptions/categories");
     return unwrap(result) ?? [];
   }
 
@@ -63,48 +64,123 @@ export class GroupsService {
     slug: string;
     name: string;
     defaultChannels?: string[];
-  }): Promise<NotificationGroup> {
-    const result = await this.client.POST("/v1/groups", {
-      body: { slug: body.slug, name: body.name, default_channels: body.defaultChannels ?? null },
+    defaultState?: "on" | "off" | "required";
+    sortOrder?: number;
+  }): Promise<SubscriptionCategory> {
+    const result = await this.client.POST("/v1/subscriptions/categories", {
+      body: {
+        slug: body.slug,
+        name: body.name,
+        default_channels: body.defaultChannels ?? null,
+        default_state: body.defaultState ?? "on",
+        sort_order: body.sortOrder ?? 0,
+      },
     });
     return unwrap(result);
   }
 
   async update(
     id: string,
-    body: { name?: string; defaultChannels?: string[] }
-  ): Promise<NotificationGroup> {
-    const result = await this.client.PUT("/v1/groups/{id}", {
+    body: {
+      name?: string;
+      defaultChannels?: string[];
+      defaultState?: "on" | "off" | "required";
+      sortOrder?: number;
+    }
+  ): Promise<SubscriptionCategory> {
+    const result = await this.client.PUT("/v1/subscriptions/categories/{id}", {
       params: { path: { id } },
-      body: { name: body.name ?? "", default_channels: body.defaultChannels ?? null },
+      body: {
+        name: body.name ?? "",
+        default_channels: body.defaultChannels ?? null,
+        default_state: body.defaultState ?? "on",
+        sort_order: body.sortOrder ?? 0,
+      },
     });
     return unwrap(result);
   }
+
+  async delete(id: string): Promise<void> {
+    const result = await this.client.DELETE("/v1/subscriptions/categories/{id}", {
+      params: { path: { id } },
+    });
+    unwrap(result);
+  }
 }
 
-export class TypesService {
+export class SubscriptionsService {
   constructor(private client: ReturnType<typeof createApiClient>) {}
 
-  async list(): Promise<NotificationType[]> {
-    const result = await this.client.GET("/v1/types");
+  async list(categoryId: string): Promise<Subscription[]> {
+    const result = await this.client.GET(
+      "/v1/subscriptions/categories/{category_id}/subscriptions",
+      { params: { path: { category_id: categoryId } } }
+    );
+    return unwrap(result) ?? [];
+  }
+
+  async create(
+    categoryId: string,
+    body: { slug: string; name: string; sortOrder?: number }
+  ): Promise<Subscription> {
+    const result = await this.client.POST(
+      "/v1/subscriptions/categories/{category_id}/subscriptions",
+      {
+        params: { path: { category_id: categoryId } },
+        body: {
+          slug: body.slug,
+          name: body.name,
+          sort_order: body.sortOrder ?? 0,
+        },
+      }
+    );
+    return unwrap(result);
+  }
+
+  async update(
+    id: string,
+    body: { name?: string; sortOrder?: number }
+  ): Promise<Subscription> {
+    const result = await this.client.PUT("/v1/subscriptions/{id}", {
+      params: { path: { id } },
+      body: { name: body.name ?? "", sort_order: body.sortOrder ?? 0 },
+    });
+    return unwrap(result);
+  }
+
+  async delete(id: string): Promise<void> {
+    const result = await this.client.DELETE("/v1/subscriptions/{id}", {
+      params: { path: { id } },
+    });
+    unwrap(result);
+  }
+}
+
+export class TemplatesService {
+  constructor(private client: ReturnType<typeof createApiClient>) {}
+
+  async list(): Promise<NotificationTemplate[]> {
+    const result = await this.client.GET("/v1/templates");
     return unwrap(result) ?? [];
   }
 
   async create(body: {
-    groupId: string;
     slug: string;
     name: string;
+    subscriptionId?: string;
+    defaultChannels?: string[];
     emailSubject?: string;
     emailBody?: string;
     smsBody?: string;
     inboxTitle?: string;
     inboxBody?: string;
-  }): Promise<NotificationType> {
-    const result = await this.client.POST("/v1/types", {
+  }): Promise<NotificationTemplate> {
+    const result = await this.client.POST("/v1/templates", {
       body: {
-        group_id: body.groupId,
         slug: body.slug,
         name: body.name,
+        subscription_id: body.subscriptionId,
+        default_channels: body.defaultChannels ?? null,
         email_subject: body.emailSubject,
         email_body: body.emailBody,
         sms_body: body.smsBody,
@@ -119,17 +195,19 @@ export class TypesService {
     id: string,
     body: {
       name?: string;
+      defaultChannels?: string[];
       emailSubject?: string;
       emailBody?: string;
       smsBody?: string;
       inboxTitle?: string;
       inboxBody?: string;
     }
-  ): Promise<NotificationType> {
-    const result = await this.client.PUT("/v1/types/{id}", {
+  ): Promise<NotificationTemplate> {
+    const result = await this.client.PUT("/v1/templates/{id}", {
       params: { path: { id } },
       body: {
         name: body.name ?? "",
+        default_channels: body.defaultChannels ?? null,
         email_subject: body.emailSubject,
         email_body: body.emailBody,
         sms_body: body.smsBody,
@@ -141,7 +219,7 @@ export class TypesService {
   }
 
   async delete(id: string): Promise<void> {
-    const result = await this.client.DELETE("/v1/types/{id}", {
+    const result = await this.client.DELETE("/v1/templates/{id}", {
       params: { path: { id } },
     });
     unwrap(result);
@@ -149,13 +227,21 @@ export class TypesService {
 }
 
 export interface SendOptions {
-  tenantId: string;
-  userId: string;
-  type?: string;
-  content?: { title: string; body: string; actionUrl?: string; actionLabel?: string };
+  to: {
+    tenantId: string;
+    userId: string;
+    email?: string;
+    phone?: string;
+  };
+  template?: string;
+  content?: {
+    title: string;
+    body: string;
+    actionUrl?: string;
+    actionLabel?: string;
+  };
   data?: Record<string, unknown>;
   channels?: string[];
-  group?: string;
   idempotencyKey?: string;
 }
 
@@ -170,9 +256,13 @@ export class NotificationsService {
           : undefined,
       },
       body: {
-        tenant_id: options.tenantId,
-        user_id: options.userId,
-        type: options.type,
+        to: {
+          tenant_id: options.to.tenantId,
+          user_id: options.to.userId,
+          email: options.to.email,
+          phone: options.to.phone,
+        },
+        template: options.template,
         content: options.content
           ? {
               title: options.content.title,
@@ -183,7 +273,6 @@ export class NotificationsService {
           : undefined,
         data: options.data,
         channels: options.channels,
-        group: options.group,
       },
     });
     const data = unwrap(result);
@@ -221,15 +310,17 @@ export class AuthService {
 }
 
 export class Hermes {
-  readonly groups: GroupsService;
-  readonly types: TypesService;
+  readonly categories: CategoriesService;
+  readonly subscriptions: SubscriptionsService;
+  readonly templates: TemplatesService;
   readonly notifications: NotificationsService;
   readonly auth: AuthService;
 
   constructor(config: HermesConfig) {
     const client = createApiClient(config);
-    this.groups = new GroupsService(client);
-    this.types = new TypesService(client);
+    this.categories = new CategoriesService(client);
+    this.subscriptions = new SubscriptionsService(client);
+    this.templates = new TemplatesService(client);
     this.notifications = new NotificationsService(client);
     this.auth = new AuthService(client);
   }

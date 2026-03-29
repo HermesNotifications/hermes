@@ -1,6 +1,6 @@
 /*
  * Hermes Admin API
- * Server-to-server API for managing notification groups, types, and sending notifications.
+ * Server-to-server API for managing subscription categories, templates, and notifications.
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -20,6 +20,7 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.hermes.sdk.model.SendContent;
+import com.hermes.sdk.model.SendRecipient;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -55,7 +56,7 @@ import com.hermes.sdk.JSON;
 /**
  * SendInputBody
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-22T18:24:04.702920-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-29T15:48:54.030379-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
 public class SendInputBody {
   public static final String SERIALIZED_NAME_$_SCHEMA = "$schema";
   @SerializedName(SERIALIZED_NAME_$_SCHEMA)
@@ -77,25 +78,15 @@ public class SendInputBody {
   @javax.annotation.Nullable
   private Map<String, Object> data = new HashMap<>();
 
-  public static final String SERIALIZED_NAME_GROUP = "group";
-  @SerializedName(SERIALIZED_NAME_GROUP)
+  public static final String SERIALIZED_NAME_TEMPLATE = "template";
+  @SerializedName(SERIALIZED_NAME_TEMPLATE)
   @javax.annotation.Nullable
-  private String group;
+  private String template;
 
-  public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
-  @SerializedName(SERIALIZED_NAME_TENANT_ID)
+  public static final String SERIALIZED_NAME_TO = "to";
+  @SerializedName(SERIALIZED_NAME_TO)
   @javax.annotation.Nonnull
-  private String tenantId;
-
-  public static final String SERIALIZED_NAME_TYPE = "type";
-  @SerializedName(SERIALIZED_NAME_TYPE)
-  @javax.annotation.Nullable
-  private String type;
-
-  public static final String SERIALIZED_NAME_USER_ID = "user_id";
-  @SerializedName(SERIALIZED_NAME_USER_ID)
-  @javax.annotation.Nonnull
-  private String userId;
+  private SendRecipient to;
 
   public SendInputBody() {
   }
@@ -151,7 +142,7 @@ public class SendInputBody {
   }
 
   /**
-   * Direct content (mutually exclusive with type)
+   * Direct content (mutually exclusive with template)
    * @return content
    */
   @javax.annotation.Nullable
@@ -191,79 +182,41 @@ public class SendInputBody {
   }
 
 
-  public SendInputBody group(@javax.annotation.Nullable String group) {
-    this.group = group;
+  public SendInputBody template(@javax.annotation.Nullable String template) {
+    this.template = template;
     return this;
   }
 
   /**
-   * Group slug (required for direct content sends)
-   * @return group
+   * Notification template slug (mutually exclusive with content)
+   * @return template
    */
   @javax.annotation.Nullable
-  public String getGroup() {
-    return group;
+  public String getTemplate() {
+    return template;
   }
 
-  public void setGroup(@javax.annotation.Nullable String group) {
-    this.group = group;
+  public void setTemplate(@javax.annotation.Nullable String template) {
+    this.template = template;
   }
 
 
-  public SendInputBody tenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
+  public SendInputBody to(@javax.annotation.Nonnull SendRecipient to) {
+    this.to = to;
     return this;
   }
 
   /**
-   * Tenant identifier
-   * @return tenantId
+   * Notification recipient
+   * @return to
    */
   @javax.annotation.Nonnull
-  public String getTenantId() {
-    return tenantId;
+  public SendRecipient getTo() {
+    return to;
   }
 
-  public void setTenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
-  }
-
-
-  public SendInputBody type(@javax.annotation.Nullable String type) {
-    this.type = type;
-    return this;
-  }
-
-  /**
-   * Notification type slug (mutually exclusive with content)
-   * @return type
-   */
-  @javax.annotation.Nullable
-  public String getType() {
-    return type;
-  }
-
-  public void setType(@javax.annotation.Nullable String type) {
-    this.type = type;
-  }
-
-
-  public SendInputBody userId(@javax.annotation.Nonnull String userId) {
-    this.userId = userId;
-    return this;
-  }
-
-  /**
-   * External user identifier
-   * @return userId
-   */
-  @javax.annotation.Nonnull
-  public String getUserId() {
-    return userId;
-  }
-
-  public void setUserId(@javax.annotation.Nonnull String userId) {
-    this.userId = userId;
+  public void setTo(@javax.annotation.Nonnull SendRecipient to) {
+    this.to = to;
   }
 
 
@@ -281,10 +234,8 @@ public class SendInputBody {
         Objects.equals(this.channels, sendInputBody.channels) &&
         Objects.equals(this.content, sendInputBody.content) &&
         Objects.equals(this.data, sendInputBody.data) &&
-        Objects.equals(this.group, sendInputBody.group) &&
-        Objects.equals(this.tenantId, sendInputBody.tenantId) &&
-        Objects.equals(this.type, sendInputBody.type) &&
-        Objects.equals(this.userId, sendInputBody.userId);
+        Objects.equals(this.template, sendInputBody.template) &&
+        Objects.equals(this.to, sendInputBody.to);
   }
 
   private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
@@ -293,7 +244,7 @@ public class SendInputBody {
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, channels, content, data, group, tenantId, type, userId);
+    return Objects.hash($schema, channels, content, data, template, to);
   }
 
   private static <T> int hashCodeNullable(JsonNullable<T> a) {
@@ -311,10 +262,8 @@ public class SendInputBody {
     sb.append("    channels: ").append(toIndentedString(channels)).append("\n");
     sb.append("    content: ").append(toIndentedString(content)).append("\n");
     sb.append("    data: ").append(toIndentedString(data)).append("\n");
-    sb.append("    group: ").append(toIndentedString(group)).append("\n");
-    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
-    sb.append("    type: ").append(toIndentedString(type)).append("\n");
-    sb.append("    userId: ").append(toIndentedString(userId)).append("\n");
+    sb.append("    template: ").append(toIndentedString(template)).append("\n");
+    sb.append("    to: ").append(toIndentedString(to)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -336,10 +285,10 @@ public class SendInputBody {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "channels", "content", "data", "group", "tenant_id", "type", "user_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "channels", "content", "data", "template", "to"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("tenant_id", "user_id"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("to"));
   }
 
   /**
@@ -381,18 +330,11 @@ public class SendInputBody {
       if (jsonObj.get("content") != null && !jsonObj.get("content").isJsonNull()) {
         SendContent.validateJsonElement(jsonObj.get("content"));
       }
-      if ((jsonObj.get("group") != null && !jsonObj.get("group").isJsonNull()) && !jsonObj.get("group").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `group` to be a primitive type in the JSON string but got `%s`", jsonObj.get("group").toString()));
+      if ((jsonObj.get("template") != null && !jsonObj.get("template").isJsonNull()) && !jsonObj.get("template").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `template` to be a primitive type in the JSON string but got `%s`", jsonObj.get("template").toString()));
       }
-      if (!jsonObj.get("tenant_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_id").toString()));
-      }
-      if ((jsonObj.get("type") != null && !jsonObj.get("type").isJsonNull()) && !jsonObj.get("type").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `type` to be a primitive type in the JSON string but got `%s`", jsonObj.get("type").toString()));
-      }
-      if (!jsonObj.get("user_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `user_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("user_id").toString()));
-      }
+      // validate the required field `to`
+      SendRecipient.validateJsonElement(jsonObj.get("to"));
   }
 
   public static class CustomTypeAdapterFactory implements TypeAdapterFactory {

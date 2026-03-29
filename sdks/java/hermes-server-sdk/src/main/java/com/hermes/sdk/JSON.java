@@ -1,6 +1,6 @@
 /*
  * Hermes Admin API
- * Server-to-server API for managing notification groups, types, and sending notifications.
+ * Server-to-server API for managing subscription categories, templates, and notifications.
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -96,22 +96,29 @@ public class JSON {
         gsonBuilder.registerTypeAdapter(OffsetDateTime.class, offsetDateTimeTypeAdapter);
         gsonBuilder.registerTypeAdapter(LocalDate.class, localDateTypeAdapter);
         gsonBuilder.registerTypeAdapter(byte[].class, byteArrayAdapter);
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateGroupInputBody.CustomTypeAdapterFactory());
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateTypeInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.ApiKeyCreatedOutputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateAPIKeyInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateCategoryInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateSubscriptionInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateTemplateInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.ErrorDetail.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.ErrorModel.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.Item.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.Notification.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationEvent.CustomTypeAdapterFactory());
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationGroup.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationStatusOutputBody.CustomTypeAdapterFactory());
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationType.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationTemplate.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendContent.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendOutputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendRecipient.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.Subscription.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SubscriptionCategory.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.TokenInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.TokenOutputBody.CustomTypeAdapterFactory());
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.UpdateGroupInputBody.CustomTypeAdapterFactory());
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.UpdateTypeInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.UpdateCategoryInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.UpdateSubscriptionInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.UpdateTemplateInputBody.CustomTypeAdapterFactory());
         gson = gsonBuilder.create();
     }
 
