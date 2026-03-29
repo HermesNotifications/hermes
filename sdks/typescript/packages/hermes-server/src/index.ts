@@ -5,6 +5,7 @@ export {
   TemplatesService,
   NotificationsService,
   AuthService,
+  APIKeysService,
   HermesError,
   type HermesConfig,
   type SendOptions,
@@ -13,4 +14,6 @@ export {
   type NotificationTemplate,
   type Notification,
   type NotificationEvent,
+  type APIKeyInfo,
+  type APIKeyCreated,
 } from "./client.js";

@@ -291,6 +291,46 @@ export class NotificationsService {
   }
 }
 
+export type APIKeyInfo = {
+  id: string;
+  name: string;
+  permissions: string[] | null;
+  created_at: string;
+};
+
+export type APIKeyCreated = APIKeyInfo & {
+  raw_key: string;
+};
+
+export class APIKeysService {
+  constructor(private client: ReturnType<typeof createApiClient>) {}
+
+  async list(): Promise<APIKeyInfo[]> {
+    const result = await this.client.GET("/v1/apikeys");
+    return unwrap(result) ?? [];
+  }
+
+  async create(body: {
+    name: string;
+    permissions?: string[];
+  }): Promise<APIKeyCreated> {
+    const result = await this.client.POST("/v1/apikeys", {
+      body: {
+        name: body.name,
+        permissions: body.permissions,
+      },
+    });
+    return unwrap(result);
+  }
+
+  async delete(id: string): Promise<void> {
+    const result = await this.client.DELETE("/v1/apikeys/{id}", {
+      params: { path: { id } },
+    });
+    unwrap(result);
+  }
+}
+
 export class AuthService {
   constructor(private client: ReturnType<typeof createApiClient>) {}
 
@@ -315,6 +355,7 @@ export class Hermes {
   readonly templates: TemplatesService;
   readonly notifications: NotificationsService;
   readonly auth: AuthService;
+  readonly apiKeys: APIKeysService;
 
   constructor(config: HermesConfig) {
     const client = createApiClient(config);
@@ -323,5 +364,6 @@ export class Hermes {
     this.templates = new TemplatesService(client);
     this.notifications = new NotificationsService(client);
     this.auth = new AuthService(client);
+    this.apiKeys = new APIKeysService(client);
   }
 }
