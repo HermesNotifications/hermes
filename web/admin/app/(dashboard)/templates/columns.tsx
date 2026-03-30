@@ -91,6 +91,18 @@ export const columns: ColumnDef<NotificationTemplate>[] = [
     },
   },
   {
+    accessorKey: "subscription_id",
+    header: "Subscription",
+    cell: ({ row }) => {
+      const subId = row.original.subscription_id;
+      return subId ? (
+        <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{subId}</code>
+      ) : (
+        <span className="text-muted-foreground text-sm">—</span>
+      );
+    },
+  },
+  {
     accessorKey: "created_at",
     header: "Created",
     cell: ({ row }) => {
