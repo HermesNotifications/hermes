@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 interface ConfirmDialogProps {
-  trigger: React.ReactNode;
+  trigger: React.ReactElement;
   title: string;
   description: string;
   onConfirm: () => void;
@@ -30,7 +30,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <AlertDialog>
-      <AlertDialogTrigger render={trigger as React.ReactElement} />
+      <AlertDialogTrigger render={trigger} />
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

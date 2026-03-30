@@ -3,6 +3,8 @@
 import { authClient } from "@/lib/auth-client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -43,29 +45,23 @@ export default function LoginPage() {
           {error && (
             <p className="text-destructive text-sm text-center">{error}</p>
           )}
-          <input
+          <Input
             type="email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full rounded-md border bg-transparent px-3 py-2 text-sm"
           />
-          <input
+          <Input
             type="password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full rounded-md border bg-transparent px-3 py-2 text-sm"
           />
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50"
-          >
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Signing in..." : "Sign in"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { categorySchema, type CategoryFormData } from "@/lib/schemas/category";
+import { slugify } from "@/lib/utils";
 
 interface CategoryFormProps {
   defaultValues?: Partial<CategoryFormData>;
@@ -29,15 +30,6 @@ const CHANNELS = [
   { id: "sms", label: "SMS" },
   { id: "inbox", label: "Inbox" },
 ] as const;
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 export function CategoryForm({ defaultValues, onSubmit, isEdit = false }: CategoryFormProps) {
   const router = useRouter();

@@ -17,19 +17,11 @@ import {
   deleteSubscription,
 } from "@/lib/actions/subscriptions";
 import type { Subscription } from "@hermes-notifications/server";
+import { slugify } from "@/lib/utils";
 
 interface SubscriptionListProps {
   categoryId: string;
   subscriptions: Subscription[];
-}
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 interface AddRowProps {

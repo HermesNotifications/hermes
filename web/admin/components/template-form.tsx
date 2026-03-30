@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { templateSchema, type TemplateFormData } from "@/lib/schemas/template";
+import { slugify } from "@/lib/utils";
 
 interface TemplateFormProps {
   defaultValues?: Partial<TemplateFormData>;
@@ -23,15 +24,6 @@ const CHANNELS = [
   { id: "sms", label: "SMS" },
   { id: "inbox", label: "Inbox" },
 ] as const;
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 export function TemplateForm({ defaultValues, onSubmit, isEdit = false }: TemplateFormProps) {
   const router = useRouter();
