@@ -76,6 +76,13 @@ migrate:           ## Run database migrations
 seed:              ## Seed dev API key (run after migrate)
 	go run ./cmd/seed/ -database-url "$(DB_URL)"
 
+# --- Admin Portal ---
+.PHONY: dev-admin admin-install
+admin-install:     ## Install admin portal dependencies
+	cd web/admin && pnpm install
+dev-admin:         ## Start the admin portal dev server (port 3000)
+	cd web/admin && pnpm dev
+
 # --- Docker ---
 .PHONY: docker-%
 docker-%:          ## Build Docker image for a service (e.g. make docker-admin)

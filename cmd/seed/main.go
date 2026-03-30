@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -14,6 +15,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var allPermissions = []string{
@@ -86,6 +88,83 @@ func seedDev(ctx context.Context, pool *pgxpool.Pool, hmacSecret string) {
 	} else {
 		fmt.Printf("Dev API key seeded:\n  %s\n", rawKey)
 	}
+
+	seedAdminUser(ctx, pool)
+	writeAdminEnvLocal(rawKey)
+}
+
+func seedAdminUser(ctx context.Context, pool *pgxpool.Pool) {
+	// Check if the Better Auth "user" table exists (created on first portal startup).
+	var exists bool
+	err := pool.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_name = 'user'
+		)`,
+	).Scan(&exists)
+	if err != nil {
+		log.Printf("check Better Auth tables: %v", err)
+		return
+	}
+	if !exists {
+		fmt.Println("Better Auth tables not found — run the admin portal once first to create them, then re-run make seed.")
+		return
+	}
+
+	const (
+		userID   = "admin-user-001"
+		email    = "admin@hermes.local"
+		name     = "Admin"
+		password = "admin"
+	)
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatalf("hash admin password: %v", err)
+	}
+
+	userTag, err := pool.Exec(ctx,
+		`INSERT INTO "user" (id, name, email, "emailVerified") VALUES ($1, $2, $3, true) ON CONFLICT DO NOTHING`,
+		userID, name, email,
+	)
+	if err != nil {
+		log.Fatalf("insert admin user: %v", err)
+	}
+
+	_, err = pool.Exec(ctx,
+		`INSERT INTO account (id, "accountId", "providerId", "userId", password)
+		 VALUES ($1, $2, 'credential', $3, $4) ON CONFLICT DO NOTHING`,
+		userID+"-cred", userID, userID, string(hashed),
+	)
+	if err != nil {
+		log.Fatalf("insert admin account: %v", err)
+	}
+
+	if userTag.RowsAffected() == 0 {
+		fmt.Println("admin portal user already exists (admin@hermes.local)")
+	} else {
+		fmt.Println("Admin portal user seeded:")
+		fmt.Printf("  Email:    %s\n", email)
+		fmt.Printf("  Password: %s\n", password)
+	}
+}
+
+func writeAdminEnvLocal(rawKey string) {
+	envPath := filepath.Join("web", "admin", ".env.local")
+	if _, err := os.Stat(envPath); err == nil {
+		// File already exists — don't overwrite.
+		return
+	}
+
+	content := fmt.Sprintf(
+		"HERMES_API_URL=http://localhost:8080\nHERMES_API_KEY=%s\nBETTER_AUTH_SECRET=hermes-dev-better-auth-secret\nDATABASE_URL=postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable\n",
+		rawKey,
+	)
+	if err := os.WriteFile(envPath, []byte(content), 0600); err != nil {
+		log.Printf("write %s: %v (create it manually)", envPath, err)
+		return
+	}
+	fmt.Printf("Admin portal config written to %s\n", envPath)
 }
 
 func seedManaged(ctx context.Context, pool *pgxpool.Pool, env, hmacSecret, awsRegion string, force, revokePrevious bool) {

@@ -43,6 +43,10 @@ make asyncapi-check
 
 # Show all available Make targets
 make help
+
+# Admin Portal (web/admin/)
+cd web/admin && pnpm install  # Install dependencies (or: make admin-install)
+cd web/admin && pnpm dev      # Start dev server on port 3000 (or: make dev-admin)
 ```
 
 ## Architecture
