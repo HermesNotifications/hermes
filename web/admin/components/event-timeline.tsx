@@ -80,6 +80,27 @@ function MetadataCollapsible({ metadata }: { metadata: string }) {
   );
 }
 
+function EventMetadata({ metadata, severity }: { metadata: string; severity: string }) {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    // not JSON
+  }
+
+  // Show error/reason messages inline for error-severity events
+  const errorMsg = parsed?.error ?? parsed?.reason;
+  if (severity === "error" && typeof errorMsg === "string") {
+    return (
+      <p className="mt-1 text-xs text-destructive">
+        {errorMsg}
+      </p>
+    );
+  }
+
+  return <MetadataCollapsible metadata={metadata} />;
+}
+
 export function EventTimeline({ events }: { events: NotificationEvent[] }) {
   const sorted = [...events].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -118,7 +139,7 @@ export function EventTimeline({ events }: { events: NotificationEvent[] }) {
             <p className="mt-0.5 text-xs text-muted-foreground">
               {formatTimestamp(event.created_at)}
             </p>
-            {event.metadata && <MetadataCollapsible metadata={event.metadata} />}
+            {event.metadata && <EventMetadata metadata={event.metadata} severity={event.severity} />}
           </div>
         </div>
       ))}

@@ -8,6 +8,18 @@ export async function listSubscriptions(categoryId: string) {
   return hermes.subscriptions.list(categoryId);
 }
 
+export async function listAllSubscriptions() {
+  const hermes = getHermes();
+  const categories = await hermes.categories.list();
+  const groups = await Promise.all(
+    categories.map(async (cat) => ({
+      category: cat,
+      subscriptions: await hermes.subscriptions.list(cat.id),
+    }))
+  );
+  return groups;
+}
+
 export async function createSubscription(
   categoryId: string,
   data: {

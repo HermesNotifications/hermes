@@ -9,6 +9,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/admin"
 	"github.com/hermes-notifications/hermes/internal/bootstrap"
 	"github.com/hermes-notifications/hermes/internal/config"
+	"github.com/hermes-notifications/hermes/internal/store/cached"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -33,7 +34,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := admin.NewServer(st, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
+	tenants := cached.NewTenantRepository(st, redisClient)
+	srv := admin.NewServer(st, tenants, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }

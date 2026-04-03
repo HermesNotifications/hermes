@@ -11,6 +11,7 @@ import (
 type TenantRepository interface {
 	CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error)
 	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
+	EnsureTenant(ctx context.Context, id string) (*models.Tenant, error)
 }
 
 // SubscriptionCategoryRepository defines operations for managing subscription categories.
@@ -64,6 +65,8 @@ type NotificationRepository interface {
 	GetNotificationByIdempotencyKey(ctx context.Context, tenantID, key string) (*models.Notification, error)
 	GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error)
 	UpdateNotificationChannels(ctx context.Context, notificationID string, channels []string) error
+	UpdateNotificationRouting(ctx context.Context, n *models.Notification) error
+	FailNotification(ctx context.Context, notificationID string) error
 }
 
 // StatusUpdate represents a notification status change for batch processing.

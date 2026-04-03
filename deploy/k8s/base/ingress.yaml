@@ -14,9 +14,9 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: hermes-admin
+                name: hermes-send
                 port:
-                  number: 8080
+                  number: 8088
           - path: /v1/types
             pathType: Prefix
             backend:

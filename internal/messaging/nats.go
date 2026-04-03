@@ -2,7 +2,9 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"github.com/hermes-notifications/hermes/internal/tracing"
@@ -64,7 +66,40 @@ func (c *Client) Publish(ctx context.Context, subject string, data []byte) error
 	return err
 }
 
-func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency int, handler func(ctx context.Context, data []byte) error) error {
+// PermanentError is an interface for errors that should not be retried.
+// When a handler returns an error implementing this interface with Permanent() == true,
+// the message is terminated (will never be redelivered).
+type PermanentError interface {
+	Permanent() bool
+}
+
+const (
+	// maxDeliveries is the maximum number of times a message will be delivered
+	// before being dropped. After this many failed attempts the message is dead.
+	maxDeliveries = 10
+)
+
+// retryDelay returns an exponential backoff delay with jitter.
+// Base delay doubles each attempt (1s, 2s, 4s, …) capped at 240s,
+// then jitter picks a uniform random duration in [base/2, base].
+func retryDelay(attempt uint64) time.Duration {
+	base := time.Second << (attempt - 1)
+	if base > 240*time.Second {
+		base = 240 * time.Second
+	}
+	half := base / 2
+	return half + time.Duration(rand.Int64N(int64(half)+1))
+}
+
+// DeliveryInfo is passed to handlers so they can react to delivery context.
+type DeliveryInfo struct {
+	// Attempt is the 1-based delivery attempt number.
+	Attempt uint64
+	// LastAttempt is true when this is the final delivery before the message is dropped.
+	LastAttempt bool
+}
+
+func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency int, handler func(ctx context.Context, data []byte, info DeliveryInfo) error) error {
 	streamName := ""
 	for _, s := range Streams {
 		for _, subj := range s.Subjects {
@@ -83,6 +118,7 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 		FilterSubject: subject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		MaxAckPending: maxAckPending,
+		MaxDeliver:    maxDeliveries,
 	})
 	if err != nil {
 		return fmt.Errorf("create consumer: %w", err)
@@ -93,8 +129,23 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 			ctx, span := tracing.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
 			defer span.Finish()
 
-			if err := handler(ctx, msg.Data()); err != nil {
-				_ = msg.Nak()
+			meta, _ := msg.Metadata()
+			attempt := uint64(1)
+			if meta != nil {
+				attempt = meta.NumDelivered
+			}
+			info := DeliveryInfo{
+				Attempt:     attempt,
+				LastAttempt: attempt >= maxDeliveries,
+			}
+
+			if err := handler(ctx, msg.Data(), info); err != nil {
+				var pe PermanentError
+				if errors.As(err, &pe) && pe.Permanent() {
+					_ = msg.Term()
+				} else {
+					_ = msg.NakWithDelay(retryDelay(attempt))
+				}
 				return
 			}
 			_ = msg.Ack()

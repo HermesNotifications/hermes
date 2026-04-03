@@ -80,12 +80,7 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 	var notifications []models.Notification
 	for rows.Next() {
 		var n models.Notification
-		if err := rows.Scan(
-			&n.ID, &n.TenantID, &n.UserID, &n.TemplateID, &n.CategoryID,
-			&n.Title, &n.Body, &n.ActionURL, &n.ActionLabel,
-			&n.IdempotencyKey, &n.Channels, &n.Status,
-			&n.CreatedAt, &n.SentAt, &n.DeliveredAt, &n.ReadAt, &n.ArchivedAt, &n.DeletedAt,
-		); err != nil {
+		if err := scanNotification(rows.Scan, &n); err != nil {
 			return nil, 0, "", fmt.Errorf("scan inbox notification: %w", err)
 		}
 		notifications = append(notifications, n)

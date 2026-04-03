@@ -75,14 +75,14 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	st := postgres.New(pool)
 
 	// Admin server
-	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), logger)
+	srv := admin.NewServer(st, st, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(false)
 	handler := srv.Handler()
 
 	// Dispatch
 	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
 	channelResolver := dispatch.NewChannelResolver(st, nil)
-	rtr := dispatch.NewDispatch(natsClient, st, st, templateResolver, channelResolver, logger)
+	rtr := dispatch.NewDispatch(natsClient, st, st, st, templateResolver, channelResolver, logger)
 
 	// Event Writer
 	ew := eventwriter.New(natsClient, st, logger)

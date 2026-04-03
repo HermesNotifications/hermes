@@ -45,6 +45,8 @@ func colorStatus(s string) string {
 		return success(s)
 	case "pending":
 		return warn(s)
+	case "failed":
+		return color.RedString(s)
 	case "archived":
 		return dim(s)
 	default:

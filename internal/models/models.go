@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Tenant struct {
 	ID            string    `json:"id"`
@@ -88,7 +91,7 @@ type NotificationEvent struct {
 	Channel        string    `json:"channel"`
 	Event          string    `json:"event"`
 	Severity       string    `json:"severity"`
-	Metadata       []byte    `json:"metadata,omitempty"`
+	Metadata       json.RawMessage `json:"metadata,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 

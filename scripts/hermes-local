@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
 # Wrapper to run the Hermes CLI against the local dev environment.
 #
+# All traffic goes through the k3d ingress (localhost:8888) which routes
+# to the correct backend service (admin, send, inbox, user).
+#
 # Usage:
 #   scripts/hermes-local groups list
 #   scripts/hermes-local -o json notifications send ...
 #
 # Override defaults with environment variables:
-#   HERMES_ADMIN_URL     (default: http://localhost:8080)
-#   HERMES_API_KEY       (default: hms_dev_key — seeded by make seed)
-#   HERMES_INBOX_URL     (default: http://localhost:8086)
-#   HERMES_CENTRIFUGO_URL (default: ws://localhost:8000/connection/websocket)
+#   HERMES_ADMIN_URL      (default: http://localhost:8888 — k3d ingress)
+#   HERMES_API_KEY        (default: read from web/admin/.env.local)
+#   HERMES_INBOX_URL      (default: http://localhost:8888)
+#   HERMES_CENTRIFUGO_URL (default: ws://localhost:8888/centrifugo)
 
 set -euo pipefail
 
-: "${HERMES_ADMIN_URL:=http://localhost:8080}"
-: "${HERMES_API_KEY:=hms_dev_key}"
-: "${HERMES_INBOX_URL:=http://localhost:8086}"
-: "${HERMES_CENTRIFUGO_URL:=ws://localhost:8000/connection/websocket}"
+# Source the real dev API key from the admin portal env if not already set
+if [ -z "${HERMES_API_KEY:-}" ] && [ -f "$(dirname "$0")/../web/admin/.env.local" ]; then
+  HERMES_API_KEY=$(grep '^HERMES_API_KEY=' "$(dirname "$0")/../web/admin/.env.local" | cut -d= -f2-)
+fi
+
+: "${HERMES_ADMIN_URL:=http://localhost:8888}"
+: "${HERMES_API_KEY:?HERMES_API_KEY is required — run 'make seed' or set it manually}"
+: "${HERMES_INBOX_URL:=http://localhost:8888}"
+: "${HERMES_CENTRIFUGO_URL:=ws://localhost:8888/centrifugo}"
 
 export HERMES_ADMIN_URL HERMES_API_KEY HERMES_INBOX_URL HERMES_CENTRIFUGO_URL
 

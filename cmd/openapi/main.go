@@ -25,7 +25,7 @@ func main() {
 
 	switch *service {
 	case "admin":
-		adminSrv := admin.NewServer(nil, nil, nil, nil, "", logger)
+		adminSrv := admin.NewServer(nil, nil, nil, nil, nil, "", logger)
 		sendSrv := send.NewServer(nil, nil, nil, nil, "", logger)
 		// Merge send paths into admin spec for a combined SDK spec
 		adminSpec := adminSrv.API().OpenAPI()

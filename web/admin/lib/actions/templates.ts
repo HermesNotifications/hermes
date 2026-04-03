@@ -29,6 +29,7 @@ export async function updateTemplate(
   id: string,
   data: {
     name?: string;
+    subscriptionId?: string;
     defaultChannels?: string[];
     emailSubject?: string;
     emailBody?: string;

@@ -64,7 +64,8 @@ SaaS Backend → Admin Service → NATS [notification.send] → Dispatch → NAT
 ### Service Ports (local dev defaults)
 - Admin: 8080, Dispatch: 8081, Event Writer: 8082
 - Email Worker: 8083, SMS Worker: 8084, Inbox Worker: 8085
-- Inbox Service: 8086, User Service: 8087
+- Inbox Service: 8086, User Service: 8087, Send: 8088
+- Ingress (k3d): 8888 — routes to correct backend by path
 
 ### Key Design Patterns
 

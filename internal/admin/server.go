@@ -15,15 +15,13 @@ import (
 	"github.com/hermes-notifications/hermes/internal/httputil"
 	"github.com/hermes-notifications/hermes/internal/middleware"
 	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermes-notifications/hermes/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // AdminStore defines the database operations the admin service needs.
 // The concrete *store.Store satisfies this interface.
 type AdminStore interface {
-	// Tenants
-	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
-
 	// Subscription Categories
 	CreateCategory(ctx context.Context, slug, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error)
 	GetCategoryByID(ctx context.Context, id string) (*models.SubscriptionCategory, error)
@@ -65,6 +63,7 @@ type AdminStore interface {
 
 type Server struct {
 	store      AdminStore
+	tenants    store.TenantRepository
 	cache      *cache.Client
 	pool       *pgxpool.Pool
 	logger     *slog.Logger
@@ -80,9 +79,10 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store AdminStore, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
+func NewServer(store AdminStore, tenants store.TenantRepository, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
 	s := &Server{
 		store:      store,
+		tenants:    tenants,
 		cache:      cache,
 		pool:       pool,
 		jwtSecret:  jwtSecret,

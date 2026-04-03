@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - admin.yaml
+  - send.yaml
   - dispatch.yaml
   - inbox.yaml
   - user.yaml

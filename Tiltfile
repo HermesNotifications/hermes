@@ -20,6 +20,7 @@ services = {
     "worker-inbox":  {"port": 8085},
     "inbox":         {"port": 8086},
     "user":          {"port": 8087},
+    "send":          {"port": 8088},
 }
 
 # --- Infrastructure from Kustomize local overlay ---
@@ -118,6 +119,24 @@ for svc_name, svc_cfg in services.items():
         resource_deps=["compile-" + svc_name],
         labels=["services"],
     )
+
+# --- Admin Portal (Next.js) ---
+local_resource(
+    "admin-portal-install",
+    cmd="pnpm install --frozen-lockfile",
+    deps=["web/admin/package.json", "pnpm-lock.yaml"],
+    resource_deps=["seed"],
+    labels=["frontend"],
+)
+
+local_resource(
+    "admin-portal",
+    serve_cmd="cd web/admin && pnpm dev --port 3000",
+    deps=["web/admin/package.json"],
+    resource_deps=["admin-portal-install", "hermes-admin"],
+    links=["http://localhost:3000"],
+    labels=["frontend"],
+)
 
 # --- Datadog (opt-in) ---
 if cfg.get("datadog", False):

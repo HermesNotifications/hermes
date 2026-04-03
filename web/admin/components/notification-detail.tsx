@@ -8,16 +8,16 @@ import {
 } from "@/components/ui/card";
 import { ChannelBadges } from "@/components/channel-badge";
 
-function statusVariant(status: string): "default" | "secondary" | "outline" {
+function statusVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
   switch (status) {
     case "sent":
-      return "default";
     case "delivered":
       return "default";
     case "read":
       return "secondary";
+    case "failed":
+      return "destructive";
     case "archived":
-      return "outline";
     case "pending":
     default:
       return "outline";
@@ -34,6 +34,8 @@ function statusClass(status: string): string {
       return "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200";
     case "read":
       return "border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700 dark:bg-purple-950 dark:text-purple-200";
+    case "failed":
+      return "";
     case "archived":
       return "border-border bg-muted text-muted-foreground";
     default:

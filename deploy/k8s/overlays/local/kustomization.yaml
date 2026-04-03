@@ -59,5 +59,7 @@ images:
     newName: k3d-hermes-registry.localhost:5111/hermes-worker-email
   - name: hermes-worker-sms
     newName: k3d-hermes-registry.localhost:5111/hermes-worker-sms
+  - name: hermes-send
+    newName: k3d-hermes-registry.localhost:5111/hermes-send
   - name: hermes-worker-inbox
     newName: k3d-hermes-registry.localhost:5111/hermes-worker-inbox

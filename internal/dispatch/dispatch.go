@@ -36,36 +36,111 @@ func NewDispatch(nats *messaging.Client, store store.NotificationRepository, use
 }
 
 func (d *Dispatch) Start() error {
-	return d.nats.Subscribe("notification.send", "dispatch", 256, 1, func(ctx context.Context, data []byte) error {
-		return d.handleSend(ctx, data)
+	return d.nats.Subscribe("notification.send", "dispatch", 256, 1, func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
+		return d.handleSend(ctx, data, info)
 	})
 }
 
-func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
+// permanentError wraps an error that should not be retried.
+// It implements messaging.PermanentError so the NATS subscriber acks instead of nacking.
+type permanentError struct{ err error }
+
+func (e *permanentError) Error() string  { return e.err.Error() }
+func (e *permanentError) Unwrap() error  { return e.err }
+func (e *permanentError) Permanent() bool { return true }
+
+func permanent(err error) error { return &permanentError{err: err} }
+
+func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
 	msg, err := hermenats.UnmarshalSend(data)
 	if err != nil {
 		d.logger.Error("unmarshal send message", "error", err)
-		return fmt.Errorf("unmarshal send: %w", err)
+		return permanent(fmt.Errorf("unmarshal send: %w", err))
 	}
 
-	log := d.logger.With("notification_id", msg.NotificationID)
+	log := d.logger.With("notification_id", msg.NotificationID, "attempt", info.Attempt)
 
-	// Validate tenant
-	if _, err := d.tenants.GetTenantByID(ctx, msg.TenantID); err != nil {
-		log.Error("validate tenant", "error", err, "tenant_id", msg.TenantID)
-		d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
-			"error": "unknown tenant",
-		})
-		return fmt.Errorf("validate tenant: %w", err)
+	// --- Phase 1: Ensure tenant + user, create notification record early ---
+	// This guarantees a DB record exists for troubleshooting even if later steps fail.
+	// Failures here are transient (DB down) and retryable, but we give up on last attempt.
+
+	if _, err := d.tenants.EnsureTenant(ctx, msg.TenantID); err != nil {
+		log.Error("ensure tenant", "error", err, "tenant_id", msg.TenantID)
+		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure tenant: %w", err))
 	}
 
-	// Ensure user exists
 	user, err := d.users.EnsureUser(ctx, msg.TenantID, msg.ExternalUserID)
 	if err != nil {
 		log.Error("ensure user", "error", err)
-		return fmt.Errorf("ensure user: %w", err)
+		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure user: %w", err))
 	}
 
+	// Build a minimal notification record so it's persisted before any routing logic.
+	channels := msg.Channels
+	if channels == nil {
+		channels = []string{}
+	}
+	n := &models.Notification{
+		ID:       msg.NotificationID,
+		TenantID: msg.TenantID,
+		UserID:   user.ID,
+		Channels: channels,
+		Status:   models.StatusPending,
+	}
+	if msg.Content != nil {
+		n.Title = msg.Content.Title
+		n.Body = msg.Content.Body
+		n.ActionURL = msg.Content.ActionURL
+		n.ActionLabel = msg.Content.ActionLabel
+	}
+	if msg.IdempotencyKey != "" {
+		n.IdempotencyKey = &msg.IdempotencyKey
+	}
+
+	if _, err := d.store.CreateNotification(ctx, n); err != nil {
+		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already exists") {
+			log.Info("notification already exists (retry), continuing")
+		} else {
+			log.Error("create notification", "error", err)
+			return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("create notification: %w", err))
+		}
+	}
+
+	// --- Phase 2: Resolve templates, render, route ---
+	// Failures here are permanent (bad template, bad data) and recorded against the notification.
+
+	if err := d.routeAndDeliver(ctx, log, msg, n, user); err != nil {
+		d.failNotification(ctx, log, msg.NotificationID, err)
+		return permanent(err)
+	}
+
+	return nil
+}
+
+// transientOrGiveUp returns a transient error for retry, unless this is the last attempt,
+// in which case it marks the notification as failed and returns a permanent error to stop retries.
+func (d *Dispatch) transientOrGiveUp(ctx context.Context, log *slog.Logger, notificationID string, info messaging.DeliveryInfo, err error) error {
+	if !info.LastAttempt {
+		return err // transient — will be retried with backoff
+	}
+	log.Error("giving up after max retries", "error", err)
+	d.failNotification(ctx, log, notificationID, err)
+	return permanent(err)
+}
+
+// failNotification marks a notification as failed and emits a routing.failed event.
+func (d *Dispatch) failNotification(ctx context.Context, log *slog.Logger, notificationID string, reason error) {
+	d.publishEvent(ctx, notificationID, "", "routing.failed", "error", map[string]any{
+		"error": reason.Error(),
+	})
+	if err := d.store.FailNotification(ctx, notificationID); err != nil {
+		log.Error("mark notification failed", "error", err)
+	}
+}
+
+// routeAndDeliver handles template resolution, rendering, channel routing, and fan-out.
+// Errors returned from this function are permanent (will not succeed on retry).
+func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *hermenats.SendMessage, n *models.Notification, user *models.User) error {
 	var nt *models.NotificationTemplate
 	var rendered *RenderedContent
 	var content hermenats.MessageContent
@@ -73,26 +148,21 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		content = *msg.Content
 	}
 
-	// Resolve category and subscription from template
 	var categoryID string
 	var subscriptionID string
 	var templateID *string
 
 	if msg.Metadata.Template != "" {
-		// Template-based send: resolve template and render
+		var err error
 		nt, err = d.templateResolver.Resolve(ctx, msg.Metadata.Template)
 		if err != nil {
 			log.Error("resolve template", "error", err, "template", msg.Metadata.Template)
-			d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
-				"error": err.Error(),
-			})
 			return fmt.Errorf("resolve template: %w", err)
 		}
 
 		templateID = &nt.ID
 		if nt.SubscriptionID != nil {
 			subscriptionID = *nt.SubscriptionID
-			// Resolve category from subscription via channel resolver's store
 			sub, subErr := d.channelResolver.store.GetSubscriptionByID(ctx, subscriptionID)
 			if subErr == nil {
 				categoryID = sub.CategoryID
@@ -102,81 +172,42 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		rendered, err = RenderTemplates(nt, msg.Data)
 		if err != nil {
 			log.Error("render templates", "error", err)
-			d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
-				"error": err.Error(),
-			})
 			return fmt.Errorf("render templates: %w", err)
 		}
 	} else {
-		// Direct send: optionally render content with data
 		title, body, err := RenderDirectContent(content.Title, content.Body, msg.Data)
 		if err != nil {
 			log.Error("render direct content", "error", err)
-			d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
-				"error": err.Error(),
-			})
 			return fmt.Errorf("render direct content: %w", err)
 		}
 		content.Title = title
 		content.Body = body
 	}
 
-	// Create notification in DB
-	channels := msg.Channels
-	if channels == nil {
-		channels = []string{}
-	}
-	n := &models.Notification{
-		ID:         msg.NotificationID,
-		TenantID:   msg.TenantID,
-		UserID:     user.ID,
-		TemplateID: templateID,
-		CategoryID: categoryID,
-		Channels:   channels,
-		Status:     models.StatusPending,
-	}
-
-	if msg.Content != nil {
-		n.Title = msg.Content.Title
-		n.Body = msg.Content.Body
-		n.ActionURL = msg.Content.ActionURL
-		n.ActionLabel = msg.Content.ActionLabel
-	} else if rendered != nil {
-		// For template sends, use inbox title/body as the notification record content
-		n.Title = rendered.InboxTitle
-		n.Body = rendered.InboxBody
-	}
-
-	if msg.IdempotencyKey != "" {
-		n.IdempotencyKey = &msg.IdempotencyKey
-	}
-
-	if _, err := d.store.CreateNotification(ctx, n); err != nil {
-		// On retry: if notification already exists (unique constraint), fetch and continue
-		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already exists") {
-			log.Info("notification already exists (retry), continuing", "notification_id", msg.NotificationID)
-		} else {
-			log.Error("create notification", "error", err)
-			return fmt.Errorf("create notification: %w", err)
+	// Backfill notification record with resolved template data
+	if templateID != nil || categoryID != "" || rendered != nil {
+		update := &models.Notification{ID: n.ID, TemplateID: templateID, CategoryID: categoryID}
+		if rendered != nil {
+			update.Title = rendered.InboxTitle
+			update.Body = rendered.InboxBody
+		}
+		if err := d.store.UpdateNotificationRouting(ctx, update); err != nil {
+			log.Error("update notification routing", "error", err)
+			// Non-fatal: the notification record exists, routing data is nice-to-have
 		}
 	}
 
 	// Resolve channels
+	channels := msg.Channels
+	var err error
 	if nt != nil {
 		channels, err = d.channelResolver.ResolveChannels(ctx, msg.Channels, user.ID, nt)
-	} else {
-		// Direct send: use explicit channels
-		channels = msg.Channels
 	}
 	if err != nil {
 		log.Error("resolve channels", "error", err)
-		d.publishEvent(ctx, msg.NotificationID, "", "routing.failed", "error", map[string]any{
-			"error": err.Error(),
-		})
 		return fmt.Errorf("resolve channels: %w", err)
 	}
 
-	// Filter channels by template content
 	channels = FilterChannelsForTemplate(channels, nt)
 
 	if len(channels) == 0 {
@@ -185,7 +216,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	// Resolve user contact info for recipient fields
+	// Resolve user contact info
 	userFull, err := d.users.GetUserByID(ctx, user.ID)
 	if err != nil {
 		log.Error("resolve user", "error", err)
@@ -199,8 +230,6 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 	if userFull.Phone != nil {
 		recipient.Phone = *userFull.Phone
 	}
-
-	// Override with send-request provided contact info
 	if msg.Email != "" {
 		recipient.Email = msg.Email
 	}
@@ -208,7 +237,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		recipient.Phone = msg.Phone
 	}
 
-	// Filter channels that require contact info the user doesn't have
+	// Filter channels that require contact info
 	var filteredChannels []string
 	for _, ch := range channels {
 		switch ch {
@@ -239,7 +268,6 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	// Update notification channels in DB
 	if err := d.store.UpdateNotificationChannels(ctx, msg.NotificationID, channels); err != nil {
 		log.Error("update notification channels", "error", err)
 		return fmt.Errorf("update notification channels: %w", err)

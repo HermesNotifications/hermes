@@ -10,12 +10,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { templateSchema, type TemplateFormData } from "@/lib/schemas/template";
 import { slugify } from "@/lib/utils";
+
+export interface SubscriptionOption {
+  id: string;
+  name: string;
+}
+
+export interface SubscriptionGroup {
+  category: { id: string; name: string };
+  subscriptions: SubscriptionOption[];
+}
 
 interface TemplateFormProps {
   defaultValues?: Partial<TemplateFormData>;
   onSubmit: (data: TemplateFormData) => Promise<unknown>;
+  subscriptionGroups?: SubscriptionGroup[];
   isEdit?: boolean;
 }
 
@@ -25,7 +46,7 @@ const CHANNELS = [
   { id: "inbox", label: "Inbox" },
 ] as const;
 
-export function TemplateForm({ defaultValues, onSubmit, isEdit = false }: TemplateFormProps) {
+export function TemplateForm({ defaultValues, onSubmit, subscriptionGroups = [], isEdit = false }: TemplateFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -116,14 +137,48 @@ export function TemplateForm({ defaultValues, onSubmit, isEdit = false }: Templa
         </p>
       </div>
 
-      {/* Subscription ID (optional) */}
+      {/* Subscription (optional) */}
       <div className="space-y-1.5">
-        <Label htmlFor="subscriptionId">Subscription ID <span className="font-normal text-muted-foreground">(optional)</span></Label>
-        <Input
-          id="subscriptionId"
-          placeholder="sub_..."
-          {...register("subscriptionId")}
+        <Label htmlFor="subscriptionId">Subscription <span className="font-normal text-muted-foreground">(optional)</span></Label>
+        <Controller
+          name="subscriptionId"
+          control={control}
+          render={({ field }) => (
+            <div className="flex items-center gap-2">
+              <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                <SelectTrigger id="subscriptionId" className="w-72">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subscriptionGroups.map((group, i) => (
+                    <SelectGroup key={group.category.id}>
+                      {i > 0 && <SelectSeparator />}
+                      <SelectLabel>{group.category.name}</SelectLabel>
+                      {group.subscriptions.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+              {field.value && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => field.onChange("")}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
         />
+        <p className="text-xs text-muted-foreground">
+          Link this template to a subscription so users can manage their preferences.
+        </p>
       </div>
 
       {/* Default Channels */}

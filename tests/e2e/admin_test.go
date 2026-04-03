@@ -66,7 +66,7 @@ func TestSendNotification_E2E(t *testing.T) {
 	// Create store and server
 	st := postgres.New(pool)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	srv := admin.NewServer(st, natsClient, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	srv := admin.NewServer(st, st, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(false) // Test with auth enabled
 
 	handler := srv.Handler()
@@ -170,7 +170,7 @@ func TestSendNotification_E2E(t *testing.T) {
 
 	// 7. Verify NATS message was published
 	received := make(chan []byte, 1)
-	err = natsClient.Subscribe("notification.send", "test-consumer", 256, 1, func(_ context.Context, data []byte) error {
+	err = natsClient.Subscribe("notification.send", "test-consumer", 256, 1, func(_ context.Context, data []byte, _ messaging.DeliveryInfo) error {
 		select {
 		case received <- data:
 		default:

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronLeftIcon } from "lucide-react";
 import { TemplateForm } from "@/components/template-form";
 import { listTemplates, updateTemplate } from "@/lib/actions/templates";
+import { listAllSubscriptions } from "@/lib/actions/subscriptions";
 import type { TemplateFormData } from "@/lib/schemas/template";
 
 interface EditTemplatePageProps {
@@ -11,7 +12,10 @@ interface EditTemplatePageProps {
 
 export default async function EditTemplatePage({ params }: EditTemplatePageProps) {
   const { id } = await params;
-  const templates = await listTemplates();
+  const [templates, subscriptionGroups] = await Promise.all([
+    listTemplates(),
+    listAllSubscriptions(),
+  ]);
   const template = templates.find((t) => t.id === id);
 
   if (!template) {
@@ -22,6 +26,7 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
     "use server";
     await updateTemplate(id, {
       name: data.name,
+      subscriptionId: data.subscriptionId || undefined,
       defaultChannels: data.defaultChannels,
       emailSubject: data.emailSubject || undefined,
       emailBody: data.emailBody || undefined,
@@ -60,7 +65,7 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
         </p>
       </div>
 
-      <TemplateForm defaultValues={defaultValues} onSubmit={handleUpdate} isEdit />
+      <TemplateForm defaultValues={defaultValues} onSubmit={handleUpdate} subscriptionGroups={subscriptionGroups} isEdit />
     </div>
   );
 }

@@ -35,9 +35,9 @@ func (s *Server) registerAuthRoutes() {
 		Summary:     "Exchange credentials for a user JWT token",
 		Tags:        []string{"Auth"},
 	}, func(ctx context.Context, input *tokenInput) (*tokenOutput, error) {
-		// Validate tenant exists
-		if _, err := s.store.GetTenantByID(ctx, input.Body.TenantID); err != nil {
-			return nil, huma.Error400BadRequest("unknown tenant_id")
+		// Auto-create tenant on first sight
+		if _, err := s.tenants.EnsureTenant(ctx, input.Body.TenantID); err != nil {
+			return nil, huma.Error500InternalServerError("internal server error")
 		}
 
 		// Ensure user exists (auto-create on first token request)

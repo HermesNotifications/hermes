@@ -22,7 +22,7 @@ func NewWorker(nats *messaging.Client, provider Provider, channel, consumer stri
 }
 
 func (w *Worker) Start(_ context.Context) error {
-	return w.nats.Subscribe("delivery."+w.channel, w.consumer, 256, 4, func(ctx context.Context, data []byte) error {
+	return w.nats.Subscribe("delivery."+w.channel, w.consumer, 256, 4, func(ctx context.Context, data []byte, _ messaging.DeliveryInfo) error {
 		return w.handleMessage(ctx, data)
 	})
 }

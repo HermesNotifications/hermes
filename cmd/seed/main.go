@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -15,7 +19,8 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/scrypt"
+	"golang.org/x/text/unicode/norm"
 )
 
 var allPermissions = []string{
@@ -94,31 +99,18 @@ func seedDev(ctx context.Context, pool *pgxpool.Pool, hmacSecret string) {
 }
 
 func seedAdminUser(ctx context.Context, pool *pgxpool.Pool) {
-	// Check if the Better Auth "user" table exists (created on first portal startup).
-	var exists bool
-	err := pool.QueryRow(ctx,
-		`SELECT EXISTS (
-			SELECT 1 FROM information_schema.tables
-			WHERE table_schema = 'public' AND table_name = 'user'
-		)`,
-	).Scan(&exists)
-	if err != nil {
-		log.Printf("check Better Auth tables: %v", err)
-		return
-	}
-	if !exists {
-		fmt.Println("Better Auth tables not found — run the admin portal once first to create them, then re-run make seed.")
-		return
-	}
-
 	const (
-		userID   = "admin-user-001"
-		email    = "admin@hermes.local"
-		name     = "Admin"
-		password = "admin"
+		userID = "admin-user-001"
+		email  = "admin@hermes.local"
+		name   = "Admin"
 	)
 
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	password, err := generatePassword(24)
+	if err != nil {
+		log.Fatalf("generate admin password: %v", err)
+	}
+
+	hashed, err := hashPasswordScrypt(password)
 	if err != nil {
 		log.Fatalf("hash admin password: %v", err)
 	}
@@ -131,28 +123,87 @@ func seedAdminUser(ctx context.Context, pool *pgxpool.Pool) {
 		log.Fatalf("insert admin user: %v", err)
 	}
 
+	if userTag.RowsAffected() == 0 {
+		fmt.Println("admin portal user already exists (admin@hermes.local)")
+		return
+	}
+
 	_, err = pool.Exec(ctx,
 		`INSERT INTO account (id, "accountId", "providerId", "userId", password)
 		 VALUES ($1, $2, 'credential', $3, $4) ON CONFLICT DO NOTHING`,
-		userID+"-cred", userID, userID, string(hashed),
+		userID+"-cred", userID, userID, hashed,
 	)
 	if err != nil {
 		log.Fatalf("insert admin account: %v", err)
 	}
 
-	if userTag.RowsAffected() == 0 {
-		fmt.Println("admin portal user already exists (admin@hermes.local)")
-	} else {
-		fmt.Println("Admin portal user seeded:")
-		fmt.Printf("  Email:    %s\n", email)
-		fmt.Printf("  Password: %s\n", password)
+	fmt.Println("Admin portal user seeded:")
+	fmt.Printf("  Email:    %s\n", email)
+	fmt.Printf("  Password: %s\n", password)
+}
+
+func generatePassword(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*"
+	b := make([]byte, length)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			return "", err
+		}
+		b[i] = charset[n.Int64()]
 	}
+	return string(b), nil
+}
+
+// hashPasswordScrypt produces a hash compatible with Better Auth's scrypt format: "salt:key" (hex-encoded).
+// Parameters match better-auth/src/crypto/password.ts: N=16384, r=16, p=1, dkLen=64.
+func hashPasswordScrypt(password string) (string, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+	saltHex := hex.EncodeToString(salt)
+	normalized := norm.NFKC.String(password)
+	key, err := scrypt.Key([]byte(normalized), []byte(saltHex), 16384, 16, 1, 64)
+	if err != nil {
+		return "", err
+	}
+	return saltHex + ":" + hex.EncodeToString(key), nil
 }
 
 func writeAdminEnvLocal(rawKey string) {
 	envPath := filepath.Join("web", "admin", ".env.local")
-	if _, err := os.Stat(envPath); err == nil {
-		// File already exists — don't overwrite.
+
+	// If file exists, update just the API key in place.
+	if data, err := os.ReadFile(envPath); err == nil {
+		lines := strings.Split(string(data), "\n")
+		found := false
+		for i, line := range lines {
+			if strings.HasPrefix(line, "HERMES_API_KEY=") {
+				lines[i] = "HERMES_API_KEY=" + rawKey
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Insert after HERMES_API_URL if possible, otherwise append.
+			inserted := false
+			for i, line := range lines {
+				if strings.HasPrefix(line, "HERMES_API_URL=") {
+					lines = append(lines[:i+1], append([]string{"HERMES_API_KEY=" + rawKey}, lines[i+1:]...)...)
+					inserted = true
+					break
+				}
+			}
+			if !inserted {
+				lines = append(lines, "HERMES_API_KEY="+rawKey)
+			}
+		}
+		if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0600); err != nil {
+			log.Printf("update %s: %v", envPath, err)
+			return
+		}
+		fmt.Printf("Admin portal API key updated in %s\n", envPath)
 		return
 	}
 

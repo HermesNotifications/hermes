@@ -11,6 +11,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/store/cached"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -32,9 +33,10 @@ func main() {
 	defer redisClient.Close()
 
 	st := postgres.New(pool)
+	tenants := cached.NewTenantRepository(st, redisClient)
 	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
 	channelResolver := dispatch.NewChannelResolver(st, redisClient)
-	d := dispatch.NewDispatch(natsClient, st, st, st, templateResolver, channelResolver, logger)
+	d := dispatch.NewDispatch(natsClient, st, st, tenants, templateResolver, channelResolver, logger)
 
 	if err := d.Start(); err != nil {
 		logger.Error("dispatch start failed", "error", err)

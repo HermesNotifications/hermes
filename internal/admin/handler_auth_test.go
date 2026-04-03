@@ -52,17 +52,31 @@ func TestHandleAuthToken(t *testing.T) {
 	}
 }
 
-func TestHandleAuthToken_UnknownTenant(t *testing.T) {
+func TestHandleAuthToken_NewTenantAutoCreated(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"user_id":"ext-user-1","tenant_id":"unknown-tenant"}`
+	body := `{"user_id":"ext-user-1","tenant_id":"brand-new-tenant"}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (auto-create tenant), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	claims := &auth.HermesClaims{}
+	token, err := jwt.ParseWithClaims(resp["token"], claims, func(t *jwt.Token) (any, error) {
+		return []byte("test-jwt-secret"), nil
+	})
+	if err != nil || !token.Valid {
+		t.Fatalf("token invalid: %v", err)
+	}
+	if claims.TenantID != "brand-new-tenant" {
+		t.Fatalf("expected tenant_id brand-new-tenant, got %s", claims.TenantID)
 	}
 }
 

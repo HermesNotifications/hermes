@@ -26,6 +26,12 @@ type mockStore struct {
 
 // --- Tenants ---
 
+func (m *mockStore) CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error) {
+	t := models.Tenant{ID: id, Name: name, CreatedAt: time.Now()}
+	m.tenants = append(m.tenants, t)
+	return &t, nil
+}
+
 func (m *mockStore) GetTenantByID(ctx context.Context, id string) (*models.Tenant, error) {
 	for _, t := range m.tenants {
 		if t.ID == id {
@@ -33,6 +39,17 @@ func (m *mockStore) GetTenantByID(ctx context.Context, id string) (*models.Tenan
 		}
 	}
 	return nil, fmt.Errorf("tenant not found: %s", id)
+}
+
+func (m *mockStore) EnsureTenant(ctx context.Context, id string) (*models.Tenant, error) {
+	for _, t := range m.tenants {
+		if t.ID == id {
+			return &t, nil
+		}
+	}
+	t := models.Tenant{ID: id, Name: id, CreatedAt: time.Now()}
+	m.tenants = append(m.tenants, t)
+	return &t, nil
 }
 
 // --- Subscription Categories ---
@@ -282,7 +299,8 @@ func newTestServer(t *testing.T) *admin.Server {
 		},
 	}
 	// Pass nil for cache, pool — most handlers don't need them.
-	srv := admin.NewServer(store, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	// Pass store as tenants (mockStore implements EnsureTenant).
+	srv := admin.NewServer(store, store, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(true)
 	return srv
 }
@@ -290,7 +308,7 @@ func newTestServer(t *testing.T) *admin.Server {
 func newTestServerWithStore(t *testing.T, store *mockStore) *admin.Server {
 	t.Helper()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	srv := admin.NewServer(store, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	srv := admin.NewServer(store, store, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(true)
 	return srv
 }

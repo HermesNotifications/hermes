@@ -2,9 +2,12 @@ import Link from "next/link";
 import { ChevronLeftIcon } from "lucide-react";
 import { TemplateForm } from "@/components/template-form";
 import { createTemplate } from "@/lib/actions/templates";
+import { listAllSubscriptions } from "@/lib/actions/subscriptions";
 import type { TemplateFormData } from "@/lib/schemas/template";
 
-export default function NewTemplatePage() {
+export default async function NewTemplatePage() {
+  const subscriptionGroups = await listAllSubscriptions();
+
   async function handleCreate(data: TemplateFormData) {
     "use server";
     await createTemplate({
@@ -36,7 +39,7 @@ export default function NewTemplatePage() {
         </p>
       </div>
 
-      <TemplateForm onSubmit={handleCreate} />
+      <TemplateForm onSubmit={handleCreate} subscriptionGroups={subscriptionGroups} />
     </div>
   );
 }

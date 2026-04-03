@@ -116,9 +116,15 @@ func newNotifStatusCmd() *cobra.Command {
 				fmt.Fprintln(out)
 				var rows [][]string
 				for _, e := range status.Events {
-					rows = append(rows, []string{e.Event, e.Channel, colorSeverity(e.Severity), fmtTime(e.CreatedAt)})
+					detail := ""
+					if msg, ok := e.Metadata["error"]; ok {
+						detail = fmt.Sprintf("%v", msg)
+					} else if msg, ok := e.Metadata["reason"]; ok {
+						detail = fmt.Sprintf("%v", msg)
+					}
+					rows = append(rows, []string{e.Event, e.Channel, colorSeverity(e.Severity), detail, fmtTime(e.CreatedAt)})
 				}
-				printTable(out, []string{"EVENT", "CHANNEL", "SEVERITY", "TIME"}, rows)
+				printTable(out, []string{"EVENT", "CHANNEL", "SEVERITY", "DETAIL", "TIME"}, rows)
 			}
 			return nil
 		},

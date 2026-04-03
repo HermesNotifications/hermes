@@ -4,6 +4,7 @@ type NotificationStatus string
 
 const (
 	StatusPending   NotificationStatus = "pending"
+	StatusFailed    NotificationStatus = "failed"
 	StatusSent      NotificationStatus = "sent"
 	StatusDelivered NotificationStatus = "delivered"
 	StatusRead      NotificationStatus = "read"
@@ -12,6 +13,7 @@ const (
 
 var statusRanks = map[NotificationStatus]int{
 	StatusPending:   0,
+	StatusFailed:    0, // same rank as pending — failed is a terminal state, not an advancement
 	StatusSent:      1,
 	StatusDelivered: 2,
 	StatusRead:      3,

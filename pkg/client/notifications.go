@@ -48,12 +48,13 @@ type NotificationDetail struct {
 }
 
 type NotificationEvent struct {
-	ID             string `json:"id"`
-	NotificationID string `json:"notification_id"`
-	Channel        string `json:"channel"`
-	Event          string `json:"event"`
-	Severity       string `json:"severity"`
-	CreatedAt      string `json:"created_at"`
+	ID             string         `json:"id"`
+	NotificationID string         `json:"notification_id"`
+	Channel        string         `json:"channel"`
+	Event          string         `json:"event"`
+	Severity       string         `json:"severity"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 type NotificationStatus struct {
