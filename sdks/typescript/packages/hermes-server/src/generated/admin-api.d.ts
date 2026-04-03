@@ -198,6 +198,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenants */
+        get: operations["list-tenants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List users */
+        get: operations["list-users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -381,7 +415,7 @@ export interface components {
             created_at: string;
             event: string;
             id: string;
-            metadata?: string;
+            metadata?: unknown;
             notification_id: string;
             severity: string;
         };
@@ -500,6 +534,15 @@ export interface components {
             /** Format: int64 */
             sort_order: number;
         };
+        TenantItem: {
+            /** Format: date-time */
+            created_at: string;
+            default_locale: string;
+            id: string;
+            name: string;
+            /** Format: int64 */
+            user_count: number;
+        };
         TokenInputBody: {
             /**
              * Format: uri
@@ -589,6 +632,17 @@ export interface components {
             sms_body?: string;
             /** @description Subscription ID (null for standalone) */
             subscription_id?: string;
+        };
+        UserItem: {
+            /** Format: date-time */
+            created_at: string;
+            email: string | null;
+            external_id: string;
+            id: string;
+            locale: string | null;
+            phone: string | null;
+            tenant_id: string;
+            tenant_name: string;
         };
     };
     responses: never;
@@ -1170,6 +1224,67 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantItem"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-users": {
+        parameters: {
+            query?: {
+                /** @description Filter by tenant ID */
+                tenant_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserItem"][] | null;
+                };
             };
             /** @description Error */
             default: {

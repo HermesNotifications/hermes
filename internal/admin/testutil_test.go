@@ -206,7 +206,43 @@ func (m *mockStore) DeleteTemplate(ctx context.Context, id string) error {
 	return fmt.Errorf("template not found: %s", id)
 }
 
+// --- Tenants (additional) ---
+
+func (m *mockStore) ListTenants(ctx context.Context) ([]models.Tenant, error) {
+	return m.tenants, nil
+}
+
+func (m *mockStore) CountUsersByTenant(ctx context.Context) (map[string]int, error) {
+	counts := make(map[string]int)
+	for _, u := range m.users {
+		counts[u.TenantID]++
+	}
+	return counts, nil
+}
+
 // --- Users ---
+
+func (m *mockStore) ListUsers(ctx context.Context, tenantID string) ([]models.User, error) {
+	if tenantID == "" {
+		return m.users, nil
+	}
+	var result []models.User
+	for _, u := range m.users {
+		if u.TenantID == tenantID {
+			result = append(result, u)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockStore) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
+	for _, u := range m.users {
+		if u.ID == userID {
+			return &u, nil
+		}
+	}
+	return nil, fmt.Errorf("user not found: %s", userID)
+}
 
 func (m *mockStore) EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error) {
 	for _, u := range m.users {

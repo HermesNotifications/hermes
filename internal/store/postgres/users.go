@@ -44,6 +44,35 @@ func (s *Store) GetUserByID(ctx context.Context, userID string) (*models.User, e
 	return u, nil
 }
 
+func (s *Store) ListUsers(ctx context.Context, tenantID string) ([]models.User, error) {
+	var query string
+	var args []any
+	if tenantID != "" {
+		query = `SELECT id, tenant_id, external_id, email, phone, locale, created_at
+			FROM users WHERE tenant_id = $1 ORDER BY created_at DESC`
+		args = []any{tenantID}
+	} else {
+		query = `SELECT id, tenant_id, external_id, email, phone, locale, created_at
+			FROM users ORDER BY created_at DESC`
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Email, &u.Phone, &u.Locale, &u.CreatedAt); err != nil {
+			return nil, fmt.Errorf("list users scan: %w", err)
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
 func (s *Store) UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error) {
 	u := &models.User{}
 	err := s.pool.QueryRow(ctx,

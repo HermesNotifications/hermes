@@ -40,6 +40,44 @@ func (s *Store) EnsureTenant(ctx context.Context, id string) (*models.Tenant, er
 	return t, nil
 }
 
+func (s *Store) ListTenants(ctx context.Context) ([]models.Tenant, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, name, default_locale, settings, created_at FROM tenants ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list tenants: %w", err)
+	}
+	defer rows.Close()
+
+	var tenants []models.Tenant
+	for rows.Next() {
+		var t models.Tenant
+		if err := rows.Scan(&t.ID, &t.Name, &t.DefaultLocale, &t.Settings, &t.CreatedAt); err != nil {
+			return nil, fmt.Errorf("list tenants scan: %w", err)
+		}
+		tenants = append(tenants, t)
+	}
+	return tenants, rows.Err()
+}
+
+func (s *Store) CountUsersByTenant(ctx context.Context) (map[string]int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT tenant_id, COUNT(*)::int FROM users GROUP BY tenant_id`)
+	if err != nil {
+		return nil, fmt.Errorf("count users by tenant: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var tenantID string
+		var count int
+		if err := rows.Scan(&tenantID, &count); err != nil {
+			return nil, fmt.Errorf("count users by tenant scan: %w", err)
+		}
+		counts[tenantID] = count
+	}
+	return counts, rows.Err()
+}
+
 func (s *Store) GetTenantByID(ctx context.Context, id string) (*models.Tenant, error) {
 	t := &models.Tenant{}
 	err := s.pool.QueryRow(ctx,

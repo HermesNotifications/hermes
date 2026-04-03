@@ -46,3 +46,11 @@ func (r *TenantRepository) CreateTenant(ctx context.Context, id, name string) (*
 func (r *TenantRepository) GetTenantByID(ctx context.Context, id string) (*models.Tenant, error) {
 	return r.store.GetTenantByID(ctx, id)
 }
+
+func (r *TenantRepository) ListTenants(ctx context.Context) ([]models.Tenant, error) {
+	return r.store.ListTenants(ctx)
+}
+
+func (r *TenantRepository) CountUsersByTenant(ctx context.Context) (map[string]int, error) {
+	return r.store.CountUsersByTenant(ctx)
+}

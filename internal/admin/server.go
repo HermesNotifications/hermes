@@ -44,8 +44,14 @@ type AdminStore interface {
 	UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
 	DeleteTemplate(ctx context.Context, id string) error
 
+	// Tenants
+	ListTenants(ctx context.Context) ([]models.Tenant, error)
+	CountUsersByTenant(ctx context.Context) (map[string]int, error)
+
 	// Users
 	EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error)
+	ListUsers(ctx context.Context, tenantID string) ([]models.User, error)
+	GetUserByID(ctx context.Context, userID string) (*models.User, error)
 
 	// Notifications
 	GetNotificationByID(ctx context.Context, id string) (*models.Notification, error)
@@ -115,6 +121,8 @@ func (s *Server) routes() {
 	s.registerNotificationRoutes()
 	s.registerAuthRoutes()
 	s.registerAPIKeyRoutes()
+	s.registerTenantRoutes()
+	s.registerUserRoutes()
 }
 
 // API returns the huma API instance for spec generation.

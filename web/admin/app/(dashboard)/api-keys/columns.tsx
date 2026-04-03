@@ -71,18 +71,11 @@ export const columns: ColumnDef<APIKeyInfo>[] = [
   {
     accessorKey: "created_at",
     header: "Created",
-    cell: ({ row }) => {
-      const date = new Date(row.getValue<string>("created_at"));
-      return (
-        <span className="text-sm text-muted-foreground">
-          {date.toLocaleDateString(undefined, {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          })}
-        </span>
-      );
-    },
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {new Date(row.getValue<string>("created_at")).toISOString().split("T")[0]}
+      </span>
+    ),
   },
   {
     id: "actions",

@@ -12,6 +12,8 @@ type TenantRepository interface {
 	CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error)
 	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
 	EnsureTenant(ctx context.Context, id string) (*models.Tenant, error)
+	ListTenants(ctx context.Context) ([]models.Tenant, error)
+	CountUsersByTenant(ctx context.Context) (map[string]int, error)
 }
 
 // SubscriptionCategoryRepository defines operations for managing subscription categories.
@@ -48,6 +50,7 @@ type UserRepository interface {
 	EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error)
 	GetUserByID(ctx context.Context, userID string) (*models.User, error)
 	UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error)
+	ListUsers(ctx context.Context, tenantID string) ([]models.User, error)
 }
 
 // UserSubscriptionRepository defines operations for managing user subscription preferences.

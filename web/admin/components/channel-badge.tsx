@@ -1,19 +1,35 @@
-import { Badge } from "@/components/ui/badge";
+import { Mail, MessageSquare, Inbox } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-const channelConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
-  email: { label: "Email", variant: "default" },
-  sms: { label: "SMS", variant: "secondary" },
-  inbox: { label: "Inbox", variant: "outline" },
+const channelConfig: Record<string, { label: string; icon: typeof Mail }> = {
+  email: { label: "Email", icon: Mail },
+  sms: { label: "SMS", icon: MessageSquare },
+  inbox: { label: "Inbox", icon: Inbox },
 };
 
 export function ChannelBadge({ channel }: { channel: string }) {
-  const config = channelConfig[channel] ?? { label: channel, variant: "outline" as const };
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+  const config = channelConfig[channel];
+  if (!config) {
+    return <span className="text-xs text-muted-foreground">{channel}</span>;
+  }
+  const Icon = config.icon;
+  return (
+    <Tooltip>
+      <TooltipTrigger>
+        <Icon className="size-4 text-muted-foreground" />
+      </TooltipTrigger>
+      <TooltipContent>{config.label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function ChannelBadges({ channels }: { channels: string[] }) {
   return (
-    <div className="flex gap-1">
+    <div className="flex gap-1.5">
       {channels.map((ch) => (
         <ChannelBadge key={ch} channel={ch} />
       ))}

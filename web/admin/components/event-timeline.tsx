@@ -5,41 +5,26 @@ import type { NotificationEvent } from "@hermes-notifications/server";
 import { Badge } from "@/components/ui/badge";
 import { ChannelBadge } from "@/components/channel-badge";
 
-function severityVariant(severity: string): "default" | "secondary" | "destructive" | "outline" {
-  switch (severity) {
-    case "error":
-      return "destructive";
-    case "warning":
-      return "secondary";
-    case "info":
-    default:
-      return "outline";
-  }
-}
+const severityStyles: Record<string, { badge: string; dot: string }> = {
+  error: {
+    badge: "border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200",
+    dot: "bg-red-500",
+  },
+  warn: {
+    badge: "border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200",
+    dot: "bg-yellow-500",
+  },
+  info: {
+    badge: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200",
+    dot: "bg-blue-500",
+  },
+  success: {
+    badge: "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200",
+    dot: "bg-green-500",
+  },
+};
 
-function severityClass(severity: string): string {
-  switch (severity) {
-    case "error":
-      return "";
-    case "warning":
-      return "border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200";
-    case "info":
-    default:
-      return "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200";
-  }
-}
-
-function dotClass(severity: string): string {
-  switch (severity) {
-    case "error":
-      return "bg-destructive";
-    case "warning":
-      return "bg-yellow-500";
-    case "info":
-    default:
-      return "bg-blue-500";
-  }
-}
+const defaultSeverityStyle = severityStyles.info;
 
 function formatTimestamp(ts: string): string {
   return new Date(ts).toLocaleString(undefined, {
@@ -118,7 +103,7 @@ export function EventTimeline({ events }: { events: NotificationEvent[] }) {
         <div key={event.id} className="flex gap-4">
           {/* Timeline spine */}
           <div className="flex flex-col items-center">
-            <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${dotClass(event.severity)}`} />
+            <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${(severityStyles[event.severity] ?? defaultSeverityStyle).dot}`} />
             {index < sorted.length - 1 && (
               <div className="w-px flex-1 bg-border mt-1 mb-1" style={{ minHeight: "1.5rem" }} />
             )}
@@ -130,8 +115,8 @@ export function EventTimeline({ events }: { events: NotificationEvent[] }) {
               <ChannelBadge channel={event.channel} />
               <span className="text-sm font-medium">{event.event}</span>
               <Badge
-                variant={severityVariant(event.severity)}
-                className={event.severity !== "error" ? severityClass(event.severity) : ""}
+                variant="outline"
+                className={(severityStyles[event.severity] ?? defaultSeverityStyle).badge}
               >
                 {event.severity}
               </Badge>

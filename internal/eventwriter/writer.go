@@ -130,7 +130,7 @@ func eventToStatus(event string) models.NotificationStatus {
 	switch event {
 	case "notification.sent", "email.routed", "sms.routed", "inbox.routed":
 		return models.StatusSent
-	case "email.sent", "sms.sent", "inbox.delivered":
+	case "email.sent", "sms.sent", "inbox.sent":
 		return models.StatusDelivered
 	default:
 		return "" // no status update
