@@ -60,3 +60,4 @@ web/admin/.env.local
 # pnpm workspace root
 node_modules/
 /seed
+/dispatch
