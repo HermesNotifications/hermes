@@ -5,28 +5,28 @@ kind: Component
 images:
 - name: hermes-admin
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
-- name: hermes-inbox
-  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
-- name: hermes-migrate
-  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
-  newTag: f3cef4d7a2000bd5417ac74c638248a2bb19e4c0
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
 - name: hermes-dispatch
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-dispatch
-  newTag: f3cef4d7a2000bd5417ac74c638248a2bb19e4c0
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+- name: hermes-inbox
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+- name: hermes-migrate
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
 - name: hermes-user
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
 - name: hermes-worker-email
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
 - name: hermes-worker-events
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
 - name: hermes-worker-inbox
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
 - name: hermes-worker-sms
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
-  newTag: dbf81f3b2b9bdf562a176abfd5fd8161ec85fe3c
+  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
