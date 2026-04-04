@@ -5,28 +5,28 @@ kind: Component
 images:
 - name: hermes-admin
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-dispatch
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-dispatch
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-inbox
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-migrate
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-user
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-worker-email
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
   newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
 - name: hermes-worker-events
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-worker-inbox
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-worker-sms
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
-  newTag: 03354893a0a047d3332aba5bd864a5140fd89ead
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
