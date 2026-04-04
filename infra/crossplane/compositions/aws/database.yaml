@@ -187,12 +187,10 @@ spec:
                     string:
                       type: Convert
                       convert: ToUpper
-                  - type: string
-                    string:
-                      type: Map
-                      map:
-                        "TRUE": "false"
-                        "FALSE": "true"
+                  - type: map
+                    map:
+                      "TRUE": "false"
+                      "FALSE": "true"
                   - type: convert
                     convert:
                       toType: bool
