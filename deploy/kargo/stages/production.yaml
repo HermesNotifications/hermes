@@ -57,6 +57,9 @@ spec:
               - image: hermes-worker-inbox
                 newName: ${{ vars.registry }}/hermes-worker-inbox
                 tag: ${{ imageFrom(vars.registry + "/hermes-worker-inbox").Tag }}
+              - image: hermes-send
+                newName: ${{ vars.registry }}/hermes-send
+                tag: ${{ imageFrom(vars.registry + "/hermes-send").Tag }}
               - image: hermes-migrate
                 newName: ${{ vars.registry }}/hermes-migrate
                 tag: ${{ imageFrom(vars.registry + "/hermes-migrate").Tag }}

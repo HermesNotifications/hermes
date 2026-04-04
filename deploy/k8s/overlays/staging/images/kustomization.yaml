@@ -27,6 +27,9 @@ images:
 - name: hermes-worker-inbox
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
   newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
+- name: hermes-send
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-send
+  newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a
 - name: hermes-worker-sms
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
   newTag: 945dc0f0e9fe0939bb7a73dbad10a8f806b3074a

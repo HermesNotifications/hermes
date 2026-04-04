@@ -52,6 +52,11 @@ spec:
         allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
     - image:
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-send
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
+        discoveryLimit: 5
+    - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
         imageSelectionStrategy: NewestBuild
         allowTags: ^[0-9a-f]{40}$
