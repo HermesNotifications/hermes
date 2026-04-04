@@ -12,8 +12,12 @@
 # OS
 .DS_Store
 
-# Superpowers
+# Superpowers / Claude Code plugins
 .superpowers/
+.agents/
+.claude/skills/
+.mcp.json
+skills-lock.json
 
 # Worktrees
 .worktrees/
