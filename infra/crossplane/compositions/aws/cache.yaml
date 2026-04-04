@@ -1,0 +1,194 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: hermescache-aws
+  labels:
+    provider: aws
+spec:
+  compositeTypeRef:
+    apiVersion: hermes.io/v1alpha1
+    kind: HermesCache
+  mode: Pipeline
+  pipeline:
+    - step: pull-environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: hermes-vpc-context
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: subnet-group
+            base:
+              apiVersion: elasticache.aws.upbound.io/v1beta1
+              kind: SubnetGroup
+              spec:
+                forProvider:
+                  description: "Hermes cache subnet group"
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: privateSubnetIdA
+                toFieldPath: spec.forProvider.subnetIds[0]
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: privateSubnetIdB
+                toFieldPath: spec.forProvider.subnetIds[1]
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: privateSubnetIdC
+                toFieldPath: spec.forProvider.subnetIds[2]
+                policy:
+                  fromFieldPath: Optional
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+
+          - name: security-group
+            base:
+              apiVersion: ec2.aws.upbound.io/v1beta1
+              kind: SecurityGroup
+              metadata:
+                labels:
+                  hermes.io/resource: security-group
+              spec:
+                forProvider:
+                  description: "Hermes ElastiCache Valkey"
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: vpcId
+                toFieldPath: spec.forProvider.vpcId
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+
+          - name: security-group-rule
+            base:
+              apiVersion: ec2.aws.upbound.io/v1beta1
+              kind: SecurityGroupIngressRule
+              spec:
+                forProvider:
+                  ipProtocol: tcp
+                  fromPort: 6379
+                  toPort: 6379
+                  description: "Valkey/Redis from EKS nodes"
+                  securityGroupIdSelector:
+                    matchControllerRef: true
+                    matchLabels:
+                      hermes.io/resource: security-group
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: nodeSecurityGroupId
+                toFieldPath: spec.forProvider.referencedSecurityGroupId
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+
+          - name: auth-token
+            base:
+              apiVersion: random.crossplane.io/v1alpha1
+              kind: Password
+              spec:
+                forProvider:
+                  length: 32
+                  special: false
+                writeConnectionSecretToRef:
+                  namespace: crossplane-system
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.writeConnectionSecretToRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-cache-auth-token"
+            connectionDetails:
+              - name: auth_token
+                fromConnectionSecretKey: password
+
+          - name: replication-group
+            base:
+              apiVersion: elasticache.aws.upbound.io/v1beta2
+              kind: ReplicationGroup
+              spec:
+                forProvider:
+                  description: "Hermes Valkey cluster"
+                  engine: valkey
+                  atRestEncryptionEnabled: true
+                  subnetGroupNameSelector:
+                    matchControllerRef: true
+                  securityGroupIdSelector:
+                    matchControllerRef: true
+                    matchLabels:
+                      hermes.io/resource: security-group
+                  authTokenSecretRef:
+                    key: password
+                    namespace: crossplane-system
+                  authTokenUpdateStrategy: ROTATE
+                  tags:
+                    managed-by: crossplane
+            patches:
+              # Pass the auth token secret name to the replication group
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.forProvider.authTokenSecretRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-cache-auth-token"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.engineVersion
+                toFieldPath: spec.forProvider.engineVersion
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.nodeType
+                toFieldPath: spec.forProvider.nodeType
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.nodeCount
+                toFieldPath: spec.forProvider.numCacheClusters
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.transitEncryption
+                toFieldPath: spec.forProvider.transitEncryptionEnabled
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.snapshotRetentionDays
+                toFieldPath: spec.forProvider.snapshotRetentionLimit
+              # Auto-failover when >1 node
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.nodeCount
+                toFieldPath: spec.forProvider.automaticFailoverEnabled
+                transforms:
+                  - type: math
+                    math:
+                      type: clampMin
+                      clampMin: 0
+                  - type: convert
+                    convert:
+                      toType: int64
+                  - type: math
+                    math:
+                      type: clampMin
+                      clampMin: 2
+                  - type: convert
+                    convert:
+                      toType: bool
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+            connectionDetails:
+              - name: endpoint
+                fromFieldPath: status.atProvider.primaryEndpointAddress
+              - name: port
+                type: FromValue
+                value: "6379"

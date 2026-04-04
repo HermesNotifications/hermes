@@ -1,0 +1,33 @@
+# ArgoCD Application for Crossplane infrastructure definitions.
+# Syncs XRDs, compositions, functions, and provider config — shared across
+# all environments. Claims are managed by separate per-environment Applications.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-infra
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/darylrobbins/hermes.git
+    targetRevision: main
+    path: infra/crossplane
+    directory:
+      recurse: true
+      exclude: "{claims/**,provider/environment-config.yaml}"
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

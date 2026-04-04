@@ -1,0 +1,16 @@
+# Staging Valkey cache — single node, minimal snapshots.
+apiVersion: hermes.io/v1alpha1
+kind: HermesCacheClaim
+metadata:
+  name: hermes-cache
+  namespace: hermes
+spec:
+  engineVersion: "7.2"
+  nodeType: cache.t4g.micro
+  nodeCount: 1
+  transitEncryption: true
+  snapshotRetentionDays: 1
+  compositionRef:
+    name: hermescache-aws
+  writeConnectionSecretToRef:
+    name: hermes-cache-conn

@@ -1,0 +1,55 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: hermesdatabases.hermes.io
+spec:
+  group: hermes.io
+  names:
+    kind: HermesDatabase
+    plural: hermesdatabases
+  claimNames:
+    kind: HermesDatabaseClaim
+    plural: hermesdatabaseclaims
+  connectionSecretKeys:
+    - endpoint
+    - username
+    - password
+    - port
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                engineVersion:
+                  type: string
+                  default: "16.4"
+                  description: "Database engine version (e.g., 16.4 for Aurora PostgreSQL)."
+                instanceClass:
+                  type: string
+                  description: "Instance class for database nodes (e.g., db.r7g.large)."
+                instanceCount:
+                  type: integer
+                  default: 1
+                  minimum: 1
+                  description: "Number of database instances. 2+ enables read replicas."
+                backupRetentionDays:
+                  type: integer
+                  default: 7
+                  minimum: 1
+                  description: "Number of days to retain automated backups."
+                storageEncrypted:
+                  type: boolean
+                  default: true
+                  description: "Whether storage is encrypted at rest."
+                deletionProtection:
+                  type: boolean
+                  default: false
+                  description: "Prevent accidental deletion. Should be true for production."
+              required:
+                - instanceClass

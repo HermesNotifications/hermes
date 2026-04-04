@@ -1,0 +1,17 @@
+# Staging Aurora PostgreSQL — single instance, no deletion protection.
+apiVersion: hermes.io/v1alpha1
+kind: HermesDatabaseClaim
+metadata:
+  name: hermes-database
+  namespace: hermes
+spec:
+  engineVersion: "16.4"
+  instanceClass: db.t4g.medium
+  instanceCount: 1
+  backupRetentionDays: 7
+  storageEncrypted: true
+  deletionProtection: false
+  compositionRef:
+    name: hermesdatabase-aws
+  writeConnectionSecretToRef:
+    name: hermes-database-conn

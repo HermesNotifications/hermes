@@ -46,38 +46,6 @@ variable "eks_node_desired_size" {
   type        = number
 }
 
-variable "rds_instance_class" {
-  description = "Aurora instance class"
-  type        = string
-}
-
-variable "rds_instance_count" {
-  description = "Number of Aurora instances (1 for staging, 2+ for production with read replica)"
-  type        = number
-  default     = 1
-}
-
-variable "rds_backup_retention_period" {
-  description = "Number of days to retain Aurora backups"
-  type        = number
-  default     = 7
-}
-
-variable "elasticache_node_type" {
-  description = "ElastiCache node type"
-  type        = string
-}
-
-variable "elasticache_num_cache_nodes" {
-  description = "Number of cache nodes in the ElastiCache cluster"
-  type        = number
-}
-
-variable "domain_name" {
-  description = "Domain name for the Hermes platform"
-  type        = string
-}
-
 variable "github_org" {
   description = "GitHub organization or user for OIDC trust"
   type        = string

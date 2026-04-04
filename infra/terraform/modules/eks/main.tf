@@ -302,6 +302,68 @@ resource "aws_iam_role_policy" "kargo_project_hermes" {
 }
 
 # ------------------------------------------------------------------------------
+# IRSA: Crossplane AWS Provider
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "crossplane" {
+  name = "${local.cluster_name}-crossplane"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks.arn
+      }
+      Condition = {
+        StringLike = {
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:crossplane-system:provider-aws-*"
+        }
+        StringEquals = {
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "crossplane" {
+  name = "${local.cluster_name}-crossplane"
+  role = aws_iam_role.crossplane.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "rds:*",
+          "elasticache:*",
+          "secretsmanager:*",
+          "ssm:*",
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateSecurityGroup",
+          "ec2:DeleteSecurityGroup",
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:AuthorizeSecurityGroupEgress",
+          "ec2:RevokeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupEgress",
+          "ec2:Describe*",
+          "ec2:CreateTags",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
 # EKS Addons
 # ------------------------------------------------------------------------------
 

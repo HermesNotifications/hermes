@@ -1,0 +1,10 @@
+# Upbound AWS provider family — installs all AWS sub-providers needed by
+# Crossplane compositions (RDS, ElastiCache, SecretsManager, SSM, EC2).
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-family-aws
+spec:
+  package: xpkg.upbound.io/upbound/provider-family-aws:v1.18.0
+  runtimeConfigRef:
+    name: default

@@ -1,0 +1,17 @@
+# Production Valkey cache — 2 nodes with automatic failover,
+# 7-day snapshot retention.
+apiVersion: hermes.io/v1alpha1
+kind: HermesCacheClaim
+metadata:
+  name: hermes-cache
+  namespace: hermes
+spec:
+  engineVersion: "7.2"
+  nodeType: cache.r7g.large
+  nodeCount: 2
+  transitEncryption: true
+  snapshotRetentionDays: 7
+  compositionRef:
+    name: hermescache-aws
+  writeConnectionSecretToRef:
+    name: hermes-cache-conn
