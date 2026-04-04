@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/id"
+	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -20,7 +20,7 @@ func TestInbox(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup: tenant, user, category
-	tenantID := uuid.New().String()
+	tenantID := uuid.Notification.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Inbox Test Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)
@@ -39,7 +39,7 @@ func TestInbox(t *testing.T) {
 	// Create 5 notifications with slight time gaps to ensure ordering
 	notifIDs := make([]string, 5)
 	for i := 0; i < 5; i++ {
-		notifIDs[i] = id.New()
+		notifIDs[i] = id.Notification.New()
 		n := &models.Notification{
 			ID:         notifIDs[i],
 			TenantID:   tenantID,

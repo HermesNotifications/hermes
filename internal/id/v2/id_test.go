@@ -1,9 +1,9 @@
 package id_test
 
 import (
-	"encoding/base64"
 	"strings"
 	"testing"
+	"time"
 
 	id "github.com/hermes-notifications/hermes/internal/id/v2"
 )
@@ -21,9 +21,11 @@ func TestGenerator_New_WithPrefix(t *testing.T) {
 		t.Fatal("suffix should not be empty")
 	}
 
-	_, err := base64.RawURLEncoding.DecodeString(suffix)
-	if err != nil {
-		t.Fatalf("suffix is not valid base64url: %v", err)
+	// All chars should be from the base62 alphabet
+	for _, c := range suffix {
+		if !strings.ContainsRune("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", c) {
+			t.Fatalf("unexpected character %c in ID %s", c, got)
+		}
 	}
 }
 
@@ -31,34 +33,35 @@ func TestGenerator_New_WithoutPrefix(t *testing.T) {
 	g := id.NewGenerator(id.Config{RandBits: 64})
 	got := g.New()
 
-	// Without a prefix, the entire string is base64url-encoded random bytes.
-	// base64url can contain '_' so we just verify it decodes correctly.
-	decoded, err := base64.RawURLEncoding.DecodeString(got)
-	if err != nil {
-		t.Fatalf("not valid base64url: %v", err)
-	}
-	if len(decoded) == 0 {
-		t.Fatal("expected non-empty decoded bytes")
+	for _, c := range got {
+		if !strings.ContainsRune("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", c) {
+			t.Fatalf("unexpected character %c in ID %s", c, got)
+		}
 	}
 }
 
-func TestGenerator_New_WithTimeBits(t *testing.T) {
-	g := id.NewGenerator(id.Config{Prefix: "ntf", TimeBits: 48, RandBits: 80})
-	got := g.New()
+func TestGenerator_New_FixedWidth(t *testing.T) {
+	g := id.NewGenerator(id.Config{TimeBits: 48, RandBits: 80})
+	first := g.New()
+	width := len(first)
 
-	if !strings.HasPrefix(got, "ntf_") {
-		t.Fatalf("expected prefix ntf_, got %s", got)
+	for i := 0; i < 100; i++ {
+		got := g.New()
+		if len(got) != width {
+			t.Fatalf("expected width %d, got %d for ID %s", width, len(got), got)
+		}
 	}
+}
 
-	suffix := strings.TrimPrefix(got, "ntf_")
-	raw, err := base64.RawURLEncoding.DecodeString(suffix)
-	if err != nil {
-		t.Fatalf("not valid base64url: %v", err)
-	}
+func TestGenerator_New_LexicographicTimeOrdering(t *testing.T) {
+	g := id.NewGenerator(id.Config{TimeBits: 48, RandBits: 80})
 
-	// 48 time bits + 80 random bits = 128 bits = 16 bytes
-	if len(raw) != 16 {
-		t.Fatalf("expected 16 bytes, got %d", len(raw))
+	a := g.New()
+	time.Sleep(2 * time.Millisecond)
+	b := g.New()
+
+	if a >= b {
+		t.Fatalf("expected %s < %s (lexicographic time ordering)", a, b)
 	}
 }
 
@@ -78,25 +81,56 @@ func TestParse(t *testing.T) {
 	g := id.NewGenerator(id.Config{Prefix: "key", RandBits: 36})
 	original := g.New()
 
-	prefix, raw := id.Parse(original)
+	prefix, value := id.Parse(original)
 	if prefix != "key" {
 		t.Fatalf("expected prefix key, got %s", prefix)
 	}
-	if len(raw) == 0 {
-		t.Fatal("expected raw bytes")
+	if len(value) == 0 {
+		t.Fatal("expected non-empty value")
 	}
 }
 
-func TestParseRaw(t *testing.T) {
+func TestParse_NoPrefix(t *testing.T) {
 	g := id.NewGenerator(id.Config{RandBits: 64})
 	original := g.New()
 
-	raw := id.ParseRaw(original)
-	if len(raw) == 0 {
-		t.Fatal("expected raw bytes")
+	prefix, value := id.Parse(original)
+	if prefix != "" {
+		t.Fatalf("expected empty prefix, got %s", prefix)
 	}
-	// 64 bits = 8 bytes
-	if len(raw) != 8 {
-		t.Fatalf("expected 8 bytes, got %d", len(raw))
+	if value != original {
+		t.Fatalf("expected value to equal original %s, got %s", original, value)
+	}
+}
+
+func TestDecodeBase62_Roundtrip(t *testing.T) {
+	g := id.NewGenerator(id.Config{TimeBits: 48, RandBits: 80})
+	original := g.New()
+
+	decoded := id.DecodeBase62(original)
+	if len(decoded) == 0 {
+		t.Fatal("expected non-empty decoded bytes")
+	}
+}
+
+func TestNotificationGenerator(t *testing.T) {
+	got := id.Notification.New()
+
+	// No prefix
+	if strings.Contains(got, "_") {
+		t.Fatalf("notification ID should not have a prefix: %s", got)
+	}
+
+	// Should be 22 chars (128 bits in base62)
+	if len(got) != 22 {
+		t.Fatalf("expected 22 chars, got %d: %s", len(got), got)
+	}
+}
+
+func TestUserGenerator(t *testing.T) {
+	got := id.User.New()
+
+	if !strings.HasPrefix(got, "usr_") {
+		t.Fatalf("expected usr_ prefix, got %s", got)
 	}
 }

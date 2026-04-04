@@ -110,7 +110,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 	// Failures here are permanent (bad template, bad data) and recorded against the notification.
 
 	if err := d.routeAndDeliver(ctx, log, msg, n, user); err != nil {
-		d.failNotification(ctx, log, msg.NotificationID, err)
+		d.failNotification(ctx, log, msg.NotificationID, err, classifyError(err))
 		return permanent(err)
 	}
 
@@ -124,18 +124,30 @@ func (d *Dispatch) transientOrGiveUp(ctx context.Context, log *slog.Logger, noti
 		return err // transient — will be retried with backoff
 	}
 	log.Error("giving up after max retries", "error", err)
-	d.failNotification(ctx, log, notificationID, err)
+	d.failNotification(ctx, log, notificationID, err, "routing.failed")
 	return permanent(err)
 }
 
-// failNotification marks a notification as failed and emits a routing.failed event.
-func (d *Dispatch) failNotification(ctx context.Context, log *slog.Logger, notificationID string, reason error) {
-	d.publishEvent(ctx, notificationID, "", "routing.failed", "error", map[string]any{
+// failNotification marks a notification as failed and emits a typed failure event.
+func (d *Dispatch) failNotification(ctx context.Context, log *slog.Logger, notificationID string, reason error, event string) {
+	d.publishEvent(ctx, notificationID, "", event, "error", map[string]any{
 		"error": reason.Error(),
 	})
 	if err := d.store.FailNotification(ctx, notificationID); err != nil {
 		log.Error("mark notification failed", "error", err)
 	}
+}
+
+// classifyError returns the appropriate event type for a routing/rendering error.
+func classifyError(err error) string {
+	msg := err.Error()
+	if strings.HasPrefix(msg, "render templates:") || strings.HasPrefix(msg, "render direct content:") {
+		return "render.failed"
+	}
+	if strings.HasPrefix(msg, "resolve template:") {
+		return "template.not_found"
+	}
+	return "routing.failed"
 }
 
 // routeAndDeliver handles template resolution, rendering, channel routing, and fan-out.
@@ -184,12 +196,20 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 		content.Body = body
 	}
 
-	// Backfill notification record with resolved template data
-	if templateID != nil || categoryID != "" || rendered != nil {
+	// Backfill notification record with resolved template/rendered data
+	needsUpdate := templateID != nil || categoryID != "" || rendered != nil
+	if !needsUpdate && len(msg.Data) > 0 && msg.Content != nil {
+		// Direct content was rendered with data — write resolved content back
+		needsUpdate = true
+	}
+	if needsUpdate {
 		update := &models.Notification{ID: n.ID, TemplateID: templateID, CategoryID: categoryID}
 		if rendered != nil {
 			update.Title = rendered.InboxTitle
 			update.Body = rendered.InboxBody
+		} else if len(msg.Data) > 0 {
+			update.Title = content.Title
+			update.Body = content.Body
 		}
 		if err := d.store.UpdateNotificationRouting(ctx, update); err != nil {
 			log.Error("update notification routing", "error", err)

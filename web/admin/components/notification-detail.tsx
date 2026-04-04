@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ChannelBadges } from "@/components/channel-badge";
+import { relativeTime } from "@/lib/relative-time";
 
 function statusVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
   switch (status) {
@@ -93,15 +94,21 @@ export function NotificationDetail({ notification }: { notification: Notificatio
         </Field>
 
         <Field label="User ID">
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-            {notification.user_id}
-          </code>
+          <span className="inline-flex items-center gap-1">
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+              {notification.user_id}
+            </code>
+            <CopyButton value={notification.user_id} />
+          </span>
         </Field>
 
         <Field label="Tenant ID">
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-            {notification.tenant_id}
-          </code>
+          <span className="inline-flex items-center gap-1">
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+              {notification.tenant_id}
+            </code>
+            <CopyButton value={notification.tenant_id} />
+          </span>
         </Field>
 
         {notification.template_id && (
@@ -117,7 +124,10 @@ export function NotificationDetail({ notification }: { notification: Notificatio
         </Field>
 
         <Field label="Created">
-          <span className="text-xs">{formatTimestamp(notification.created_at)}</span>
+          <span className="text-xs">
+            {formatTimestamp(notification.created_at)}
+            <span className="text-muted-foreground ml-1.5">({relativeTime(notification.created_at)})</span>
+          </span>
         </Field>
       </CardContent>
     </Card>

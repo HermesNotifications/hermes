@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hermes-notifications/hermes/internal/id"
+	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
 func (s *Store) EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error) {
-	newID := id.New()
+	newID := id.User.New()
 	u := &models.User{}
 	err := s.pool.QueryRow(ctx,
 		`WITH ins AS (

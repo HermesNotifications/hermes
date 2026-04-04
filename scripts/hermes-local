@@ -24,7 +24,7 @@ fi
 : "${HERMES_ADMIN_URL:=http://localhost:8888}"
 : "${HERMES_API_KEY:?HERMES_API_KEY is required — run 'make seed' or set it manually}"
 : "${HERMES_INBOX_URL:=http://localhost:8888}"
-: "${HERMES_CENTRIFUGO_URL:=ws://localhost:8888/centrifugo}"
+: "${HERMES_CENTRIFUGO_URL:=ws://localhost:8888/centrifugo/connection/websocket}"
 
 export HERMES_ADMIN_URL HERMES_API_KEY HERMES_INBOX_URL HERMES_CENTRIFUGO_URL
 

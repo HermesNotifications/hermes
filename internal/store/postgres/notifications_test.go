@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/id"
+	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -16,7 +16,7 @@ func TestCreateNotification_And_GetByID(t *testing.T) {
 	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
+	tenantID := uuid.Notification.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)
@@ -32,7 +32,7 @@ func TestCreateNotification_And_GetByID(t *testing.T) {
 		t.Fatalf("CreateCategory: %v", err)
 	}
 
-	notifID := id.New()
+	notifID := id.Notification.New()
 	n := &models.Notification{
 		ID:         notifID,
 		TenantID:   tenantID,
@@ -72,7 +72,7 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
+	tenantID := uuid.Notification.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)
@@ -88,9 +88,9 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 		t.Fatalf("CreateCategory: %v", err)
 	}
 
-	idemKey := "unique-key-" + id.New()
+	idemKey := "unique-key-" + id.Notification.New()
 	n := &models.Notification{
-		ID:             id.New(),
+		ID:             id.Notification.New(),
 		TenantID:       tenantID,
 		UserID:         user.ID,
 		CategoryID:     cat.ID,

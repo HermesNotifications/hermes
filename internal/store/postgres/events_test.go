@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/id"
+	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -19,7 +19,7 @@ func TestEventInsertAndStatusRollup(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Create tenant, user, category, notification (status: pending)
-	tenantID := uuid.New().String()
+	tenantID := uuid.Notification.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Event Rollup Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)
@@ -35,7 +35,7 @@ func TestEventInsertAndStatusRollup(t *testing.T) {
 		t.Fatalf("CreateCategory: %v", err)
 	}
 
-	notifID := id.New()
+	notifID := id.Notification.New()
 	n := &models.Notification{
 		ID:         notifID,
 		TenantID:   tenantID,

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/hermes-notifications/hermes/internal/id"
+	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 )
 
@@ -63,7 +63,7 @@ func (s *Server) registerSendRoutes() {
 		}
 
 		// Generate notification ID
-		notifID := id.New()
+		notifID := id.Notification.New()
 
 		// Idempotency check via Redis SET NX
 		idemKey := input.IdempotencyKey

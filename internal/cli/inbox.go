@@ -40,7 +40,7 @@ func newInboxOpenCmd() *cobra.Command {
 				inboxURL = baseURL
 			}
 			if centrifugoURL == "" {
-				centrifugoURL = httpToWS(baseURL) + "/centrifugo"
+				centrifugoURL = httpToWS(baseURL) + "/centrifugo/connection/websocket"
 			}
 
 			// Exchange API key for JWT
@@ -104,7 +104,7 @@ func newInboxListenCmd() *cobra.Command {
 			outputFmt := getOutput(cmd)
 			baseURL, _ := cmd.Root().PersistentFlags().GetString("url")
 			if centrifugoURL == "" {
-				centrifugoURL = httpToWS(baseURL) + "/centrifugo"
+				centrifugoURL = httpToWS(baseURL) + "/centrifugo/connection/websocket"
 			}
 
 			// Step 1: Get unified JWT
