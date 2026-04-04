@@ -29,6 +29,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: hermes-config
+                optional: true
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

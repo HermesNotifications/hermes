@@ -11,7 +11,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/darylrobbins/hermes.git
+    repoURL: git@github.com:darylrobbins/hermes.git
     targetRevision: main
     path: infra/crossplane
     directory:

@@ -72,4 +72,4 @@ spec:
             apps:
               - name: hermes-production
                 sources:
-                  - repoURL: https://github.com/darylrobbins/hermes.git
+                  - repoURL: git@github.com:darylrobbins/hermes.git

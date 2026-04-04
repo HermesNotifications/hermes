@@ -72,7 +72,7 @@ spec:
             apps:
               - name: hermes-staging
                 sources:
-                  - repoURL: https://github.com/darylrobbins/hermes.git
+                  - repoURL: git@github.com:darylrobbins/hermes.git
   verification:
     analysisTemplates:
       - name: hermes-health-check
