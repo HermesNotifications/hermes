@@ -1,0 +1,408 @@
+# -- Global configuration shared across all services
+global:
+  image:
+    # -- Container image registry
+    registry: ghcr.io/hermesnotifications
+    # -- Global image tag override (defaults to Chart appVersion)
+    tag: ""
+  # -- Primary domain for ingress routing
+  domain: ""
+
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+# -- Hermes application-level configuration
+hermes:
+  # -- Name of an existing Kubernetes Secret containing all sensitive values.
+  # When set, the chart will not create its own Secret.
+  existingSecret: ""
+
+  jwt:
+    # -- HMAC secret used to verify user JWTs (required)
+    secret: ""
+    # -- Use an existing secret for the JWT secret instead of hermes.jwt.secret
+    existingSecret: ""
+    # -- Key within the existing secret that holds the JWT secret
+    existingSecretKey: "HERMES_JWT_SECRET"
+
+  apiKey:
+    # -- HMAC secret used for API key hashing (required)
+    hmacSecret: ""
+    # -- Use an existing secret for the API key HMAC secret
+    existingSecret: ""
+    # -- Key within the existing secret
+    existingSecretKey: "HERMES_API_KEY_HMAC_SECRET"
+
+  centrifugo:
+    # -- API key for authenticating with Centrifugo
+    apiKey: ""
+
+  email:
+    # -- Email delivery provider: smtp or ses
+    provider: "smtp"
+    # -- Default sender address
+    from: "noreply@example.com"
+    smtp:
+      # -- SMTP server hostname
+      host: ""
+      # -- SMTP server port
+      port: 587
+      # -- SMTP username
+      username: ""
+      # -- SMTP password (stored in Secret)
+      password: ""
+    ses:
+      # -- AWS region for SES
+      region: "us-east-1"
+
+  sms:
+    # -- Webhook URL for SMS delivery
+    webhookUrl: ""
+
+  events:
+    # -- Number of days to retain notification events
+    retentionDays: 90
+
+  cleanup:
+    # -- Enable periodic cleanup of expired events
+    enabled: false
+    # -- Cron schedule for cleanup job
+    schedule: "0 3 * * *"
+
+# ---------------------------------------------------------------------------
+# Per-service configuration
+# ---------------------------------------------------------------------------
+
+# -- Admin API service
+admin:
+  # -- Number of replicas
+  replicas: 1
+  image:
+    # -- Image repository (appended to global.image.registry)
+    repository: hermes-admin
+    # -- Image tag override
+    tag: ""
+  # -- Container port
+  port: 8080
+  # -- Resource requests and limits
+  resources: {}
+  # -- Horizontal pod autoscaler configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  # -- Additional pod annotations
+  podAnnotations: {}
+  # -- Node selector constraints
+  nodeSelector: {}
+  # -- Tolerations for pod scheduling
+  tolerations: []
+  # -- Affinity rules
+  affinity: {}
+  # -- Topology spread constraints
+  topologySpreadConstraints: []
+
+# -- Send ingestion service
+send:
+  replicas: 1
+  image:
+    repository: hermes-send
+    tag: ""
+  port: 8088
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# -- Dispatch service
+dispatch:
+  replicas: 1
+  image:
+    repository: hermes-dispatch
+    tag: ""
+  port: 8081
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# -- Inbox query service
+inbox:
+  replicas: 1
+  image:
+    repository: hermes-inbox
+    tag: ""
+  port: 8086
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# -- User preferences service
+user:
+  replicas: 1
+  image:
+    repository: hermes-user
+    tag: ""
+  port: 8087
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# -- Email delivery worker
+workerEmail:
+  replicas: 1
+  image:
+    repository: hermes-worker-email
+    tag: ""
+  port: 8083
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# -- SMS delivery worker
+workerSms:
+  replicas: 1
+  image:
+    repository: hermes-worker-sms
+    tag: ""
+  port: 8084
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# -- Inbox delivery worker
+workerInbox:
+  replicas: 1
+  image:
+    repository: hermes-worker-inbox
+    tag: ""
+  port: 8085
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# -- Event writer worker
+workerEvents:
+  replicas: 1
+  image:
+    repository: hermes-worker-events
+    tag: ""
+  port: 8082
+  resources: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+
+# ---------------------------------------------------------------------------
+# Admin Portal (web UI)
+# ---------------------------------------------------------------------------
+
+# -- Admin Portal web application
+adminPortal:
+  # -- Deploy the admin portal
+  enabled: false
+  image:
+    repository: hermes-admin-portal
+    tag: ""
+  # -- Container port
+  port: 3000
+  replicas: 1
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Database migration job
+# ---------------------------------------------------------------------------
+
+# -- Database migration job configuration
+migration:
+  image:
+    # -- Migration job image repository
+    repository: hermes-migrate
+    # -- Image tag override
+    tag: ""
+  # -- Number of retries before marking the job as failed
+  backoffLimit: 3
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+
+# -- Ingress configuration
+ingress:
+  # -- Enable ingress resource creation
+  enabled: true
+  # -- Ingress class name (e.g. nginx, traefik)
+  className: ""
+  # -- Additional ingress annotations
+  annotations: {}
+  # -- TLS configuration
+  tls: []
+  #  - secretName: hermes-tls
+  #    hosts:
+  #      - hermes.example.com
+
+# ---------------------------------------------------------------------------
+# Observability
+# ---------------------------------------------------------------------------
+
+# -- Observability / telemetry configuration
+observability:
+  # -- Enable metrics and tracing sidecars or annotations
+  enabled: false
+  # -- Telemetry provider: otel or datadog
+  provider: "otel"
+
+# ---------------------------------------------------------------------------
+# Network Policy
+# ---------------------------------------------------------------------------
+
+# -- Network policy configuration
+networkPolicy:
+  # -- Enable network policies to restrict inter-service traffic
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# External services (when sub-charts are disabled)
+# ---------------------------------------------------------------------------
+
+# -- External PostgreSQL connection (used when postgresql.enabled=false)
+externalPostgresql:
+  # -- Full connection URL (e.g. postgres://user:pass@host:5432/hermes?sslmode=require)
+  url: ""
+  # -- Name of an existing secret containing the database URL
+  existingSecret: ""
+  # -- Key within the existing secret
+  existingSecretKey: "HERMES_DATABASE_URL"
+
+# -- External NATS connection (used when nats.enabled=false)
+externalNats:
+  # -- NATS connection URL
+  url: ""
+  # -- Name of an existing secret containing the NATS URL
+  existingSecret: ""
+  # -- Key within the existing secret
+  existingSecretKey: "HERMES_NATS_URL"
+
+# -- External Redis connection (used when redis.enabled=false)
+externalRedis:
+  # -- Redis connection URL
+  url: ""
+  # -- Name of an existing secret containing the Redis URL
+  existingSecret: ""
+  # -- Key within the existing secret
+  existingSecretKey: "HERMES_REDIS_URL"
+
+# -- External Centrifugo connection (used when centrifugo.enabled=false)
+externalCentrifugo:
+  # -- Centrifugo HTTP API URL
+  url: ""
+  # -- Name of an existing secret containing the Centrifugo URL
+  existingSecret: ""
+  # -- Key within the existing secret
+  existingSecretKey: "HERMES_CENTRIFUGO_API_URL"
+
+# ---------------------------------------------------------------------------
+# Sub-chart overrides
+# ---------------------------------------------------------------------------
+
+# -- Bitnami PostgreSQL sub-chart configuration
+postgresql:
+  enabled: true
+  auth:
+    username: hermes
+    password: hermes
+    database: hermes
+
+# -- Bitnami Redis sub-chart configuration
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+
+# -- NATS sub-chart configuration
+nats:
+  enabled: true
+  config:
+    jetstream:
+      enabled: true
+      fileStore:
+        pvc:
+          size: 10Gi
+    cluster:
+      enabled: true
+      replicas: 3
+
+# -- Centrifugo sub-chart configuration
+centrifugo:
+  enabled: true
+  config:
+    engine: memory
