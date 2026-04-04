@@ -138,12 +138,7 @@ export function SendNotificationForm({
   function handleFormSubmit(formData: SendNotificationFormData) {
     startTransition(async () => {
       try {
-        let tenantId = formData.tenantId;
-
-        if (!tenantId && formData.newTenantName) {
-          const tenant = await createTenant(formData.newTenantName);
-          tenantId = tenant.id;
-        }
+        const tenantId = formData.tenantId;
 
         if (!tenantId) {
           toast.error("Please select or create a tenant");
