@@ -212,7 +212,7 @@ spec:
             {{ $count := $spec.instanceCount | default 1 }}
             {{ range $i := until ($count | int) }}
             ---
-            apiVersion: rds.aws.upbound.io/v1beta2
+            apiVersion: rds.aws.upbound.io/v1beta1
             kind: ClusterInstance
             metadata:
               annotations:
