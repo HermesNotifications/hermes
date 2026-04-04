@@ -45,6 +45,7 @@ type AdminStore interface {
 	DeleteTemplate(ctx context.Context, id string) error
 
 	// Tenants
+	CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error)
 	ListTenants(ctx context.Context) ([]models.Tenant, error)
 	CountUsersByTenant(ctx context.Context) (map[string]int, error)
 

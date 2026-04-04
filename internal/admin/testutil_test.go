@@ -39,6 +39,9 @@ func (m *mockStore) shouldError(method string) error {
 // --- Tenants ---
 
 func (m *mockStore) CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error) {
+	if err := m.shouldError("CreateTenant"); err != nil {
+		return nil, err
+	}
 	t := models.Tenant{ID: id, Name: name, CreatedAt: time.Now()}
 	m.tenants = append(m.tenants, t)
 	return &t, nil
