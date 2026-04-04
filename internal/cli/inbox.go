@@ -28,7 +28,7 @@ func newInboxOpenCmd() *cobra.Command {
 		tenantID      string
 		userID        string
 		inboxURL      string
-		centrifugoURL string
+		wsURL string
 	)
 
 	cmd := &cobra.Command{
@@ -39,8 +39,8 @@ func newInboxOpenCmd() *cobra.Command {
 			if inboxURL == "" {
 				inboxURL = baseURL
 			}
-			if centrifugoURL == "" {
-				centrifugoURL = httpToWS(baseURL) + "/centrifugo/connection/websocket"
+			if wsURL == "" {
+				wsURL = httpToWS(baseURL) + "/realtime/connection/websocket"
 			}
 
 			// Exchange API key for JWT
@@ -65,7 +65,7 @@ func newInboxOpenCmd() *cobra.Command {
 			p := tea.NewProgram(model, tea.WithAltScreen())
 
 			// Setup WebSocket to feed real-time events into the TUI
-			wsClient, sub, err := setupWebSocket(centrifugoURL, tokenResp.Token, internalUserID, p)
+			wsClient, sub, err := setupWebSocket(wsURL, tokenResp.Token, internalUserID, p)
 			if err != nil {
 				return fmt.Errorf("websocket setup failed: %w", err)
 			}
@@ -83,7 +83,7 @@ func newInboxOpenCmd() *cobra.Command {
 	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
 	cmd.Flags().StringVar(&inboxURL, "inbox-url", os.Getenv("HERMES_INBOX_URL"), "Inbox service URL override (env: HERMES_INBOX_URL)")
-	cmd.Flags().StringVar(&centrifugoURL, "centrifugo-url", os.Getenv("HERMES_CENTRIFUGO_URL"), "Centrifugo WebSocket URL override (env: HERMES_CENTRIFUGO_URL)")
+	cmd.Flags().StringVar(&wsURL, "ws-url", os.Getenv("HERMES_WS_URL"), "WebSocket URL override (env: HERMES_WS_URL)")
 	cmd.MarkFlagRequired("tenant-id")
 	cmd.MarkFlagRequired("user-id")
 	return cmd
@@ -91,9 +91,9 @@ func newInboxOpenCmd() *cobra.Command {
 
 func newInboxListenCmd() *cobra.Command {
 	var (
-		tenantID      string
-		userID        string
-		centrifugoURL string
+		tenantID string
+		userID   string
+		wsURL    string
 	)
 
 	cmd := &cobra.Command{
@@ -103,8 +103,8 @@ func newInboxListenCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			outputFmt := getOutput(cmd)
 			baseURL, _ := cmd.Root().PersistentFlags().GetString("url")
-			if centrifugoURL == "" {
-				centrifugoURL = httpToWS(baseURL) + "/centrifugo/connection/websocket"
+			if wsURL == "" {
+				wsURL = httpToWS(baseURL) + "/realtime/connection/websocket"
 			}
 
 			// Step 1: Get unified JWT
@@ -124,12 +124,12 @@ func newInboxListenCmd() *cobra.Command {
 
 			channel := "user#" + internalUserID
 
-			// Step 2: Connect to Centrifugo
-			wsClient := centrifuge.NewJsonClient(centrifugoURL, centrifuge.Config{})
+			// Step 2: Connect to WebSocket for real-time events
+			wsClient := centrifuge.NewJsonClient(wsURL, centrifuge.Config{})
 			wsClient.SetToken(tokenResp.Token)
 
 			wsClient.OnConnecting(func(e centrifuge.ConnectingEvent) {
-				fmt.Fprintf(os.Stderr, "Connecting to %s...\n", centrifugoURL)
+				fmt.Fprintf(os.Stderr, "Connecting to %s...\n", wsURL)
 			})
 			wsClient.OnConnected(func(e centrifuge.ConnectedEvent) {
 				fmt.Fprintf(os.Stderr, "Connected. Subscribing to %s\n", channel)
@@ -190,7 +190,7 @@ func newInboxListenCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
-	cmd.Flags().StringVar(&centrifugoURL, "centrifugo-url", os.Getenv("HERMES_CENTRIFUGO_URL"), "Centrifugo WebSocket URL override (env: HERMES_CENTRIFUGO_URL)")
+	cmd.Flags().StringVar(&wsURL, "ws-url", os.Getenv("HERMES_WS_URL"), "WebSocket URL override (env: HERMES_WS_URL)")
 	cmd.MarkFlagRequired("tenant-id")
 	cmd.MarkFlagRequired("user-id")
 	return cmd
