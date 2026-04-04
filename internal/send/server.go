@@ -13,7 +13,6 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/middleware"
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,9 +24,14 @@ type SendStore interface {
 	GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
 }
 
+// Publisher abstracts NATS message publishing for testability.
+type Publisher interface {
+	Publish(ctx context.Context, subject string, data []byte) error
+}
+
 type Server struct {
 	store      SendStore
-	nats       *messaging.Client
+	nats       Publisher
 	cache      *cache.Client
 	pool       *pgxpool.Pool
 	logger     *slog.Logger
@@ -42,7 +46,7 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store SendStore, nats *messaging.Client, cache *cache.Client, pool *pgxpool.Pool, hmacSecret string, logger *slog.Logger) *Server {
+func NewServer(store SendStore, nats Publisher, cache *cache.Client, pool *pgxpool.Pool, hmacSecret string, logger *slog.Logger) *Server {
 	s := &Server{
 		store:      store,
 		nats:       nats,

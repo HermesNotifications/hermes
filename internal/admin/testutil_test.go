@@ -22,6 +22,18 @@ type mockStore struct {
 	notifications []models.Notification
 	events        []models.NotificationEvent
 	apiKeys       []models.APIKey
+
+	// errors maps method names to errors to return, enabling store error injection in tests.
+	errors map[string]error
+}
+
+func (m *mockStore) shouldError(method string) error {
+	if m.errors != nil {
+		if err, ok := m.errors[method]; ok {
+			return err
+		}
+	}
+	return nil
 }
 
 // --- Tenants ---
@@ -55,6 +67,9 @@ func (m *mockStore) EnsureTenant(ctx context.Context, id string) (*models.Tenant
 // --- Subscription Categories ---
 
 func (m *mockStore) CreateCategory(ctx context.Context, slug, name string, defaultChannels []string, defaultState string, sortOrder int) (*models.SubscriptionCategory, error) {
+	if err := m.shouldError("CreateCategory"); err != nil {
+		return nil, err
+	}
 	c := models.SubscriptionCategory{
 		ID: fmt.Sprintf("sct-%d", len(m.categories)+1), Slug: slug, Name: name,
 		DefaultChannels: defaultChannels, DefaultState: defaultState, SortOrder: sortOrder,
@@ -74,6 +89,9 @@ func (m *mockStore) GetCategoryByID(ctx context.Context, id string) (*models.Sub
 }
 
 func (m *mockStore) ListCategories(ctx context.Context) ([]models.SubscriptionCategory, error) {
+	if err := m.shouldError("ListCategories"); err != nil {
+		return nil, err
+	}
 	return m.categories, nil
 }
 
@@ -156,6 +174,9 @@ func (m *mockStore) DeleteSubscription(ctx context.Context, id string) error {
 // --- Templates ---
 
 func (m *mockStore) CreateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error) {
+	if err := m.shouldError("CreateTemplate"); err != nil {
+		return nil, err
+	}
 	t := *input
 	t.ID = fmt.Sprintf("ntpl-%d", len(m.templates)+1)
 	t.CreatedAt = time.Now()
@@ -164,6 +185,9 @@ func (m *mockStore) CreateTemplate(ctx context.Context, input *models.Notificati
 }
 
 func (m *mockStore) GetTemplateByID(ctx context.Context, id string) (*models.NotificationTemplate, error) {
+	if err := m.shouldError("GetTemplateByID"); err != nil {
+		return nil, err
+	}
 	for _, t := range m.templates {
 		if t.ID == id {
 			return &t, nil
@@ -182,6 +206,9 @@ func (m *mockStore) GetTemplateBySlug(ctx context.Context, slug string) (*models
 }
 
 func (m *mockStore) ListTemplates(ctx context.Context) ([]models.NotificationTemplate, error) {
+	if err := m.shouldError("ListTemplates"); err != nil {
+		return nil, err
+	}
 	return m.templates, nil
 }
 

@@ -38,6 +38,104 @@ func TestCreateTemplate_And_GetBySlug(t *testing.T) {
 	}
 }
 
+func TestCreateTemplate_DuplicateSlug(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notification_templates", "subscription_categories")
+
+	ctx := context.Background()
+	_, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
+		Slug: "welcome", Name: "Welcome", DefaultChannels: []string{},
+	})
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+
+	_, err = s.CreateTemplate(ctx, &models.NotificationTemplate{
+		Slug: "welcome", Name: "Welcome Duplicate", DefaultChannels: []string{},
+	})
+	if err == nil {
+		t.Fatal("expected error on duplicate slug, got nil")
+	}
+}
+
+func TestUpdateTemplate(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notification_templates", "subscription_categories")
+
+	ctx := context.Background()
+	subject := "Hello"
+	nt, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
+		Slug: "welcome", Name: "Welcome", DefaultChannels: []string{"email"},
+		EmailSubject: &subject,
+	})
+	if err != nil {
+		t.Fatalf("CreateTemplate: %v", err)
+	}
+
+	newSubject := "Hello Updated"
+	updated, err := s.UpdateTemplate(ctx, &models.NotificationTemplate{
+		ID: nt.ID, Name: "Welcome Updated", DefaultChannels: []string{"email", "inbox"},
+		EmailSubject: &newSubject,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTemplate: %v", err)
+	}
+	if updated.Name != "Welcome Updated" {
+		t.Errorf("expected name 'Welcome Updated', got %q", updated.Name)
+	}
+	if *updated.EmailSubject != "Hello Updated" {
+		t.Errorf("expected email_subject 'Hello Updated', got %q", *updated.EmailSubject)
+	}
+}
+
+func TestUpdateTemplate_NotFound(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notification_templates", "subscription_categories")
+
+	ctx := context.Background()
+	_, err := s.UpdateTemplate(ctx, &models.NotificationTemplate{
+		ID: "ntpl-nonexistent", Name: "Nope",
+	})
+	if err == nil {
+		t.Fatal("expected error updating non-existent template, got nil")
+	}
+}
+
+func TestListTemplates(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notification_templates", "subscription_categories")
+
+	ctx := context.Background()
+	s.CreateTemplate(ctx, &models.NotificationTemplate{
+		Slug: "welcome", Name: "Welcome", DefaultChannels: []string{},
+	})
+	s.CreateTemplate(ctx, &models.NotificationTemplate{
+		Slug: "invoice", Name: "Invoice", DefaultChannels: []string{},
+	})
+
+	templates, err := s.ListTemplates(ctx)
+	if err != nil {
+		t.Fatalf("ListTemplates: %v", err)
+	}
+	if len(templates) != 2 {
+		t.Fatalf("expected 2 templates, got %d", len(templates))
+	}
+}
+
+func TestCreateTemplate_InvalidSubscriptionID(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notification_templates", "subscription_categories")
+
+	ctx := context.Background()
+	badID := "sub-nonexistent"
+	_, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
+		Slug: "test", Name: "Test", SubscriptionID: &badID, DefaultChannels: []string{},
+	})
+	if err == nil {
+		t.Fatal("expected FK violation error, got nil")
+	}
+}
+
 func TestDeleteTemplate(t *testing.T) {
 	s, pool := testStore(t)
 	cleanTable(t, pool, "notification_templates", "subscription_categories")

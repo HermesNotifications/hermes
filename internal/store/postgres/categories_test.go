@@ -65,6 +65,33 @@ func TestUpdateCategory(t *testing.T) {
 	}
 }
 
+func TestCreateCategory_DuplicateSlug(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "subscription_categories")
+
+	ctx := context.Background()
+	_, err := s.CreateCategory(ctx, "billing", "Billing", []string{"email"}, "on", 0)
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+
+	_, err = s.CreateCategory(ctx, "billing", "Billing Duplicate", []string{"email"}, "on", 1)
+	if err == nil {
+		t.Fatal("expected error on duplicate slug, got nil")
+	}
+}
+
+func TestUpdateCategory_NotFound(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "subscription_categories")
+
+	ctx := context.Background()
+	_, err := s.UpdateCategory(ctx, "sct-nonexistent", "Nope", []string{}, "on", 0)
+	if err == nil {
+		t.Fatal("expected error updating non-existent category, got nil")
+	}
+}
+
 func TestDeleteCategory(t *testing.T) {
 	s, pool := testStore(t)
 	cleanTable(t, pool, "subscription_categories")
