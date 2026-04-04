@@ -53,12 +53,3 @@ spec:
   package: xpkg.upbound.io/upbound/provider-aws-ssm:v1.18.0
   runtimeConfigRef:
     name: default
----
-# Random provider for generating passwords and tokens.
-# Uses the community Upjet-based random provider.
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-random
-spec:
-  package: xpkg.upbound.io/crossplane-contrib/provider-random:v0.2.0

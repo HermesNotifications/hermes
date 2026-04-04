@@ -95,30 +95,6 @@ spec:
                 fromFieldPath: region
                 toFieldPath: spec.forProvider.region
 
-          - name: auth-token
-            base:
-              apiVersion: random.crossplane.io/v1alpha1
-              kind: Password
-              spec:
-                forProvider:
-                  length: 32
-                  special: false
-                writeConnectionSecretToRef:
-                  namespace: crossplane-system
-            patches:
-              - type: FromCompositeFieldPath
-                fromFieldPath: metadata.uid
-                toFieldPath: spec.writeConnectionSecretToRef.name
-                transforms:
-                  - type: string
-                    string:
-                      type: Format
-                      fmt: "%s-cache-auth-token"
-            connectionDetails:
-              - name: auth_token
-                type: FromConnectionSecretKey
-                fromConnectionSecretKey: password
-
           - name: replication-group
             base:
               apiVersion: elasticache.aws.upbound.io/v1beta2
@@ -134,8 +110,9 @@ spec:
                     matchControllerRef: true
                     matchLabels:
                       hermes.io/resource: security-group
+                  autoGenerateAuthToken: true
                   authTokenSecretRef:
-                    key: password
+                    key: attribute.auth_token
                     namespace: crossplane-system
                   authTokenUpdateStrategy: ROTATE
                   tags:
@@ -170,17 +147,17 @@ spec:
                 fromFieldPath: spec.nodeCount
                 toFieldPath: spec.forProvider.automaticFailoverEnabled
                 transforms:
-                  - type: math
-                    math:
-                      type: clampMin
-                      clampMin: 0
                   - type: convert
                     convert:
-                      toType: int64
-                  - type: math
-                    math:
-                      type: clampMin
-                      clampMin: 2
+                      toType: string
+                  - type: map
+                    map:
+                      "1": "false"
+                      "2": "true"
+                      "3": "true"
+                      "4": "true"
+                      "5": "true"
+                      "6": "true"
                   - type: convert
                     convert:
                       toType: bool
@@ -188,6 +165,9 @@ spec:
                 fromFieldPath: region
                 toFieldPath: spec.forProvider.region
             connectionDetails:
+              - name: auth_token
+                type: FromConnectionSecretKey
+                fromConnectionSecretKey: attribute.auth_token
               - name: endpoint
                 type: FromFieldPath
                 fromFieldPath: status.atProvider.primaryEndpointAddress
