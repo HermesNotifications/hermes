@@ -178,6 +178,7 @@ export interface components {
             /** Format: date-time */
             archived_at?: string;
             body: string;
+            category_id: string;
             channels: string[] | null;
             /** Format: date-time */
             created_at: string;
@@ -185,7 +186,6 @@ export interface components {
             deleted_at?: string;
             /** Format: date-time */
             delivered_at?: string;
-            group_id: string;
             id: string;
             idempotency_key?: string;
             /** Format: date-time */
@@ -193,9 +193,9 @@ export interface components {
             /** Format: date-time */
             sent_at?: string;
             status: string;
+            template_id?: string;
             tenant_id: string;
             title: string;
-            type_id?: string;
             user_id: string;
         };
     };

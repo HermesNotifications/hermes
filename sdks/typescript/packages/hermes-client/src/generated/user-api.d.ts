@@ -45,8 +45,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List notification preferences */
-        get: operations["list-preferences"];
+        /** Get notification preference center */
+        get: operations["get-preference-center"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55,7 +55,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/users/me/preferences/{group_id}": {
+    "/v1/users/me/preferences/{subscription_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -63,10 +63,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Set notification preference for a group */
+        /** Set subscription preference */
         put: operations["set-preference"];
         post?: never;
-        /** Delete notification preference for a group */
+        /** Delete subscription preference (revert to default) */
         delete: operations["delete-preference"];
         options?: never;
         head?: never;
@@ -124,15 +124,29 @@ export interface components {
              */
             type: string;
         };
-        PreferenceListOutputBody: {
+        PreferenceCategory: {
+            default_channels: string[] | null;
+            default_state: string;
+            id: string;
+            name: string;
+            slug: string;
+            subscriptions: components["schemas"]["PreferenceSubscription"][] | null;
+        };
+        PreferenceCenterOutputBody: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PreferenceListOutputBody.json
+             * @example https://example.com/schemas/PreferenceCenterOutputBody.json
              */
             readonly $schema?: string;
-            /** @description List of notification preferences */
-            data: components["schemas"]["UserPreference"][] | null;
+            categories: components["schemas"]["PreferenceCategory"][] | null;
+        };
+        PreferenceSubscription: {
+            id: string;
+            name: string;
+            opted_in: boolean;
+            slug: string;
+            toggleable: boolean;
         };
         SetPreferenceInputBody: {
             /**
@@ -141,8 +155,8 @@ export interface components {
              * @example https://example.com/schemas/SetPreferenceInputBody.json
              */
             readonly $schema?: string;
-            /** @description Preferred delivery channels */
-            channels: string[] | null;
+            /** @description Whether the user is subscribed */
+            opted_in: boolean;
         };
         StatusOutputBody: {
             /**
@@ -184,17 +198,6 @@ export interface components {
             locale?: string;
             phone?: string;
             tenant_id: string;
-        };
-        UserPreference: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UserPreference.json
-             */
-            readonly $schema?: string;
-            channels: string[] | null;
-            group_id: string;
-            user_id: string;
         };
     };
     responses: never;
@@ -267,7 +270,7 @@ export interface operations {
             };
         };
     };
-    "list-preferences": {
+    "get-preference-center": {
         parameters: {
             query?: never;
             header?: never;
@@ -282,7 +285,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PreferenceListOutputBody"];
+                    "application/json": components["schemas"]["PreferenceCenterOutputBody"];
                 };
             };
             /** @description Error */
@@ -301,8 +304,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Group ID */
-                group_id: string;
+                /** @description Subscription ID */
+                subscription_id: string;
             };
             cookie?: never;
         };
@@ -318,7 +321,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserPreference"];
+                    "application/json": components["schemas"]["StatusOutputBody"];
                 };
             };
             /** @description Error */
@@ -337,8 +340,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Group ID */
-                group_id: string;
+                /** @description Subscription ID */
+                subscription_id: string;
             };
             cookie?: never;
         };
