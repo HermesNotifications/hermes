@@ -86,6 +86,7 @@ type EventRepository interface {
 	InsertEvents(ctx context.Context, events []models.NotificationEvent) error
 	UpdateNotificationStatus(ctx context.Context, notificationID string, newStatus models.NotificationStatus, eventTime time.Time) error
 	BatchUpdateNotificationStatuses(ctx context.Context, updates []StatusUpdate) error
+	DeleteEventsOlderThan(ctx context.Context, before time.Time, batchSize int) (int64, error)
 }
 
 // InboxRepository defines operations for the user-facing inbox read path.

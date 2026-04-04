@@ -1,0 +1,1 @@
+ALTER TABLE notification_events DROP CONSTRAINT notification_events_notification_id_fkey;

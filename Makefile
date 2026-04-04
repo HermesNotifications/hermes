@@ -1,5 +1,5 @@
 # --- Variables ---
-SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate seed
+SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate seed cleanup
 DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 
 # --- Build ---
@@ -75,6 +75,8 @@ migrate:           ## Run database migrations
 	go run ./cmd/migrate/ -database-url "$(DB_URL)" -migrations-path ./migrations
 seed:              ## Seed dev API key (run after migrate)
 	go run ./cmd/seed/ -database-url "$(DB_URL)"
+cleanup:           ## Run event retention cleanup (delete events older than HERMES_EVENT_RETENTION_DAYS)
+	go run ./cmd/cleanup/ -database-url "$(DB_URL)"
 
 # --- Admin Portal ---
 .PHONY: dev-admin admin-install

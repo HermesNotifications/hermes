@@ -133,3 +133,19 @@ func (s *Store) UpdateNotificationStatus(ctx context.Context, notificationID str
 	}
 	return nil
 }
+
+// DeleteEventsOlderThan deletes up to batchSize events with created_at before the given time.
+// Returns the number of rows deleted. Callers should loop until 0 is returned.
+func (s *Store) DeleteEventsOlderThan(ctx context.Context, before time.Time, batchSize int) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM notification_events
+		WHERE id IN (
+			SELECT id FROM notification_events
+			WHERE created_at < $1
+			LIMIT $2
+		)`, before, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("delete old events: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}

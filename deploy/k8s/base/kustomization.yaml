@@ -14,6 +14,7 @@ resources:
   - services/
   - infra/
   - migration-job.yaml
+  - cleanup-cronjob.yaml
   - ingress.yaml
 
 configMapGenerator:

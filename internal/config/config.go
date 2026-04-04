@@ -26,7 +26,8 @@ type Config struct {
 	CentrifugoAPIKey string
 	Email            EmailConfig
 	SMSWebhookURL    string
-	APIKeyHMACSecret string
+	APIKeyHMACSecret   string
+	EventRetentionDays int
 }
 
 func Load() Config {
@@ -49,7 +50,8 @@ func Load() Config {
 			LayoutPath:   envStr("HERMES_EMAIL_LAYOUT_PATH", ""),
 		},
 		SMSWebhookURL:    envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
-		APIKeyHMACSecret: envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
+		APIKeyHMACSecret:   envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
+		EventRetentionDays: envInt("HERMES_EVENT_RETENTION_DAYS", 90),
 	}
 }
 

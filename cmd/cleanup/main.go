@@ -1,0 +1,72 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/hermes-notifications/hermes/internal/bootstrap"
+	"github.com/hermes-notifications/hermes/internal/store/postgres"
+)
+
+func main() {
+	dbURL := flag.String("database-url", os.Getenv("HERMES_DATABASE_URL"), "PostgreSQL connection URL")
+	retentionDays := flag.Int("retention-days", envIntDefault("HERMES_EVENT_RETENTION_DAYS", 90), "Number of days to retain notification events")
+	batchSize := flag.Int("batch-size", 5000, "Number of rows to delete per batch")
+	flag.Parse()
+
+	if *dbURL == "" {
+		log.Fatal("database-url is required (or set HERMES_DATABASE_URL)")
+	}
+
+	logger := bootstrap.NewLogger()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	pool := bootstrap.MustConnectDB(ctx, *dbURL, logger)
+	cancel()
+	defer pool.Close()
+
+	st := postgres.New(pool)
+	cutoff := time.Now().UTC().Add(-time.Duration(*retentionDays) * 24 * time.Hour)
+
+	logger.Info("starting event cleanup",
+		"retention_days", *retentionDays,
+		"cutoff", cutoff.Format(time.RFC3339),
+		"batch_size", *batchSize,
+	)
+
+	start := time.Now()
+	var totalDeleted int64
+
+	for {
+		deleted, err := st.DeleteEventsOlderThan(context.Background(), cutoff, *batchSize)
+		if err != nil {
+			log.Fatalf("delete failed: %v", err)
+		}
+		totalDeleted += deleted
+		if deleted == 0 {
+			break
+		}
+		logger.Info("batch deleted", "rows", deleted, "total", totalDeleted)
+	}
+
+	logger.Info("event cleanup complete",
+		"total_deleted", totalDeleted,
+		"duration", time.Since(start).Round(time.Millisecond),
+	)
+}
+
+func envIntDefault(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var i int
+	if _, err := fmt.Sscanf(v, "%d", &i); err != nil {
+		return fallback
+	}
+	return i
+}
