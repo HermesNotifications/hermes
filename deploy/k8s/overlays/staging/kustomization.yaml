@@ -6,6 +6,7 @@ resources:
 - secret-store.yaml
 - parameter-store.yaml
 - network-policies/
+- storage-class.yaml
 patches:
 - path: patches/replicas.yaml
 - path: patches/centrifugo-env.yaml
