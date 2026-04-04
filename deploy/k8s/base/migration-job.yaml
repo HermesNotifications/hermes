@@ -3,8 +3,9 @@ kind: Job
 metadata:
   name: hermes-migrate
   annotations:
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # TODO: re-enable once Crossplane has provisioned the database
+    # argocd.argoproj.io/hook: PreSync
+    # argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 3
   template:
