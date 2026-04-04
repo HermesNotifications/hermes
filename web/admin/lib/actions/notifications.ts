@@ -1,6 +1,7 @@
 "use server";
 
 import { getHermes } from "@/lib/hermes";
+import { revalidatePath } from "next/cache";
 
 export async function listRecentNotifications() {
   const hermes = getHermes();
@@ -14,4 +15,27 @@ export async function getNotificationStatus(id: string) {
   } catch {
     return null;
   }
+}
+
+export async function sendNotification(options: {
+  to: {
+    tenantId: string;
+    userId: string;
+    email?: string;
+    phone?: string;
+  };
+  template?: string;
+  content?: {
+    title: string;
+    body: string;
+    actionUrl?: string;
+    actionLabel?: string;
+  };
+  data?: Record<string, unknown>;
+  channels?: string[];
+}) {
+  const hermes = getHermes();
+  const result = await hermes.notifications.send(options);
+  revalidatePath("/notifications");
+  return result;
 }
