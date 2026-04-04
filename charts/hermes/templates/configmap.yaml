@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hermes.configMapName" . }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+data:
+  HERMES_NATS_URL: {{ include "hermes.natsUrl" . | quote }}
+  HERMES_CENTRIFUGO_API_URL: {{ include "hermes.centrifugoApiUrl" . | quote }}
+  HERMES_REDIS_URL: {{ include "hermes.redisUrl" . | quote }}
+  HERMES_EMAIL_PROVIDER: {{ .Values.hermes.email.provider | quote }}
+  HERMES_EMAIL_FROM: {{ .Values.hermes.email.from | quote }}
+  {{- if eq .Values.hermes.email.provider "smtp" }}
+  {{- if .Values.hermes.email.smtp.host }}
+  HERMES_EMAIL_SMTP_HOST: {{ .Values.hermes.email.smtp.host | quote }}
+  HERMES_EMAIL_SMTP_PORT: {{ .Values.hermes.email.smtp.port | quote }}
+  {{- if .Values.hermes.email.smtp.username }}
+  HERMES_EMAIL_SMTP_USERNAME: {{ .Values.hermes.email.smtp.username | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- if eq .Values.hermes.email.provider "ses" }}
+  HERMES_EMAIL_SES_REGION: {{ .Values.hermes.email.ses.region | quote }}
+  {{- end }}
+  {{- if .Values.hermes.sms.webhookUrl }}
+  HERMES_SMS_WEBHOOK_URL: {{ .Values.hermes.sms.webhookUrl | quote }}
+  {{- end }}
+  HERMES_EVENT_RETENTION_DAYS: {{ .Values.hermes.events.retentionDays | quote }}
