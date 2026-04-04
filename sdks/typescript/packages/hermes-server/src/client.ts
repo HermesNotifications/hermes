@@ -366,6 +366,13 @@ export class TenantsService {
     const result = await this.client.GET("/v1/tenants");
     return unwrap(result) ?? [];
   }
+
+  async create(body: { name: string }): Promise<Tenant> {
+    const result = await this.client.POST("/v1/tenants", {
+      body: { name: body.name },
+    });
+    return unwrap(result);
+  }
 }
 
 export class UsersService {
