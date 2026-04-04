@@ -45,7 +45,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: ops@example.com
+    email: daryl@darylrobbins.com
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
@@ -99,6 +99,8 @@ kubectl apply -f infra/crossplane/compositions/aws/functions.yaml
 kubectl apply -f infra/crossplane/provider/aws-provider.yaml
 echo "    Waiting for provider to become healthy..."
 kubectl wait provider.pkg --all --for=condition=Healthy --timeout=300s
+echo "    Waiting for functions to become healthy..."
+kubectl wait function.pkg --all --for=condition=Healthy --timeout=300s
 
 echo "==> Configuring Crossplane AWS ProviderConfig (IRSA)"
 # The provider-config references IRSA — the provider pods pick up the role
@@ -116,7 +118,7 @@ SUBNET_C=$(echo "$SUBNET_IDS_JSON" | jq -r '.[2] // empty')
 NODE_SG_ID=$(cd infra/terraform && terraform output -raw node_security_group_id)
 
 kubectl apply -f - <<ENVEOF
-apiVersion: apiextensions.crossplane.io/v1alpha1
+apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
   name: hermes-vpc-context

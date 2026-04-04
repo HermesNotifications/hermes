@@ -16,7 +16,7 @@ patches:
 configMapGenerator:
 - name: hermes-domain
   literals:
-  - DOMAIN=staging.hermes.horizonhq.io # ← Set your staging domain here
+  - DOMAIN=staging.hermes.dgr.io # ← Set your staging domain here
   options:
     disableNameSuffixHash: true
 - name: centrifugo-config

@@ -2,7 +2,7 @@
 # Values are populated by the bootstrap script from Terraform outputs.
 # This resource is NOT managed by ArgoCD — it contains cluster-specific
 # values that come from Terraform outputs at bootstrap time.
-apiVersion: apiextensions.crossplane.io/v1alpha1
+apiVersion: apiextensions.crossplane.io/v1beta1
 kind: EnvironmentConfig
 metadata:
   name: hermes-vpc-context

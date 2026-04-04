@@ -8,10 +8,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - DOMAIN_PLACEHOLDER
+        - staging.hermes.dgr.io
       secretName: hermes-tls
   rules:
-    - host: DOMAIN_PLACEHOLDER
+    - host: staging.hermes.dgr.io
       http:
         paths:
           - path: /v1/send
@@ -78,10 +78,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - DOMAIN_PLACEHOLDER
+        - staging.hermes.dgr.io
       secretName: hermes-centrifugo-tls
   rules:
-    - host: DOMAIN_PLACEHOLDER
+    - host: staging.hermes.dgr.io
       http:
         paths:
           - path: /centrifugo(/|$)(.*)
