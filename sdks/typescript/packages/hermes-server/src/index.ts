@@ -15,6 +15,7 @@ export {
   type Subscription,
   type NotificationTemplate,
   type Notification,
+  type NotificationItem,
   type NotificationEvent,
   type APIKeyInfo,
   type APIKeyCreated,

@@ -67,6 +67,7 @@ type NotificationRepository interface {
 	GetNotificationByID(ctx context.Context, id string) (*models.Notification, error)
 	GetNotificationByIdempotencyKey(ctx context.Context, tenantID, key string) (*models.Notification, error)
 	GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error)
+	ListRecentNotifications(ctx context.Context, limit int) ([]models.Notification, error)
 	UpdateNotificationChannels(ctx context.Context, notificationID string, channels []string) error
 	UpdateNotificationRouting(ctx context.Context, n *models.Notification) error
 	FailNotification(ctx context.Context, notificationID string) error

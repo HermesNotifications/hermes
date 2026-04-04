@@ -56,6 +56,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent notifications */
+        get: operations["list-notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/notifications/{id}": {
         parameters: {
             query?: never;
@@ -419,6 +436,20 @@ export interface components {
             notification_id: string;
             severity: string;
         };
+        NotificationItem: {
+            body: string;
+            category_id: string;
+            channels: string[] | null;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            status: string;
+            template_id?: string;
+            template_slug?: string;
+            tenant_id: string;
+            title: string;
+            user_id: string;
+        };
         NotificationStatusOutputBody: {
             /**
              * Format: uri
@@ -765,6 +796,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-notifications": {
+        parameters: {
+            query?: {
+                /** @description Max results (default 50) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationItem"][] | null;
                 };
             };
             /** @description Error */

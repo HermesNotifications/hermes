@@ -336,6 +336,47 @@ components:
         - severity
         - created_at
       type: object
+    NotificationItem:
+      additionalProperties: false
+      properties:
+        body:
+          type: string
+        category_id:
+          type: string
+        channels:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        status:
+          type: string
+        template_id:
+          type: string
+        template_slug:
+          type: string
+        tenant_id:
+          type: string
+        title:
+          type: string
+        user_id:
+          type: string
+      required:
+        - id
+        - tenant_id
+        - user_id
+        - category_id
+        - title
+        - body
+        - channels
+        - status
+        - created_at
+      type: object
     NotificationStatusOutputBody:
       additionalProperties: false
       properties:
@@ -870,6 +911,40 @@ paths:
       summary: Exchange credentials for a user JWT token
       tags:
         - Auth
+  /v1/notifications:
+    get:
+      operationId: list-notifications
+      parameters:
+        - description: Max results (default 50)
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Max results (default 50)
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/NotificationItem"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List recent notifications
+      tags:
+        - Notifications
   /v1/notifications/{id}:
     get:
       operationId: get-notification

@@ -262,6 +262,13 @@ func (m *mockStore) EnsureUser(ctx context.Context, tenantID, externalID string)
 
 // --- Notifications ---
 
+func (m *mockStore) ListRecentNotifications(ctx context.Context, limit int) ([]models.Notification, error) {
+	if limit <= 0 || limit > len(m.notifications) {
+		return m.notifications, nil
+	}
+	return m.notifications[:limit], nil
+}
+
 func (m *mockStore) GetNotificationByID(ctx context.Context, id string) (*models.Notification, error) {
 	for _, n := range m.notifications {
 		if n.ID == id {

@@ -6,6 +6,7 @@ export type Subscription = components["schemas"]["Subscription"];
 export type NotificationTemplate = components["schemas"]["NotificationTemplate"];
 export type Notification = components["schemas"]["Notification"];
 export type NotificationEvent = components["schemas"]["NotificationEvent"];
+export type NotificationItem = components["schemas"]["NotificationItem"];
 export type Tenant = components["schemas"]["TenantItem"];
 export type User = components["schemas"]["UserItem"];
 
@@ -279,6 +280,13 @@ export class NotificationsService {
     });
     const data = unwrap(result);
     return { notificationId: data.notification_id };
+  }
+
+  async list(limit?: number): Promise<NotificationItem[]> {
+    const result = await this.client.GET("/v1/notifications", {
+      params: { query: limit ? { limit } : {} },
+    });
+    return unwrap(result) ?? [];
   }
 
   async getStatus(id: string): Promise<{

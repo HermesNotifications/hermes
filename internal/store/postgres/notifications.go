@@ -72,6 +72,32 @@ func (s *Store) GetNotificationByIdempotencyKey(ctx context.Context, tenantID, k
 	return n, nil
 }
 
+func (s *Store) ListRecentNotifications(ctx context.Context, limit int) ([]models.Notification, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, tenant_id, user_id, template_id, category_id, title, body,
+		        action_url, action_label, idempotency_key, channels, status,
+		        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
+		 FROM notifications ORDER BY created_at DESC LIMIT $1`, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list recent notifications: %w", err)
+	}
+	defer rows.Close()
+
+	var notifications []models.Notification
+	for rows.Next() {
+		var n models.Notification
+		if err := scanNotification(rows.Scan, &n); err != nil {
+			return nil, fmt.Errorf("list recent notifications scan: %w", err)
+		}
+		notifications = append(notifications, n)
+	}
+	return notifications, rows.Err()
+}
+
 func (s *Store) GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, notification_id, channel, event, severity, metadata, created_at
