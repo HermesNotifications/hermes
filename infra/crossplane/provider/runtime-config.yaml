@@ -1,0 +1,11 @@
+# DeploymentRuntimeConfig sets IRSA annotations on provider service accounts
+# so they can assume the Crossplane IAM role for AWS API access.
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: default
+spec:
+  serviceAccountTemplate:
+    metadata:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::471524413120:role/hermes-staging-crossplane
