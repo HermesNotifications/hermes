@@ -225,7 +225,8 @@ export interface paths {
         /** List tenants */
         get: operations["list-tenants"];
         put?: never;
-        post?: never;
+        /** Create a tenant */
+        post: operations["create-tenant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -345,6 +346,16 @@ export interface components {
             sms_body?: string;
             /** @description Subscription ID (null for standalone) */
             subscription_id?: string;
+        };
+        CreateTenantInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateTenantInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Tenant name */
+            name: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -566,6 +577,12 @@ export interface components {
             sort_order: number;
         };
         TenantItem: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TenantItem.json
+             */
+            readonly $schema?: string;
             /** Format: date-time */
             created_at: string;
             default_locale: string;
@@ -1315,6 +1332,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantItem"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-tenant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTenantInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantItem"];
                 };
             };
             /** @description Error */

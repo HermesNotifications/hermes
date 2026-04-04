@@ -170,6 +170,23 @@ components:
         - slug
         - name
       type: object
+    CreateTenantInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CreateTenantInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Tenant name
+          minLength: 1
+          type: string
+      required:
+        - name
+      type: object
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -608,6 +625,13 @@ components:
     TenantItem:
       additionalProperties: false
       properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/TenantItem.json
+          format: uri
+          readOnly: true
+          type: string
         created_at:
           format: date-time
           type: string
@@ -1347,6 +1371,30 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: List tenants
+      tags:
+        - Tenants
+    post:
+      operationId: create-tenant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTenantInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantItem"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a tenant
       tags:
         - Tenants
   /v1/users:
