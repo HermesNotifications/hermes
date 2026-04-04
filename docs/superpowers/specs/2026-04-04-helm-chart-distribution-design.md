@@ -76,7 +76,7 @@ hermes:
 ```yaml
 global:
   image:
-    registry: ghcr.io/yourorg
+    registry: ghcr.io/hermesnotifications
     tag: ""  # defaults to chart appVersion
   domain: hermes.example.com
 ```
@@ -267,13 +267,13 @@ Internal-only services (dispatch, workers, event-writer) have no ingress path â€
 ### OCI Registry (Primary)
 
 ```bash
-helm install hermes oci://ghcr.io/yourorg/charts/hermes --version 1.0.0
+helm install hermes oci://ghcr.io/hermesnotifications/charts/hermes --version 1.0.0
 ```
 
 ### GitHub Pages (Fallback)
 
 ```bash
-helm repo add hermes https://yourorg.github.io/hermes
+helm repo add hermes https://hermesnotifications.github.io/hermes
 helm install hermes hermes/hermes
 ```
 
@@ -296,15 +296,15 @@ jobs:
   release-chart:
     steps:
       - helm package charts/hermes --version $TAG --app-version $TAG
-      - helm push hermes-$TAG.tgz oci://ghcr.io/yourorg/charts
+      - helm push hermes-$TAG.tgz oci://ghcr.io/hermesnotifications/charts
       - # update GitHub Pages index
 ```
 
 Container images are tagged with the semver version (in addition to existing SHA tags for internal use):
 
 ```
-ghcr.io/yourorg/hermes-admin:1.0.0
-ghcr.io/yourorg/hermes-dispatch:1.0.0
+ghcr.io/hermesnotifications/hermes-admin:1.0.0
+ghcr.io/hermesnotifications/hermes-dispatch:1.0.0
 ...
 ```
 
@@ -326,7 +326,7 @@ Internal staging/production deployments continue using Kustomize + ArgoCD + Karg
 
 ```bash
 # 1. Add the repo
-helm repo add hermes https://yourorg.github.io/hermes
+helm repo add hermes https://hermesnotifications.github.io/hermes
 
 # 2. Install with defaults (bundles Postgres, NATS, Redis, Centrifugo)
 helm install hermes hermes/hermes \
