@@ -1,5 +1,6 @@
 import type { Notification } from "@hermes-notifications/server";
 import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/copy-button";
 import {
   Card,
   CardContent,
@@ -55,35 +56,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function formatTimestamp(ts: string): string {
-  return new Date(ts).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return new Date(ts).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
 export function NotificationDetail({ notification }: { notification: Notification }) {
-  const timestamps: { label: string; value: string | undefined }[] = [
-    { label: "Created", value: notification.created_at },
-    { label: "Sent", value: notification.sent_at },
-    { label: "Delivered", value: notification.delivered_at },
-    { label: "Read", value: notification.read_at },
-    { label: "Archived", value: notification.archived_at },
-  ];
-
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Notification Details</CardTitle>
+        <CardTitle>Details</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
         <Field label="ID">
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs break-all">
-            {notification.id}
-          </code>
+          <span className="inline-flex items-center gap-1">
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs break-all">
+              {notification.id}
+            </code>
+            <CopyButton value={notification.id} />
+          </span>
         </Field>
 
         <Field label="Status">
@@ -127,19 +116,9 @@ export function NotificationDetail({ notification }: { notification: Notificatio
           <span>{notification.title}</span>
         </Field>
 
-        <Field label="Body">
-          <span className="whitespace-pre-wrap">{notification.body}</span>
+        <Field label="Created">
+          <span className="text-xs">{formatTimestamp(notification.created_at)}</span>
         </Field>
-
-        <div className="sm:col-span-2 grid gap-3 sm:grid-cols-3">
-          {timestamps
-            .filter((t) => t.value)
-            .map((t) => (
-              <Field key={t.label} label={t.label}>
-                <span className="text-xs">{formatTimestamp(t.value!)}</span>
-              </Field>
-            ))}
-        </div>
       </CardContent>
     </Card>
   );

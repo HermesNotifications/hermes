@@ -27,14 +27,7 @@ const severityStyles: Record<string, { badge: string; dot: string }> = {
 const defaultSeverityStyle = severityStyles.info;
 
 function formatTimestamp(ts: string): string {
-  return new Date(ts).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return new Date(ts).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
 function MetadataCollapsible({ metadata }: { metadata: string }) {

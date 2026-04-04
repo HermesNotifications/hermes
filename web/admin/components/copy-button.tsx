@@ -14,11 +14,11 @@ export function CopyButton({ value }: { value: string }) {
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={handleCopy}>
+    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopy}>
       {copied ? (
-        <Check className="h-4 w-4" />
+        <Check className="h-3.5 w-3.5 text-emerald-500" />
       ) : (
-        <Copy className="h-4 w-4" />
+        <Copy className="h-3.5 w-3.5" />
       )}
     </Button>
   );

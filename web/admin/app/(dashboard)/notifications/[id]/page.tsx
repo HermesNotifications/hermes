@@ -7,9 +7,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { NotificationStatusStepper } from "@/components/notification-status-stepper";
 import { NotificationDetail } from "@/components/notification-detail";
-import { EventTimeline } from "@/components/event-timeline";
+import { NotificationTabs } from "@/components/notification-tabs";
 import { getNotificationStatus } from "@/lib/actions/notifications";
+import { listTemplates } from "@/lib/actions/templates";
 
 export default async function NotificationDetailPage({
   params,
@@ -18,6 +20,14 @@ export default async function NotificationDetailPage({
 }) {
   const { id } = await params;
   const data = await getNotificationStatus(id);
+
+  // Resolve template if the notification references one
+  let template = null;
+  if (data?.notification.template_id) {
+    const templates = await listTemplates();
+    template =
+      templates?.find((t) => t.id === data.notification.template_id) ?? null;
+  }
 
   return (
     <div className="space-y-6">
@@ -34,12 +44,23 @@ export default async function NotificationDetailPage({
       {data ? (
         <div className="space-y-6">
           <NotificationDetail notification={data.notification} />
+
           <Card>
             <CardHeader>
-              <CardTitle>Event Timeline</CardTitle>
+              <CardTitle>Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <EventTimeline events={data.events} />
+              <NotificationStatusStepper notification={data.notification} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <NotificationTabs
+                notification={data.notification}
+                events={data.events}
+                template={template}
+              />
             </CardContent>
           </Card>
         </div>
