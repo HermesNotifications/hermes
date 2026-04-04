@@ -3,10 +3,15 @@ SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inb
 DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 
 # --- Build ---
+GO_BUILD := go run github.com/DataDog/orchestrion go build
+ifdef FAST
+GO_BUILD := go build
+endif
+
 .PHONY: build build-%
-build: $(addprefix build-,$(SERVICES))   ## Build all services
+build: $(addprefix build-,$(SERVICES))   ## Build all services (FAST=1 to skip orchestrion)
 build-%:                                  ## Build a single service (e.g. make build-admin)
-	go run github.com/DataDog/orchestrion go build -o bin/$*/service ./cmd/$*/
+	$(GO_BUILD) -o bin/$*/service ./cmd/$*/
 
 # --- Test ---
 .PHONY: test test-integration test-e2e

@@ -2,6 +2,7 @@ load("ext://restart_process", "docker_build_with_restart")
 load("ext://helm_remote", "helm_remote")
 
 config.define_bool("datadog", args=True, usage="Enable Datadog Agent (requires DD_API_KEY)")
+config.define_bool("fast", args=True, usage="Skip orchestrion instrumentation for faster builds")
 cfg = config.parse()
 
 # --- Config ---
@@ -81,14 +82,21 @@ for svc_name, svc_cfg in services.items():
 
     # Compile Go binary on host (fast, uses module/build cache)
     # Output to bin/<svc>/service so it matches the Dockerfile COPY path
-    local_resource(
-        "compile-" + svc_name,
-        cmd=" && ".join([
+    if cfg.get("fast", False):
+        compile_cmd = "CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
+            goarch=goarch, svc=svc_name,
+        )
+    else:
+        compile_cmd = " && ".join([
             "go build -o ./bin/_tools/orchestrion github.com/DataDog/orchestrion",
             "CGO_ENABLED=0 GOOS=linux GOARCH={goarch} ./bin/_tools/orchestrion go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
                 goarch=goarch, svc=svc_name,
             ),
-        ]),
+        ])
+
+    local_resource(
+        "compile-" + svc_name,
+        cmd=compile_cmd,
         deps=[
             "cmd/" + svc_name + "/",
             "internal/",
