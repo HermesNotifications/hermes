@@ -116,6 +116,7 @@ spec:
                       fmt: "%s-cache-auth-token"
             connectionDetails:
               - name: auth_token
+                type: FromConnectionSecretKey
                 fromConnectionSecretKey: password
 
           - name: replication-group
@@ -188,6 +189,7 @@ spec:
                 toFieldPath: spec.forProvider.region
             connectionDetails:
               - name: endpoint
+                type: FromFieldPath
                 fromFieldPath: status.atProvider.primaryEndpointAddress
               - name: port
                 type: FromValue
