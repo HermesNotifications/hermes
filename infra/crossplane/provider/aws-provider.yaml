@@ -1,5 +1,4 @@
-# Upbound AWS provider family — installs all AWS sub-providers needed by
-# Crossplane compositions (RDS, ElastiCache, SecretsManager, SSM, EC2).
+# Upbound AWS provider family — base package for shared auth and config.
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
 metadata:
@@ -8,3 +7,57 @@ spec:
   package: xpkg.upbound.io/upbound/provider-family-aws:v1.18.0
   runtimeConfigRef:
     name: default
+---
+# Sub-providers for each AWS service used by compositions.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ec2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ec2:v1.18.0
+  runtimeConfigRef:
+    name: default
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-rds
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-rds:v1.18.0
+  runtimeConfigRef:
+    name: default
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-elasticache
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-elasticache:v1.18.0
+  runtimeConfigRef:
+    name: default
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-secretsmanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-secretsmanager:v1.18.0
+  runtimeConfigRef:
+    name: default
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ssm
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ssm:v1.18.0
+  runtimeConfigRef:
+    name: default
+---
+# Random provider for generating passwords and tokens.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-random
+spec:
+  package: xpkg.upbound.io/upbound/provider-random:v0.2.0
