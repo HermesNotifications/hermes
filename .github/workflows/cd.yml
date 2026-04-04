@@ -24,6 +24,7 @@ jobs:
         service:
           - admin
           - dispatch
+          - send
           - worker-events
           - worker-email
           - worker-sms

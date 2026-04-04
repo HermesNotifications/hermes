@@ -4,7 +4,8 @@ data "aws_region" "current" {}
 locals {
   services = toset([
     "admin",
-    "router",
+    "dispatch",
+    "send",
     "inbox",
     "user",
     "worker-events",
