@@ -1,0 +1,32 @@
+# ArgoCD Application for Crossplane resource claims (production).
+# prune is DISABLED — removing a claim from git should not automatically
+# delete the backing cloud resource (Aurora cluster, ElastiCache, etc.).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-claims-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/darylrobbins/hermes.git
+    targetRevision: main
+    path: infra/crossplane/claims/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hermes
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

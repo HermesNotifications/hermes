@@ -30,9 +30,10 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 | kubectl | >= 1.28 | Kubernetes management |
 | Helm | >= 3.12 | Cluster component installation |
 | jq | any | JSON processing |
+| crossplane (optional) | >= 1.18 | Debugging Crossplane resources (`crossplane beta trace`, etc.) |
 
 **AWS access:**
-- An AWS account with permissions to create VPC, EKS, Aurora, ElastiCache, ECR, Secrets Manager, SSM, and IAM resources
+- An AWS account with permissions to create VPC, EKS, ECR, and IAM resources
 - AWS CLI configured (`aws configure` or environment variables)
 
 **GitHub:**
@@ -68,11 +69,15 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 │  │                    └─────────┘              └────────┘   │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
-│  ┌─────────────┐  ┌──────────────────┐  ┌─────────────────┐    │
-│  │     ECR     │  │ Secrets Manager  │  │    S3 bucket    │    │
-│  │  9 repos    │  │ + SSM Params     │  │  TF state       │    │
-│  └─────────────┘  └──────────────────┘  └─────────────────┘    │
+│  ┌─────────────┐  ┌─────────────────┐                          │
+│  │     ECR     │  │    S3 bucket    │                          │
+│  │  9 repos    │  │  TF state       │                          │
+│  └─────────────┘  └─────────────────┘                          │
 └─────────────────────────────────────────────────────────────────┘
+
+Aurora PostgreSQL, ElastiCache Valkey, and Secrets Manager are managed
+by Crossplane (in-cluster) rather than Terraform. Terraform only manages
+VPC, EKS, ECR, and the CICD OIDC role.
 
 Deployment Pipeline:
   git push → CI (build) → CD (push to ECR) → Kargo (promote) → ArgoCD (sync)
@@ -84,6 +89,7 @@ Deployment Pipeline:
 - **Valkey** (not Redis) — BSD-licensed, wire-compatible, supported natively by ElastiCache
 - **NATS runs in-cluster** as a StatefulSet (no AWS-managed equivalent)
 - **Separate EKS clusters** per environment (not shared)
+- **Crossplane manages data services** — Aurora, ElastiCache, and Secrets Manager are declared as Crossplane claims inside the cluster, enabling GitOps for infrastructure
 
 ---
 
@@ -116,6 +122,10 @@ After apply completes, save key outputs for subsequent steps:
 cd infra/terraform
 terraform output -raw eks_cluster_name          # e.g. hermes-staging
 terraform output -raw external_secrets_role_arn  # for bootstrap-cluster.sh
+terraform output -raw crossplane_role_arn       # for bootstrap-cluster.sh
+terraform output -raw vpc_id                    # used by Crossplane EnvironmentConfig
+terraform output -raw private_subnet_ids        # used by Crossplane EnvironmentConfig
+terraform output -raw node_security_group_id    # used by Crossplane EnvironmentConfig
 ```
 
 ### What Terraform creates
@@ -124,12 +134,11 @@ terraform output -raw external_secrets_role_arn  # for bootstrap-cluster.sh
 |----------|---------|------------|
 | VPC | 2 AZs, 1 NAT GW | 3 AZs, 3 NAT GWs (HA) |
 | EKS | `t4g.medium` nodes, 2-4 count | `m7g.large` nodes, 3-10 count |
-| Aurora PostgreSQL 16 | `db.t4g.medium`, 1 instance | `db.r7g.large`, 2 instances (writer + reader) |
-| ElastiCache Valkey 7.2 | `cache.t4g.micro`, 1 node | `cache.r7g.large`, 2 replicas |
 | ECR | 9 repositories (AES256 encrypted) | Shared (apply once) |
-| Secrets Manager | `hermes/staging` (infra credentials) | `hermes/production` (30-day recovery window) |
-| SSM Parameter Store | Webhook URLs (operator-managed) | Webhook URLs (operator-managed) |
 | IAM (CICD) | GitHub Actions OIDC role | Shared (apply once) |
+| IAM (Crossplane) | IRSA role for Crossplane AWS provider | Per-cluster |
+
+> **Note:** Aurora PostgreSQL, ElastiCache Valkey, and Secrets Manager are now managed by Crossplane compositions inside the EKS cluster. See [Deploy with ArgoCD](#7-deploy-with-argocd--kargo) for details.
 
 ---
 
@@ -151,9 +160,13 @@ Install platform components (ingress, cert-manager, External Secrets Operator, A
 
 ```bash
 ESO_ROLE_ARN=$(cd infra/terraform && terraform output -raw external_secrets_role_arn)
+KARGO_ROLE_ARN=$(cd infra/terraform && terraform output -raw kargo_controller_role_arn)
+CROSSPLANE_ROLE_ARN=$(cd infra/terraform && terraform output -raw crossplane_role_arn)
 
-./infra/scripts/bootstrap-cluster.sh hermes-staging us-east-1 "$ESO_ROLE_ARN"
+./infra/scripts/bootstrap-cluster.sh hermes-staging us-east-1 "$ESO_ROLE_ARN" "$KARGO_ROLE_ARN" "$CROSSPLANE_ROLE_ARN"
 ```
+
+The 5th parameter (`crossplane-role-arn`) tells the bootstrap script to install Crossplane with the AWS provider configured for IRSA authentication. The script also creates an `EnvironmentConfig` from Terraform outputs (`vpc_id`, `private_subnet_ids`, `node_security_group_id`) so that Crossplane compositions can place resources in the correct VPC and subnets.
 
 The script installs:
 
@@ -162,6 +175,7 @@ The script installs:
 | NGINX Ingress Controller | `ingress-nginx` | Internet-facing NLB, routes traffic to services |
 | cert-manager | `cert-manager` | Automatic TLS certificates via Let's Encrypt |
 | External Secrets Operator | `external-secrets` | Syncs AWS Secrets Manager → K8s Secrets |
+| Crossplane + AWS Provider | `crossplane-system` | Manages Aurora, ElastiCache, and Secrets Manager as in-cluster resources |
 | ArgoCD | `argocd` | GitOps — syncs K8s manifests from git |
 | Kargo | `kargo` | Promotion pipeline — manages staging → production flow |
 
@@ -264,8 +278,17 @@ git push
 ### Apply ArgoCD Applications
 
 ```bash
+# Crossplane XRDs, compositions, and functions (shared across environments)
+kubectl apply -f deploy/argocd/crossplane-infra.yaml
+
+# Crossplane resource claims for staging (Aurora, ElastiCache, Secrets Manager)
+kubectl apply -f deploy/argocd/crossplane-claims-staging.yaml
+
+# Hermes application for staging
 kubectl apply -f deploy/argocd/staging.yaml
 ```
+
+> **Important:** Apply `crossplane-infra` first — it installs the XRDs and compositions that the claims depend on. Wait for it to sync before applying the claims app. The claims app provisions the actual AWS resources (Aurora cluster, ElastiCache, Secrets Manager secret), which takes 10-15 minutes for the initial creation.
 
 ArgoCD will immediately sync the staging overlay. Watch the sync:
 
@@ -344,12 +367,16 @@ make tf-apply ENV=production    # requires manual approval
 
 ```bash
 ESO_ROLE_ARN=$(cd infra/terraform && terraform output -raw external_secrets_role_arn)
-./infra/scripts/bootstrap-cluster.sh hermes-production us-east-1 "$ESO_ROLE_ARN"
+KARGO_ROLE_ARN=$(cd infra/terraform && terraform output -raw kargo_controller_role_arn)
+CROSSPLANE_ROLE_ARN=$(cd infra/terraform && terraform output -raw crossplane_role_arn)
+./infra/scripts/bootstrap-cluster.sh hermes-production us-east-1 "$ESO_ROLE_ARN" "$KARGO_ROLE_ARN" "$CROSSPLANE_ROLE_ARN"
 ```
 
 ### Apply ArgoCD + Kargo
 
 ```bash
+kubectl apply -f deploy/argocd/crossplane-infra.yaml
+kubectl apply -f deploy/argocd/crossplane-claims-production.yaml
 kubectl apply -f deploy/argocd/production.yaml
 kubectl apply -f deploy/kargo/  # Kargo resources are shared if on same cluster,
                                  # or re-apply if separate clusters
@@ -384,7 +411,7 @@ kubectl get freight -n hermes
 
 ### Scaling
 
-**Horizontal (node count):** Update `eks_node_min_size` / `eks_node_max_size` in the appropriate tfvars file:
+**Horizontal (EKS node count):** Update `eks_node_min_size` / `eks_node_max_size` in the appropriate tfvars file:
 ```bash
 make tf-plan ENV=production
 make tf-apply ENV=production
@@ -394,11 +421,21 @@ make tf-apply ENV=production
 - Edit `deploy/k8s/overlays/production/hpa/*.yaml`
 - Commit and push — ArgoCD auto-syncs
 
-**Vertical (instance size):** Update instance types in tfvars and re-apply. For EKS nodes, this triggers a rolling replacement. For Aurora/ElastiCache, expect brief downtime during the maintenance window.
+**Vertical (EKS node size):** Update instance types in tfvars and re-apply. This triggers a rolling replacement of EKS nodes.
+
+**Aurora / ElastiCache scaling:** Edit the Crossplane claims in git and push. ArgoCD syncs the change, and Crossplane applies it to AWS:
+```bash
+# Example: scale Aurora instance class or add a read replica
+vim infra/crossplane/claims/production/database.yaml   # change instanceClass or replicaCount
+# Example: scale ElastiCache node type or replica count
+vim infra/crossplane/claims/production/cache.yaml       # change nodeType or nodeCount
+git add -A && git commit -m "chore(infra): scale Aurora to r7g.xlarge" && git push
+```
+Crossplane applies changes with the same maintenance-window behavior as the AWS console. Expect brief downtime for instance class changes.
 
 ### Secrets Rotation
 
-Secrets are stored in AWS Secrets Manager and synced to K8s by External Secrets Operator (1h refresh interval).
+Secrets are stored in AWS Secrets Manager and synced to K8s by External Secrets Operator (1h refresh interval). The Secrets Manager secret itself is managed by the `HermesSecretsBundle` Crossplane composition, which assembles connection details from the Aurora and ElastiCache claims.
 
 **Rotate database password:**
 ```bash
@@ -410,7 +447,7 @@ aws rds modify-db-cluster \
   --master-user-password "$NEW_PASS" \
   --apply-immediately
 
-# Update Secrets Manager
+# Update Secrets Manager (Crossplane manages the secret resource, but you can update the value)
 aws secretsmanager put-secret-value \
   --secret-id hermes/production \
   --secret-string "$(
@@ -520,11 +557,12 @@ kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_
 - Cache data is reconstructable — Hermes uses Valkey as a cache layer, not as primary storage
 
 **Full cluster recovery:**
-1. `make tf-apply ENV=<environment>` recreates cloud infrastructure from state
-2. `./infra/scripts/bootstrap-cluster.sh` reinstalls platform components
+1. `make tf-apply ENV=<environment>` recreates VPC, EKS, ECR, and IAM from state
+2. `./infra/scripts/bootstrap-cluster.sh` reinstalls platform components including Crossplane, the AWS provider, and the EnvironmentConfig from Terraform outputs — this must complete before ArgoCD can reconcile Crossplane claims
 3. `kubectl apply -f deploy/argocd/` + `kubectl apply -f deploy/kargo/` restores GitOps
-4. ArgoCD auto-syncs the application — all K8s resources are defined in git
-5. Migration job runs automatically, seed data may need to be re-applied
+4. ArgoCD syncs `crossplane-infra` (XRDs/compositions) then `crossplane-claims-<env>` (data services) — Aurora and ElastiCache are recreated from the claim specs
+5. ArgoCD auto-syncs the application — all K8s resources are defined in git
+6. Migration job runs automatically, seed data may need to be re-applied
 
 ---
 
@@ -536,6 +574,10 @@ kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_
 |------|-------|
 | Terraform modules | `infra/terraform/modules/` |
 | Environment configs | `infra/terraform/environments/*.tfvars` |
+| Crossplane XRDs | `infra/crossplane/xrds/` — Cloud-agnostic resource definitions |
+| Crossplane compositions | `infra/crossplane/compositions/aws/` — AWS-specific implementations |
+| Crossplane claims | `infra/crossplane/claims/{env}/` — Per-environment resource claims |
+| Crossplane provider config | `infra/crossplane/provider/` — AWS provider and auth config |
 | K8s base manifests | `deploy/k8s/base/` |
 | Staging overlay | `deploy/k8s/overlays/staging/` |
 | Production overlay | `deploy/k8s/overlays/production/` |

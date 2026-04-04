@@ -1,0 +1,10 @@
+# AWS ProviderConfig using IRSA for authentication.
+# The Crossplane service account is annotated with the IAM role ARN
+# created by the EKS Terraform module.
+apiVersion: aws.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: IRSA

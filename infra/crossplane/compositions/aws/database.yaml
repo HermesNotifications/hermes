@@ -1,0 +1,256 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: hermesdatabase-aws
+  labels:
+    provider: aws
+spec:
+  compositeTypeRef:
+    apiVersion: hermes.io/v1alpha1
+    kind: HermesDatabase
+  mode: Pipeline
+  pipeline:
+    - step: pull-environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: hermes-vpc-context
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: subnet-group
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: SubnetGroup
+              spec:
+                forProvider:
+                  description: "Hermes database subnet group"
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: privateSubnetIdA
+                toFieldPath: spec.forProvider.subnetIds[0]
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: privateSubnetIdB
+                toFieldPath: spec.forProvider.subnetIds[1]
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: privateSubnetIdC
+                toFieldPath: spec.forProvider.subnetIds[2]
+                policy:
+                  fromFieldPath: Optional
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+
+          - name: security-group
+            base:
+              apiVersion: ec2.aws.upbound.io/v1beta1
+              kind: SecurityGroup
+              metadata:
+                labels:
+                  hermes.io/resource: security-group
+              spec:
+                forProvider:
+                  description: "Hermes Aurora PostgreSQL"
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: vpcId
+                toFieldPath: spec.forProvider.vpcId
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+
+          - name: security-group-rule
+            base:
+              apiVersion: ec2.aws.upbound.io/v1beta1
+              kind: SecurityGroupIngressRule
+              spec:
+                forProvider:
+                  ipProtocol: tcp
+                  fromPort: 5432
+                  toPort: 5432
+                  description: "PostgreSQL from EKS nodes"
+                  securityGroupIdSelector:
+                    matchControllerRef: true
+                    matchLabels:
+                      hermes.io/resource: security-group
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: nodeSecurityGroupId
+                toFieldPath: spec.forProvider.referencedSecurityGroupId
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+
+          - name: cluster-parameter-group
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: ClusterParameterGroup
+              spec:
+                forProvider:
+                  family: aurora-postgresql16
+                  parameter:
+                    - name: log_min_duration_statement
+                      value: "1000"
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+
+          - name: password
+            base:
+              apiVersion: random.crossplane.io/v1alpha1
+              kind: Password
+              spec:
+                forProvider:
+                  length: 32
+                  special: true
+                  overrideSpecial: "!#$%&*()-_=+[]{}|:?"
+                writeConnectionSecretToRef:
+                  namespace: crossplane-system
+            patches:
+              # Generate a deterministic secret name from the composite UID
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.writeConnectionSecretToRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-db-password"
+            connectionDetails:
+              - name: password
+                fromConnectionSecretKey: password
+
+          - name: cluster
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta2
+              kind: Cluster
+              spec:
+                forProvider:
+                  engine: aurora-postgresql
+                  databaseName: hermes
+                  masterUsername: hermes
+                  masterPasswordSecretRef:
+                    key: password
+                    namespace: crossplane-system
+                  dbSubnetGroupNameSelector:
+                    matchControllerRef: true
+                  vpcSecurityGroupIdSelector:
+                    matchControllerRef: true
+                    matchLabels:
+                      hermes.io/resource: security-group
+                  dbClusterParameterGroupNameSelector:
+                    matchControllerRef: true
+                  storageEncrypted: true
+                  preferredBackupWindow: "03:00-04:00"
+                  skipFinalSnapshot: true
+                  tags:
+                    managed-by: crossplane
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.engineVersion
+                toFieldPath: spec.forProvider.engineVersion
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.backupRetentionDays
+                toFieldPath: spec.forProvider.backupRetentionPeriod
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.storageEncrypted
+                toFieldPath: spec.forProvider.storageEncrypted
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.deletionProtection
+                toFieldPath: spec.forProvider.deletionProtection
+              # skipFinalSnapshot = !deletionProtection
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.deletionProtection
+                toFieldPath: spec.forProvider.skipFinalSnapshot
+                transforms:
+                  - type: convert
+                    convert:
+                      toType: string
+                  - type: string
+                    string:
+                      type: Convert
+                      convert: ToUpper
+                  - type: string
+                    string:
+                      type: Map
+                      map:
+                        "TRUE": "false"
+                        "FALSE": "true"
+                  - type: convert
+                    convert:
+                      toType: bool
+              # Pass the password secret name to the cluster
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.forProvider.masterPasswordSecretRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-db-password"
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: region
+                toFieldPath: spec.forProvider.region
+            connectionDetails:
+              - name: endpoint
+                fromFieldPath: status.atProvider.endpoint
+              - name: port
+                type: FromValue
+                value: "5432"
+              - name: username
+                type: FromValue
+                value: "hermes"
+
+    # Use Go templating to conditionally render cluster instances based on
+    # instanceCount. This avoids Crossplane's lack of native count/loop support.
+    - step: render-instances
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $spec := $.observed.composite.resource.spec }}
+            {{ $env := index .context "apiextensions.crossplane.io/environment" }}
+            {{ $count := $spec.instanceCount | default 1 }}
+            {{ range $i := until ($count | int) }}
+            ---
+            apiVersion: rds.aws.upbound.io/v1beta2
+            kind: ClusterInstance
+            metadata:
+              annotations:
+                crossplane.io/composition-resource-name: cluster-instance-{{ $i }}
+                gotemplating.fn.crossplane.io/composition-resource-name: cluster-instance-{{ $i }}
+              labels:
+                instance-index: "{{ $i }}"
+            spec:
+              forProvider:
+                engine: aurora-postgresql
+                engineVersion: "{{ $spec.engineVersion | default "16.4" }}"
+                instanceClass: "{{ $spec.instanceClass }}"
+                clusterIdentifierSelector:
+                  matchControllerRef: true
+                performanceInsightsEnabled: true
+                region: {{ $env.region }}
+                tags:
+                  managed-by: crossplane
+            {{ end }}

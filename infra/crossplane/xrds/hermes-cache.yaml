@@ -1,0 +1,50 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: hermescaches.hermes.io
+spec:
+  group: hermes.io
+  names:
+    kind: HermesCache
+    plural: hermescaches
+  claimNames:
+    kind: HermesCacheClaim
+    plural: hermescacheclaims
+  connectionSecretKeys:
+    - endpoint
+    - auth_token
+    - port
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                engineVersion:
+                  type: string
+                  default: "7.2"
+                  description: "Cache engine version (e.g., 7.2 for Valkey)."
+                nodeType:
+                  type: string
+                  description: "Node type for cache instances (e.g., cache.r7g.large)."
+                nodeCount:
+                  type: integer
+                  default: 1
+                  minimum: 1
+                  description: "Number of cache nodes. 2+ enables automatic failover."
+                transitEncryption:
+                  type: boolean
+                  default: true
+                  description: "Whether to encrypt data in transit (TLS)."
+                snapshotRetentionDays:
+                  type: integer
+                  default: 1
+                  minimum: 0
+                  description: "Number of days to retain automatic snapshots. 0 disables."
+              required:
+                - nodeType
