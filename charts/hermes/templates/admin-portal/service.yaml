@@ -1,0 +1,19 @@
+{{- if .Values.adminPortal.enabled }}
+{{- $svcName := printf "%s-admin-portal" (include "hermes.fullname" .) -}}
+{{- $svcCtx := dict "root" . "service" "admin-portal" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.adminPortal.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 4 }}
+{{- end }}

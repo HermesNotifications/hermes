@@ -1,0 +1,58 @@
+{{- if .Values.adminPortal.enabled }}
+{{- $svcName := printf "%s-admin-portal" (include "hermes.fullname" .) -}}
+{{- $svcCtx := dict "root" . "service" "admin-portal" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  replicas: {{ .Values.adminPortal.replicas }}
+  selector:
+    matchLabels:
+      {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.adminPortal.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 8 }}
+    spec:
+      containers:
+        - name: admin-portal
+          image: {{ include "hermes.image" (dict "root" . "service" .Values.adminPortal) }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Values.adminPortal.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.adminPortal.resources | nindent 12 }}
+      {{- with .Values.adminPortal.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.adminPortal.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.adminPortal.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
