@@ -1,0 +1,111 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullName := include "hermes.fullname" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.domain | quote }}
+      http:
+        paths:
+          - path: /v1/send
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-send
+                port:
+                  number: {{ .Values.send.port }}
+          - path: /v1/types
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-admin
+                port:
+                  number: {{ .Values.admin.port }}
+          - path: /v1/groups
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-admin
+                port:
+                  number: {{ .Values.admin.port }}
+          - path: /v1/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-admin
+                port:
+                  number: {{ .Values.admin.port }}
+          - path: /v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-admin
+                port:
+                  number: {{ .Values.admin.port }}
+          - path: /v1/inbox
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-inbox
+                port:
+                  number: {{ .Values.inbox.port }}
+          - path: /v1/users
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-user
+                port:
+                  number: {{ .Values.user.port }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}-realtime
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.domain | quote }}
+      http:
+        paths:
+          - path: /realtime(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                {{- if .Values.centrifugo.enabled }}
+                name: {{ .Release.Name }}-centrifugo
+                {{- else }}
+                name: {{ $fullName }}-centrifugo
+                {{- end }}
+                port:
+                  number: 8000
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
