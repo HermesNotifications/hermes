@@ -28,7 +28,36 @@
     },
     "hermes": {
       "type": "object",
+      "required": ["jwt", "apiKey"],
       "properties": {
+        "jwt": {
+          "type": "object",
+          "properties": {
+            "secret": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "string"
+            },
+            "existingSecretKey": {
+              "type": "string"
+            }
+          }
+        },
+        "apiKey": {
+          "type": "object",
+          "properties": {
+            "hmacSecret": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "string"
+            },
+            "existingSecretKey": {
+              "type": "string"
+            }
+          }
+        },
         "email": {
           "type": "object",
           "properties": {
@@ -80,11 +109,39 @@
         }
       }
     },
+    "externalPostgresql": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
+        }
+      }
+    },
     "nats": {
       "type": "object",
       "properties": {
         "enabled": {
           "type": "boolean"
+        }
+      }
+    },
+    "externalNats": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
         }
       }
     },
@@ -96,6 +153,20 @@
         }
       }
     },
+    "externalRedis": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
+        }
+      }
+    },
     "centrifugo": {
       "type": "object",
       "properties": {
@@ -103,7 +174,102 @@
           "type": "boolean"
         }
       }
+    },
+    "externalCentrifugo": {
+      "type": "object",
+      "properties": {
+        "apiUrl": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
+        },
+        "ingressServiceName": {
+          "type": "string"
+        }
+      }
     }
   },
-  "required": ["global"]
+  "required": ["global", "hermes"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "postgresql": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalPostgresql": {
+            "anyOf": [
+              { "required": ["url"], "properties": { "url": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "nats": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalNats": {
+            "anyOf": [
+              { "required": ["url"], "properties": { "url": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "redis": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalRedis": {
+            "anyOf": [
+              { "required": ["url"], "properties": { "url": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "centrifugo": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalCentrifugo": {
+            "anyOf": [
+              { "required": ["apiUrl"], "properties": { "apiUrl": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

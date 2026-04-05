@@ -16,6 +16,7 @@ Add the Hermes Helm chart from the OCI registry and install with minimal configu
 ```bash
 helm install hermes oci://ghcr.io/hermesnotifications/charts/hermes \
   --namespace hermes --create-namespace \
+  --set global.domain=hermes.example.com \
   --set hermes.jwt.secret="$(openssl rand -base64 32)" \
   --set hermes.apiKey.hmacSecret="$(openssl rand -base64 32)"
 ```
@@ -41,7 +42,7 @@ helm upgrade hermes oci://ghcr.io/hermesnotifications/charts/hermes \
   --namespace hermes \
   --reuse-values \
   --set ingress.enabled=true \
-  --set ingress.host=hermes.example.com
+  --set global.domain=hermes.example.com
 ```
 
 Otherwise, port-forward to the admin service:

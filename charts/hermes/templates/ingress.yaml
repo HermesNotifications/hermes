@@ -71,7 +71,11 @@ spec:
   tls:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+{{- if or .Values.centrifugo.enabled .Values.externalCentrifugo.ingressServiceName }}
 ---
+# Realtime ingress for Centrifugo WebSocket connections.
+# When using external Centrifugo without ingressServiceName, create your own
+# Ingress and Service pointing to your Centrifugo instance.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -100,7 +104,7 @@ spec:
                 {{- if .Values.centrifugo.enabled }}
                 name: {{ .Release.Name }}-centrifugo
                 {{- else }}
-                name: {{ $fullName }}-centrifugo
+                name: {{ .Values.externalCentrifugo.ingressServiceName }}
                 {{- end }}
                 port:
                   number: 8000
@@ -108,4 +112,5 @@ spec:
   tls:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+{{- end }}
 {{- end }}

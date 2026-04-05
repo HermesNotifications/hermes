@@ -59,6 +59,13 @@ spec:
                   name: {{ .Values.externalPostgresql.existingSecret }}
                   key: {{ .Values.externalPostgresql.existingSecretKey }}
             {{- end }}
+            {{- if .Values.externalNats.existingSecret }}
+            - name: HERMES_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalNats.existingSecret }}
+                  key: {{ .Values.externalNats.existingSecretKey | default "nats-url" }}
+            {{- end }}
             {{- if .Values.externalRedis.existingSecret }}
             - name: HERMES_REDIS_URL
               valueFrom:

@@ -29,6 +29,13 @@ jobs:
       - name: Build dependencies
         run: helm dependency build charts/hermes/
 
+      - name: Lint chart
+        run: |
+          helm lint charts/hermes/ \
+            --set hermes.jwt.secret=test \
+            --set hermes.apiKey.hmacSecret=test \
+            --set global.domain=test.example.com
+
       - name: Package chart
         run: |
           helm package charts/hermes/ \
@@ -37,9 +44,3 @@ jobs:
 
       - name: Push to GHCR
         run: helm push hermes-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/hermesnotifications/charts
-
-      - name: Lint packaged chart
-        run: |
-          helm lint charts/hermes/ \
-            --set hermes.jwt.secret=test \
-            --set hermes.apiKey.hmacSecret=test

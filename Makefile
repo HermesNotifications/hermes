@@ -31,7 +31,7 @@ lint:              ## Run golangci-lint
 .PHONY: helm-lint
 helm-lint:         ## Lint the Helm chart
 	helm dependency build charts/hermes/
-	helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test
+	helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com
 	jq . charts/hermes/values.schema.json > /dev/null
 
 # --- API Docs ---

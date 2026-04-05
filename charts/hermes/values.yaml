@@ -365,11 +365,14 @@ externalRedis:
 # -- External Centrifugo connection (used when centrifugo.enabled=false)
 externalCentrifugo:
   # -- Centrifugo HTTP API URL
-  url: ""
-  # -- Name of an existing secret containing the Centrifugo URL
+  apiUrl: ""
+  # -- Name of an existing secret containing the Centrifugo API key
   existingSecret: ""
-  # -- Key within the existing secret
-  existingSecretKey: "HERMES_CENTRIFUGO_API_URL"
+  # -- Key within the existing secret that holds the API key
+  existingSecretKey: "centrifugo-api-key"
+  # -- Name of the Kubernetes Service to route realtime ingress traffic to when using external Centrifugo.
+  # You must create this Service yourself (e.g., an ExternalName or headless Service pointing to your Centrifugo instance).
+  ingressServiceName: ""
 
 # ---------------------------------------------------------------------------
 # Sub-chart overrides

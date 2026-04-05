@@ -134,6 +134,6 @@ Return the Centrifugo API URL.
 {{- if .Values.centrifugo.enabled -}}
 {{- printf "http://%s-centrifugo:8000" .Release.Name -}}
 {{- else -}}
-{{- .Values.externalCentrifugo.url -}}
+{{- .Values.externalCentrifugo.apiUrl -}}
 {{- end -}}
 {{- end }}

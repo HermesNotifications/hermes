@@ -22,27 +22,79 @@ spec:
         - port: 53
           protocol: TCP
 ---
-# Allow ingress to public-facing services
+# Allow ingress to admin service
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ $fullName }}-allow-ingress
+  name: {{ $fullName }}-allow-ingress-admin
   labels:
     {{- include "hermes.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/part-of: hermes
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-admin
+      app.kubernetes.io/instance: {{ .Release.Name }}
   policyTypes:
     - Ingress
   ingress:
     - ports:
         - port: {{ .Values.admin.port }}
           protocol: TCP
+---
+# Allow ingress to send service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-send
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-send
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
         - port: {{ .Values.send.port }}
           protocol: TCP
+---
+# Allow ingress to inbox service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-inbox
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-inbox
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
         - port: {{ .Values.inbox.port }}
           protocol: TCP
+---
+# Allow ingress to user service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-user
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-user
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
         - port: {{ .Values.user.port }}
           protocol: TCP
 ---

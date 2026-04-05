@@ -119,9 +119,11 @@ spec:
 Enable TLS on the ingress:
 
 ```yaml
+global:
+  domain: hermes.example.com
+
 ingress:
   enabled: true
-  host: hermes.example.com
   tls:
     - secretName: hermes-tls
       hosts:
@@ -135,31 +137,32 @@ ingress:
 Set resource requests and limits per service based on your expected load:
 
 ```yaml
-services:
-  admin:
-    resources:
-      requests:
-        cpu: 250m
-        memory: 256Mi
-      limits:
-        cpu: "1"
-        memory: 512Mi
-  dispatch:
-    resources:
-      requests:
-        cpu: 500m
-        memory: 256Mi
-      limits:
-        cpu: "2"
-        memory: 512Mi
-  workerEmail:
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 256Mi
+admin:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+dispatch:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 512Mi
+
+workerEmail:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 ```
 
 Adjust based on your notification volume. The dispatch and worker services are the most CPU-intensive under load.
@@ -171,25 +174,26 @@ Adjust based on your notification volume. The dispatch and worker services are t
 Enable horizontal pod autoscaling for high-throughput services:
 
 ```yaml
-services:
-  admin:
-    autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 10
-      targetCPUUtilizationPercentage: 70
-  dispatch:
-    autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 20
-      targetCPUUtilizationPercentage: 70
-  workerEmail:
-    autoscaling:
-      enabled: true
-      minReplicas: 2
-      maxReplicas: 10
-      targetCPUUtilizationPercentage: 70
+admin:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+dispatch:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+workerEmail:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
 ```
 
 ### Topology Spread
@@ -197,15 +201,14 @@ services:
 Spread pods across availability zones:
 
 ```yaml
-services:
-  admin:
-    topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: topology.kubernetes.io/zone
-        whenUnsatisfiable: DoNotSchedule
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/component: admin
+admin:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: hermes-admin
 ```
 
 ### Multiple Replicas (without autoscaling)
@@ -213,11 +216,11 @@ services:
 For simpler setups, set a fixed replica count:
 
 ```yaml
-services:
-  admin:
-    replicaCount: 3
-  dispatch:
-    replicaCount: 3
+admin:
+  replicas: 3
+
+dispatch:
+  replicas: 3
 ```
 
 ## Network Policies
@@ -225,20 +228,9 @@ services:
 Enable network policies to restrict traffic between services:
 
 ```yaml
-networkPolicies:
+networkPolicy:
   enabled: true
 ```
 
 This creates policies that only allow traffic between Hermes services and their required infrastructure (PostgreSQL, NATS, Redis). See the [configuration reference](configuration.md) for details.
 
-## Pod Disruption Budgets
-
-For production workloads with multiple replicas, configure PDBs to ensure availability during node maintenance:
-
-```yaml
-services:
-  admin:
-    podDisruptionBudget:
-      enabled: true
-      minAvailable: 1
-```

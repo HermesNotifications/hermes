@@ -5,9 +5,18 @@ metadata:
   labels:
     {{- include "hermes.labels" . | nindent 4 }}
 data:
-  HERMES_NATS_URL: {{ include "hermes.natsUrl" . | quote }}
-  HERMES_CENTRIFUGO_API_URL: {{ include "hermes.centrifugoApiUrl" . | quote }}
-  HERMES_REDIS_URL: {{ include "hermes.redisUrl" . | quote }}
+  {{- $natsUrl := include "hermes.natsUrl" . }}
+  {{- if $natsUrl }}
+  HERMES_NATS_URL: {{ $natsUrl | quote }}
+  {{- end }}
+  {{- $centrifugoApiUrl := include "hermes.centrifugoApiUrl" . }}
+  {{- if $centrifugoApiUrl }}
+  HERMES_CENTRIFUGO_API_URL: {{ $centrifugoApiUrl | quote }}
+  {{- end }}
+  {{- $redisUrl := include "hermes.redisUrl" . }}
+  {{- if $redisUrl }}
+  HERMES_REDIS_URL: {{ $redisUrl | quote }}
+  {{- end }}
   HERMES_EMAIL_PROVIDER: {{ .Values.hermes.email.provider | quote }}
   HERMES_EMAIL_FROM: {{ .Values.hermes.email.from | quote }}
   {{- if eq .Values.hermes.email.provider "smtp" }}
