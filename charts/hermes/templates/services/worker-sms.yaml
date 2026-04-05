@@ -1,0 +1,170 @@
+{{- $svcName := printf "%s-worker-sms" (include "hermes.fullname" .) -}}
+{{- $svcCtx := dict "root" . "service" "worker-sms" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  {{- if not .Values.workerSms.autoscaling.enabled }}
+  replicas: {{ .Values.workerSms.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.workerSms.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: worker-sms
+          image: {{ include "hermes.image" (dict "root" . "service" .Values.workerSms) }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Values.workerSms.port }}
+              protocol: TCP
+          env:
+            - name: HERMES_HTTP_PORT
+              value: {{ .Values.workerSms.port | quote }}
+            {{- if .Values.hermes.jwt.existingSecret }}
+            - name: HERMES_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hermes.jwt.existingSecret }}
+                  key: {{ .Values.hermes.jwt.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.hermes.apiKey.existingSecret }}
+            - name: HERMES_API_KEY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hermes.apiKey.existingSecret }}
+                  key: {{ .Values.hermes.apiKey.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.externalPostgresql.existingSecret }}
+            - name: HERMES_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgresql.existingSecret }}
+                  key: {{ .Values.externalPostgresql.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.externalRedis.existingSecret }}
+            - name: HERMES_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalRedis.existingSecret }}
+                  key: {{ .Values.externalRedis.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.externalCentrifugo.existingSecret }}
+            - name: HERMES_CENTRIFUGO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalCentrifugo.existingSecret }}
+                  key: {{ .Values.externalCentrifugo.existingSecretKey }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "hermes.configMapName" . }}
+            - secretRef:
+                name: {{ include "hermes.secretName" . }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.workerSms.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 10Mi
+      {{- with .Values.workerSms.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.workerSms.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.workerSms.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.workerSms.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.workerSms.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 4 }}
+{{- if .Values.workerSms.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $svcName }}
+  minReplicas: {{ .Values.workerSms.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.workerSms.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.workerSms.autoscaling.targetCPUUtilizationPercentage }}
+    {{- if .Values.workerSms.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.workerSms.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
