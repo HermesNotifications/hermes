@@ -1,0 +1,36 @@
+{{- $fullName := include "hermes.fullname" . -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullName }}-test-connection
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: health-check
+      image: curlimages/curl:latest
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "Testing admin service..."
+          curl -sf http://{{ $fullName }}-admin:{{ .Values.admin.port }}/healthz
+
+          echo "Testing send service..."
+          curl -sf http://{{ $fullName }}-send:{{ .Values.send.port }}/healthz
+
+          echo "Testing dispatch service..."
+          curl -sf http://{{ $fullName }}-dispatch:{{ .Values.dispatch.port }}/healthz
+
+          echo "Testing inbox service..."
+          curl -sf http://{{ $fullName }}-inbox:{{ .Values.inbox.port }}/healthz
+
+          echo "Testing user service..."
+          curl -sf http://{{ $fullName }}-user:{{ .Values.user.port }}/healthz
+
+          echo "All health checks passed."
