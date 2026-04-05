@@ -290,6 +290,8 @@ migration:
     tag: ""
   # -- Number of retries before marking the job as failed
   backoffLimit: 3
+  # -- Resource requests and limits for the migration job
+  resources: {}
 
 # ---------------------------------------------------------------------------
 # Ingress

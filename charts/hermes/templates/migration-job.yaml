@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "hermes.fullname" . }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "-5"
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "hermes.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: migrate
+          image: {{ include "hermes.image" (dict "root" . "service" .Values.migration) }}
+          imagePullPolicy: IfNotPresent
+          args: ["-migrations-path", "/migrations"]
+          env:
+            {{- if .Values.externalPostgresql.existingSecret }}
+            - name: HERMES_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgresql.existingSecret }}
+                  key: {{ .Values.externalPostgresql.existingSecretKey }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "hermes.secretName" . }}
+          resources:
+            {{- toYaml .Values.migration.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
