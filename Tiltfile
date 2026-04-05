@@ -1,9 +1,9 @@
 load("ext://restart_process", "docker_build_with_restart")
 load("ext://helm_remote", "helm_remote")
 
-config.define_bool("datadog", args=True, usage="Enable Datadog Agent (requires DD_API_KEY)")
-config.define_bool("fast", args=True, usage="Skip orchestrion instrumentation for faster builds")
+config.define_bool("datadog", usage="Enable Datadog Agent and orchestrion instrumentation (requires DD_API_KEY)")
 cfg = config.parse()
+datadog_enabled = cfg.get("datadog", False)
 
 # --- Config ---
 k3d_registry = "k3d-hermes-registry.localhost:5111"
@@ -82,17 +82,17 @@ for svc_name, svc_cfg in services.items():
 
     # Compile Go binary on host (fast, uses module/build cache)
     # Output to bin/<svc>/service so it matches the Dockerfile COPY path
-    if cfg.get("fast", False):
-        compile_cmd = "CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
-            goarch=goarch, svc=svc_name,
-        )
-    else:
+    if datadog_enabled:
         compile_cmd = " && ".join([
             "go build -o ./bin/_tools/orchestrion github.com/DataDog/orchestrion",
             "CGO_ENABLED=0 GOOS=linux GOARCH={goarch} ./bin/_tools/orchestrion go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
                 goarch=goarch, svc=svc_name,
             ),
         ])
+    else:
+        compile_cmd = "CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go build -o ./bin/{svc}/service ./cmd/{svc}/".format(
+            goarch=goarch, svc=svc_name,
+        )
 
     local_resource(
         "compile-" + svc_name,
@@ -147,6 +147,6 @@ local_resource(
 )
 
 # --- Datadog (opt-in) ---
-if cfg.get("datadog", False):
+if datadog_enabled:
     k8s_yaml(kustomize("deploy/k8s/overlays/local/datadog"))
     k8s_resource("datadog-agent", labels=["infra"])

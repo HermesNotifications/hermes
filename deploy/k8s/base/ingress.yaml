@@ -38,6 +38,34 @@ spec:
                 name: hermes-admin
                 port:
                   number: 8080
+          - path: /v1/tenants
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/templates
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/apikeys
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
+          - path: /v1/subscriptions
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
           - path: /v1/auth
             pathType: Prefix
             backend:
@@ -52,13 +80,21 @@ spec:
                 name: hermes-inbox
                 port:
                   number: 8086
-          - path: /v1/users
+          # Longest-prefix match: /v1/users/me (self-service, JWT) beats /v1/users (admin listing, API key)
+          - path: /v1/users/me
             pathType: Prefix
             backend:
               service:
                 name: hermes-user
                 port:
                   number: 8087
+          - path: /v1/users
+            pathType: Prefix
+            backend:
+              service:
+                name: hermes-admin
+                port:
+                  number: 8080
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
