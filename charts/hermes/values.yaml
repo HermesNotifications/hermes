@@ -407,4 +407,5 @@ nats:
 centrifugo:
   enabled: true
   config:
-    engine: memory
+    engine:
+      type: memory
