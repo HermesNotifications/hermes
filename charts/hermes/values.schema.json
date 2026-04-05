@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "title": "Hermes Helm Chart Values",
+  "description": "JSON Schema for validating Hermes Helm chart values at install time",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "required": ["domain"],
+      "properties": {
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Primary domain for ingress routing (required)"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "registry": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "hermes": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["smtp", "ses", "sendgrid"],
+              "description": "Email delivery provider"
+            }
+          }
+        },
+        "events": {
+          "type": "object",
+          "properties": {
+            "retentionDays": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of days to retain notification events"
+            }
+          }
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["otel", "datadog"],
+          "description": "Telemetry provider"
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "nats": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "centrifugo": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "required": ["global"]
+}
