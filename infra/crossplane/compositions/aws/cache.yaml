@@ -45,11 +45,6 @@ spec:
                 fromFieldPath: privateSubnetIdB
                 toFieldPath: spec.forProvider.subnetIds[1]
               - type: FromEnvironmentFieldPath
-                fromFieldPath: privateSubnetIdC
-                toFieldPath: spec.forProvider.subnetIds[2]
-                policy:
-                  fromFieldPath: Optional
-              - type: FromEnvironmentFieldPath
                 fromFieldPath: region
                 toFieldPath: spec.forProvider.region
 
