@@ -1,0 +1,22 @@
+{{- if and .Values.observability.enabled (eq .Values.observability.provider "otel") }}
+{{- $fullName := include "hermes.fullname" . -}}
+{{- $labels := include "hermes.labels" . -}}
+{{- range $service := list "admin" "send" "dispatch" "inbox" "user" "worker-email" "worker-sms" "worker-inbox" "worker-events" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $fullName }}-{{ $service }}
+  labels:
+    {{- $labels | nindent 4 }}
+    app.kubernetes.io/component: {{ $service }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-{{ $service }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+{{- end }}
+{{- end }}
