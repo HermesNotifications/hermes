@@ -1,0 +1,177 @@
+{{- $svcName := printf "%s-send" (include "hermes.fullname" .) -}}
+{{- $svcCtx := dict "root" . "service" "send" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  {{- if not .Values.send.autoscaling.enabled }}
+  replicas: {{ .Values.send.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.send.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: send
+          image: {{ include "hermes.image" (dict "root" . "service" .Values.send) }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Values.send.port }}
+              protocol: TCP
+          env:
+            - name: HERMES_HTTP_PORT
+              value: {{ .Values.send.port | quote }}
+            {{- if .Values.hermes.jwt.existingSecret }}
+            - name: HERMES_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hermes.jwt.existingSecret }}
+                  key: {{ .Values.hermes.jwt.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.hermes.apiKey.existingSecret }}
+            - name: HERMES_API_KEY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hermes.apiKey.existingSecret }}
+                  key: {{ .Values.hermes.apiKey.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.externalPostgresql.existingSecret }}
+            - name: HERMES_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgresql.existingSecret }}
+                  key: {{ .Values.externalPostgresql.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.externalNats.existingSecret }}
+            - name: HERMES_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalNats.existingSecret }}
+                  key: {{ .Values.externalNats.existingSecretKey | default "nats-url" }}
+            {{- end }}
+            {{- if .Values.externalRedis.existingSecret }}
+            - name: HERMES_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalRedis.existingSecret }}
+                  key: {{ .Values.externalRedis.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.externalCentrifugo.existingSecret }}
+            - name: HERMES_CENTRIFUGO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalCentrifugo.existingSecret }}
+                  key: {{ .Values.externalCentrifugo.existingSecretKey }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "hermes.configMapName" . }}
+            - secretRef:
+                name: {{ include "hermes.secretName" . }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.send.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 10Mi
+      {{- with .Values.send.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.send.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.send.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.send.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.send.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 4 }}
+{{- if .Values.send.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $svcName }}
+  minReplicas: {{ .Values.send.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.send.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.send.autoscaling.targetCPUUtilizationPercentage }}
+    {{- if .Values.send.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.send.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}

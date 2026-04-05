@@ -27,6 +27,13 @@ test-e2e:          ## Run E2E tests only (requires make infra-up)
 lint:              ## Run golangci-lint
 	golangci-lint run
 
+# --- Helm ---
+.PHONY: helm-lint
+helm-lint:         ## Lint the Helm chart
+	helm dependency build charts/hermes/
+	helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com
+	jq . charts/hermes/values.schema.json > /dev/null
+
 # --- API Docs ---
 .PHONY: openapi openapi-check asyncapi-check
 openapi:           ## Generate OpenAPI 3.1 specs from huma

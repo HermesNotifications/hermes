@@ -1,0 +1,143 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $fullName := include "hermes.fullname" . -}}
+# Default deny all ingress and egress, but allow DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-default-deny
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: hermes
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    # Allow DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Allow ingress to admin service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-admin
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-admin
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: {{ .Values.admin.port }}
+          protocol: TCP
+---
+# Allow ingress to send service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-send
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-send
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: {{ .Values.send.port }}
+          protocol: TCP
+---
+# Allow ingress to inbox service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-inbox
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-inbox
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: {{ .Values.inbox.port }}
+          protocol: TCP
+---
+# Allow ingress to user service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-user
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-user
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: {{ .Values.user.port }}
+          protocol: TCP
+---
+# Allow egress to infrastructure services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-egress
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: hermes
+  policyTypes:
+    - Egress
+  egress:
+    # NATS
+    - ports:
+        - port: 4222
+          protocol: TCP
+    # Centrifugo
+    - ports:
+        - port: 8000
+          protocol: TCP
+    # PostgreSQL
+    - ports:
+        - port: 5432
+          protocol: TCP
+    # Redis
+    - ports:
+        - port: 6379
+          protocol: TCP
+    # HTTPS (external webhooks)
+    - ports:
+        - port: 443
+          protocol: TCP
+    # SMTP
+    - ports:
+        - port: 587
+          protocol: TCP
+        - port: 465
+          protocol: TCP
+        - port: 25
+          protocol: TCP
+{{- end }}

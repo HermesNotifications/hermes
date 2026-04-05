@@ -1,0 +1,49 @@
+{{- if .Values.hermes.cleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "hermes.fullname" . }}-cleanup
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cleanup
+spec:
+  schedule: {{ .Values.hermes.cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "hermes.labels" . | nindent 12 }}
+            app.kubernetes.io/component: cleanup
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+          containers:
+            - name: cleanup
+              image: {{ include "hermes.image" (dict "root" . "service" (dict "image" (dict "repository" "hermes-cleanup" "tag" ""))) }}
+              imagePullPolicy: IfNotPresent
+              env:
+                {{- if .Values.externalPostgresql.existingSecret }}
+                - name: HERMES_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.externalPostgresql.existingSecret }}
+                      key: {{ .Values.externalPostgresql.existingSecretKey }}
+                {{- end }}
+              envFrom:
+                - secretRef:
+                    name: {{ include "hermes.secretName" . }}
+                - configMapRef:
+                    name: {{ include "hermes.configMapName" . }}
+              resources:
+                {{- toYaml .Values.migration.resources | nindent 16 }}
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+{{- end }}

@@ -3,6 +3,7 @@ name: CD
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths-ignore:
       # Don't trigger on Kargo's automated image tag updates
       - 'deploy/k8s/overlays/*/images/kustomization.yaml'
@@ -10,6 +11,7 @@ on:
 permissions:
   id-token: write    # OIDC for AWS
   contents: read
+  packages: write    # Push to GHCR on version tags
 
 env:
   AWS_REGION: us-east-1
@@ -60,3 +62,31 @@ jobs:
             -t "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
             --push \
             -f deploy/docker/Dockerfile .
+
+      - name: Tag with semver version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SERVICE: ${{ matrix.service }}
+          IMAGE_TAG: ${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          docker buildx imagetools create \
+            "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
+            --tag "${ECR_REGISTRY}/hermes-${SERVICE}:${VERSION}"
+
+      - name: Login to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SERVICE: ${{ matrix.service }}
+          IMAGE_TAG: ${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          docker buildx imagetools create \
+            "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
+            --tag "ghcr.io/hermesnotifications/hermes-${SERVICE}:${VERSION}"

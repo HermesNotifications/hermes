@@ -1,0 +1,39 @@
+apiVersion: v2
+name: hermes
+description: An event-driven notification platform for delivering multi-channel notifications at scale
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/hermesnotifications/hermes
+sources:
+  - https://github.com/hermesnotifications/hermes
+maintainers:
+  - name: Hermes Notifications
+    url: https://github.com/hermesnotifications
+keywords:
+  - notifications
+  - messaging
+  - email
+  - sms
+  - inbox
+  - push
+  - nats
+  - event-driven
+
+dependencies:
+  - name: postgresql
+    version: "~16.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: postgresql.enabled
+  - name: redis
+    version: "~20.0"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: redis.enabled
+  - name: nats
+    version: "~1.2"
+    repository: https://nats-io.github.io/k8s/helm/charts/
+    condition: nats.enabled
+  - name: centrifugo
+    version: "~13.0"
+    repository: https://centrifugal.github.io/helm-charts
+    condition: centrifugo.enabled

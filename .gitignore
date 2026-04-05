@@ -52,6 +52,9 @@ sdks/java/hermes-server-sdk/build/
 sdks/dotnet/Hermes.ServerSdk/src/*/bin/
 sdks/dotnet/Hermes.ServerSdk/src/*/obj/
 
+# Helm chart dependencies (downloaded by helm dependency build)
+charts/hermes/charts/
+
 # Admin portal
 web/admin/node_modules/
 web/admin/.next/

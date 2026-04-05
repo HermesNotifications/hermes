@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "title": "Hermes Helm Chart Values",
+  "description": "JSON Schema for validating Hermes Helm chart values at install time",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "required": ["domain"],
+      "properties": {
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Primary domain for ingress routing (required)"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "registry": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "hermes": {
+      "type": "object",
+      "required": ["jwt", "apiKey"],
+      "properties": {
+        "jwt": {
+          "type": "object",
+          "properties": {
+            "secret": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "string"
+            },
+            "existingSecretKey": {
+              "type": "string"
+            }
+          }
+        },
+        "apiKey": {
+          "type": "object",
+          "properties": {
+            "hmacSecret": {
+              "type": "string"
+            },
+            "existingSecret": {
+              "type": "string"
+            },
+            "existingSecretKey": {
+              "type": "string"
+            }
+          }
+        },
+        "email": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["smtp", "ses", "sendgrid"],
+              "description": "Email delivery provider"
+            }
+          }
+        },
+        "events": {
+          "type": "object",
+          "properties": {
+            "retentionDays": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of days to retain notification events"
+            }
+          }
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["otel", "datadog"],
+          "description": "Telemetry provider"
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "externalPostgresql": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
+        }
+      }
+    },
+    "nats": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "externalNats": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "externalRedis": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
+        }
+      }
+    },
+    "centrifugo": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "externalCentrifugo": {
+      "type": "object",
+      "properties": {
+        "apiUrl": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretKey": {
+          "type": "string"
+        },
+        "ingressServiceName": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": ["global", "hermes"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "postgresql": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalPostgresql": {
+            "anyOf": [
+              { "required": ["url"], "properties": { "url": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "nats": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalNats": {
+            "anyOf": [
+              { "required": ["url"], "properties": { "url": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "redis": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalRedis": {
+            "anyOf": [
+              { "required": ["url"], "properties": { "url": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "centrifugo": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "externalCentrifugo": {
+            "anyOf": [
+              { "required": ["apiUrl"], "properties": { "apiUrl": { "minLength": 1 } } },
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "minLength": 1 } } }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

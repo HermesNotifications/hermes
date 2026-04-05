@@ -161,6 +161,16 @@ jobs:
             -t "hermes-${SERVICE}:ci" \
             -f deploy/docker/Dockerfile .
 
+  helm-lint:
+    name: Helm Chart Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm dependency build charts/hermes/
+      - run: helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com
+      - run: helm template test charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com > /dev/null
+
   kustomize-validate:
     name: Validate Kustomize Overlays
     runs-on: ubuntu-latest
