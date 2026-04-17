@@ -65,7 +65,7 @@ Two entry points, one scenario codebase:
 - Executor: `constant-arrival-rate` targeting `TARGET_RPS`.
 - Each iteration picks a random seeded tenant → user → template and `POST`s `/v1/send` with that template-ref, a UUID idempotency key, and per-request variance (payload vars, channel override, recipient selection).
 - Channel mix parameterized: default 70% inbox, 30% email. No SMS.
-- Auth: single shared API key from the seed manifest (API keys are per-namespace/app, not per tenant — one is all we need).
+- Auth: single shared API key from the seed manifest (API keys are currently global with permissions in Hermes's schema — one is all we need).
 - Measures send-API ack latency (`send_ack_latency`) and throughput. Dispatch and worker pressure surfaces in Hermes's own Datadog metrics, correlated via `run_id`.
 
 ### 2. `inbox-mixed.js` — realistic read path
@@ -87,7 +87,13 @@ End-to-end latency is the headline metric: idempotency key = correlation ID, `se
 
 ## Data Seeding
 
-Go command at `cmd/loadseed/` builds a deterministic dataset via the admin API using the existing server SDK.
+Go command at `cmd/loadseed/` builds a deterministic dataset. Seeding goes **direct to Postgres** (not via the admin API), following the same pattern as the existing `cmd/seed/`. Reasons:
+
+- **There is no `POST /v1/users` endpoint** in the admin API — users are only listable. Direct DB is the only way to create them at the scale we need.
+- **Speed:** 1 M-row batched `COPY FROM` completes in seconds; 1 M admin-API POSTs would take tens of minutes and stress the very API the real test is measuring.
+- **Precedent:** `cmd/seed/main.go` already writes directly to `api_keys`, `user`, `account`.
+
+The seeder reuses the server SDK only for entities that already have POST endpoints and where API coverage is useful (none strictly needed for v1 — everything goes direct to DB).
 
 **Inputs (flags / env):**
 
@@ -95,22 +101,25 @@ Go command at `cmd/loadseed/` builds a deterministic dataset via the admin API u
 |---|---|---|
 | `--tenants` | 10 | Number of tenants to create |
 | `--users-per-tenant` | 10 000 | Users per tenant |
-| `--groups-per-tenant` | 5 | Notification groups per tenant |
-| `--templates-per-tenant` | 10 | Templates per tenant |
-| `--admin-url` | (required) | Target admin service URL |
-| `--admin-bootstrap-token` | (required) | Bootstrap admin token |
+| `--categories-per-tenant` | 3 | Subscription categories per tenant (matches the migration-default shape: `account`, `general`, `marketing`) |
+| `--subscriptions-per-category` | 2 | Subscriptions per category |
+| `--templates-per-subscription` | 2 | Templates per subscription |
+| `--database-url` | `$HERMES_DATABASE_URL` | Postgres connection URL |
+| `--admin-url` | `http://localhost:8080` | Admin base URL (used only for warm-up verification) |
+| `--hmac-secret` | `$HERMES_API_KEY_HMAC_SECRET` | HMAC secret for API-key hashing |
 | `--output` | `seed-manifest.json` | Manifest output path |
-| `--cleanup` | false | If set, delete all tenants in the manifest |
+| `--cleanup` | false | If set, delete all tenants in the manifest (cascades everything) |
 
 **What it creates:**
 
-1. N tenants (UUIDs via `uuid.New().String()` — see project memory; Hermes no longer uses Crockford IDs).
-2. **One** API key in one namespace/app, captured once and written to the manifest. Used for all send requests in the run.
-3. M users per tenant, with deterministic email/phone derived from `(tenant_index, user_index)` so re-runs are reproducible.
-4. G groups per tenant with inbox + email channel configs.
-5. T templates per tenant covering inbox + email.
+1. N tenants (UUIDs via `uuid.New().String()` — Hermes uses UUIDs, not Crockford IDs).
+2. **One global API key** with permissions `[notifications:send, templates:manage, tenants:manage]`, written to `api_keys` directly. Raw key captured once, stored in the manifest, used for every send during the run.
+3. M users per tenant, inserted via `COPY FROM` for speed. Deterministic `email`, `phone`, and `external_id` derived from `(tenant_index, user_index)` so reruns are reproducible.
+4. C subscription categories per tenant (`subscription_categories` table).
+5. S subscriptions per category (`subscriptions` table).
+6. T templates per subscription (`notification_templates` table) — each with inbox + email bodies populated, SMS empty.
 
-**Idempotency:** re-running with the same manifest skips existing entities. `--cleanup` deletes every tenant in the manifest (cascades everything).
+**Idempotency:** re-running with the same manifest is a no-op (`INSERT … ON CONFLICT DO NOTHING`). `--cleanup` issues `DELETE FROM tenants WHERE id = ANY(...)`; FK cascades remove users, and seeded categories/subscriptions/templates are deleted by id (those tables are not tenant-scoped at the DB layer — the manifest tracks every seeded row).
 
 **Manifest shape:**
 
@@ -123,8 +132,17 @@ Go command at `cmd/loadseed/` builds a deterministic dataset via the admin API u
     {
       "id": "…",
       "users": ["…"],
-      "groups": ["…"],
-      "templates": [{ "id": "…", "channels": ["inbox", "email"] }]
+      "categories": [
+        {
+          "id": "…",
+          "subscriptions": [
+            {
+              "id": "…",
+              "templates": [{ "id": "…", "channels": ["inbox", "email"] }]
+            }
+          ]
+        }
+      ]
     }
   ]
 }
@@ -133,7 +151,7 @@ Go command at `cmd/loadseed/` builds a deterministic dataset via the admin API u
 **k6 consumption:**
 
 - Manifest loaded into a `SharedArray` on init (one copy per process; O(1) per-VU access, required at 100k+ VUs).
-- Helpers in `lib/seed.js`: `pickTenant()`, `pickUser(tenant)`, `pickTemplate(tenant)`.
+- Helpers in `lib/seed.js`: `pickTenant()`, `pickUser(tenant)`, `pickTemplate(tenant)` (walks `tenant.categories[*].subscriptions[*].templates` to choose uniformly across all templates for the tenant).
 - Helpers in `lib/auth.js`: `adminHeaders()` (shared bearer), `jwtFor(user)` (HMAC-signs a JWT with the same secret the target env uses — passed in via env var).
 
 **Per-request variance** generated at runtime (not pre-seeded): notification payload variables, UUID idempotency keys, recipient subset choice, template-vs-inline toggle.
