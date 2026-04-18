@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hermes-notifications/hermes/internal/database"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Config struct {
@@ -79,7 +77,3 @@ func envOr(key, def string) string {
 // runID returns a short hex string suitable for tagging this seed run.
 func runID() string { return uuid.NewString()[:8] }
 
-// Stub — replaced by real implementation in Phase 2 (Task 2.6).
-func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
-	return fmt.Errorf("not implemented")
-}
