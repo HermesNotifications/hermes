@@ -37,9 +37,12 @@ type Template struct {
 func (m *Manifest) Write(path string) error {
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal manifest: %w", err)
 	}
-	return os.WriteFile(path, b, 0o600)
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+	return nil
 }
 
 func ReadManifest(path string) (*Manifest, error) {
