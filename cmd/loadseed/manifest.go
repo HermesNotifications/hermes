@@ -31,6 +31,7 @@ type Subscription struct {
 
 type Template struct {
 	ID       string   `json:"id"`
+	Slug     string   `json:"slug"`
 	Channels []string `json:"channels"`
 }
 

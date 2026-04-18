@@ -18,7 +18,7 @@ export function buildSendBody(tenant, userID, template, opts) {
   return {
     to: { tenant_id: tenant.id, user_id: userID },
     channels: [channel],
-    template: template.id,
+    template: template.slug,
     data: { subject: 'Load test ' + uuidv4().slice(0, 8), name: userID },
   };
 }

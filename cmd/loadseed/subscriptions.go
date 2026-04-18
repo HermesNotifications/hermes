@@ -52,7 +52,7 @@ func insertSubscriptionTree(ctx context.Context, pool *pgxpool.Pool, runID strin
 				); err != nil {
 					return nil, fmt.Errorf("insert template: %w", err)
 				}
-				sub.Templates[ti] = Template{ID: tmplID, Channels: []string{"inbox", "email"}}
+				sub.Templates[ti] = Template{ID: tmplID, Slug: tmplSlug, Channels: []string{"inbox", "email"}}
 			}
 			cat.Subscriptions[si] = sub
 		}
