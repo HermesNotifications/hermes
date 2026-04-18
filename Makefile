@@ -215,3 +215,14 @@ configure-registry: ## Set ECR registry in K8s overlays (usage: make configure-r
 	@test -n "$(REGISTRY)" || { echo "Usage: make configure-registry REGISTRY=<ecr-url>"; echo "  Get it via: cd infra/terraform && terraform output -raw ecr_registry_url"; exit 1; }
 	sed -i'' -e 's|REGISTRY/|$(REGISTRY)/|g' deploy/k8s/overlays/staging/images/kustomization.yaml deploy/k8s/overlays/production/images/kustomization.yaml deploy/kargo/warehouse.yaml
 	@echo "Registry set to $(REGISTRY) in staging, production, and kargo overlays"
+
+# --- Load testing ---
+.PHONY: loadseed loadseed-clean
+loadseed:          ## Seed load-test dataset (default: 10 tenants, 10k users each)
+	go run ./cmd/loadseed \
+	  --tenants $(or $(LT_TENANTS),10) \
+	  --users-per-tenant $(or $(LT_USERS),10000) \
+	  --output loadtest/seed-manifest.json
+
+loadseed-clean:    ## Delete all entities from the current seed manifest
+	go run ./cmd/loadseed --cleanup --output loadtest/seed-manifest.json
