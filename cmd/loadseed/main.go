@@ -77,12 +77,9 @@ func envOr(key, def string) string {
 }
 
 // runID returns a short hex string suitable for tagging this seed run.
-func runID() string { return uuid.NewString()[:8] } //nolint:unused // used in Phase 2 (Task 2.5)
+func runID() string { return uuid.NewString()[:8] }
 
-// Stubs — replaced by real implementations in Phase 2 (Tasks 2.5, 2.6).
-func runSeed(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
-	return fmt.Errorf("not implemented")
-}
+// Stub — replaced by real implementation in Phase 2 (Task 2.6).
 func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 	return fmt.Errorf("not implemented")
 }

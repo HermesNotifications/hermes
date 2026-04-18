@@ -9,7 +9,7 @@ import (
 
 // loadseedPermissions are the permissions granted to the single seeded API key.
 // Matches cmd/seed/main.go allPermissions minus apikeys:manage (not needed for load runs).
-var loadseedPermissions = []string{ //nolint:unused // used by integration test (apikey_test.go)
+var loadseedPermissions = []string{
 	auth.PermNotificationsSend,
 	auth.PermTemplatesManage,
 	auth.PermTenantsManage,
@@ -17,7 +17,7 @@ var loadseedPermissions = []string{ //nolint:unused // used by integration test 
 
 // insertAPIKey generates a new API key, writes it to api_keys with the HMAC hash,
 // and returns the raw plaintext key (to be stored in the manifest) and key ID.
-func insertAPIKey(ctx context.Context, pool *pgxpool.Pool, hmacSecret, name string) (rawKey, keyID string, err error) { //nolint:unused // used by integration test (apikey_test.go)
+func insertAPIKey(ctx context.Context, pool *pgxpool.Pool, hmacSecret, name string) (rawKey, keyID string, err error) {
 	rawKey, keyID, err = auth.GenerateAPIKey("dev")
 	if err != nil {
 		return "", "", err

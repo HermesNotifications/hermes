@@ -12,7 +12,6 @@ import (
 // subscription_categories and notification_templates have UNIQUE indexes on slug,
 // so slugs include the runID + tenantIdx to stay globally unique across runs.
 //
-//nolint:unused // called by runSeed in Task 2.5
 func insertSubscriptionTree(ctx context.Context, pool *pgxpool.Pool, runID string, tenantIdx, numCats, subsPerCat, tmplsPerSub int) ([]Category, error) {
 	cats := make([]Category, numCats)
 

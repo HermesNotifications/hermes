@@ -8,9 +8,9 @@ import (
 
 func TestManifest_RoundTrip(t *testing.T) {
 	m := &Manifest{
-		SeededAt: "2026-04-17T00:00:00Z",
+		SeededAt:  "2026-04-17T00:00:00Z",
 		RunSeedID: "abc123",
-		APIKey:   "hms_dev_key_xxx_yyy",
+		APIKey:    "hms_dev_key_xxx_yyy",
 		Tenants: []Tenant{
 			{
 				ID:    "t1",

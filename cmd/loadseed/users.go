@@ -12,7 +12,6 @@ import (
 // Deterministic IDs: lt-<runID>-t<tenantIdx>-u<i>; stable email/phone/external_id
 // derived the same way so reruns against the same tenant produce the same users.
 //
-//nolint:unused // called by runSeed in Task 2.5
 func insertUsers(ctx context.Context, pool *pgxpool.Pool, tenantID string, n int, runID string, tenantIdx int) ([]string, error) {
 	rows := make([][]any, n)
 	ids := make([]string, n)

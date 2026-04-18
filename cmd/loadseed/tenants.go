@@ -11,7 +11,6 @@ import (
 // insertTenants creates n tenants and returns their UUIDs.
 // Name is "loadtest-<runID>-<idx>" so runs are identifiable and easy to clean up manually.
 //
-//nolint:unused // called by runSeed in Task 2.5
 func insertTenants(ctx context.Context, pool *pgxpool.Pool, n int, runID string) ([]string, error) {
 	ids := make([]string, n)
 	names := make([]string, n)
