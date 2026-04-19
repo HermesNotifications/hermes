@@ -1,6 +1,7 @@
 // Soak is inbox-mixed at ~30% of capacity levels for a long duration.
 // We re-export inbox-mixed's exec functions so the scenario code stays in one place.
 export { wsHold, drive, pollInbox } from './inbox-mixed.js';
+export { handleSummary } from '../lib/summary.js';
 
 const VUS      = parseInt(__ENV.VUS || '1000', 10);
 const SEND_RPS = parseInt(__ENV.SEND_RPS || '100', 10);

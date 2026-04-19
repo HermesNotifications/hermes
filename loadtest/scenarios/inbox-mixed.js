@@ -6,6 +6,7 @@ import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
 import { connect, recordE2EOnPush } from '../lib/centrifugo.js';
 import { sendAckLatency, sendErrors, inboxListLatency } from '../lib/metrics.js';
 import { recordSent } from '../lib/shared.js';
+export { handleSummary } from '../lib/summary.js';
 
 const VUS        = parseInt(__ENV.VUS || '100', 10);
 const SEND_RPS   = parseInt(__ENV.SEND_RPS || '50', 10);

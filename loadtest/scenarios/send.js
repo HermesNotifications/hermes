@@ -5,6 +5,7 @@ import { pickTenant, pickUser, pickTemplate } from '../lib/seed.js';
 import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
 import { sendAckLatency, sendErrors } from '../lib/metrics.js';
 import { recordSent } from '../lib/shared.js';
+export { handleSummary } from '../lib/summary.js';
 
 const TARGET_RPS = parseInt(__ENV.TARGET_RPS || '100', 10);
 const DURATION   = __ENV.DURATION || '1m';
