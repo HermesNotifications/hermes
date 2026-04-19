@@ -1,0 +1,102 @@
+name: Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Scenario to run"
+        required: true
+        default: send
+        type: choice
+        options: [send, inbox-mixed, soak]
+      parallelism:
+        description: "TestRun parallelism"
+        required: true
+        default: "2"
+      vus:
+        description: "Virtual users (inbox-mixed/soak)"
+        default: "1000"
+      target_rps:
+        description: "Target RPS (send)"
+        default: "500"
+      duration:
+        description: "Test duration (k6 format)"
+        default: "10m"
+  schedule:
+    # Nightly soak at 2am UTC
+    - cron: "0 2 * * *"
+
+permissions:
+  id-token: write   # AWS OIDC
+  contents: read
+
+env:
+  GO_VERSION: "1.25.0"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_LOADTEST_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ secrets.STAGING_CLUSTER }} --region us-east-1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build and push loadseed image
+        env:
+          REGISTRY: ${{ secrets.ECR_REGISTRY }}
+        run: |
+          aws ecr get-login-password | docker login --username AWS --password-stdin $REGISTRY
+          IMG=$REGISTRY/loadseed:${{ github.sha }}
+          docker build -f cmd/loadseed/Dockerfile -t $IMG .
+          docker push $IMG
+          echo "LOADSEED_IMAGE=$IMG" >> $GITHUB_ENV
+
+      - name: Determine run parameters
+        id: params
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_SCENARIO: ${{ inputs.scenario }}
+          INPUT_PARALLELISM: ${{ inputs.parallelism }}
+          INPUT_DURATION: ${{ inputs.duration }}
+          INPUT_VUS: ${{ inputs.vus }}
+          INPUT_TARGET_RPS: ${{ inputs.target_rps }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            echo "scenario=soak" >> $GITHUB_OUTPUT
+            echo "parallelism=3" >> $GITHUB_OUTPUT
+            echo "duration=4h" >> $GITHUB_OUTPUT
+            echo "vus=2000" >> $GITHUB_OUTPUT
+            echo "target_rps=300" >> $GITHUB_OUTPUT
+          else
+            echo "scenario=$INPUT_SCENARIO" >> $GITHUB_OUTPUT
+            echo "parallelism=$INPUT_PARALLELISM" >> $GITHUB_OUTPUT
+            echo "duration=$INPUT_DURATION" >> $GITHUB_OUTPUT
+            echo "vus=$INPUT_VUS" >> $GITHUB_OUTPUT
+            echo "target_rps=$INPUT_TARGET_RPS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run load test
+        env:
+          SCENARIO: ${{ steps.params.outputs.scenario }}
+          PARALLELISM: ${{ steps.params.outputs.parallelism }}
+          DURATION: ${{ steps.params.outputs.duration }}
+          VUS: ${{ steps.params.outputs.vus }}
+          TARGET_RPS: ${{ steps.params.outputs.target_rps }}
+        run: make loadtest-k8s
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loadtest-artifacts-${{ github.run_id }}
+          path: artifacts/
