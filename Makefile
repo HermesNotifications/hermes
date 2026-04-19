@@ -226,3 +226,20 @@ loadseed:          ## Seed load-test dataset (default: 10 tenants, 10k users eac
 
 loadseed-clean:    ## Delete all entities from the current seed manifest
 	go run ./cmd/loadseed --cleanup --output loadtest/seed-manifest.json
+
+.PHONY: loadtest-local loadtest-local-clean
+loadtest-local:    ## Run a local load test (SCENARIO=send|inbox-mixed|soak TARGET_RPS=... DURATION=...)
+	SCENARIO=$(or $(SCENARIO),send) \
+	TARGET_RPS=$(or $(TARGET_RPS),50) \
+	VUS=$(or $(VUS),50) \
+	DURATION=$(or $(DURATION),30s) \
+	SEND_URL=$(or $(SEND_URL),http://localhost:8088) \
+	ADMIN_URL=$(or $(ADMIN_URL),http://localhost:8080) \
+	INBOX_URL=$(or $(INBOX_URL),http://localhost:8086) \
+	CENTRIFUGO_URL=$(or $(CENTRIFUGO_URL),ws://localhost:8000/connection/websocket) \
+	loadtest/scripts/run-local.sh
+
+loadtest-local-clean: ## Tear down local load-test infra and clean seed
+	docker compose -f docker-compose.yml -f loadtest/docker-compose.loadtest.yml down -v
+	[ -f loadtest/seed-manifest.json ] && go run ./cmd/loadseed --cleanup || true
+	rm -f loadtest/seed-manifest.json
