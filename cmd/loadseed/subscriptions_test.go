@@ -7,7 +7,26 @@ import (
 	"testing"
 
 	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// cleanupSubscriptionTree removes a tree of categories, subscriptions, and templates.
+// Deletes in FK-safe order: templates → subscriptions → categories.
+func cleanupSubscriptionTree(ctx context.Context, pool *pgxpool.Pool, cats []Category) {
+	var tmplIDs, subIDs, catIDs []string
+	for _, c := range cats {
+		catIDs = append(catIDs, c.ID)
+		for _, s := range c.Subscriptions {
+			subIDs = append(subIDs, s.ID)
+			for _, t := range s.Templates {
+				tmplIDs = append(tmplIDs, t.ID)
+			}
+		}
+	}
+	_, _ = pool.Exec(ctx, `DELETE FROM notification_templates WHERE id = ANY($1)`, tmplIDs)
+	_, _ = pool.Exec(ctx, `DELETE FROM subscriptions WHERE id = ANY($1)`, subIDs)
+	_, _ = pool.Exec(ctx, `DELETE FROM subscription_categories WHERE id = ANY($1)`, catIDs)
+}
 
 func TestInsertSubscriptionTree(t *testing.T) {
 	ctx := context.Background()

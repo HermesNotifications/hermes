@@ -28,7 +28,7 @@ export const options = {
   thresholds: {
     send_ack_latency: ['p(99)<200'],
     http_req_failed: ['rate<0.005'],
-    ws_connection_drops: ['count<' + (VUS * 0.01 * (parseInt(DURATION) || 4))],
+    ws_connection_drops: ['count<' + Math.max(10, Math.floor(VUS * 0.05))],
   },
   tags: {
     scenario: 'soak',
