@@ -64,3 +64,8 @@ web/admin/.env.local
 node_modules/
 /seed
 /dispatch
+
+# load testing
+/artifacts/
+/loadtest/seed-manifest.json
+/loadtest/dist/

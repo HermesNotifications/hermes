@@ -1,0 +1,10 @@
+# Generated on each run by `make loadtest-k8s`. This is a template, not applied directly.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadtest-scenarios
+  namespace: loadtest
+data:
+  # Populated at runtime from loadtest/scenarios/*.js and loadtest/lib/*.js.
+  # The runner script flattens lib/ imports into each scenario via `k6 compile` or
+  # ships the whole tree — see loadtest/scripts/run-k8s.sh.

@@ -1,0 +1,43 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: ${RUN_NAME}
+  namespace: loadtest
+spec:
+  parallelism: ${PARALLELISM}
+  script:
+    configMap:
+      name: loadtest-scenarios
+      file: ${SCENARIO}.js
+  arguments: --out experimental-prometheus-rw=http://loadtest-prometheus-server/api/v1/write --tag run_id=${RUN_ID}
+  runner:
+    tolerations:
+      - key: loadtest
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    nodeSelector:
+      pool: loadtest-generators
+    resources:
+      requests: { cpu: 2,  memory: 4Gi }
+      limits:   { cpu: 4,  memory: 8Gi }
+    env:
+      - { name: RUN_ID,         value: "${RUN_ID}" }
+      - { name: TARGET_RPS,     value: "${TARGET_RPS}" }
+      - { name: VUS,            value: "${VUS}" }
+      - { name: SEND_RPS,       value: "${SEND_RPS}" }
+      - { name: POLL_RPS,       value: "${POLL_RPS}" }
+      - { name: DURATION,       value: "${DURATION}" }
+      - { name: ADMIN_URL,      value: "${ADMIN_URL}" }
+      - { name: SEND_URL,       value: "${SEND_URL}" }
+      - { name: INBOX_URL,      value: "${INBOX_URL}" }
+      - { name: CENTRIFUGO_URL, value: "${CENTRIFUGO_URL}" }
+      - { name: HERMES_JWT_SECRET,
+          valueFrom: { secretKeyRef: { name: hermes-loadtest-bootstrap, key: jwt_secret } } }
+      - { name: SEED_MANIFEST,  value: "/manifest/seed-manifest.json" }
+    volumeMounts:
+      - { name: manifest, mountPath: /manifest, readOnly: true }
+  volumes:
+    - name: manifest
+      secret:
+        secretName: loadtest-manifest

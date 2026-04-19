@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loadseed
+  namespace: loadtest
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels: { app: loadseed }
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: loadtest
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      nodeSelector:
+        pool: loadtest-generators
+      containers:
+        - name: loadseed
+          image: "${LOADSEED_IMAGE}"
+          args:
+            - --tenants=${LT_TENANTS}
+            - --users-per-tenant=${LT_USERS}
+            - --output=/manifest/seed-manifest.json
+          env:
+            - name: HERMES_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-loadtest-bootstrap
+                  key: database_url
+            - name: HERMES_API_KEY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-loadtest-bootstrap
+                  key: hmac_secret
+          volumeMounts:
+            - { name: manifest, mountPath: /manifest }
+      volumes:
+        - name: manifest
+          emptyDir: {}

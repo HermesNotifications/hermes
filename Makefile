@@ -215,3 +215,48 @@ configure-registry: ## Set ECR registry in K8s overlays (usage: make configure-r
 	@test -n "$(REGISTRY)" || { echo "Usage: make configure-registry REGISTRY=<ecr-url>"; echo "  Get it via: cd infra/terraform && terraform output -raw ecr_registry_url"; exit 1; }
 	sed -i'' -e 's|REGISTRY/|$(REGISTRY)/|g' deploy/k8s/overlays/staging/images/kustomization.yaml deploy/k8s/overlays/production/images/kustomization.yaml deploy/kargo/warehouse.yaml
 	@echo "Registry set to $(REGISTRY) in staging, production, and kargo overlays"
+
+# --- Load testing ---
+.PHONY: loadseed loadseed-clean
+loadseed:          ## Seed load-test dataset (default: 10 tenants, 10k users each)
+	go run ./cmd/loadseed \
+	  --tenants $(or $(LT_TENANTS),10) \
+	  --users-per-tenant $(or $(LT_USERS),10000) \
+	  --output loadtest/seed-manifest.json
+
+loadseed-clean:    ## Delete all entities from the current seed manifest
+	go run ./cmd/loadseed --cleanup --output loadtest/seed-manifest.json
+
+.PHONY: loadtest-local loadtest-local-clean
+loadtest-local:    ## Run a local load test (SCENARIO=send|inbox-mixed|soak TARGET_RPS=... DURATION=...)
+	SCENARIO=$(or $(SCENARIO),send) \
+	TARGET_RPS=$(or $(TARGET_RPS),50) \
+	VUS=$(or $(VUS),50) \
+	DURATION=$(or $(DURATION),30s) \
+	SEND_URL=$(or $(SEND_URL),http://localhost:8088) \
+	ADMIN_URL=$(or $(ADMIN_URL),http://localhost:8080) \
+	INBOX_URL=$(or $(INBOX_URL),http://localhost:8086) \
+	CENTRIFUGO_URL=$(or $(CENTRIFUGO_URL),ws://localhost:8000/connection/websocket) \
+	loadtest/scripts/run-local.sh
+
+loadtest-local-clean: ## Tear down local load-test infra and clean seed
+	docker compose -f docker-compose.yml -f loadtest/docker-compose.loadtest.yml down -v
+	[ -f loadtest/seed-manifest.json ] && go run ./cmd/loadseed --cleanup || true
+	rm -f loadtest/seed-manifest.json
+
+.PHONY: loadtest-k8s loadtest-k8s-clean loadtest-k8s-install
+loadtest-k8s-install: ## One-time install of k6-operator + Prom + Grafana in loadtest namespace
+	loadtest/k8s/install.sh
+
+loadtest-k8s:      ## Run a cluster load test (SCENARIO=... PARALLELISM=... VUS=... DURATION=... LOADSEED_IMAGE=...)
+	SCENARIO=$(or $(SCENARIO),send) \
+	PARALLELISM=$(or $(PARALLELISM),2) \
+	TARGET_RPS=$(or $(TARGET_RPS),500) \
+	VUS=$(or $(VUS),1000) \
+	DURATION=$(or $(DURATION),10m) \
+	LOADSEED_IMAGE=$(or $(LOADSEED_IMAGE),ghcr.io/hermes-notifications/loadseed:latest) \
+	loadtest/scripts/run-k8s.sh
+
+loadtest-k8s-clean: ## Delete the last TestRun and the seed Job
+	kubectl -n loadtest delete testrun --all || true
+	kubectl -n loadtest delete job loadseed --ignore-not-found

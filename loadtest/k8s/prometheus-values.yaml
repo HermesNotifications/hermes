@@ -1,0 +1,27 @@
+# Helm values for prometheus-community/prometheus (standalone, not kube-prometheus-stack)
+server:
+  extraArgs:
+    web.enable-remote-write-receiver: ""
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+  retention: 24h
+  tolerations:
+    - key: loadtest
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  nodeSelector:
+    pool: loadtest-generators
+  resources:
+    requests: { cpu: 500m, memory: 2Gi }
+    limits:   { cpu: 2,    memory: 4Gi }
+
+alertmanager:
+  enabled: false
+pushgateway:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+kube-state-metrics:
+  enabled: false

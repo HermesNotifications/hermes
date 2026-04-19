@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 15s
+
+# k6 pushes via remote-write on the receiver endpoint.
+# Enabled by the --web.enable-remote-write-receiver flag on startup.
+scrape_configs: []

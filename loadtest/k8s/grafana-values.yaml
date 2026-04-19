@@ -1,0 +1,33 @@
+# Helm values for grafana/grafana
+adminPassword: admin
+service:
+  type: ClusterIP
+tolerations:
+  - key: loadtest
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+nodeSelector:
+  pool: loadtest-generators
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://loadtest-prometheus-server
+        isDefault: true
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: loadtest
+        orgId: 1
+        folder: Load Test
+        type: file
+        disableDeletion: false
+        options:
+          path: /var/lib/grafana/dashboards/loadtest
+dashboardsConfigMaps:
+  loadtest: loadtest-dashboards
