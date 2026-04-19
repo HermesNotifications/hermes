@@ -243,3 +243,20 @@ loadtest-local-clean: ## Tear down local load-test infra and clean seed
 	docker compose -f docker-compose.yml -f loadtest/docker-compose.loadtest.yml down -v
 	[ -f loadtest/seed-manifest.json ] && go run ./cmd/loadseed --cleanup || true
 	rm -f loadtest/seed-manifest.json
+
+.PHONY: loadtest-k8s loadtest-k8s-clean loadtest-k8s-install
+loadtest-k8s-install: ## One-time install of k6-operator + Prom + Grafana in loadtest namespace
+	loadtest/k8s/install.sh
+
+loadtest-k8s:      ## Run a cluster load test (SCENARIO=... PARALLELISM=... VUS=... DURATION=... LOADSEED_IMAGE=...)
+	SCENARIO=$(or $(SCENARIO),send) \
+	PARALLELISM=$(or $(PARALLELISM),2) \
+	TARGET_RPS=$(or $(TARGET_RPS),500) \
+	VUS=$(or $(VUS),1000) \
+	DURATION=$(or $(DURATION),10m) \
+	LOADSEED_IMAGE=$(or $(LOADSEED_IMAGE),ghcr.io/hermes-notifications/loadseed:latest) \
+	loadtest/scripts/run-k8s.sh
+
+loadtest-k8s-clean: ## Delete the last TestRun and the seed Job
+	kubectl -n loadtest delete testrun --all || true
+	kubectl -n loadtest delete job loadseed --ignore-not-found
