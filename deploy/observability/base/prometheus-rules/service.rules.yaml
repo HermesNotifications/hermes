@@ -1,0 +1,53 @@
+# Per-service alert rules. Every alert MUST have a matching runbook at
+# docs/observability/runbooks/<slug>.md (CI check enforces this pairing).
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hermes-service
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: hermes.service
+      rules:
+        - alert: ServiceDown
+          expr: up{job=~"hermes-.+"} == 0
+          for: 2m
+          labels:
+            severity: page
+            component: service
+          annotations:
+            summary: "Service {{ $labels.job }} is down"
+            description: "No successful scrape for {{ $labels.job }} (pod {{ $labels.pod }}) for 2 minutes."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/service-down.md"
+
+        - alert: HighErrorRate
+          expr: |
+            sum by (service) (rate(http_server_request_duration_seconds_count{http_response_status_code=~"5..",service=~"hermes-.+"}[5m]))
+              /
+            sum by (service) (rate(http_server_request_duration_seconds_count{service=~"hermes-.+"}[5m]))
+              > 0.01
+          for: 5m
+          labels:
+            severity: page
+            component: service
+          annotations:
+            summary: "High 5xx error rate on {{ $labels.service }}"
+            description: "{{ $labels.service }} 5xx rate is {{ $value | humanizePercentage }} (>1%) for 5 minutes."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/high-error-rate.md"
+
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (service, le) (rate(http_server_request_duration_seconds_bucket{service=~"hermes-.+"}[5m]))
+            ) > 1.0
+          for: 10m
+          labels:
+            severity: warn
+            component: service
+          annotations:
+            summary: "High p95 latency on {{ $labels.service }}"
+            description: "{{ $labels.service }} p95 is {{ $value }}s (>1s) for 10 minutes."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/high-latency.md"

@@ -15,6 +15,12 @@ patches:
 # DATABASE_URL and REDIS_URL are provided by ExternalSecret (hermes-secrets)
 # No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL
 configMapGenerator:
+- name: hermes-config
+  behavior: merge
+  literals:
+  - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=staging
+  options:
+    disableNameSuffixHash: true
 - name: hermes-domain
   literals:
   - DOMAIN=staging.hermes.dgr.io # ← Set your staging domain here

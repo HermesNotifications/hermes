@@ -34,6 +34,7 @@ configMapGenerator:
       - HERMES_DATABASE_URL=postgres://hermes:hermes@postgres:5432/hermes?sslmode=disable
       - HERMES_REDIS_URL=redis://redis:6379/0
       - HERMES_EMAIL_SMTP_HOST=mailpit
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=local
     options:
       disableNameSuffixHash: true
   # Override centrifugo config for local dev (admin enabled, dev secrets)

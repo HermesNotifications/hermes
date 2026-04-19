@@ -1,0 +1,46 @@
+# ArgoCD Application for Hermes observability (staging).
+#
+# Observability uses a simpler release model than services:
+#   - Services: Kargo promotes image tags through stages, ArgoCD applies the overlay
+#   - Observability: plain GitOps PR-based release of the Helm chart versions pinned in values
+#
+# Requires `kustomize.buildOptions: --enable-helm` in the argocd-cm ConfigMap so
+# Kustomize can inflate helmCharts blocks. See docs/observability/operations.md.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hermes-observability-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:darylrobbins/hermes.git
+    targetRevision: main
+    path: deploy/observability/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      # CRDs from kube-prometheus-stack are large; serverSideApply handles them.
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  ignoreDifferences:
+    # kube-prometheus-stack operator mutates these at runtime.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

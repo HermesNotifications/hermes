@@ -69,3 +69,6 @@ node_modules/
 /artifacts/
 /loadtest/seed-manifest.json
 /loadtest/dist/
+
+# Kustomize helmCharts inflation (downloaded by `kustomize build --enable-helm`)
+/deploy/observability/base/*/charts/

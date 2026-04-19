@@ -21,6 +21,12 @@ patches:
 # No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL
 
 configMapGenerator:
+  - name: hermes-config
+    behavior: merge
+    literals:
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production
+    options:
+      disableNameSuffixHash: true
   - name: hermes-domain
     literals:
       - DOMAIN=hermes.example.com  # ← Set your production domain here

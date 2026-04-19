@@ -1,0 +1,49 @@
+{
+  "annotations": {"list": []},
+  "description": "End-to-end notification pipeline: send → dispatch → workers → event-writer.",
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "Notifications per minute",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "sum(rate(hermes_notifications_sent_total[1m])) * 60", "legendFormat": "sent", "refId": "A"},
+        {"expr": "sum(rate(hermes_notifications_delivered_total[1m])) * 60", "legendFormat": "delivered", "refId": "B"}
+      ]
+    },
+    {
+      "title": "Per-channel error rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "sum by (channel) (rate(hermes_deliveries_failed_total[5m]))", "legendFormat": "{{channel}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "NATS consumer pending messages",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "sum by (stream, consumer) (nats_jetstream_consumer_num_pending)", "legendFormat": "{{stream}}/{{consumer}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Dispatch template resolution hit rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "sum(rate(hermes_template_cache_hits_total[5m])) / sum(rate(hermes_template_cache_lookups_total[5m]))", "legendFormat": "hit ratio", "refId": "A"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["hermes", "pipeline"],
+  "templating": {"list": []},
+  "time": {"from": "now-3h", "to": "now"},
+  "title": "Hermes pipeline — overview",
+  "uid": "hermes-pipeline-overview",
+  "version": 1
+}

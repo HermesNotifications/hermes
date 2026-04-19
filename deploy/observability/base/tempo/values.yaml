@@ -1,0 +1,39 @@
+# Tempo single-binary mode (Phase 1).
+# Filesystem storage, 14d retention, 100% head sampling (collector decides downstream).
+# Phase 2 migrates to S3 via Crossplane and adds tail-based sampling at the collector.
+
+tempo:
+  retention: 336h  # 14d
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  # Generate RED-style service metrics from traces for free.
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://kps-prometheus.observability.svc:9090/api/v1/write
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+persistence:
+  enabled: true
+  size: 50Gi
+
+# Expose a ServiceMonitor so Prometheus scrapes Tempo's own metrics.
+serviceMonitor:
+  enabled: true
+  labels:
+    app.kubernetes.io/part-of: hermes

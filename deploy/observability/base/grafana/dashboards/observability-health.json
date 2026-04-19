@@ -1,0 +1,65 @@
+{
+  "annotations": {"list": []},
+  "description": "Self-monitoring for the observability stack itself.",
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "OTel Collector — spans received / sec",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "sum by (receiver) (rate(otelcol_receiver_accepted_spans[5m]))", "legendFormat": "{{receiver}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "OTel Collector — exporter send failures",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "sum by (exporter) (rate(otelcol_exporter_send_failed_spans[5m]))", "legendFormat": "spans/{{exporter}}", "refId": "A"},
+        {"expr": "sum by (exporter) (rate(otelcol_exporter_send_failed_metric_points[5m]))", "legendFormat": "metrics/{{exporter}}", "refId": "B"}
+      ]
+    },
+    {
+      "title": "Prometheus scrape success rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "sum(up) / count(up)", "legendFormat": "success rate", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Loki ingestion rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "sum(rate(loki_distributor_bytes_received_total[5m]))", "legendFormat": "bytes/sec", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Tempo ingestion rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {"expr": "sum(rate(tempo_ingester_bytes_received_total[5m]))", "legendFormat": "bytes/sec", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Alertmanager — alerts firing",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "sum(ALERTS{alertstate=\"firing\"})", "refId": "A"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["observability", "self-monitoring"],
+  "templating": {"list": []},
+  "time": {"from": "now-3h", "to": "now"},
+  "title": "Observability — stack health",
+  "uid": "observability-health",
+  "version": 1
+}

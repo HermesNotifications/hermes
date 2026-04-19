@@ -1,0 +1,49 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hermes-infra
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: hermes.infra
+      rules:
+        - alert: DBPoolSaturated
+          expr: |
+            pg_stat_database_numbackends{datname="hermes"}
+              /
+            pg_settings_max_connections
+              > 0.9
+          for: 5m
+          labels:
+            severity: page
+            component: infra
+          annotations:
+            summary: "Postgres connection pool >90% saturated"
+            description: "Active connections {{ $value | humanizePercentage }} of max_connections for 5 minutes."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
+
+        - alert: PrometheusTargetDown
+          expr: up == 0
+          for: 10m
+          labels:
+            severity: warn
+            component: observability
+          annotations:
+            summary: "Prometheus target {{ $labels.job }} down"
+            description: "Prometheus has been unable to scrape {{ $labels.job }} ({{ $labels.instance }}) for 10 minutes."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/prometheus-target-down.md"
+
+        - alert: DiskPressure
+          expr: |
+            (1 - (kubelet_volume_stats_available_bytes{namespace="observability"} / kubelet_volume_stats_capacity_bytes{namespace="observability"}))
+              > 0.8
+          for: 10m
+          labels:
+            severity: page
+            component: observability
+          annotations:
+            summary: "Observability PV {{ $labels.persistentvolumeclaim }} >80% full"
+            description: "PVC {{ $labels.persistentvolumeclaim }} utilization {{ $value | humanizePercentage }}."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/disk-pressure.md"

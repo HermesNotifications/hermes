@@ -1,0 +1,21 @@
+# Staging: inject DD_API_KEY into the OTel Collector Deployment so the datadog exporter works.
+#
+# This patch only adds the env-source — it doesn't alter the Collector's config ConfigMap.
+# To actually add `datadog` into each pipeline's exporter list, the cleaner approach is an
+# environment-specific values file passed to the chart. That refactor is tracked as a
+# follow-up; for Phase 1 rollout, the base config includes `datadog` in the exporters section
+# but NOT in the pipelines. Staging/production flip it on by regenerating the Collector config
+# via a separate ConfigMap override (see docs/observability/operations.md).
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector-opentelemetry-collector
+spec:
+  template:
+    spec:
+      containers:
+        - name: opentelemetry-collector
+          envFrom:
+            - secretRef:
+                name: otel-collector-dd

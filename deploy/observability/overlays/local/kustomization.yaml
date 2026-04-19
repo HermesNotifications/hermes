@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - postgres-exporter-dsn.yaml  # inline dev DSN (no ExternalSecret in local)
+
+patches:
+  # k3d has less headroom than a real cluster — shrink PVs and resource requests.
+  - path: patches/shrink-prometheus.yaml
+    target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: Prometheus
+      name: kps-prometheus
+  - path: patches/shrink-loki.yaml
+    target:
+      kind: StatefulSet
+      name: loki
+  - path: patches/shrink-tempo.yaml
+    target:
+      kind: StatefulSet
+      name: tempo
+  - path: patches/shrink-alertmanager.yaml
+    target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: Alertmanager
+      name: kps-alertmanager
+
+# The datadog exporter is omitted in local: no DD_API_KEY, no datadog in pipeline exporters.
+# (Base config never references it in pipelines — staging/production overlays add it back.)

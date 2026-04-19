@@ -22,5 +22,9 @@ configMapGenerator:
     literals:
       - HERMES_NATS_URL=nats://nats:4222
       - HERMES_CENTRIFUGO_API_URL=http://centrifugo:8000
+      # OpenTelemetry — cluster-local Collector in the observability namespace.
+      # Overlays may override to an out-of-cluster endpoint.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-opentelemetry-collector.observability.svc:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
     options:
       disableNameSuffixHash: true

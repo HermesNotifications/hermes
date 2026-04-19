@@ -7,6 +7,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2/types"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
 )
 
 // SESProvider sends emails via AWS SES v2.
@@ -22,6 +23,7 @@ func NewSESProvider(cfg Config) (*SESProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
+	otelaws.AppendMiddlewares(&awsCfg.APIOptions)
 
 	return &SESProvider{
 		client: sesv2.NewFromConfig(awsCfg),

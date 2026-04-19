@@ -42,6 +42,8 @@ spec:
               value: "8082"
             - name: DD_SERVICE
               value: hermes-worker-events
+            - name: OTEL_SERVICE_NAME
+              value: hermes-worker-events
           resources:
             requests:
               cpu: 50m

@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hermes-pipeline
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: hermes.pipeline
+      rules:
+        - alert: NATSConsumerLag
+          expr: nats_jetstream_consumer_num_pending > 1000
+          for: 5m
+          labels:
+            severity: warn
+            component: pipeline
+          annotations:
+            summary: "NATS consumer lag on {{ $labels.stream }}/{{ $labels.consumer }}"
+            description: "{{ $labels.consumer }} on {{ $labels.stream }} has {{ $value }} pending messages for 5 minutes."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/nats-consumer-lag.md"

@@ -1,0 +1,10 @@
+# Local overlay: inline DSN Secret for postgres-exporter.
+# DO NOT use this pattern in staging/production — those overlays use ExternalSecret.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-exporter-dsn
+type: Opaque
+stringData:
+  dsn: "postgresql://hermes:hermes@postgres.hermes.svc:5432/hermes?sslmode=disable"

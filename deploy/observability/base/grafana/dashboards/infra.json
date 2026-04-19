@@ -1,0 +1,66 @@
+{
+  "annotations": {"list": []},
+  "description": "Infrastructure dependencies: NATS, Postgres, Redis.",
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "NATS — JetStream bytes stored",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "sum by (stream) (nats_jetstream_stream_bytes)", "legendFormat": "{{stream}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "NATS — Consumer lag",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "sum by (stream, consumer) (nats_jetstream_consumer_num_pending)", "legendFormat": "{{stream}}/{{consumer}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Postgres — Active connections",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "pg_stat_database_numbackends{datname=\"hermes\"}", "legendFormat": "{{datname}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Postgres — Transactions / sec",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "rate(pg_stat_database_xact_commit{datname=\"hermes\"}[5m])", "legendFormat": "commit", "refId": "A"},
+        {"expr": "rate(pg_stat_database_xact_rollback{datname=\"hermes\"}[5m])", "legendFormat": "rollback", "refId": "B"}
+      ]
+    },
+    {
+      "title": "Redis — Ops / sec",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {"expr": "rate(redis_commands_processed_total[5m])", "legendFormat": "ops/sec", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Redis — Memory used",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "redis_memory_used_bytes", "legendFormat": "used", "refId": "A"},
+        {"expr": "redis_memory_max_bytes", "legendFormat": "max", "refId": "B"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["hermes", "infra"],
+  "templating": {"list": []},
+  "time": {"from": "now-3h", "to": "now"},
+  "title": "Hermes infra — NATS / Postgres / Redis",
+  "uid": "hermes-infra",
+  "version": 1
+}

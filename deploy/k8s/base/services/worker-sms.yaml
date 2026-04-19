@@ -42,6 +42,8 @@ spec:
               value: "8084"
             - name: DD_SERVICE
               value: hermes-worker-sms
+            - name: OTEL_SERVICE_NAME
+              value: hermes-worker-sms
           resources:
             requests:
               cpu: 50m

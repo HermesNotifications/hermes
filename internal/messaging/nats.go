@@ -7,7 +7,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/tracing"
+	"github.com/hermes-notifications/hermes/internal/observability"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -59,10 +59,11 @@ func (c *Client) SetupStreams(ctx context.Context) error {
 
 func (c *Client) Publish(ctx context.Context, subject string, data []byte) error {
 	msg := &nats.Msg{Subject: subject, Data: data}
-	_, span := tracing.InjectNATS(ctx, msg)
-	defer span.Finish()
+	_, span := observability.InjectNATS(ctx, msg)
+	defer span.End()
 
 	_, err := c.js.PublishMsg(ctx, msg)
+	observability.RecordError(span, err)
 	return err
 }
 
@@ -126,8 +127,8 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 
 	for i := 0; i < concurrency; i++ {
 		_, err = cons.Consume(func(msg jetstream.Msg) {
-			ctx, span := tracing.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
-			defer span.Finish()
+			ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
+			defer span.End()
 
 			meta, _ := msg.Metadata()
 			attempt := uint64(1)

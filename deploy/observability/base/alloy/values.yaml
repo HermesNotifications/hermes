@@ -1,0 +1,97 @@
+# Grafana Alloy — DaemonSet log collector.
+# Scrapes container stdout on each node, parses JSON (slog output), labels with pod metadata,
+# forwards to Loki. During dual-emit the Datadog Agent DaemonSet continues independent log
+# collection — Alloy does not need to double-ship to DD.
+
+controller:
+  type: daemonset
+
+alloy:
+  configMap:
+    content: |
+      // --- Discover pods ---
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        // Only Hermes pods — by name prefix (the part-of label only lands on
+        // top-level objects, not pod templates, so we match the pod's own name label).
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          regex         = "hermes-.*"
+          action        = "keep"
+        }
+
+        // Standard Loki labels.
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "service"
+        }
+      }
+
+      // --- Read container logs from disk ---
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.process.parse.receiver]
+      }
+
+      // --- Parse slog JSON and promote key fields to labels/structured metadata ---
+      loki.process "parse" {
+        forward_to = [loki.write.default.receiver]
+
+        // Expect slog JSON; tolerate non-JSON lines (some k8s-level noise).
+        stage.json {
+          expressions = {
+            level    = "level",
+            msg      = "msg",
+            trace_id = "trace_id",
+            span_id  = "span_id",
+          }
+        }
+
+        // Promote `level` to a label; keep trace_id/span_id as structured metadata for
+        // log↔trace correlation in Grafana.
+        stage.labels {
+          values = {
+            level = "",
+          }
+        }
+        stage.structured_metadata {
+          values = {
+            trace_id = "",
+            span_id  = "",
+          }
+        }
+      }
+
+      // --- Ship to Loki ---
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.observability.svc:3100/loki/api/v1/push"
+        }
+      }
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+# Alloy needs host path access to /var/log/pods to read container stdout.
+# The chart wires these mounts automatically for the `daemonset` controller type.

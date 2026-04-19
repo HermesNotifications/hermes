@@ -97,6 +97,18 @@ All config via environment variables with `HERMES_` prefix. Defaults target Dock
 
 When writing new handlers, follow the existing pattern: define methods on the store interface, implement in `internal/store/`, create mock in the service's `testutil_test.go`, test handlers with httptest.
 
+## Observability
+
+Hermes emits telemetry via OpenTelemetry to an in-cluster **LGTM stack** (Loki, Grafana, Tempo, Prometheus) running in the `observability` namespace, with **Datadog dual-emit** during Phase 1. Canonical docs:
+
+- **Start here:** [docs/observability/README.md](docs/observability/README.md)
+- **Adding metrics/traces/logs:** [docs/observability/instrumentation-guide.md](docs/observability/instrumentation-guide.md)
+- **Naming / label rules:** [docs/observability/semantic-conventions.md](docs/observability/semantic-conventions.md)
+- **Handling alerts:** [docs/observability/runbooks/](docs/observability/runbooks/)
+- **Local dev (`tilt up -- --observability`):** [docs/observability/local-dev.md](docs/observability/local-dev.md)
+
+New services MUST call `internal/observability.Init` in `main.go` and follow the semantic conventions (no unbounded-cardinality metric labels). New alert rules MUST ship with a matching runbook in the same PR.
+
 ## Tool Usage Rules
 
 **Always use dedicated tools instead of shell commands:**

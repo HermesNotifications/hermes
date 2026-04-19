@@ -42,6 +42,8 @@ spec:
               value: "8088"
             - name: DD_SERVICE
               value: hermes-send
+            - name: OTEL_SERVICE_NAME
+              value: hermes-send
           resources:
             requests:
               cpu: 50m

@@ -42,6 +42,8 @@ spec:
               value: "8086"
             - name: DD_SERVICE
               value: hermes-inbox
+            - name: OTEL_SERVICE_NAME
+              value: hermes-inbox
           resources:
             requests:
               cpu: 50m

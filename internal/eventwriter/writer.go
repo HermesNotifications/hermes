@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/DataDog/dd-trace-go/v2/datastreams"
-	"github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/models"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermes-notifications/hermes/internal/observability"
 	"github.com/hermes-notifications/hermes/internal/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Writer struct {
@@ -48,32 +50,26 @@ func (w *Writer) Stop() {
 }
 
 func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
-	// Merge DSM pathways (fan-in) from all batched messages.
-	ctxs := make([]context.Context, len(items))
-	for i, item := range items {
-		ctxs[i] = item.Ctx
-	}
-	ctx := datastreams.MergeContexts(ctxs...)
-
-	// Create flush span with links back to each originating trace.
-	var links []tracer.SpanLink
+	// Collect span links back to each originating trace so the batch flush
+	// span connects to every input trace in Tempo's service graph.
+	// (Replaces the DSM-context merge from the dd-trace-go version —
+	// DSM is DD-proprietary; see docs/observability/adr/004-accepting-dsm-loss.md.)
+	var links []trace.Link
 	for _, item := range items {
-		if sp, ok := tracer.SpanFromContext(item.Ctx); ok {
-			links = append(links, tracer.SpanLink{
-				TraceID:     sp.Context().TraceIDLower(),
-				TraceIDHigh: sp.Context().TraceIDUpper(),
-				SpanID:      sp.Context().SpanID(),
-			})
+		if sc := trace.SpanContextFromContext(item.Ctx); sc.IsValid() {
+			links = append(links, trace.Link{SpanContext: sc})
 		}
 	}
-	opts := []tracer.StartSpanOption{
-		tracer.ResourceName("notification.events"),
-	}
-	if len(links) > 0 {
-		opts = append(opts, tracer.WithSpanLinks(links))
-	}
-	span, ctx := tracer.StartSpanFromContext(ctx, "eventwriter.flush", opts...)
-	defer span.Finish()
+
+	tracer := otel.Tracer("github.com/hermes-notifications/hermes/internal/eventwriter")
+	ctx, span := tracer.Start(context.Background(), "eventwriter.flush",
+		trace.WithLinks(links...),
+		trace.WithAttributes(
+			attribute.Int("batch.size", len(items)),
+			attribute.String("messaging.destination", "notification.events"),
+		),
+	)
+	defer span.End()
 
 	// Convert to models for DB insert.
 	dbEvents := make([]models.NotificationEvent, len(items))
@@ -94,9 +90,8 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 
 	// Batch insert events.
 	if err := w.store.InsertEvents(ctx, dbEvents); err != nil {
-		span.SetTag("error", true)
-		span.SetTag("error.message", err.Error())
-		w.logger.Error("batch insert events", "error", err, "count", len(items))
+		observability.RecordError(span, err)
+		w.logger.ErrorContext(ctx, "batch insert events", "error", err, "count", len(items))
 		return
 	}
 
@@ -118,11 +113,11 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 	// Batch update notification statuses.
 	if len(updates) > 0 {
 		if err := w.store.BatchUpdateNotificationStatuses(ctx, updates); err != nil {
-			w.logger.Error("batch update statuses", "error", err, "count", len(updates))
+			w.logger.ErrorContext(ctx, "batch update statuses", "error", err, "count", len(updates))
 		}
 	}
 
-	w.logger.Info("flushed events", "count", len(items))
+	w.logger.InfoContext(ctx, "flushed events", "count", len(items))
 }
 
 // eventToStatus maps event names to notification statuses.

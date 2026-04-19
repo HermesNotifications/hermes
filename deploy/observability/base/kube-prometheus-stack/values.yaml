@@ -1,0 +1,114 @@
+# kube-prometheus-stack Helm values (Hermes Phase 1)
+# - 15d Prometheus retention, 50Gi PV
+# - Alertmanager: 2 replicas for HA, 1Gi PV each, routing is a deliberate no-op (Phase 2 wires destinations)
+# - Grafana: dashboard ConfigMap sidecar enabled; dashboards live in deploy/observability/base/grafana/dashboards/
+# - Collects ServiceMonitors from any namespace with label `app.kubernetes.io/part-of: hermes`
+
+fullnameOverride: kps
+
+# --- Prometheus ---
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: "45GB"  # leave headroom under the 50Gi PV
+    # Scrape any ServiceMonitor/PodMonitor with our label, not just those in this namespace.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector:
+      matchLabels:
+        app.kubernetes.io/part-of: hermes
+    podMonitorNamespaceSelector:
+      matchLabels:
+        app.kubernetes.io/part-of: hermes
+    # Enable remote-write receiver so the OTel Collector's prometheusremotewrite exporter can push.
+    enableRemoteWriteReceiver: true
+    enableFeatures:
+      - exemplar-storage
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        memory: 4Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+
+# --- Alertmanager ---
+alertmanager:
+  alertmanagerSpec:
+    replicas: 2
+    retention: 120h
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+  # Phase 1: no-op route. Alerts fire and enter the inhibition/silencing UI but go nowhere.
+  # Phase 2 replaces this with a real receiver (Slack, then PagerDuty).
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "service"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: null-receiver
+    receivers:
+      - name: null-receiver
+
+# --- Grafana ---
+grafana:
+  adminPassword: admin  # overlay overrides via patch in staging/production
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  # Sidecar reads ConfigMaps with grafana_dashboard/grafana_datasource labels cluster-wide.
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+      label: grafana_dashboard
+      labelValue: "1"
+      provider:
+        foldersFromFilesStructure: true
+        allowUiUpdates: false
+    datasources:
+      enabled: true
+      searchNamespace: ALL
+      label: grafana_datasource
+      labelValue: "1"
+  # Default kube-prom-stack dashboards — keep them, they give free node/pod views.
+  defaultDashboardsEnabled: true
+  # Default data source (Prom) is auto-created; Loki + Tempo come from the sidecar ConfigMaps.
+
+# --- Defaults for bundled pieces we don't need to tweak ---
+nodeExporter:
+  enabled: true
+kubeStateMetrics:
+  enabled: true
+prometheusOperator:
+  admissionWebhooks:
+    patch:
+      enabled: true

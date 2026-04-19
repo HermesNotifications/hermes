@@ -8,12 +8,15 @@ import (
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermes-notifications/hermes/internal/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // NewLogger creates a structured JSON logger writing to stdout.
+// The handler is wrapped with observability.TraceHandler so every record
+// picks up trace_id/span_id when the context carries an active span.
 func NewLogger() *slog.Logger {
-	return slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	return slog.New(observability.WrapJSONHandler(slog.NewJSONHandler(os.Stdout, nil)))
 }
 
 // MustConnectDB connects to Postgres or exits the process.

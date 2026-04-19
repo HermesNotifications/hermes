@@ -2,8 +2,10 @@ load("ext://restart_process", "docker_build_with_restart")
 load("ext://helm_remote", "helm_remote")
 
 config.define_bool("datadog", usage="Enable Datadog Agent and orchestrion instrumentation (requires DD_API_KEY)")
+config.define_bool("observability", usage="Enable the OSS observability stack (Prometheus/Loki/Tempo/Grafana/OTel Collector)")
 cfg = config.parse()
 datadog_enabled = cfg.get("datadog", False)
+observability_enabled = cfg.get("observability", False)
 
 # --- Config ---
 k3d_registry = "k3d-hermes-registry.localhost:5111"
@@ -150,3 +152,32 @@ local_resource(
 if datadog_enabled:
     k8s_yaml(kustomize("deploy/k8s/overlays/local/datadog"))
     k8s_resource("datadog-agent", labels=["infra"])
+
+# --- Observability stack (opt-in) ---
+# Enable with: `tilt up -- --observability`
+# Brings up Prometheus, Loki, Tempo, Grafana, OTel Collector, Alloy DaemonSet, and infra
+# exporters in the `observability` namespace. kube-prometheus-stack CRDs must be installed
+# before anything that references them (PrometheusRule, ServiceMonitor) — Tilt handles the
+# ordering via resource_deps.
+if observability_enabled:
+    # `kustomize --enable-helm` is required; recent Tilt versions pass flags after `--`.
+    k8s_yaml(kustomize("deploy/observability/overlays/local", flags=["--enable-helm"]))
+    # Port-forward Grafana (admin/admin). Prometheus and Alertmanager are
+    # operator-managed StatefulSets — port-forward them manually if needed:
+    #   kubectl -n observability port-forward svc/kps-prometheus 9090:9090
+    #   kubectl -n observability port-forward svc/kps-alertmanager 9093:9093
+    #
+    # Grafana is a subchart of kube-prometheus-stack so it doesn't pick up the
+    # fullnameOverride — the resource name stays the chart default.
+    k8s_resource(
+        "kube-prometheus-stack-grafana",
+        port_forwards=["3001:3000"],
+        labels=["observability"],
+    )
+    k8s_resource("otel-collector-opentelemetry-collector", labels=["observability"])
+    k8s_resource("loki", labels=["observability"])
+    k8s_resource("tempo", labels=["observability"])
+    k8s_resource("alloy", labels=["observability"])
+    k8s_resource("nats-exporter", labels=["observability"])
+    k8s_resource("postgres-exporter", labels=["observability"])
+    k8s_resource("redis-exporter", labels=["observability"])

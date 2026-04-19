@@ -1,0 +1,133 @@
+# OpenTelemetry Collector — gateway pattern.
+# Single fan-out point for all app telemetry. Replacing/adding backends is a config change here.
+#
+# Phase 1 flow:
+#   hermes services ──OTLP/gRPC──▶ this collector
+#                                       ├── otlp/tempo           (traces → Tempo)
+#                                       ├── prometheusremotewrite (metrics → Prometheus)
+#                                       └── datadog               (all signals → DD, preserves parity)
+#
+# The datadog exporter is gated by the DD_API_KEY env var. Overlays inject it from ExternalSecret
+# in staging/production; the local overlay omits it entirely so the DD pipeline is a no-op branch.
+
+mode: deployment
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+replicaCount: 2
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+ports:
+  otlp:
+    enabled: true
+    containerPort: 4317
+    servicePort: 4317
+    hostPort: 0
+    protocol: TCP
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    hostPort: 0
+    protocol: TCP
+  metrics:
+    enabled: true
+    containerPort: 8888
+    servicePort: 8888
+    protocol: TCP
+
+extraEnvs:
+  - name: K8S_CLUSTER_NAME
+    value: hermes
+  # DD_API_KEY is projected from a Kubernetes Secret by overlays that enable the DD exporter.
+  # If unset, the datadog exporter is excluded from the `service.pipelines.*.exporters` list
+  # via the Kustomize overlay patch.
+
+serviceMonitor:
+  enabled: true
+  extraLabels:
+    app.kubernetes.io/part-of: hermes
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    batch:
+      send_batch_size: 8192
+      send_batch_max_size: 16384
+      timeout: 10s
+    resource:
+      attributes:
+        - key: k8s.cluster.name
+          value: ${env:K8S_CLUSTER_NAME}
+          action: insert
+        - key: deployment.environment
+          from_attribute: k8s.namespace.name
+          action: insert
+    # Strip high-cardinality attributes before they hit Prometheus (they remain on spans).
+    attributes/metrics:
+      actions:
+        - key: user_id
+          action: delete
+        - key: notification_id
+          action: delete
+        - key: tenant_id
+          action: delete
+
+  exporters:
+    otlp/tempo:
+      endpoint: tempo.observability.svc:4317
+      tls:
+        insecure: true
+    prometheusremotewrite:
+      endpoint: http://kps-prometheus.observability.svc:9090/api/v1/write
+      resource_to_telemetry_conversion:
+        enabled: true
+    # Debug exporter is useful during initial rollout — safe to leave enabled.
+    debug:
+      verbosity: basic
+    # The `datadog` exporter is NOT defined in the base config — defining it
+    # without DD_API_KEY fails validation even when unused by pipelines.
+    # Staging/production overlays inject it via their own values (see
+    # docs/observability/operations.md).
+
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
+    zpages:
+      endpoint: 0.0.0.0:55679
+
+  service:
+    extensions: [health_check, zpages]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, resource, batch]
+        exporters: [otlp/tempo]  # overlay adds `datadog` in staging/production
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, resource, attributes/metrics, batch]
+        exporters: [prometheusremotewrite]  # overlay adds `datadog` in staging/production
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, resource, batch]
+        exporters: [debug]  # logs mostly come via Alloy→Loki; OTLP logs path kept for services
+                            # that opt into structured OTel logging. Overlay adds `datadog`.
+    telemetry:
+      metrics:
+        address: 0.0.0.0:8888

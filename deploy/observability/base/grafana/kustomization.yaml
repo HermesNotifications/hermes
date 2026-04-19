@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - datasources.yaml
+
+# Dashboards are generated into a single ConfigMap for each file so the Grafana
+# sidecar can pick them up independently. Keep each dashboard JSON under 1MB
+# (ConfigMap limit: 1MiB per key).
+configMapGenerator:
+  - name: grafana-dashboard-hermes-service
+    files:
+      - dashboards/hermes-service.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      disableNameSuffixHash: true
+  - name: grafana-dashboard-pipeline-overview
+    files:
+      - dashboards/pipeline-overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      disableNameSuffixHash: true
+  - name: grafana-dashboard-infra
+    files:
+      - dashboards/infra.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      disableNameSuffixHash: true
+  - name: grafana-dashboard-observability-health
+    files:
+      - dashboards/observability-health.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      disableNameSuffixHash: true

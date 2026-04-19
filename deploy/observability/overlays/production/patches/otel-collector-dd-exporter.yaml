@@ -1,0 +1,17 @@
+# Production: inject DD_API_KEY into the OTel Collector so the datadog exporter can function.
+# The pipeline fan-out (adding `datadog` into each pipeline's exporters list) is handled by
+# swapping in a production values.yaml for the chart — see docs/observability/operations.md
+# for the tooling pattern.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector-opentelemetry-collector
+spec:
+  template:
+    spec:
+      containers:
+        - name: opentelemetry-collector
+          envFrom:
+            - secretRef:
+                name: otel-collector-dd

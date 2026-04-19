@@ -42,6 +42,8 @@ spec:
               value: "8083"
             - name: DD_SERVICE
               value: hermes-worker-email
+            - name: OTEL_SERVICE_NAME
+              value: hermes-worker-email
           resources:
             requests:
               cpu: 50m

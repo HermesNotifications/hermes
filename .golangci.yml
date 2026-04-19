@@ -43,6 +43,12 @@ linters:
         - (*github.com/centrifugal/centrifuge-go.Subscription).Unsubscribe
 
   exclusions:
+    # Kustomize helmCharts inflates upstream charts under
+    # deploy/observability/base/*/charts/ — they're gitignored but appear in
+    # the working tree after `kustomize build --enable-helm`. Skip them so
+    # the Loki chart's unused-test-helpers don't trip the unused linter.
+    paths:
+      - deploy/observability/base/.*/charts/.*
     rules:
       # Allow unchecked errors in test files
       - path: _test\.go
