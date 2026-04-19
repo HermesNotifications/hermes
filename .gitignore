@@ -68,3 +68,4 @@ node_modules/
 # load testing
 /artifacts/
 /loadtest/seed-manifest.json
+/loadtest/dist/

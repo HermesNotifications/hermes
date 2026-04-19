@@ -27,10 +27,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 K8S_DIR="$SCRIPT_DIR/../k8s"
 cd "$SCRIPT_DIR/../.."
 
-# 1) Build the scenarios ConfigMap from the repo's JS files.
+# 1) Bundle scenarios into self-contained files, then build a ConfigMap.
+loadtest/scripts/bundle.sh
 kubectl -n loadtest create configmap loadtest-scenarios \
-  --from-file=loadtest/scenarios/ \
-  --from-file=loadtest/lib/ \
+  --from-file=loadtest/dist/ \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # 2) Seed the dataset (blocks until complete).
