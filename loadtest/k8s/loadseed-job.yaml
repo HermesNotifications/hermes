@@ -5,6 +5,7 @@ metadata:
   namespace: loadtest
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 300
   template:
     metadata:
       labels: { app: loadseed }
@@ -19,7 +20,7 @@ spec:
         pool: loadtest-generators
       containers:
         - name: loadseed
-          image: "${LOADSEED_IMAGE}"   # built+pushed by CI, substituted by run-k8s.sh
+          image: "${LOADSEED_IMAGE}"
           args:
             - --tenants=${LT_TENANTS}
             - --users-per-tenant=${LT_USERS}
@@ -39,16 +40,4 @@ spec:
             - { name: manifest, mountPath: /manifest }
       volumes:
         - name: manifest
-          persistentVolumeClaim:
-            claimName: loadtest-manifest
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: loadtest-manifest
-  namespace: loadtest
-spec:
-  accessModes: [ReadWriteMany]
-  resources:
-    requests:
-      storage: 1Gi
+          emptyDir: {}

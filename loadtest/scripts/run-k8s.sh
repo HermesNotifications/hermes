@@ -33,9 +33,21 @@ kubectl -n loadtest create configmap loadtest-scenarios \
   --from-file=loadtest/dist/ \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# 2) Seed the dataset (blocks until complete).
+# 2) Seed the dataset (blocks until complete) and extract the manifest.
+kubectl -n loadtest delete job loadseed --ignore-not-found
 envsubst < "$K8S_DIR/loadseed-job.yaml" | kubectl apply -f -
 kubectl -n loadtest wait --for=condition=complete job/loadseed --timeout=30m
+
+# Find the completed pod and copy the manifest out while ttlSecondsAfterFinished keeps it around.
+POD=$(kubectl -n loadtest get pods -l app=loadseed -o jsonpath='{.items[0].metadata.name}')
+[ -n "$POD" ] || { echo "no loadseed pod found"; exit 1; }
+TMP_MANIFEST=$(mktemp)
+kubectl -n loadtest cp "${POD}:/manifest/seed-manifest.json" "$TMP_MANIFEST" -c loadseed
+[ -s "$TMP_MANIFEST" ] || { echo "manifest extraction failed (empty file)"; exit 1; }
+kubectl -n loadtest create secret generic loadtest-manifest \
+  --from-file=seed-manifest.json="$TMP_MANIFEST" \
+  --dry-run=client -o yaml | kubectl apply -f -
+rm -f "$TMP_MANIFEST"
 
 # 3) Apply the TestRun.
 envsubst < "$K8S_DIR/testrun.yaml" | kubectl apply -f -
