@@ -10,11 +10,12 @@ Hermes runs as a set of microservices:
 
 | Service | Port (default) | Purpose |
 |---------|---------------|---------|
-| **Admin** | 8080 | Server-side API: send notifications, manage groups/types, issue JWT tokens |
-| **Inbox** | 8081 | User-facing API: list/read/archive inbox notifications |
-| **User** | 8082 | User-facing API: profile management, notification preferences |
-| **Router** | - | Internal worker: routes notifications to delivery channels |
-| **Workers** | - | Internal workers: email, SMS, inbox delivery, event writing |
+| **Send** | 8088 | Server-side API: `POST /v1/send` (thin ingestion layer) |
+| **Admin** | 8080 | Server-side API: manage categories/subscriptions/templates, issue JWT tokens |
+| **Inbox** | 8086 | User-facing API: list/read/archive inbox notifications |
+| **User** | 8087 | User-facing API: profile management, notification preferences |
+| **Dispatch** | 8081 | Internal worker: resolves templates/channels, routes to delivery |
+| **Workers** | 8082–8085 | Internal workers: email, SMS, inbox delivery, event writing |
 
 **Admin API** is authenticated with API keys (server-to-server).
 **Inbox and User APIs** are authenticated with JWTs (user-facing).
@@ -69,49 +70,77 @@ The same JWT is used for:
 
 ## Setup Steps
 
+Hermes organizes preferences as **categories** → **subscriptions**, with reusable
+**templates** for content. (These were previously called "groups" and "types".)
+
 ### 1. Create a Tenant
 
-Tenants represent isolated organizations in Hermes. Create one per customer (or one for your whole app if single-tenant).
+Tenants represent isolated organizations in Hermes. Create one per customer (or one for your whole app if single-tenant). Tenant IDs are UUIDs assigned by Hermes.
 
-Tenants are currently created via direct database insertion or migration:
-
-```sql
-INSERT INTO tenants (id, name) VALUES ('my-tenant', 'My App');
+```bash
+curl -X POST https://hermes.example.com/admin/v1/tenants \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "My App" }'
 ```
+
+**Response:**
+
+```json
+{ "id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30", "name": "My App", "created_at": "2026-03-21T10:00:00Z" }
+```
+
+Use the returned `id` as `tenant_id` in subsequent calls.
 
 ### 2. Create an API Key
 
-API keys authenticate server-to-server calls to the Admin API. Store the raw key securely -- it is hashed before storage and cannot be retrieved.
+API keys authenticate server-to-server calls to the Admin API (`POST /admin/v1/apikeys`). The raw key is shown **once** on creation -- store it securely. Only an HMAC-SHA256 hash is persisted, so it cannot be retrieved later.
 
-### 3. Create Notification Groups
+### 3. Create Subscription Categories
 
-Groups organize notification types and control default delivery channels.
+Categories group related notifications and define default delivery channels and a default opt-in state. Three categories (`account`, `general`, `marketing`) are seeded by default; create more as needed.
 
 ```bash
-curl -X POST https://hermes.example.com/admin/v1/groups \
+curl -X POST https://hermes.example.com/admin/v1/subscriptions/categories \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "slug": "account",
     "name": "Account Notifications",
-    "default_channels": ["email", "inbox"]
+    "default_channels": ["email", "inbox"],
+    "default_state": "on"
   }'
 ```
 
-Available channels: `email`, `sms`, `inbox`, `webhook`.
+`default_state` is one of `on`, `off`, or `required` (required categories can't be opted out of). Available channels: `email`, `sms`, `inbox`.
 
-### 4. Create Notification Types (Optional)
+### 4. Create Subscriptions
 
-Types are templates within a group. They define reusable content templates with variable substitution.
+A subscription is a specific notification a user can opt in or out of, within a category.
 
 ```bash
-curl -X POST https://hermes.example.com/admin/v1/types \
+curl -X POST https://hermes.example.com/admin/v1/subscriptions/categories/CATEGORY_ID/subscriptions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "invoice-ready",
+    "name": "Invoice Ready"
+  }'
+```
+
+### 5. Create Templates (Optional)
+
+Templates define reusable per-channel content with variable substitution. Link a template to a subscription via `subscription_id`, or leave it null for a standalone template.
+
+```bash
+curl -X POST https://hermes.example.com/admin/v1/templates \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "slug": "welcome",
     "name": "Welcome Email",
-    "group_id": "GROUP_ID",
+    "subscription_id": "SUBSCRIPTION_ID",
+    "default_channels": ["email", "inbox"],
     "email_subject": "Welcome to {{.app_name}}, {{.user_name}}!",
     "email_body": "<h1>Welcome!</h1><p>Hi {{.user_name}}, thanks for joining.</p>",
     "inbox_title": "Welcome to {{.app_name}}",
@@ -123,16 +152,23 @@ Templates use Go `text/template` syntax. Variables are passed via the `data` fie
 
 ## Sending Notifications
 
-### Using a Notification Type (Templated)
+The recipient is always given under `to` (`tenant_id` + external `user_id`, plus optional
+`email`/`phone` overrides). Provide **either** a `template` slug **or** direct `content` --
+they are mutually exclusive. `POST /v1/send` is served by both the Admin service and the
+dedicated high-throughput Send service.
+
+### Using a Template
 
 ```bash
 curl -X POST https://hermes.example.com/admin/v1/send \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "tenant_id": "my-tenant",
-    "user_id": "ext-user-123",
-    "type": "welcome",
+    "to": {
+      "tenant_id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30",
+      "user_id": "ext-user-123"
+    },
+    "template": "welcome",
     "data": {
       "app_name": "Acme App",
       "user_name": "Alice"
@@ -147,9 +183,10 @@ curl -X POST https://hermes.example.com/admin/v1/send \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "tenant_id": "my-tenant",
-    "user_id": "ext-user-123",
-    "group": "account",
+    "to": {
+      "tenant_id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30",
+      "user_id": "ext-user-123"
+    },
     "content": {
       "title": "Your invoice is ready",
       "body": "Invoice #1234 for $99.00 is now available.",
@@ -164,7 +201,7 @@ curl -X POST https://hermes.example.com/admin/v1/send \
 
 ```json
 {
-  "notification_id": "01KM8EJ4JKTKJQBPXXMPJVGK4X"
+  "notification_id": "2qFh8Kd0Rb3Lm9Tx1Vn7Yc"
 }
 ```
 
@@ -194,7 +231,7 @@ curl https://hermes.example.com/admin/v1/notifications/NOTIFICATION_ID \
 ```json
 {
   "notification": {
-    "id": "01KM8EJ4JKTKJQBPXXMPJVGK4X",
+    "id": "2qFh8Kd0Rb3Lm9Tx1Vn7Yc",
     "tenant_id": "my-tenant",
     "user_id": "usr-internal-id",
     "status": "delivered",
@@ -207,7 +244,7 @@ curl https://hermes.example.com/admin/v1/notifications/NOTIFICATION_ID \
     {
       "id": "...",
       "channel": "email",
-      "event": "delivered",
+      "event": "email.delivered",
       "severity": "info",
       "created_at": "2026-03-21T10:00:02Z"
     }
@@ -232,7 +269,7 @@ curl "https://hermes.example.com/inbox/v1/inbox?limit=20&archived=false" \
 {
   "data": [
     {
-      "id": "01KM8EJ4JKTKJQBPXXMPJVGK4X",
+      "id": "2qFh8Kd0Rb3Lm9Tx1Vn7Yc",
       "title": "Your invoice is ready",
       "body": "Invoice #1234 for $99.00 is now available.",
       "action_url": "https://app.example.com/invoices/1234",
@@ -330,6 +367,10 @@ curl -X PUT https://hermes.example.com/user/v1/users/me/contacts \
   }'
 ```
 
+Preferences are modeled as a **preference center**: categories, each containing the
+subscriptions a user can opt in or out of. A subscription in a `required` category is not
+toggleable.
+
 ### List Notification Preferences
 
 ```bash
@@ -341,33 +382,46 @@ curl https://hermes.example.com/user/v1/users/me/preferences \
 
 ```json
 {
-  "data": [
+  "categories": [
     {
-      "user_id": "usr-internal-id",
-      "group_id": "group-1",
-      "channels": ["email", "inbox"]
+      "id": "sct_default_account",
+      "slug": "account",
+      "name": "Account",
+      "default_channels": ["email", "inbox"],
+      "default_state": "required",
+      "subscriptions": [
+        {
+          "id": "sub_invoice_ready",
+          "slug": "invoice-ready",
+          "name": "Invoice Ready",
+          "opted_in": true,
+          "toggleable": true
+        }
+      ]
     }
   ]
 }
 ```
 
-### Set Preference for a Group
+### Set a Preference
+
+Opt the user in or out of a single subscription:
 
 ```bash
-curl -X PUT https://hermes.example.com/user/v1/users/me/preferences/GROUP_ID \
+curl -X PUT https://hermes.example.com/user/v1/users/me/preferences/SUBSCRIPTION_ID \
   -H "Authorization: Bearer USER_JWT" \
   -H "Content-Type: application/json" \
   -d '{
-    "channels": ["inbox"]
+    "opted_in": false
   }'
 ```
 
-This overrides the group's default channels for this user. The user will only receive notifications via the specified channels.
+### Delete a Preference (Reset to Default)
 
-### Delete Preference (Reset to Default)
+Removes the explicit choice so the subscription falls back to its category's default state:
 
 ```bash
-curl -X DELETE https://hermes.example.com/user/v1/users/me/preferences/GROUP_ID \
+curl -X DELETE https://hermes.example.com/user/v1/users/me/preferences/SUBSCRIPTION_ID \
   -H "Authorization: Bearer USER_JWT"
 ```
 
@@ -394,15 +448,25 @@ const sub = centrifuge.newSubscription(`user#${hermesUserId}`);
 
 sub.on('publication', (ctx) => {
   const event = ctx.data;
-  console.log('Inbox event:', event);
-  // event.type = "inbox.updated"
-  // event.notification_id = "..."
-  // event.action = "read" | "unread" | "archive" | "unarchive" | "delete" | "read-all"
+  if (event.type === 'notification.new') {
+    // A new notification was delivered to the inbox:
+    //   event.id, event.title, event.body, event.created_at, event.timestamp
+    //   event.action = { url, label }   // present only if the notification has an action
+  } else if (event.type === 'inbox.updated') {
+    // The user's inbox state changed (from an inbox API action):
+    //   event.notification_id
+    //   event.action = "read" | "unread" | "archive" | "unarchive" | "delete" | "read-all"
+    //   event.unread_count, event.timestamp
+  }
 });
 
 sub.subscribe();
 centrifuge.connect();
 ```
+
+Two event types arrive on the user's channel: **`notification.new`** when a notification is
+delivered to the inbox, and **`inbox.updated`** when inbox state changes via an Inbox API action
+(both carry a `timestamp` in epoch milliseconds).
 
 The channel format is `user#<hermes_internal_user_id>`. Events are published when inbox actions occur (mark read, archive, new delivery, etc.).
 
@@ -412,17 +476,21 @@ The channel format is `user#<hermes_internal_user_id>`. Events are published whe
 
 All Admin endpoints require an API key: `Authorization: Bearer YOUR_API_KEY`.
 
+This is the high-level map; the generated spec at `api/admin/openapi.yaml` is authoritative.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/auth/token` | Exchange user ID + tenant ID for a Hermes JWT |
-| `POST` | `/v1/groups` | Create a notification group |
-| `GET` | `/v1/groups` | List notification groups |
-| `PUT` | `/v1/groups/:id` | Update a notification group |
-| `POST` | `/v1/types` | Create a notification type |
-| `GET` | `/v1/types` | List notification types |
-| `PUT` | `/v1/types/:id` | Update a notification type |
-| `DELETE` | `/v1/types/:id` | Delete a notification type |
+| `POST` / `GET` | `/v1/tenants` | Create / list tenants |
+| `POST` / `GET` / `DELETE` | `/v1/apikeys` (`/:id`) | Create, list, revoke API keys |
+| `GET` / `POST` | `/v1/subscriptions/categories` | List / create subscription categories |
+| `GET` / `PUT` / `DELETE` | `/v1/subscriptions/categories/:id` | Get / update / delete a category |
+| `GET` / `POST` | `/v1/subscriptions/categories/:category_id/subscriptions` | List / create subscriptions in a category |
+| `PUT` / `DELETE` | `/v1/subscriptions/:id` | Update / delete a subscription |
+| `GET` / `POST` | `/v1/templates` | List / create templates |
+| `PUT` / `DELETE` | `/v1/templates/:id` | Update / delete a template |
 | `POST` | `/v1/send` | Send a notification |
+| `GET` | `/v1/notifications` | List recent notifications |
 | `GET` | `/v1/notifications/:id` | Get notification status and events |
 
 ## Inbox API Reference
@@ -447,9 +515,9 @@ All User endpoints require a user JWT: `Authorization: Bearer USER_JWT`.
 |--------|------|-------------|
 | `GET` | `/v1/users/me` | Get current user profile |
 | `PUT` | `/v1/users/me/contacts` | Update email and/or phone |
-| `GET` | `/v1/users/me/preferences` | List notification preferences |
-| `PUT` | `/v1/users/me/preferences/:group_id` | Set channel preference for a group |
-| `DELETE` | `/v1/users/me/preferences/:group_id` | Delete preference (reset to group default) |
+| `GET` | `/v1/users/me/preferences` | List the preference center (categories + subscriptions) |
+| `PUT` | `/v1/users/me/preferences/:subscription_id` | Opt in/out of a subscription |
+| `DELETE` | `/v1/users/me/preferences/:subscription_id` | Delete preference (reset to category default) |
 
 ## Environment Variables
 
