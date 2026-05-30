@@ -16,7 +16,7 @@ func TestCreateNotification_And_GetByID(t *testing.T) {
 	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
-	tenantID := uuid.Notification.New().String()
+	tenantID := uuid.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)
@@ -72,7 +72,7 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
 
 	ctx := context.Background()
-	tenantID := uuid.Notification.New().String()
+	tenantID := uuid.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)

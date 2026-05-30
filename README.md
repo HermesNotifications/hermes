@@ -4,10 +4,10 @@ Event-driven notification platform. Send notifications across email, SMS, and in
 
 ## Architecture
 
-Go monorepo with 8 microservices connected via NATS JetStream:
+Go monorepo of nine services connected via NATS JetStream:
 
 ```
-API Client ──> Admin Service ──> NATS ──> Dispatch ──> NATS ──> Workers ──> NATS ──> Event Writer ──> Postgres
+API Client ──> Send ──> NATS ──> Dispatch ──> NATS ──> Workers ──> NATS ──> Event Writer ──> Postgres
                                            │
                                      ┌─────┼─────┐
                                      │     │     │
@@ -18,7 +18,7 @@ API Client ──> Admin Service ──> NATS ──> Dispatch ──> NATS ─�
                                                   (WebSocket)
 ```
 
-**Write path (API key auth):** Admin Service validates and persists notifications, publishes to NATS. Dispatch resolves templates and channels, fans out to delivery workers. Workers deliver via webhooks (email/SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status.
+**Write path (API key auth):** The Send service authenticates the request and publishes it to NATS (a thin ingestion layer). Dispatch persists the notification, resolves templates and channels, and fans out to delivery workers. Workers deliver via webhooks (email/SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status. The Admin service is the separate management API (tenants, keys, categories, templates, JWT issuance).
 
 **Read path (JWT auth):** Inbox Service serves paginated inbox. User Service manages profiles and notification preferences. Centrifugo provides real-time WebSocket push.
 
@@ -26,7 +26,8 @@ API Client ──> Admin Service ──> NATS ──> Dispatch ──> NATS ─�
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Admin | 8080 | Server-to-server API — tenants, groups, types, send |
+| Send | 8088 | Thin ingestion API — authenticates and publishes `POST /v1/send` to NATS |
+| Admin | 8080 | Server-to-server management API — tenants, categories, templates, API keys, JWT issuance |
 | Dispatch | 8081 | Resolves channels and templates, fans out to workers |
 | Event Writer | 8082 | Batch-inserts delivery events, updates notification status |
 | Email Worker | 8083 | Delivers email notifications via webhook |
@@ -48,7 +49,7 @@ API Client ──> Admin Service ──> NATS ──> Dispatch ──> NATS ─�
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Docker & Docker Compose
 - Make
 
@@ -102,17 +103,19 @@ The `hermes` CLI provides management commands and an interactive inbox viewer.
 go install ./cmd/hermes/
 
 # Configure
-export HERMES_URL=http://localhost:8080
+export HERMES_URL=http://localhost:8888   # k3d ingress
 export HERMES_API_KEY=<your-api-key>
 
 # Manage resources
-hermes groups list
-hermes types list
-hermes notifications send --type welcome --user user123
+hermes categories list
+hermes templates list
+hermes notifications send --tenant-id <uuid> --user-id user123 --template welcome --data '{"name":"Alice"}'
 
 # Interactive inbox (TUI with real-time updates)
-hermes inbox open --user user123
+hermes inbox open --tenant-id <uuid> --user-id user123
 ```
+
+See [docs/cli.md](docs/cli.md) for the full CLI reference.
 
 ## API
 
@@ -121,17 +124,17 @@ Two auth modes:
 - **Admin API** (API key) — `Authorization: Bearer <api-key>` — for server-to-server operations
 - **User API** (JWT) — `Authorization: Bearer <jwt>` — for inbox and user preference endpoints
 
-OpenAPI specs are generated with `make swagger` and available in `api/admin/` and `api/user/`.
+OpenAPI specs are generated with `make openapi` and available under `api/admin/`, `api/inbox/`, and `api/user/`. See [docs/api/README.md](docs/api/README.md).
 
 ### Send a notification
 
 ```bash
-curl -X POST http://localhost:8080/v1/send \
+curl -X POST http://localhost:8888/v1/send \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "type": "welcome",
-    "user_id": "user123",
+    "to": {"tenant_id": "<uuid>", "user_id": "user123"},
+    "template": "welcome",
     "data": {"name": "Alice"}
   }'
 ```
@@ -161,21 +164,22 @@ See [docs/deployment-guide.md](docs/deployment-guide.md) for the full deployment
 ## Project Structure
 
 ```
-cmd/                    # Service entry points
-  admin/                #   Admin API server
+cmd/                    # Service & tool entry points
+  send/                 #   Ingestion API (POST /v1/send)
+  admin/                #   Admin/management API server
   dispatch/             #   Notification dispatch
-  worker-{email,sms,inbox,events}/  # Delivery workers
+  worker-{email,sms,inbox,events}/  # Delivery workers + event writer
   inbox/                #   User inbox API
   user/                 #   User service API
   hermes/               #   CLI tool
-  migrate/              #   Database migration runner
+  migrate/ seed/ cleanup/ loadseed/ openapi/  # One-shot tools
 internal/               # Shared packages
   store/                #   Database layer (all services)
   config/               #   Environment configuration
   nats/                 #   NATS message contracts
   models/               #   Shared data models
   middleware/           #   HTTP middleware (auth, logging)
-  id/                   #   Crockford Base32 ID generation
+  id/v2/                #   Base62 sortable ID generation
 migrations/             # SQL migrations
 deploy/                 # Kubernetes manifests
   k8s/base/             #   Base Kustomize manifests
@@ -185,10 +189,19 @@ deploy/                 # Kubernetes manifests
 infra/                  # Infrastructure as code
   terraform/            #   AWS resources (EKS, Aurora, ElastiCache, ECR)
   scripts/              #   Cluster bootstrap scripts
-api/                    # Generated OpenAPI specs
-docs/                   # Integration & deployment guides
+api/                    # Generated OpenAPI specs + AsyncAPI contract
+docs/                   # Documentation hub (see docs/README.md)
 tests/e2e/              # End-to-end tests
 ```
+
+## Documentation
+
+The full documentation hub is **[docs/README.md](docs/README.md)**. Highlights:
+
+- [Architecture](docs/architecture.md) · [Services](docs/services.md) · [Data Model](docs/data-model.md)
+- [Development](docs/development.md) · [Testing](docs/testing.md) · [Contributing](CONTRIBUTING.md)
+- [API Reference](docs/api/README.md) · [Integration Guide](docs/integration-guide.md) · [CLI](docs/cli.md)
+- [Configuration](docs/configuration.md) · [Self-Hosting](docs/self-hosting/quickstart.md) · [Deployment](docs/deployment-guide.md) · [Observability](docs/observability/README.md)
 
 ## Make Targets
 

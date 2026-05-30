@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/admin"
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/database"
@@ -25,6 +24,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/email"
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermes-notifications/hermes/internal/send"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -74,8 +74,8 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	// ── Store + Services ────────────────────────────────────────────────
 	st := postgres.New(pool)
 
-	// Admin server
-	srv := admin.NewServer(st, st, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	// Send server (with API key auth)
+	srv := send.NewServer(st, natsClient, redisClient, pool, "test-hmac-secret", logger)
 	srv.SetSkipAuth(false)
 	handler := srv.Handler()
 
@@ -116,13 +116,17 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	}
 
 	// API key
-	rawKey := "hms_email_" + uuid.New().String()
-	keyHash, err := auth.HashAPIKey(rawKey)
+	rawKey, keyID, err := auth.GenerateAPIKey("")
 	if err != nil {
-		t.Fatalf("hash key: %v", err)
+		t.Fatalf("generate key: %v", err)
 	}
+	_, secret, err := auth.ParseAPIKey(rawKey)
+	if err != nil {
+		t.Fatalf("parse key: %v", err)
+	}
+	keyHash := auth.HMACHashAPIKey(secret, "test-hmac-secret")
 	_, err = pool.Exec(ctx, "INSERT INTO api_keys (id, key_hash, name) VALUES ($1, $2, $3)",
-		uuid.New().String(), keyHash, "Email E2E Key")
+		keyID, keyHash, "Email E2E Key")
 	if err != nil {
 		t.Fatalf("create api key: %v", err)
 	}
@@ -140,31 +144,16 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 		return rec
 	}
 
-	// Create group with email channel
-	groupSlug := "email-grp-" + runID
-	rec := doRequest("POST", "/v1/groups", map[string]any{
-		"slug":             groupSlug,
-		"name":             "Email Test Group",
-		"default_channels": []string{"email"},
-	})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create group: expected 201, got %d: %s", rec.Code, rec.Body.String())
-	}
-	var groupResp map[string]any
-	json.NewDecoder(rec.Body).Decode(&groupResp)
-	groupID := groupResp["id"].(string)
-
-	// Create notification type with email templates
-	typeSlug := "email.type." + runID
-	rec = doRequest("POST", "/v1/types", map[string]any{
-		"group_id":      groupID,
-		"slug":          typeSlug,
-		"name":          "Email Test Type",
-		"email_subject": "Welcome {{.name}}!",
-		"email_body":    "<h1>Hello {{.name}}</h1><p>Your order #{{.order_id}} has been confirmed.</p>",
-	})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create type: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	// Seed a standalone template with email content (default channel: email).
+	templateSlug := "email.template." + runID
+	_, err = pool.Exec(ctx,
+		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, email_body)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		uuid.New().String(), templateSlug, "Email Test Template", []string{"email"},
+		"Welcome {{.name}}!", "<h1>Hello {{.name}}</h1><p>Your order #{{.order_id}} has been confirmed.</p>",
+	)
+	if err != nil {
+		t.Fatalf("create template: %v", err)
 	}
 
 	// ── Start services ──────────────────────────────────────────────────
@@ -180,11 +169,13 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	}
 
 	// ── Send notification ───────────────────────────────────────────────
-	rec = doRequest("POST", "/v1/send", map[string]any{
-		"tenant_id": tenantID,
-		"user_id":   userExternalID,
-		"type":      typeSlug,
-		"data":      map[string]string{"name": "Alice", "order_id": "12345"},
+	rec := doRequest("POST", "/v1/send", map[string]any{
+		"to": map[string]any{
+			"tenant_id": tenantID,
+			"user_id":   userExternalID,
+		},
+		"template": templateSlug,
+		"data":     map[string]string{"name": "Alice", "order_id": "12345"},
 	})
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("send: expected 202, got %d: %s", rec.Code, rec.Body.String())

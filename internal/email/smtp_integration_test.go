@@ -43,7 +43,7 @@ func TestSMTPProvider_SendToMailpit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := provider.Send(ctx, email)
+	_, err = provider.Send(ctx, email)
 	if err != nil {
 		t.Fatalf("send email: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestSMTPProvider_SendToMailpit(t *testing.T) {
 	// Verify email arrived via Mailpit API
 	time.Sleep(500 * time.Millisecond) // give Mailpit time to process
 
-	resp, err := http.Get(mailpitAPI + "/api/v1/messages")
+	resp, err = http.Get(mailpitAPI + "/api/v1/messages")
 	if err != nil {
 		t.Fatalf("query mailpit: %v", err)
 	}

@@ -15,11 +15,15 @@ func TestCreateTemplate_And_GetBySlug(t *testing.T) {
 
 	ctx := context.Background()
 	cat, _ := s.CreateCategory(ctx, "billing", "Billing", []string{"email", "inbox"}, "on", 0)
+	sub, err := s.CreateSubscription(ctx, cat.ID, "invoice", "Invoice", 0)
+	if err != nil {
+		t.Fatalf("CreateSubscription: %v", err)
+	}
 
-	catID := cat.ID
+	subID := sub.ID
 	subject := "Invoice {{.invoice_number}} paid"
 	nt, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
-		SubscriptionID:  &catID,
+		SubscriptionID:  &subID,
 		Slug:            "invoice.paid",
 		Name:            "Invoice Paid",
 		DefaultChannels: []string{"email"},

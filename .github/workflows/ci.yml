@@ -9,7 +9,7 @@ on:
     branches: [main]
 
 env:
-  GO_VERSION: "1.25.0"
+  GO_VERSION: "1.26"
 
 jobs:
   lint:
@@ -73,6 +73,12 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      mailpit:
+        # SMTP sink for the email-delivery E2E test (SMTP :1025, HTTP API :8025)
+        image: axllent/mailpit:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
     env:
       HERMES_DATABASE_URL: postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
       HERMES_NATS_URL: nats://localhost:4222
@@ -96,7 +102,9 @@ jobs:
         run: ./bin/migrate -migrations-path ./migrations
 
       - name: Run integration and E2E tests
-        run: go test ./... -tags=integration -race -timeout=120s -count=1
+        # -p 1 serializes packages: integration tests share a single Postgres/NATS/Redis
+        # instance, and the NATS WorkQueue streams allow only one consumer per subject.
+        run: go test ./... -tags=integration -race -p 1 -timeout=120s -count=1
 
   build:
     name: Build Binaries
@@ -167,6 +175,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
+      - name: Add chart repositories
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm repo add centrifugal https://centrifugal.github.io/helm-charts
       - run: helm dependency build charts/hermes/
       - run: helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com
       - run: helm template test charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com > /dev/null

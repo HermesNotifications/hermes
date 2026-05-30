@@ -18,7 +18,7 @@ build-%:                                  ## Build a single service (e.g. make b
 test:              ## Run unit tests (no infra needed)
 	go test ./... -count=1
 test-integration:  ## Run all tests including integration (requires make infra-up)
-	go test ./... -tags=integration -race -timeout=120s -count=1
+	go test ./... -tags=integration -race -p 1 -timeout=120s -count=1
 test-e2e:          ## Run E2E tests only (requires make infra-up)
 	go test ./tests/e2e/... -tags=integration -v -timeout=30s
 

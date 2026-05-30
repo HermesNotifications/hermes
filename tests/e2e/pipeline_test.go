@@ -14,13 +14,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/admin"
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/dispatch"
+	"github.com/hermes-notifications/hermes/internal/send"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -69,8 +69,8 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	// ── Store + Services ────────────────────────────────────────────────
 	st := postgres.New(pool)
 
-	// Admin server (with auth)
-	srv := admin.NewServer(st, st, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	// Send server (with API key auth)
+	srv := send.NewServer(st, natsClient, redisClient, pool, "test-hmac-secret", logger)
 	srv.SetSkipAuth(false)
 	handler := srv.Handler()
 
@@ -90,13 +90,17 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	}
 
 	// API key
-	rawKey := "hms_pipeline_" + uuid.New().String()
-	keyHash, err := auth.HashAPIKey(rawKey)
+	rawKey, keyID, err := auth.GenerateAPIKey("")
 	if err != nil {
-		t.Fatalf("hash key: %v", err)
+		t.Fatalf("generate key: %v", err)
 	}
+	_, secret, err := auth.ParseAPIKey(rawKey)
+	if err != nil {
+		t.Fatalf("parse key: %v", err)
+	}
+	keyHash := auth.HMACHashAPIKey(secret, "test-hmac-secret")
 	_, err = pool.Exec(ctx, "INSERT INTO api_keys (id, key_hash, name) VALUES ($1, $2, $3)",
-		uuid.New().String(), keyHash, "Pipeline Test Key")
+		keyID, keyHash, "Pipeline Test Key")
 	if err != nil {
 		t.Fatalf("create api key: %v", err)
 	}
@@ -115,32 +119,16 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 		return rec
 	}
 
-	// Create group with email+inbox channels
-	groupSlug := "pipeline-grp-" + runID
-	rec := doRequest("POST", "/v1/groups", map[string]any{
-		"slug":             groupSlug,
-		"name":             "Pipeline Group",
-		"default_channels": []string{"email", "inbox"},
-	})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create group: expected 201, got %d: %s", rec.Code, rec.Body.String())
-	}
-	var groupResp map[string]any
-	json.NewDecoder(rec.Body).Decode(&groupResp)
-	groupID := groupResp["id"].(string)
-
-	// Create notification type with email+inbox templates
-	typeSlug := "pipeline.type." + runID
-	rec = doRequest("POST", "/v1/types", map[string]any{
-		"group_id":      groupID,
-		"slug":          typeSlug,
-		"name":          "Pipeline Type",
-		"email_subject": "Hello {{.name}}",
-		"inbox_title":   "Hi {{.name}}",
-		"inbox_body":    "Welcome {{.name}}",
-	})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create type: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	// Seed a standalone template with email+inbox content.
+	templateSlug := "pipeline.template." + runID
+	_, err = pool.Exec(ctx,
+		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, inbox_title, inbox_body)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		uuid.New().String(), templateSlug, "Pipeline Template", []string{"email", "inbox"},
+		"Hello {{.name}}", "Hi {{.name}}", "Welcome {{.name}}",
+	)
+	if err != nil {
+		t.Fatalf("create template: %v", err)
 	}
 
 	// ── Start Dispatch + Event Writer BEFORE sending ───────────────────
@@ -152,12 +140,15 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	}
 	defer ew.Stop()
 
-	// ── Send notification via Admin handler ─────────────────────────────
-	rec = doRequest("POST", "/v1/send", map[string]any{
-		"tenant_id": tenantID,
-		"user_id":   "pipeline-user-" + runID,
-		"type":      typeSlug,
-		"data":      map[string]string{"name": "Alice"},
+	// ── Send notification via Send service ──────────────────────────────
+	rec := doRequest("POST", "/v1/send", map[string]any{
+		"to": map[string]any{
+			"tenant_id": tenantID,
+			"user_id":   "pipeline-user-" + runID,
+			"email":     "pipeline-user-" + runID + "@example.com",
+		},
+		"template": templateSlug,
+		"data":     map[string]string{"name": "Alice"},
 	})
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("send: expected 202, got %d: %s", rec.Code, rec.Body.String())

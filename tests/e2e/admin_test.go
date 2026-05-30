@@ -18,7 +18,10 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermes-notifications/hermes/internal/dispatch"
+	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermes-notifications/hermes/internal/send"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -63,13 +66,28 @@ func TestSendNotification_E2E(t *testing.T) {
 	}
 	defer redisClient.Close()
 
-	// Create store and server
+	// Clean up stale NATS consumers (dispatch uses WorkQueue streams)
+	cleanupNATSConsumers(t, natsURL)
+
+	// Create store and services
 	st := postgres.New(pool)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	srv := admin.NewServer(st, st, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
-	srv.SetSkipAuth(false) // Test with auth enabled
 
-	handler := srv.Handler()
+	// Send service handles POST /v1/send (publishes to NATS)
+	sendSrv := send.NewServer(st, natsClient, redisClient, pool, "test-hmac-secret", logger)
+	sendSrv.SetSkipAuth(false)
+	sendHandler := sendSrv.Handler()
+
+	// Admin service handles notification reads
+	adminSrv := admin.NewServer(st, st, redisClient, pool, []byte("test-jwt-secret"), "test-hmac-secret", logger)
+	adminSrv.SetSkipAuth(false) // Test with auth enabled
+	adminHandler := adminSrv.Handler()
+
+	// Dispatch persists notifications and routes them; Event Writer records events.
+	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
+	channelResolver := dispatch.NewChannelResolver(st, nil)
+	rtr := dispatch.NewDispatch(natsClient, st, st, st, templateResolver, channelResolver, logger)
+	ew := eventwriter.New(natsClient, st, logger)
 
 	// 1. Create a tenant directly in DB
 	tenantID := uuid.New().String()
@@ -95,8 +113,8 @@ func TestSendNotification_E2E(t *testing.T) {
 		t.Fatalf("create api key: %v", err)
 	}
 
-	// Helper to make authenticated requests
-	doRequest := func(method, path string, body any) *httptest.ResponseRecorder {
+	// Helpers to make authenticated requests against each service.
+	doReq := func(handler http.Handler, method, path string, body any, headers map[string]string) *httptest.ResponseRecorder {
 		var buf bytes.Buffer
 		if body != nil {
 			json.NewEncoder(&buf).Encode(body)
@@ -104,46 +122,41 @@ func TestSendNotification_E2E(t *testing.T) {
 		req := httptest.NewRequest(method, path, &buf)
 		req.Header.Set("Authorization", "Bearer "+rawKey)
 		req.Header.Set("Content-Type", "application/json")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		return rec
 	}
 
-	// 3. POST /v1/groups — create "billing" group
-	rec := doRequest("POST", "/v1/groups", map[string]any{
-		"slug": "billing-" + runID, "name": "Billing", "default_channels": []string{"email", "inbox"},
-	})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create group: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	// 3. Seed a standalone template (email+inbox) directly in the DB.
+	templateSlug := "invoice.paid.e2e." + runID
+	_, err = pool.Exec(ctx,
+		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, inbox_title, inbox_body)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		uuid.New().String(), templateSlug, "Invoice Paid", []string{"email", "inbox"},
+		"Invoice {{.number}} paid", "Invoice paid", "Your invoice {{.number}} has been paid",
+	)
+	if err != nil {
+		t.Fatalf("create template: %v", err)
 	}
 
-	// 4. POST /v1/types — create "invoice.paid" type
-	var group map[string]any
-	json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&group) // re-read from bytes
-	// Re-fetch the response properly
-	rec = doRequest("POST", "/v1/groups", map[string]any{
-		"slug": "billing-e2e-" + runID, "name": "Billing E2E", "default_channels": []string{"email", "inbox"},
-	})
-	json.NewDecoder(rec.Body).Decode(&group)
-	groupID := group["id"].(string)
-
-	rec = doRequest("POST", "/v1/types", map[string]any{
-		"group_id": groupID, "slug": "invoice.paid.e2e." + runID, "name": "Invoice Paid",
-		"email_subject": "Invoice {{.number}} paid",
-		"inbox_title":   "Invoice paid",
-		"inbox_body":    "Your invoice {{.number}} has been paid",
-	})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create type: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	// Start dispatch + event writer so notifications get persisted and routed.
+	if err := rtr.Start(); err != nil {
+		t.Fatalf("start dispatch: %v", err)
 	}
+	if err := ew.Start(ctx); err != nil {
+		t.Fatalf("start event writer: %v", err)
+	}
+	defer ew.Stop()
 
-	// 5. POST /v1/send — send notification with type
-	rec = doRequest("POST", "/v1/send", map[string]any{
-		"tenant_id": tenantID,
-		"user_id":   "ext-user-e2e-1",
-		"type":      "invoice.paid.e2e." + runID,
-		"data":      map[string]string{"number": "INV-001"},
-	})
+	// 4. POST /v1/send — template-based send via the Send service.
+	rec := doReq(sendHandler, "POST", "/v1/send", map[string]any{
+		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-1", "email": "ext-user-e2e-1@example.com"},
+		"template": templateSlug,
+		"data":     map[string]string{"number": "INV-001"},
+	}, nil)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("send: expected 202, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -155,85 +168,42 @@ func TestSendNotification_E2E(t *testing.T) {
 		t.Fatal("expected notification_id in response")
 	}
 
-	// 6. GET /v1/notifications/:id — verify status is "pending"
-	rec = doRequest("GET", "/v1/notifications/"+notifID, nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("get notification: expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var statusResp map[string]any
-	json.NewDecoder(rec.Body).Decode(&statusResp)
-	notif := statusResp["notification"].(map[string]any)
-	if notif["status"] != "pending" {
-		t.Fatalf("expected status pending, got %s", notif["status"])
-	}
-
-	// 7. Verify NATS message was published
-	received := make(chan []byte, 1)
-	err = natsClient.Subscribe("notification.send", "test-consumer", 256, 1, func(_ context.Context, data []byte, _ messaging.DeliveryInfo) error {
-		select {
-		case received <- data:
-		default:
+	// 5. Poll the Admin read API until dispatch has persisted the notification.
+	var notif map[string]any
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		rec = doReq(adminHandler, "GET", "/v1/notifications/"+notifID, nil, nil)
+		if rec.Code == http.StatusOK {
+			var statusResp map[string]any
+			json.NewDecoder(rec.Body).Decode(&statusResp)
+			notif = statusResp["notification"].(map[string]any)
+			break
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("subscribe: %v", err)
+		time.Sleep(250 * time.Millisecond)
 	}
-
-	// Send another notification to trigger NATS message (first one may already be consumed)
-	rec = doRequest("POST", "/v1/send", map[string]any{
-		"tenant_id": tenantID,
-		"user_id":   "ext-user-e2e-2",
-		"group":     "billing-e2e-" + runID,
-		"content":   map[string]string{"title": "Test", "body": "Test body"},
-	})
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("send 2: expected 202, got %d: %s", rec.Code, rec.Body.String())
+	if notif == nil {
+		t.Fatal("notification was not persisted by dispatch within timeout")
 	}
-
-	select {
-	case msg := <-received:
-		var parsed map[string]any
-		json.Unmarshal(msg, &parsed)
-		if parsed["notification_id"] == nil {
-			t.Fatal("NATS message missing notification_id")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timeout waiting for NATS message")
+	if notif["status"] == nil || notif["status"] == "" {
+		t.Fatalf("expected a notification status, got %v", notif["status"])
 	}
+	t.Logf("notification status: %v", notif["status"])
 
-	// 8. Test idempotency
-	rec1 := doRequest("POST", "/v1/send", map[string]any{
-		"tenant_id": tenantID,
-		"user_id":   "ext-user-e2e-3",
-		"group":     "billing-e2e-" + runID,
-		"content":   map[string]string{"title": "Idem Test", "body": "Body"},
-	})
-	// Add idempotency header for this one
+	// 6. Idempotency — two direct-content sends with the same key return the same ID.
 	idemKey := "test-idem-key-" + runID
-	req := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(`{
-		"tenant_id": "`+tenantID+`",
-		"user_id": "ext-user-e2e-4",
-		"group": "billing-e2e-`+runID+`",
-		"content": {"title": "Idem", "body": "Body"}
-	}`))
-	req.Header.Set("Authorization", "Bearer "+rawKey)
-	req.Header.Set("X-Idempotency-Key", idemKey)
-	rec1 = httptest.NewRecorder()
-	handler.ServeHTTP(rec1, req)
-
-	// Same request again
-	req2 := httptest.NewRequest("POST", "/v1/send", bytes.NewBufferString(`{
-		"tenant_id": "`+tenantID+`",
-		"user_id": "ext-user-e2e-4",
-		"group": "billing-e2e-`+runID+`",
-		"content": {"title": "Idem", "body": "Body"}
-	}`))
-	req2.Header.Set("Authorization", "Bearer "+rawKey)
-	req2.Header.Set("X-Idempotency-Key", idemKey)
-	rec2 := httptest.NewRecorder()
-	handler.ServeHTTP(rec2, req2)
+	idemBody := map[string]any{
+		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-4", "email": "ext-user-e2e-4@example.com"},
+		"content":  map[string]string{"title": "Idem", "body": "Body"},
+		"channels": []string{"inbox"},
+	}
+	rec1 := doReq(sendHandler, "POST", "/v1/send", idemBody, map[string]string{"X-Idempotency-Key": idemKey})
+	if rec1.Code != http.StatusAccepted {
+		t.Fatalf("idempotent send 1: expected 202, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+	rec2 := doReq(sendHandler, "POST", "/v1/send", idemBody, map[string]string{"X-Idempotency-Key": idemKey})
+	if rec2.Code != http.StatusAccepted {
+		t.Fatalf("idempotent send 2: expected 202, got %d: %s", rec2.Code, rec2.Body.String())
+	}
 
 	var resp1, resp2 map[string]string
 	json.NewDecoder(rec1.Body).Decode(&resp1)
