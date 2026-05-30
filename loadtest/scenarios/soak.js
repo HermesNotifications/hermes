@@ -1,3 +1,6 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
 // Soak is inbox-mixed at ~30% of capacity levels for a long duration.
 // We re-export inbox-mixed's exec functions so the scenario code stays in one place.
 export { wsHold, drive, pollInbox } from './inbox-mixed.js';

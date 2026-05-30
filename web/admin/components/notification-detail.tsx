@@ -1,3 +1,6 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
 import type { Notification } from "@hermes-notifications/server";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/copy-button";

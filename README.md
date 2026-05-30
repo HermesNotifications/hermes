@@ -2,6 +2,13 @@
 
 Event-driven notification platform. Send notifications across email, SMS, and in-app inbox channels with real-time delivery via WebSocket.
 
+## Legal
+
+This software is provided as-is for non-commercial use. It is **not approved for use in
+safety-critical, medical, financial, or infrastructure systems**, and is **not intended
+for use in the European Economic Area**. Users are responsible for compliance with all
+applicable local laws. See [NOTICE](./NOTICE) and [LICENSE](./LICENSE) for full terms.
+
 ## Architecture
 
 Go monorepo of nine services connected via NATS JetStream:
@@ -209,4 +216,4 @@ Run `make help` to see all available targets.
 
 ## License
 
-Proprietary.
+Apache License 2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for full terms and restrictions.
