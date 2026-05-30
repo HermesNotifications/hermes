@@ -1,3 +1,6 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
 import { SharedArray } from 'k6/data';
 
 // Manifest is loaded once per k6 process into a SharedArray so N VUs share one copy.

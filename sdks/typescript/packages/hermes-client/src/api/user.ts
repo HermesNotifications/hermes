@@ -1,3 +1,6 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
 import createClient, { type Middleware } from "openapi-fetch";
 import type { paths } from "../generated/user-api.js";
 import type { User, UserPreference } from "../types.js";
