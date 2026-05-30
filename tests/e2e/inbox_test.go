@@ -77,28 +77,28 @@ func TestInbox_ReadPath(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	// Create a group
-	groupID := uuid.New().String()
+	// Create a subscription category
+	categoryID := uuid.New().String()
 	_, err = pool.Exec(ctx,
-		"INSERT INTO notification_groups (id, slug, name, default_channels) VALUES ($1, $2, $3, $4)",
-		groupID, "inbox-grp-"+runID, "Inbox Group", []string{"inbox"},
+		"INSERT INTO subscription_categories (id, slug, name, default_channels) VALUES ($1, $2, $3, $4)",
+		categoryID, "inbox-cat-"+runID, "Inbox Category", []string{"inbox"},
 	)
 	if err != nil {
-		t.Fatalf("create group: %v", err)
+		t.Fatalf("create category: %v", err)
 	}
 
 	// Create 3 notifications with status "delivered"
 	notifIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
 		n := &models.Notification{
-			ID:       uuid.New().String(),
-			TenantID: tenantID,
-			UserID:   userID,
-			GroupID:  groupID,
-			Title:    fmt.Sprintf("Notification %d (%s)", i+1, runID),
-			Body:     fmt.Sprintf("Body %d", i+1),
-			Channels: []string{"inbox"},
-			Status:   models.StatusDelivered,
+			ID:         uuid.New().String(),
+			TenantID:   tenantID,
+			UserID:     userID,
+			CategoryID: categoryID,
+			Title:      fmt.Sprintf("Notification %d (%s)", i+1, runID),
+			Body:       fmt.Sprintf("Body %d", i+1),
+			Channels:   []string{"inbox"},
+			Status:     models.StatusDelivered,
 		}
 		if _, err := st.CreateNotification(ctx, n); err != nil {
 			t.Fatalf("create notification %d: %v", i, err)
@@ -249,14 +249,14 @@ func TestInbox_ReadPath(t *testing.T) {
 		// Create 5 more notifications (total 8 non-archived)
 		for i := 0; i < 5; i++ {
 			n := &models.Notification{
-				ID:       uuid.New().String(),
-				TenantID: tenantID,
-				UserID:   userID,
-				GroupID:  groupID,
-				Title:    fmt.Sprintf("Paginated %d (%s)", i+1, runID),
-				Body:     fmt.Sprintf("Page body %d", i+1),
-				Channels: []string{"inbox"},
-				Status:   models.StatusDelivered,
+				ID:         uuid.New().String(),
+				TenantID:   tenantID,
+				UserID:     userID,
+				CategoryID: categoryID,
+				Title:      fmt.Sprintf("Paginated %d (%s)", i+1, runID),
+				Body:       fmt.Sprintf("Page body %d", i+1),
+				Channels:   []string{"inbox"},
+				Status:     models.StatusDelivered,
 			}
 			if _, err := st.CreateNotification(ctx, n); err != nil {
 				t.Fatalf("create paginated notification %d: %v", i, err)

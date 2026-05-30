@@ -20,7 +20,7 @@ func TestInbox(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup: tenant, user, category
-	tenantID := uuid.Notification.New().String()
+	tenantID := uuid.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Inbox Test Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)

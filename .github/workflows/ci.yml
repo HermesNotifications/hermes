@@ -96,7 +96,9 @@ jobs:
         run: ./bin/migrate -migrations-path ./migrations
 
       - name: Run integration and E2E tests
-        run: go test ./... -tags=integration -race -timeout=120s -count=1
+        # -p 1 serializes packages: integration tests share a single Postgres/NATS/Redis
+        # instance, and the NATS WorkQueue streams allow only one consumer per subject.
+        run: go test ./... -tags=integration -race -p 1 -timeout=120s -count=1
 
   build:
     name: Build Binaries

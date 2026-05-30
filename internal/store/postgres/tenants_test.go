@@ -11,7 +11,7 @@ import (
 
 func TestCreateTenant_And_GetByID(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_types", "notification_groups", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscriptions", "subscription_categories", "tenants")
 
 	ctx := context.Background()
 	tenantID := uuid.New().String()

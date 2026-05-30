@@ -19,7 +19,7 @@ func TestEventInsertAndStatusRollup(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Create tenant, user, category, notification (status: pending)
-	tenantID := uuid.Notification.New().String()
+	tenantID := uuid.New().String()
 	_, err := s.CreateTenant(ctx, tenantID, "Event Rollup Tenant")
 	if err != nil {
 		t.Fatalf("CreateTenant: %v", err)

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/07/schema#",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Hermes Helm Chart Values",
   "description": "JSON Schema for validating Hermes Helm chart values at install time",
   "type": "object",
