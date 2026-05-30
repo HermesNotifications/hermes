@@ -73,6 +73,12 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      mailpit:
+        # SMTP sink for the email-delivery E2E test (SMTP :1025, HTTP API :8025)
+        image: axllent/mailpit:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
     env:
       HERMES_DATABASE_URL: postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
       HERMES_NATS_URL: nats://localhost:4222
