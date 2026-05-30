@@ -1,7 +1,7 @@
 import ws from 'k6/ws';
 import { jwtFor } from './auth.js';
 import {
-  wsConnectLatency, wsConnectionActive, wsConnectionDrops,
+  wsConnectLatency, wsConnectionsOpened, wsConnectionsClosed, wsConnectionDrops,
   pushReceived, wsPushE2ELatency,
 } from './metrics.js';
 import { takeSent } from './shared.js';
@@ -21,9 +21,8 @@ export function connect(userID, tenantID, onPush) {
 
   const start = Date.now();
   return ws.connect(url, {}, function (socket) {
-    wsConnectionActive.add(1);
-
     socket.on('open', function () {
+      wsConnectionsOpened.add(1);
       wsConnectLatency.add(Date.now() - start);
       // Centrifugo v5 client protocol: connect + subscribe.
       socket.send(JSON.stringify({ id: 1, connect: { token: token, name: 'k6-loadtest' } }));
@@ -33,7 +32,13 @@ export function connect(userID, tenantID, onPush) {
     socket.on('message', function (data) {
       let msg;
       try { msg = JSON.parse(data); } catch (e) { return; }
-      // Centrifugo publications arrive as { push: { channel, pub: { data: {...} } } }.
+      // Centrifugo v5 app-level ping: server sends `{}`, client must echo `{}`
+      // or the connection is dropped on ping_pong_interval timeout (~25s default).
+      if (msg && Object.keys(msg).length === 0) {
+        socket.send('{}');
+        return;
+      }
+      // Publications arrive as { push: { channel, pub: { data: {...} } } }.
       if (msg.push && msg.push.pub && msg.push.pub.data) {
         pushReceived.add(1);
         const payload = msg.push.pub.data;
@@ -41,7 +46,7 @@ export function connect(userID, tenantID, onPush) {
       }
     });
 
-    socket.on('close', function () { wsConnectionActive.add(-1); });
+    socket.on('close', function () { wsConnectionsClosed.add(1); });
     socket.on('error', function (_e) { wsConnectionDrops.add(1); });
 
     socket.setTimeout(function () { socket.close(); },

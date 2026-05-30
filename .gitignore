@@ -39,6 +39,7 @@ infra/terraform/.terraform/
 /user
 /migrate
 /hermes
+/loadseed
 # SDKs - TypeScript
 sdks/typescript/node_modules/
 sdks/typescript/packages/*/dist/

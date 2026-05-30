@@ -32,7 +32,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Content",
     items: [
       { title: "Templates", href: "/templates", icon: FileText },
-      { title: "Categories", href: "/categories", icon: FolderTree },
+      { title: "Subscriptions", href: "/categories", icon: FolderTree },
     ],
   },
   {
