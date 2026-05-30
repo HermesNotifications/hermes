@@ -9,7 +9,7 @@ on:
     branches: [main]
 
 env:
-  GO_VERSION: "1.25.0"
+  GO_VERSION: "1.26"
 
 jobs:
   lint:
@@ -167,6 +167,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
+      - name: Add chart repositories
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm repo add centrifugal https://centrifugal.github.io/helm-charts
       - run: helm dependency build charts/hermes/
       - run: helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com
       - run: helm template test charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com > /dev/null
