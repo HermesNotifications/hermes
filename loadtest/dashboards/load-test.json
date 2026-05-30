@@ -101,7 +101,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "k6_ws_connection_active{run_id=~\"$run_id\"}",
+          "expr": "sum(k6_ws_connections_opened_total{run_id=~\"$run_id\"}) - sum(k6_ws_connections_closed_total{run_id=~\"$run_id\"})",
           "legendFormat": "active connections",
           "refId": "A"
         }

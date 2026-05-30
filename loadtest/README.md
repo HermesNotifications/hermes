@@ -51,7 +51,7 @@ Generator-side metrics go to the dedicated `loadtest` Prometheus. Hermes service
 Custom k6 metrics:
 
 - `send_ack_latency` — `POST /v1/send` ack latency
-- `ws_connect_latency`, `ws_connection_active`, `ws_connection_drops`
+- `ws_connect_latency`, `ws_connections_opened`, `ws_connections_closed`, `ws_connection_drops` (active = opened − closed)
 - `ws_push_e2e_latency` — send-ack → WS push received (headline e2e metric)
 - `inbox_list_latency`
 
