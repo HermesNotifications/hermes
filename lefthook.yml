@@ -10,6 +10,17 @@ pre-commit:
     build:
       glob: "*.go"
       run: go build ./...
+    copyright-header:
+      run: |
+        files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(go|ts|tsx|js|jsx|sh)$' | grep -vE 'node_modules|vendor/|\.d\.ts$')
+        [ -z "$files" ] && exit 0
+        missing=""
+        while IFS= read -r f; do
+          [ -f "$f" ] && head -5 "$f" | grep -qF "Copyright 2026 Hermes Notifications" || missing="$missing\n  $f"
+        done <<< "$files"
+        [ -z "$missing" ] && exit 0
+        printf "Files missing copyright header:%b\nRun: head -2 <any-existing-source-file> to see the required format.\n" "$missing"
+        exit 1
 
 pre-push:
   commands:
