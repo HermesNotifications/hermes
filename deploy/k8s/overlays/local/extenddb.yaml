@@ -1,0 +1,52 @@
+# DynamoDB Local — AWS's official local development container for the DynamoDB API.
+# Used for local dev and CI. No auth, no TLS, no init step required.
+# For multi-cloud / on-prem production deployments, replace this with ExtendDB
+# pointed at a real Postgres instance. See docs/adr/0001-dynamodb-model-via-extenddb.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamodb-local
+  namespace: hermes
+  labels:
+    app.kubernetes.io/name: dynamodb-local
+    app.kubernetes.io/component: datastore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dynamodb-local
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dynamodb-local
+        app.kubernetes.io/component: datastore
+    spec:
+      containers:
+        - name: dynamodb-local
+          image: amazon/dynamodb-local:latest
+          args: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamodb-local
+  namespace: hermes
+spec:
+  selector:
+    app.kubernetes.io/name: dynamodb-local
+  ports:
+    - port: 8000
+      targetPort: 8000

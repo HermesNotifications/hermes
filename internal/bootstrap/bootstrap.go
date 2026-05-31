@@ -12,6 +12,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermes-notifications/hermes/internal/store/dynamo"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -57,5 +58,27 @@ func MustConnectRedis(url string, logger *slog.Logger) *cache.Client {
 		logger.Error("redis connection failed", "error", err)
 		os.Exit(1)
 	}
+	return client
+}
+
+// MustConnectDynamo creates a DynamoDB client (or ExtendDB client when endpoint
+// is non-empty) and ensures the required tables exist, or exits the process.
+// It is safe to call even when the DynamoDB path is not yet wired into service
+// handlers — table creation is idempotent.
+func MustConnectDynamo(ctx context.Context, endpoint, region string, logger *slog.Logger) *dynamo.Client {
+	client, err := dynamo.NewClient(ctx, endpoint, region)
+	if err != nil {
+		logger.Error("dynamo client creation failed", "error", err)
+		os.Exit(1)
+	}
+	if err := client.EnsureTables(ctx); err != nil {
+		logger.Error("dynamo ensure tables failed", "error", err)
+		os.Exit(1)
+	}
+	mode := "AWS DynamoDB"
+	if endpoint != "" {
+		mode = "ExtendDB @ " + endpoint
+	}
+	logger.Info("dynamo connected", "mode", mode)
 	return client
 }

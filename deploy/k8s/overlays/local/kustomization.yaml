@@ -6,6 +6,7 @@ resources:
   - postgres.yaml
   - redis.yaml
   - mailpit.yaml
+  - extenddb.yaml
   - secrets.yaml
 
 patches:
@@ -34,6 +35,8 @@ configMapGenerator:
       - HERMES_DATABASE_URL=postgres://hermes:hermes@postgres:5432/hermes?sslmode=disable
       - HERMES_REDIS_URL=redis://redis:6379/0
       - HERMES_EMAIL_SMTP_HOST=mailpit
+      - HERMES_DYNAMO_ENDPOINT=http://dynamodb-local:8000
+      - HERMES_DYNAMO_REGION=us-east-1
       - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=local
     options:
       disableNameSuffixHash: true

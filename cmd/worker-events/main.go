@@ -14,6 +14,8 @@ import (
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermes-notifications/hermes/internal/store/dynamo"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -31,8 +33,15 @@ func main() {
 	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
 
-	st := postgres.New(pool)
-	w := eventwriter.New(natsClient, st, logger)
+	pgStore := postgres.New(pool)
+
+	var eventRepo store.EventRepository = pgStore
+	if cfg.DynamoEndpoint != "" {
+		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, logger)
+		eventRepo = dynamo.NewEventStore(dynamoClient, pgStore)
+	}
+
+	w := eventwriter.New(natsClient, eventRepo, logger)
 
 	if err := w.Start(context.Background()); err != nil {
 		logger.Error("start event writer", "error", err)

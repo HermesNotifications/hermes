@@ -31,6 +31,11 @@ type Config struct {
 	SMSWebhookURL    string
 	APIKeyHMACSecret   string
 	EventRetentionDays int
+
+	// DynamoDB / ExtendDB — set DynamoEndpoint to an ExtendDB URL for local dev and
+	// multi-cloud environments; leave empty to use native DynamoDB on AWS.
+	DynamoEndpoint string
+	DynamoRegion   string
 }
 
 func Load() Config {
@@ -55,6 +60,8 @@ func Load() Config {
 		SMSWebhookURL:    envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
 		APIKeyHMACSecret:   envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
 		EventRetentionDays: envInt("HERMES_EVENT_RETENTION_DAYS", 90),
+		DynamoEndpoint:     envStr("HERMES_DYNAMO_ENDPOINT", ""),
+		DynamoRegion:       envStr("HERMES_DYNAMO_REGION", "us-east-1"),
 	}
 }
 
