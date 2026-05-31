@@ -1,3 +1,6 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
 // Package dynamo provides store implementations backed by DynamoDB (or any
 // DynamoDB-compatible API, including ExtendDB).
 //
@@ -25,10 +28,15 @@ import (
 const (
 	defaultEventsTable            = "hermes-events"
 	defaultUserSubscriptionsTable = "hermes-user-subscriptions"
+	defaultNotificationsTable     = "hermes-notifications"
 
 	// ttlAttr is the DynamoDB TTL attribute name — must match the TTL attribute
 	// configured on the table via UpdateTimeToLive.
 	ttlAttr = "ttl"
+
+	// GSI names for hermes-notifications.
+	gsiByUser          = "gsi-by-user"          // PK=user_id, SK=notif_id — inbox listing
+	gsiByIdempotency   = "gsi-by-idempotency"   // PK=idem_pk, SK=created_at — dispatch dedup
 )
 
 // Client wraps a DynamoDB client with table-name configuration.
@@ -36,6 +44,7 @@ type Client struct {
 	db                     *dynamodb.Client
 	EventsTable            string
 	UserSubscriptionsTable string
+	NotificationsTable     string
 }
 
 // NewClient constructs a Client. If endpoint is non-empty the client is
@@ -69,6 +78,7 @@ func NewClient(ctx context.Context, endpoint, region string) (*Client, error) {
 		db:                     db,
 		EventsTable:            defaultEventsTable,
 		UserSubscriptionsTable: defaultUserSubscriptionsTable,
+		NotificationsTable:     defaultNotificationsTable,
 	}, nil
 }
 
@@ -79,7 +89,58 @@ func (c *Client) EnsureTables(ctx context.Context) error {
 	if err := c.ensureTable(ctx, c.EventsTable, "pk", "sk"); err != nil {
 		return err
 	}
-	return c.ensureTable(ctx, c.UserSubscriptionsTable, "pk", "sk")
+	if err := c.ensureTable(ctx, c.UserSubscriptionsTable, "pk", "sk"); err != nil {
+		return err
+	}
+	return c.ensureNotificationsTable(ctx)
+}
+
+// ensureNotificationsTable creates hermes-notifications with its two GSIs.
+// gsi-by-user  (PK=user_id, SK=notif_id)   — inbox listing sorted by time
+// gsi-by-idempotency (PK=idem_pk, SK=created_at) — dispatch dedup within 24h window
+func (c *Client) ensureNotificationsTable(ctx context.Context) error {
+	_, err := c.db.CreateTable(ctx, &dynamodb.CreateTableInput{
+		TableName: aws.String(c.NotificationsTable),
+		AttributeDefinitions: []types.AttributeDefinition{
+			{AttributeName: aws.String("pk"), AttributeType: types.ScalarAttributeTypeS},
+			{AttributeName: aws.String("sk"), AttributeType: types.ScalarAttributeTypeS},
+			{AttributeName: aws.String("user_id"), AttributeType: types.ScalarAttributeTypeS},
+			{AttributeName: aws.String("notif_id"), AttributeType: types.ScalarAttributeTypeS},
+			{AttributeName: aws.String("idem_pk"), AttributeType: types.ScalarAttributeTypeS},
+			{AttributeName: aws.String("created_at"), AttributeType: types.ScalarAttributeTypeS},
+		},
+		KeySchema: []types.KeySchemaElement{
+			{AttributeName: aws.String("pk"), KeyType: types.KeyTypeHash},
+			{AttributeName: aws.String("sk"), KeyType: types.KeyTypeRange},
+		},
+		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
+			{
+				IndexName: aws.String(gsiByUser),
+				KeySchema: []types.KeySchemaElement{
+					{AttributeName: aws.String("user_id"), KeyType: types.KeyTypeHash},
+					{AttributeName: aws.String("notif_id"), KeyType: types.KeyTypeRange},
+				},
+				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
+			},
+			{
+				IndexName: aws.String(gsiByIdempotency),
+				KeySchema: []types.KeySchemaElement{
+					{AttributeName: aws.String("idem_pk"), KeyType: types.KeyTypeHash},
+					{AttributeName: aws.String("created_at"), KeyType: types.KeyTypeRange},
+				},
+				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
+			},
+		},
+		BillingMode: types.BillingModePayPerRequest,
+	})
+	if err != nil {
+		var riue *types.ResourceInUseException
+		if errors.As(err, &riue) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (c *Client) ensureTable(ctx context.Context, name, pkAttr, skAttr string) error {
