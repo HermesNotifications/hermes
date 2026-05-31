@@ -30,6 +30,12 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    ports:
+      - "8000:8000"
+
 volumes:
   pgdata:
   natsdata:

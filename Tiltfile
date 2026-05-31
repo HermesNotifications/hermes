@@ -35,6 +35,7 @@ k8s_resource("redis", labels=["infra"], port_forwards=["6379:6379"])
 k8s_resource("centrifugo", labels=["infra"], port_forwards=["8000:8000"],
              resource_deps=["nats", "redis"])
 k8s_resource("mailpit", labels=["infra"], port_forwards=["8025:8025"])
+k8s_resource("dynamodb-local", labels=["infra"], port_forwards=["8001:8000"])
 
 # --- Ingress ---
 helm_remote(

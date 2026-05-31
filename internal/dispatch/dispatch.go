@@ -2,9 +2,12 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 
@@ -66,6 +69,9 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 
 	if _, err := d.tenants.EnsureTenant(ctx, msg.TenantID); err != nil {
 		log.Error("ensure tenant", "error", err, "tenant_id", msg.TenantID)
+		if isPermanentDBError(err) {
+			return permanent(fmt.Errorf("ensure tenant: %w", err))
+		}
 		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure tenant: %w", err))
 	}
 
@@ -115,6 +121,24 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 	}
 
 	return nil
+}
+
+// isPermanentDBError reports whether a Postgres error is in class 22 (Data Exception)
+// or class 23 (Integrity Constraint Violation). These indicate malformed input that
+// will never succeed on retry and should be treated as permanent failures.
+func isPermanentDBError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		class := pgErr.Code
+		if len(class) >= 2 {
+			switch class[:2] {
+			case "22", // Data Exception (e.g. 22P02 invalid UUID format)
+				"23": // Integrity Constraint Violation
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // transientOrGiveUp returns a transient error for retry, unless this is the last attempt,
