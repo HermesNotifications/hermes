@@ -44,9 +44,11 @@ func main() {
 	var adminStore admin.AdminStore = pgStore
 	if cfg.DynamoEndpoint != "" {
 		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, logger)
-		adminStore = &adminStoreWithDynamoEvents{
+		evStore := dynamo.NewEventStore(dynamoClient, pgStore)
+		notifStore := dynamo.NewNotificationStore(dynamoClient, evStore)
+		adminStore = &adminStoreWithDynamoNotifs{
 			Store:  pgStore,
-			events: dynamo.NewEventStore(dynamoClient, pgStore),
+			notifs: notifStore,
 		}
 	}
 
@@ -55,14 +57,18 @@ func main() {
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }
 
-// adminStoreWithDynamoEvents delegates GetNotificationEvents to DynamoDB so the
-// admin notification detail view reads from the same store events are written to.
-// All other AdminStore methods are handled by the embedded *postgres.Store.
-type adminStoreWithDynamoEvents struct {
+// adminStoreWithDynamoNotifs routes GetNotificationByID and GetNotificationEvents
+// to DynamoDB while delegating ListRecentNotifications (cross-tenant admin scan)
+// and all other AdminStore methods to the Postgres store.
+type adminStoreWithDynamoNotifs struct {
 	*postgres.Store
-	events *dynamo.EventStore
+	notifs *dynamo.NotificationStore
 }
 
-func (a *adminStoreWithDynamoEvents) GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error) {
-	return a.events.GetNotificationEvents(ctx, notificationID)
+func (a *adminStoreWithDynamoNotifs) GetNotificationByID(ctx context.Context, id string) (*models.Notification, error) {
+	return a.notifs.GetNotificationByID(ctx, id)
+}
+
+func (a *adminStoreWithDynamoNotifs) GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error) {
+	return a.notifs.GetNotificationEvents(ctx, notificationID)
 }

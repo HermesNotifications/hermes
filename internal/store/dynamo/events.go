@@ -1,3 +1,6 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
 package dynamo
 
 import (
@@ -17,6 +20,13 @@ import (
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
+// notifStatusUpdater is the minimum interface EventStore needs to delegate status
+// updates. Satisfied by both *postgres.Store (Phase 1) and *NotificationStore (Phase 2).
+type notifStatusUpdater interface {
+	UpdateNotificationStatus(ctx context.Context, notificationID string, newStatus models.NotificationStatus, eventTime time.Time) error
+	BatchUpdateNotificationStatuses(ctx context.Context, updates []store.StatusUpdate) error
+}
+
 // EventStore implements store.EventRepository using DynamoDB for event inserts
 // and TTL-based expiry.
 //
@@ -30,13 +40,13 @@ import (
 //   sk:  EVT#<id>
 type EventStore struct {
 	client   *Client
-	postgres store.EventRepository
+	delegate notifStatusUpdater
 }
 
-// NewEventStore creates an EventStore. postgres is the Postgres-backed
-// EventRepository used for status update delegation; it may not be nil.
-func NewEventStore(client *Client, postgres store.EventRepository) *EventStore {
-	return &EventStore{client: client, postgres: postgres}
+// NewEventStore creates an EventStore. delegate handles status updates —
+// pass *postgres.Store for Phase 1, *NotificationStore for Phase 2.
+func NewEventStore(client *Client, delegate notifStatusUpdater) *EventStore {
+	return &EventStore{client: client, delegate: delegate}
 }
 
 // InsertEvent inserts a single notification event into DynamoDB.
@@ -132,13 +142,13 @@ func (s *EventStore) InsertEvents(ctx context.Context, events []models.Notificat
 // UpdateNotificationStatus delegates to the Postgres store during the
 // transition period (notifications table still lives in Postgres).
 func (s *EventStore) UpdateNotificationStatus(ctx context.Context, notificationID string, newStatus models.NotificationStatus, eventTime time.Time) error {
-	return s.postgres.UpdateNotificationStatus(ctx, notificationID, newStatus, eventTime)
+	return s.delegate.UpdateNotificationStatus(ctx, notificationID, newStatus, eventTime)
 }
 
 // BatchUpdateNotificationStatuses delegates to the Postgres store during the
 // transition period.
 func (s *EventStore) BatchUpdateNotificationStatuses(ctx context.Context, updates []store.StatusUpdate) error {
-	return s.postgres.BatchUpdateNotificationStatuses(ctx, updates)
+	return s.delegate.BatchUpdateNotificationStatuses(ctx, updates)
 }
 
 // GetNotificationEvents returns all events for a notification, sorted by created_at ascending.

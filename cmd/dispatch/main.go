@@ -14,7 +14,9 @@ import (
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/store"
 	"github.com/hermes-notifications/hermes/internal/store/cached"
+	"github.com/hermes-notifications/hermes/internal/store/dynamo"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -35,11 +37,21 @@ func main() {
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
 	defer redisClient.Close()
 
-	st := postgres.New(pool)
-	tenants := cached.NewTenantRepository(st, redisClient)
-	templateResolver := dispatch.NewTemplateResolver(st, redisClient)
-	channelResolver := dispatch.NewChannelResolver(st, redisClient)
-	d := dispatch.NewDispatch(natsClient, st, st, tenants, templateResolver, channelResolver, logger)
+	pgStore := postgres.New(pool)
+	tenants := cached.NewTenantRepository(pgStore, redisClient)
+	templateResolver := dispatch.NewTemplateResolver(pgStore, redisClient)
+	channelResolver := dispatch.NewChannelResolver(pgStore, redisClient)
+
+	var notifRepo store.NotificationRepository = pgStore
+	if cfg.DynamoEndpoint != "" {
+		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, logger)
+		// EventStore is created here only to satisfy NotificationStore's events field;
+		// dispatch doesn't insert events — it only creates/updates notification records.
+		evStore := dynamo.NewEventStore(dynamoClient, pgStore)
+		notifRepo = dynamo.NewNotificationStore(dynamoClient, evStore)
+	}
+
+	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, tenants, templateResolver, channelResolver, logger)
 
 	if err := d.Start(); err != nil {
 		logger.Error("dispatch start failed", "error", err)
