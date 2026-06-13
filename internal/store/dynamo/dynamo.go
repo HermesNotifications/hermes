@@ -131,14 +131,20 @@ func (c *Client) enableTTL(ctx context.Context, tableName, attrName string) erro
 		},
 	})
 	if err != nil {
-		// DynamoDB Local does not fully support TTL and may return a ValidationException.
-		// Real DynamoDB returns ValidationException when TTL is already being enabled.
-		// Use the smithy APIError interface to check the error code without importing
-		// the smithy package (it is already an indirect dep).
+		// Enabling TTL is best-effort. The well-known cases below are non-fatal and
+		// must not block startup — checked via the smithy APIError interface so we
+		// don't import the smithy package directly (it is already an indirect dep):
+		//   ValidationException     — DynamoDB Local lacks TTL support, or TTL is already enabling
+		//   AccessDeniedException   — pre-provisioned (IaC) table where the app role has only
+		//                             data-plane permissions; TTL is managed out-of-band
+		//   ResourceNotFoundException — table managed elsewhere; nothing for us to configure
 		type apiErr interface{ ErrorCode() string }
 		var ae apiErr
-		if errors.As(err, &ae) && ae.ErrorCode() == "ValidationException" {
-			return nil
+		if errors.As(err, &ae) {
+			switch ae.ErrorCode() {
+			case "ValidationException", "AccessDeniedException", "ResourceNotFoundException":
+				return nil
+			}
 		}
 		return fmt.Errorf("enable TTL on %s: %w", tableName, err)
 	}
