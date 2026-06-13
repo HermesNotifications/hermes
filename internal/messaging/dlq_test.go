@@ -16,6 +16,11 @@ type permErr struct{ msg string }
 func (e *permErr) Error() string   { return e.msg }
 func (e *permErr) Permanent() bool { return true }
 
+type notPermErr struct{}
+
+func (notPermErr) Error() string   { return "transient despite interface" }
+func (notPermErr) Permanent() bool { return false }
+
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -31,6 +36,7 @@ func TestClassify(t *testing.T) {
 		{"permanent first attempt", &permErr{"invalid tenant uuid"}, 1, true, hermenats.DeadLetterReasonTerminated},
 		{"permanent on last attempt wins over exhaustion", &permErr{"bad"}, 10, true, hermenats.DeadLetterReasonTerminated},
 		{"wrapped permanent", fmt.Errorf("handle: %w", &permErr{"bad"}), 2, true, hermenats.DeadLetterReasonTerminated},
+		{"PermanentError reporting false is transient", notPermErr{}, 2, false, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

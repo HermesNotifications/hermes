@@ -12,7 +12,7 @@ import (
 // dlqStreamName is the stream that captures terminally failed messages.
 // It uses Limits retention (not WorkQueue) so dead letters survive
 // inspection reads during an incident.
-// nolint:unused // Used by downstream tasks (Phase 2)
+//nolint:unused // Used by downstream tasks (Phase 2)
 const dlqStreamName = "DLQ"
 
 // classify decides whether a failed delivery is terminal and, if so, why.
