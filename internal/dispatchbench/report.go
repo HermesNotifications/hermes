@@ -94,7 +94,7 @@ func Markdown(results []Result) string {
 			return rs[i].Cell.Prefetch < rs[j].Cell.Prefetch
 		})
 		out += fmt.Sprintf("## %s\n\n", b)
-		out += "| workers | prefetch | mean msgs/s | 95%% CI | CV |\n|---|---|---|---|---|\n"
+		out += "| workers | prefetch | mean msgs/s | 95% CI | CV |\n|---|---|---|---|---|\n"
 		for _, r := range rs {
 			s := r.Stat()
 			out += fmt.Sprintf("| %d | %d | %.0f | ±%.0f | %.2f |\n",

@@ -79,7 +79,7 @@ func main() {
 	js, err := jetstream.New(nc)
 	must(err, "jetstream")
 
-	benchTenant := "bench-" + uuid.New().String()[:8]
+	benchTenant := uuid.New().String() // tenants.id is a UUID column
 	userIDs := seedBench(ctx, pool, pgStore, redisClient, benchTenant, *users)
 	fmt.Fprintf(os.Stderr, "seeded tenant %s with %d users\n", benchTenant, len(userIDs))
 
