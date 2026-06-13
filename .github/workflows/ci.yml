@@ -5,8 +5,18 @@ on:
     branches: [main]
     paths-ignore:
       - 'deploy/k8s/overlays/*/kustomization.yaml'
+      # Kargo's automated image-tag commits: skip CI (and thus CD, which now
+      # triggers on CI completion) so deploys don't rebuild/republish images.
+      - 'deploy/k8s/overlays/*/images/kustomization.yaml'
   pull_request:
     branches: [main]
+
+# Cancel superseded runs on the same ref. PR runs are cancellable (a new push
+# obsoletes the previous run); main-branch runs are not, so every commit on main
+# is fully built and tested.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GO_VERSION: "1.26"
@@ -144,40 +154,28 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     strategy:
+      # On PRs, only smoke-test the admin image; on main, build every service.
+      # The matrix is selected here so PRs spin up one runner instead of ten.
       matrix:
-        service:
-          - admin
-          - send
-          - dispatch
-          - worker-events
-          - worker-email
-          - worker-sms
-          - worker-inbox
-          - inbox
-          - user
-          - migrate
+        service: ${{ fromJSON(github.event_name == 'pull_request' && '["admin"]' || '["admin","send","dispatch","worker-events","worker-email","worker-sms","worker-inbox","inbox","user","migrate"]') }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          SERVICE: ${{ matrix.service }}
-        run: |
-          docker build \
-            --build-arg SERVICE="$SERVICE" \
-            -t "hermes-${SERVICE}:ci" \
-            -f deploy/docker/Dockerfile .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (PR smoke test)
-        if: github.event_name == 'pull_request' && matrix.service == 'admin'
-        env:
-          SERVICE: ${{ matrix.service }}
-        run: |
-          docker build \
-            --build-arg SERVICE="$SERVICE" \
-            -t "hermes-${SERVICE}:ci" \
-            -f deploy/docker/Dockerfile .
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          build-args: SERVICE=${{ matrix.service }}
+          tags: hermes-${{ matrix.service }}:ci
+          push: false
+          # Per-service GHA layer cache: reuses go mod download + dependency
+          # build layers across runs (scoped per service to avoid cross-eviction).
+          cache-from: type=gha,scope=docker-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.service }}
 
   helm-lint:
     name: Helm Chart Lint
