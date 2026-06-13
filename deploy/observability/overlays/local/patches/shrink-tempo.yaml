@@ -10,9 +10,12 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
-            limits:
+              # 256Mi/512Mi OOMKilled tempo (exit 137) once traces actually flow —
+              # the ingester WAL + in-memory blocks exceed it. Bump to give headroom
+              # while staying modest for k3d.
               memory: 512Mi
+            limits:
+              memory: 1Gi
   volumeClaimTemplates:
     - metadata:
         name: storage
