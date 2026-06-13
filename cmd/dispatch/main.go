@@ -53,7 +53,19 @@ func main() {
 
 	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, tenants, templateResolver, channelResolver, logger)
 
-	if err := d.Start(cfg.DispatchConcurrency, cfg.DispatchPrefetch); err != nil {
+	// Cap workers at the DB pool size: each worker holds at most one Postgres
+	// connection while processing, so more workers than connections only adds
+	// contention. A guardrail, not a tuning model — see dispatch.ClampWorkersToPool.
+	workers := cfg.DispatchConcurrency
+	dbMaxConns := int(pool.Config().MaxConns)
+	if eff, clamped := dispatch.ClampWorkersToPool(workers, dbMaxConns); clamped {
+		logger.Warn("HERMES_DISPATCH_CONCURRENCY exceeds the database pool size; clamping to pool size",
+			"requested", workers, "db_max_conns", dbMaxConns, "effective", eff,
+			"hint", "raise pool_max_conns in HERMES_DATABASE_URL to use more workers")
+		workers = eff
+	}
+
+	if err := d.Start(workers, cfg.DispatchPrefetch); err != nil {
 		logger.Error("dispatch start failed", "error", err)
 		os.Exit(1)
 	}
