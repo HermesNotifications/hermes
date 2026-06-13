@@ -1,6 +1,6 @@
 # ADR 0001: Adopt the DynamoDB programming model for the hot notification path
 
-**Status:** Accepted (amended 2026-06-12: dual-path store is permanent — see Rollout posture)  
+**Status:** Accepted (amended 2026-06-12: dual store path retained as a temporary hedge while ExtendDB matures — see Rollout posture)  
 **Date:** 2026-05-29  
 **Author:** Daryl Robbins
 
@@ -187,17 +187,43 @@ encoding (`base64(created_at_ns|id)`) can be adapted to pass the DynamoDB
    pattern and table creation in-cluster via ExtendDB.
 2. **Phase 2:** Dual-write to both Postgres and DynamoDB for `notifications`; read from
    Postgres until validation is complete, then flip the read path.
-3. **Phase 3 (amended 2026-06-12):** The Postgres implementations are **not** removed.
-   Hermes is distributed as a self-hosted product, and requiring a DynamoDB-compatible
-   endpoint (DynamoDB Local or ExtendDB) would add a fifth stateful dependency to every
-   installation. Both store paths are permanent:
+3. **Phase 3 (amended 2026-06-12):** Cutover is **deferred, not cancelled.** The original
+   plan — collapse to a single DynamoDB-model code path with ExtendDB+Postgres as the
+   self-host backend — remains the target architecture. The native Postgres
+   implementations in `internal/store/postgres/` are retained for now as a **temporary
+   hedge**, for one reason: ExtendDB was announced May 2026 and is, at the time of this
+   amendment, roughly one month old. Making a one-month-old adapter a hard runtime
+   dependency for *every* self-host install — with no native fallback to the database
+   operators already trust — is a maturity risk we are not yet willing to take.
+
+   Note that ExtendDB is **stateless**: it is a protocol adapter in front of Postgres, not
+   a fifth stateful dependency. The cost of the single-path approach is therefore an extra
+   *process* to deploy, monitor, and upgrade (plus dependence on its correctness and
+   performance), not extra stored state.
+
+   Until that risk clears, both store paths are maintained:
    - **Postgres** (native repositories in `internal/store/postgres/`) is the self-host
      default — `HERMES_DYNAMO_ENDPOINT` unset selects it.
    - **DynamoDB model** (`internal/store/dynamo/`) is the scale option — native DynamoDB
      on AWS, or ExtendDB elsewhere.
-   Phase 3 work is therefore observability parity and load-test validation of both
-   backends, not cutover. Both paths are covered by the integration test suite and must
-   stay behaviorally equivalent (status rollup, idempotency window, pagination).
+
+   Both paths are covered by the integration test suite and must stay behaviorally
+   equivalent (status rollup, idempotency window, pagination). Near-term Phase 3 work is
+   therefore observability parity and load-test validation of both backends.
+
+   **Revisit trigger.** Re-evaluate collapsing to the single ExtendDB path once ExtendDB
+   has a track record we trust — concretely, when **all** of the following hold:
+   - ExtendDB has run the Hermes hot path under production-representative load for a
+     sustained period without correctness or availability regressions vs. the Postgres
+     path;
+   - it has cut at least one stable (non-RC) release line with a documented upgrade and
+     security-patch cadence;
+   - operating it (deploy, monitor, upgrade, recover) is well understood and runbooked.
+
+   When the trigger is met, removing the native Postgres path becomes a deliberate
+   follow-up decision (its own ADR or amendment), not an automatic step — so the
+   "permanent vs. temporary" question is revisited with evidence rather than presumed
+   either way.
 
 ## Consequences
 
