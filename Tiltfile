@@ -131,6 +131,36 @@ for svc_name, svc_cfg in services.items():
         labels=["services"],
     )
 
+# --- Cleanup CronJob ---
+# Built like a service, but run-to-completion: no port-forward, no live_update,
+# and a plain docker_build (the restart wrapper would keep the batch process
+# alive and prevent the Job from completing). The CronJob only fires on schedule
+# — this just makes a valid image available so scheduled or manually triggered
+# runs (`kubectl create job --from=cronjob/hermes-cleanup ...`) don't
+# ImagePullBackOff. The overlay sets the container command since Dockerfile.dev
+# bakes no ENTRYPOINT.
+local_resource(
+    "compile-cleanup",
+    cmd="CGO_ENABLED=0 GOOS=linux GOARCH={goarch} go build -o ./bin/cleanup/service ./cmd/cleanup/".format(
+        goarch=goarch,
+    ),
+    deps=["cmd/cleanup/", "internal/", "go.mod", "go.sum"],
+    resource_deps=["migrate"],
+    labels=["compile"],
+)
+docker_build(
+    "{}/hermes-cleanup".format(k3d_registry),
+    context=".",
+    dockerfile="deploy/docker/Dockerfile.dev",
+    build_args={"SERVICE": "cleanup"},
+    only=["bin/cleanup/service", "migrations/"],
+)
+k8s_resource(
+    "hermes-cleanup",
+    resource_deps=["compile-cleanup"],
+    labels=["infra"],
+)
+
 # --- Admin Portal (Next.js) ---
 local_resource(
     "admin-portal-install",

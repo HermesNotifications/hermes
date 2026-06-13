@@ -27,6 +27,25 @@ patches:
       kind: Job
       metadata:
         name: hermes-migrate
+  # The dev image (Dockerfile.dev) bakes no ENTRYPOINT — services get theirs from
+  # Tilt's restart wrapper, but the cleanup CronJob uses a plain build, so set the
+  # container command explicitly. (The prod image bakes ENTRYPOINT ["/service"].)
+  - target:
+      kind: CronJob
+      name: hermes-cleanup
+    patch: |
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: hermes-cleanup
+      spec:
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: cleanup
+                    command: ["/app/service"]
 
 configMapGenerator:
   - name: hermes-config
@@ -67,3 +86,5 @@ images:
     newName: k3d-hermes-registry.localhost:5111/hermes-send
   - name: hermes-worker-inbox
     newName: k3d-hermes-registry.localhost:5111/hermes-worker-inbox
+  - name: hermes-cleanup
+    newName: k3d-hermes-registry.localhost:5111/hermes-cleanup
