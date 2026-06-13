@@ -83,6 +83,8 @@ jobs:
       HERMES_DATABASE_URL: postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
       HERMES_NATS_URL: nats://localhost:4222
       HERMES_REDIS_URL: redis://localhost:6379
+      HERMES_DYNAMO_ENDPOINT: http://localhost:8000
+      HERMES_DYNAMO_REGION: us-east-1
     steps:
       - uses: actions/checkout@v4
 
@@ -93,6 +95,14 @@ jobs:
       - name: Start NATS with JetStream
         run: |
           docker run -d --name nats -p 4222:4222 nats:2-alpine --jetstream --store_dir=/data
+          sleep 2
+
+      - name: Start DynamoDB Local
+        # Mirrors the docker-compose dynamodb-local service the integration tests
+        # in internal/store/dynamo expect at localhost:8000.
+        run: |
+          docker run -d --name dynamodb-local -p 8000:8000 amazon/dynamodb-local:latest \
+            -jar DynamoDBLocal.jar -sharedDb -inMemory
           sleep 2
 
       - name: Build migrate tool
