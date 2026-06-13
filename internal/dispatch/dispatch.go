@@ -51,8 +51,8 @@ func (d *Dispatch) Start() error {
 // It implements messaging.PermanentError so the NATS subscriber acks instead of nacking.
 type permanentError struct{ err error }
 
-func (e *permanentError) Error() string  { return e.err.Error() }
-func (e *permanentError) Unwrap() error  { return e.err }
+func (e *permanentError) Error() string   { return e.err.Error() }
+func (e *permanentError) Unwrap() error   { return e.err }
 func (e *permanentError) Permanent() bool { return true }
 
 func permanent(err error) error { return &permanentError{err: err} }
@@ -263,19 +263,12 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 		return nil
 	}
 
-	// Resolve user contact info
-	userFull, err := d.users.GetUserByID(ctx, user.ID)
-	if err != nil {
-		log.Error("resolve user", "error", err)
-		return fmt.Errorf("resolve user: %w", err)
-	}
-
 	recipient := hermenats.Recipient{}
-	if userFull.Email != nil {
-		recipient.Email = *userFull.Email
+	if user.Email != nil {
+		recipient.Email = *user.Email
 	}
-	if userFull.Phone != nil {
-		recipient.Phone = *userFull.Phone
+	if user.Phone != nil {
+		recipient.Phone = *user.Phone
 	}
 	if msg.Email != "" {
 		recipient.Email = msg.Email

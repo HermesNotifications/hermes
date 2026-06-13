@@ -85,6 +85,9 @@ func (s *Server) registerSubscriptionRoutes() {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
+		if s.cache != nil {
+			_ = s.cache.InvalidateSubscription(ctx, sub.ID)
+		}
 		return &subscriptionOutput{Body: *sub}, nil
 	})
 
@@ -98,6 +101,9 @@ func (s *Server) registerSubscriptionRoutes() {
 	}, func(ctx context.Context, input *subscriptionIDInput) (*struct{}, error) {
 		if err := s.store.DeleteSubscription(ctx, input.ID); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		if s.cache != nil {
+			_ = s.cache.InvalidateSubscription(ctx, input.ID)
 		}
 		return nil, nil
 	})

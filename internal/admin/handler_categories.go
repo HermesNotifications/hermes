@@ -22,7 +22,7 @@ type createCategoryInput struct {
 }
 
 type updateCategoryInput struct {
-	ID string `path:"id" doc:"Category ID"`
+	ID   string `path:"id" doc:"Category ID"`
 	Body struct {
 		Name            string   `json:"name" required:"true" doc:"Human-readable name"`
 		DefaultChannels []string `json:"default_channels" doc:"Default delivery channels"`
@@ -84,6 +84,9 @@ func (s *Server) registerCategoryRoutes() {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
+		if s.cache != nil {
+			_ = s.cache.InvalidateCategory(ctx, c.ID)
+		}
 		return &categoryOutput{Body: *c}, nil
 	})
 
@@ -97,6 +100,9 @@ func (s *Server) registerCategoryRoutes() {
 	}, func(ctx context.Context, input *categoryIDInput) (*struct{}, error) {
 		if err := s.store.DeleteCategory(ctx, input.ID); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		if s.cache != nil {
+			_ = s.cache.InvalidateCategory(ctx, input.ID)
 		}
 		return nil, nil
 	})
