@@ -7,11 +7,13 @@ package messaging_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/hermes-notifications/hermes/internal/messaging"
+	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -155,4 +157,150 @@ func TestSetupStreams_CreatesDLQ(t *testing.T) {
 	if cfg.Storage != jetstream.FileStorage {
 		t.Errorf("Storage = %v, want FileStorage", cfg.Storage)
 	}
+}
+
+// fetchDeadLetter reads the next dead letter off the DLQ stream.
+func fetchDeadLetter(t *testing.T, url string, timeout time.Duration) *hermenats.DeadLetter {
+	t.Helper()
+	nc, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	cons, err := js.OrderedConsumer(context.Background(), "DLQ", jetstream.OrderedConsumerConfig{
+		FilterSubjects: []string{"dlq.>"},
+	})
+	if err != nil {
+		t.Fatalf("ordered consumer: %v", err)
+	}
+	batch, err := cons.Fetch(1, jetstream.FetchMaxWait(timeout))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	msg := <-batch.Messages()
+	if msg == nil {
+		t.Fatalf("no dead letter within %v (batch error: %v)", timeout, batch.Error())
+	}
+	dl, err := hermenats.UnmarshalDeadLetter(msg.Data())
+	if err != nil {
+		t.Fatalf("unmarshal dead letter: %v", err)
+	}
+	return dl
+}
+
+// waitForEmptyStream polls until the stream has no messages (Term removes them).
+func waitForEmptyStream(t *testing.T, url, stream string, timeout time.Duration) {
+	t.Helper()
+	nc, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		s, err := js.Stream(context.Background(), stream)
+		if err != nil {
+			t.Fatalf("stream %s: %v", stream, err)
+		}
+		info, err := s.Info(context.Background())
+		if err != nil {
+			t.Fatalf("stream info: %v", err)
+		}
+		if info.State.Msgs == 0 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("stream %s not empty after %v", stream, timeout)
+}
+
+func TestSubscribe_DeadLettersAfterMaxDeliveries(t *testing.T) {
+	client, err := messaging.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS", "DLQ")
+
+	restore := messaging.SetMaxDeliveriesForTest(2)
+	defer restore()
+
+	payload := []byte(`{"notification_id":"dlq-test-1"}`)
+	if err := client.Publish(context.Background(), "notification.send", payload); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	if err := client.Subscribe("notification.send", "dlq-exhaust-test", 256, 1, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
+		return errors.New("simulated transient failure")
+	}); err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	// Attempt 1 fails → Nak (~0.5-1s backoff) → attempt 2 fails → dead letter.
+	dl := fetchDeadLetter(t, testNATSUrl(t), 15*time.Second)
+	if dl.Reason != hermenats.DeadLetterReasonMaxDeliveries {
+		t.Errorf("Reason = %q, want %q", dl.Reason, hermenats.DeadLetterReasonMaxDeliveries)
+	}
+	if dl.Attempts != 2 {
+		t.Errorf("Attempts = %d, want 2", dl.Attempts)
+	}
+	if dl.Subject != "notification.send" || dl.Stream != "NOTIFICATIONS" || dl.Consumer != "dlq-exhaust-test" {
+		t.Errorf("identity fields = %s/%s/%s", dl.Subject, dl.Stream, dl.Consumer)
+	}
+	if dl.Error != "simulated transient failure" {
+		t.Errorf("Error = %q", dl.Error)
+	}
+	if string(dl.Payload) != string(payload) {
+		t.Errorf("Payload = %s, want %s", dl.Payload, payload)
+	}
+	// Term must remove the dead message from the WorkQueue stream.
+	waitForEmptyStream(t, testNATSUrl(t), "NOTIFICATIONS", 5*time.Second)
+}
+
+type permanentTestError struct{}
+
+func (permanentTestError) Error() string   { return "malformed payload" }
+func (permanentTestError) Permanent() bool { return true }
+
+func TestSubscribe_DeadLettersPermanentError(t *testing.T) {
+	client, err := messaging.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS", "DLQ")
+
+	payload := []byte(`{"not":"valid"}`)
+	if err := client.Publish(context.Background(), "notification.send", payload); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	if err := client.Subscribe("notification.send", "dlq-perm-test", 256, 1, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
+		return permanentTestError{}
+	}); err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	dl := fetchDeadLetter(t, testNATSUrl(t), 10*time.Second)
+	if dl.Reason != hermenats.DeadLetterReasonTerminated {
+		t.Errorf("Reason = %q, want %q", dl.Reason, hermenats.DeadLetterReasonTerminated)
+	}
+	if dl.Attempts != 1 {
+		t.Errorf("Attempts = %d, want 1", dl.Attempts)
+	}
+	waitForEmptyStream(t, testNATSUrl(t), "NOTIFICATIONS", 5*time.Second)
 }

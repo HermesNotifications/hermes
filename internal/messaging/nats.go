@@ -5,7 +5,6 @@ package messaging
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -158,12 +157,19 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 			}
 
 			if err := handler(ctx, msg.Data(), info); err != nil {
-				var pe PermanentError
-				if errors.As(err, &pe) && pe.Permanent() {
+				if dead, reason := classify(err, attempt); dead {
+					if dlqErr := c.publishDeadLetter(ctx, streamName, consumer, subject, reason, attempt, err, msg.Data()); dlqErr != nil {
+						// Never destroy a message we failed to preserve. Past
+						// MaxDeliver the Nak is a no-op and the message lingers
+						// in the source stream until MaxAge — same as before
+						// this feature existed.
+						_ = msg.NakWithDelay(retryDelay(attempt))
+						return
+					}
 					_ = msg.Term()
-				} else {
-					_ = msg.NakWithDelay(retryDelay(attempt))
+					return
 				}
+				_ = msg.NakWithDelay(retryDelay(attempt))
 				return
 			}
 			_ = msg.Ack()
