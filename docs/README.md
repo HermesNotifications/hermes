@@ -43,6 +43,8 @@ SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch
 - **[Contributing](../CONTRIBUTING.md)** — prerequisites, branch/PR conventions, hooks, and CI gates.
 - **[Architecture](architecture.md)** — services, the async pipeline, message contracts, and the
   core design patterns.
+- **[Architecture Decision Records](adr/README.md)** — the significant architectural decisions and
+  their rationale, plus when and how to write a new one.
 - **[Development](development.md)** — local dev with Tilt + k3d (and the lighter Docker Compose
   path for tests), project layout, and live reload.
 - **[Testing](testing.md)** — the unit / integration / e2e split and the mock-store pattern.
@@ -59,7 +61,7 @@ SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch
 - **[Deployment Guide](deployment-guide.md)** — the reference AWS/EKS + Terraform + ArgoCD/Kargo
   deployment.
 - **[Observability](observability/README.md)** — the in-cluster LGTM stack, instrumentation,
-  dashboards, alert runbooks, and ADRs.
+  dashboards, and alert runbooks.
 - **[Load Testing](../loadtest/README.md)** — the k6-based load-testing system.
 
 ---
