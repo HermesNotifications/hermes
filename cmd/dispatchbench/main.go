@@ -21,6 +21,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/dispatchbench"
 	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermes-notifications/hermes/internal/store"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -86,9 +87,21 @@ func main() {
 	cells := dispatchbench.Cells(intList(*workersCSV), intList(*prefetchCSV), backends)
 	dispatchbench.Shuffle(cells, *seed)
 
+	repos := map[string]store.NotificationRepository{}
+	for _, b := range backends {
+		if _, done := repos[b]; done {
+			continue
+		}
+		repo, cleanup := storeForBackend(ctx, b, pgStore, *dynamoEP, *dynamoRgn, logger)
+		if cleanup != nil {
+			defer cleanup()
+		}
+		repos[b] = repo // may be nil => backend unavailable; handled in the loop
+	}
+
 	var results []dispatchbench.Result
 	for _, cell := range cells {
-		notifRepo := storeForBackend(ctx, cell.Backend, pgStore, *dynamoEP, *dynamoRgn, logger)
+		notifRepo := repos[cell.Backend]
 		if notifRepo == nil {
 			fmt.Fprintf(os.Stderr, "skip %s cells: backend unavailable\n", cell.Backend)
 			continue

@@ -67,29 +67,29 @@ func seedBench(ctx context.Context, pool *pgxpool.Pool, pgStore *postgres.Store,
 	return externalIDs
 }
 
-// storeForBackend returns the NotificationRepository for the given backend, or a
-// nil interface (skip) when the backend is unavailable.
-func storeForBackend(ctx context.Context, backend string, pgStore *postgres.Store, dynamoEP, dynamoRgn string, logger *slog.Logger) store.NotificationRepository {
+// storeForBackend returns the NotificationRepository for the given backend and a
+// cleanup function, or (nil, nil) when the backend is unavailable.
+func storeForBackend(ctx context.Context, backend string, pgStore *postgres.Store, dynamoEP, dynamoRgn string, logger *slog.Logger) (store.NotificationRepository, func()) {
 	switch backend {
 	case "postgres":
-		return pgStore
+		return pgStore, func() {}
 	case "dynamo":
 		if dynamoEP == "" {
-			return nil
+			return nil, nil
 		}
 		client, err := dynamo.NewClient(ctx, dynamoEP, dynamoRgn)
 		if err != nil {
 			logger.Warn("dynamo connect failed; skipping dynamo cells", "error", err)
-			return nil
+			return nil, nil
 		}
 		if err := client.EnsureTables(ctx); err != nil {
 			logger.Warn("dynamo ensure tables failed; skipping dynamo cells", "error", err)
-			return nil
+			return nil, nil
 		}
-		return dynamo.NewNotificationStore(client, dynamo.NewEventStore(client, pgStore))
+		return dynamo.NewNotificationStore(client, dynamo.NewEventStore(client, pgStore)), func() {}
 	default:
 		logger.Warn("unknown backend; skipping", "backend", backend)
-		return nil
+		return nil, nil
 	}
 }
 
