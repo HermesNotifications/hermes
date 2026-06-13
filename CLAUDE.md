@@ -116,6 +116,14 @@ Hermes emits telemetry via OpenTelemetry to an in-cluster **LGTM stack** (Loki, 
 
 New services MUST call `internal/observability.Init` in `main.go` and follow the semantic conventions (no unbounded-cardinality metric labels). New alert rules MUST ship with a matching runbook in the same PR.
 
+## Architecture Decision Records
+
+Architecturally significant decisions are recorded as ADRs in [docs/adr/](docs/adr/README.md). Create or update an ADR **in the same PR** as the change when you:
+- introduce or replace a datastore, messaging backbone, auth model, or cross-service contract;
+- make a choice that is costly to reverse, or that a future maintainer would otherwise have to reverse-engineer from the code.
+
+Use the `writing-adrs` skill for the full process and template. Key rule: **clarifications** amend the ADR in place (dated in the `Status` line); **substantive reversals** create a *new* ADR that supersedes the old one (`Superseded by NNNN`) — never silently rewrite a past decision.
+
 ## Tool Usage Rules
 
 **Always use dedicated tools instead of shell commands:**
