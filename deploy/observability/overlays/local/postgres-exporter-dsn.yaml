@@ -5,6 +5,10 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: postgres-exporter-dsn
+  # This overlay has no `namespace:` directive (unlike base/kustomization.yaml),
+  # so set it explicitly — otherwise the Secret lands in `default` and the
+  # postgres-exporter Deployment in `observability` can't mount it.
+  namespace: observability
 type: Opaque
 stringData:
   dsn: "postgresql://hermes:hermes@postgres.hermes.svc:5432/hermes?sslmode=disable"
