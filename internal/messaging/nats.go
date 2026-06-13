@@ -77,11 +77,10 @@ type PermanentError interface {
 	Permanent() bool
 }
 
-const (
-	// maxDeliveries is the maximum number of times a message will be delivered
-	// before being dropped. After this many failed attempts the message is dead.
-	maxDeliveries = 10
-)
+// maxDeliveries is the maximum number of times a message will be delivered
+// before being dead-lettered. A var so tests can lower it (see
+// export_test.go); production code never mutates it.
+var maxDeliveries = 10
 
 // retryDelay returns an exponential backoff delay with jitter.
 // Base delay doubles each attempt (1s, 2s, 4s, …) capped at 240s,
@@ -140,7 +139,7 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 			}
 			info := DeliveryInfo{
 				Attempt:     attempt,
-				LastAttempt: attempt >= maxDeliveries,
+				LastAttempt: attempt >= uint64(maxDeliveries),
 			}
 
 			if err := handler(ctx, msg.Data(), info); err != nil {
