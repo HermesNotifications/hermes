@@ -112,7 +112,7 @@ func retryDelay(attempt uint64) time.Duration {
 type DeliveryInfo struct {
 	// Attempt is the 1-based delivery attempt number.
 	Attempt uint64
-	// LastAttempt is true when this is the final delivery before the message is dropped.
+	// LastAttempt is true when this is the final delivery before the message is dead-lettered.
 	LastAttempt bool
 }
 
@@ -162,7 +162,11 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 						// Never destroy a message we failed to preserve. Past
 						// MaxDeliver the Nak is a no-op and the message lingers
 						// in the source stream until MaxAge — same as before
-						// this feature existed.
+						// this feature existed. Note: if a PermanentError fails
+						// to publish here at an early attempt, the redelivery may
+						// eventually dead-letter it as max_deliveries rather than
+						// terminated. The safety invariant still holds, and
+						// HermesDLQPublishFailure will already be firing.
 						_ = msg.NakWithDelay(retryDelay(attempt))
 						return
 					}
