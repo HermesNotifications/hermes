@@ -132,7 +132,11 @@ func TestSetupStreams_CreatesDLQ(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DLQ stream not found: %v", err)
 	}
-	cfg := stream.CachedInfo().Config
+	info, err := stream.Info(context.Background())
+	if err != nil {
+		t.Fatalf("DLQ stream Info: %v", err)
+	}
+	cfg := info.Config
 	if cfg.Retention != jetstream.LimitsPolicy {
 		t.Errorf("Retention = %v, want LimitsPolicy", cfg.Retention)
 	}
@@ -147,5 +151,8 @@ func TestSetupStreams_CreatesDLQ(t *testing.T) {
 	}
 	if cfg.Discard != jetstream.DiscardOld {
 		t.Errorf("Discard = %v, want DiscardOld", cfg.Discard)
+	}
+	if cfg.Storage != jetstream.FileStorage {
+		t.Errorf("Storage = %v, want FileStorage", cfg.Storage)
 	}
 }
