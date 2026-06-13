@@ -1,4 +1,4 @@
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk --no-cache add ca-certificates tzdata
 COPY migrations/ /migrations/
 RUN mkdir /app && chown 65534:65534 /app
