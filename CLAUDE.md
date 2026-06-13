@@ -90,7 +90,7 @@ SaaS Backend → Send → NATS [notification.send] → Dispatch → NATS [delive
 
 ### Infrastructure
 - **Postgres:** Single shared database. All services use `internal/store/`. Migrations in `migrations/` via golang-migrate.
-- **NATS JetStream:** Three streams — NOTIFICATIONS, DELIVERY, EVENTS. WorkQueue retention (each message consumed once).
+- **NATS JetStream:** Four streams — NOTIFICATIONS, DELIVERY, EVENTS (WorkQueue retention, each message consumed once) plus DLQ (Limits retention, `dlq.>`) capturing terminally failed messages for operator inspection/replay.
 - **Redis:** Centrifugo engine + notification type config cache + idempotency key dedup.
 - **Centrifugo:** Real-time WebSocket push. User-limited channels (`user#<user_id>`). NATS broker, Redis engine.
 

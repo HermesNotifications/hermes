@@ -75,14 +75,16 @@ per-service ports above are the defaults each service binds when run directly.
 
 ## Messaging: NATS JetStream
 
-Three streams, all with **WorkQueue** retention (each message is delivered to exactly one
-consumer and removed once acked):
+Four streams. The three pipeline streams use **WorkQueue** retention (each message is
+delivered to exactly one consumer and removed once acked); the DLQ uses **Limits**
+retention (7 days / 1 GiB) so dead letters survive inspection reads:
 
 | Stream | Subject(s) | Producer → Consumer |
 |---|---|---|
 | `NOTIFICATIONS` | `notification.send` | Send → Dispatch |
 | `DELIVERY` | `delivery.email`, `delivery.sms`, `delivery.inbox` | Dispatch → Workers |
 | `EVENTS` | `notification.events` | Dispatch & Workers → worker-events |
+| `DLQ` | `dlq.>` | messaging layer (terminal failures) → operators (nats CLI) |
 
 The wire contracts are shared Go structs in `internal/nats/` (package `hermenats`,
 `internal/nats/messages.go`) and mirrored in the AsyncAPI spec at `api/async/asyncapi.yaml`:
@@ -94,6 +96,10 @@ The wire contracts are shared Go structs in `internal/nats/` (package `hermenats
   the resolved `content`, `metadata`, the resolved `recipient` (email/phone), `attempt`.
 - **`EventMessage`** — notification ID, `channel`, `event` (e.g. `email.sent`, `sms.failed`),
   `severity` (`info`/`warning`/`error`), and free-form `metadata`.
+- **`DeadLetter`** — terminally failed message envelope: original `subject`, source
+  `stream`/`consumer`, `reason` (`max_deliveries`/`terminated`), `attempts`, the handler
+  `error`, `failed_at`, and the original `payload` verbatim. See the
+  [dead-letter-queue runbook](observability/runbooks/dead-letter-queue.md).
 
 ## Key design patterns
 
@@ -155,7 +161,7 @@ superseded by `internal/id/v2`.)
 
 - **Postgres** — single shared database; all services go through `internal/store`. Migrations in
   `migrations/` via golang-migrate.
-- **NATS JetStream** — the three streams above.
+- **NATS JetStream** — the four streams above.
 - **Redis** — cache, idempotency dedup, and Centrifugo engine.
 - **Centrifugo** — real-time WebSocket push on user-scoped channels; NATS broker, Redis engine.
 

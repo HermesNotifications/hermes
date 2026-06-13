@@ -5,7 +5,6 @@ package messaging
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -57,6 +56,21 @@ func (c *Client) SetupStreams(ctx context.Context) error {
 			return fmt.Errorf("create stream %s: %w", s.Name, err)
 		}
 	}
+	// The DLQ stream is deliberately NOT in Streams: nothing Subscribes to it
+	// in-process (operators consume it manually via the nats CLI), and keeping
+	// it out of the subject→stream lookup prevents accidental consumers.
+	_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:      dlqStreamName,
+		Subjects:  []string{"dlq.>"},
+		Retention: jetstream.LimitsPolicy,
+		Storage:   jetstream.FileStorage,
+		MaxAge:    7 * 24 * time.Hour,
+		MaxBytes:  1 << 30, // 1 GiB; oldest dead letters discarded first
+		Discard:   jetstream.DiscardOld,
+	})
+	if err != nil {
+		return fmt.Errorf("create stream %s: %w", dlqStreamName, err)
+	}
 	return nil
 }
 
@@ -77,11 +91,10 @@ type PermanentError interface {
 	Permanent() bool
 }
 
-const (
-	// maxDeliveries is the maximum number of times a message will be delivered
-	// before being dropped. After this many failed attempts the message is dead.
-	maxDeliveries = 10
-)
+// maxDeliveries is the maximum number of times a message will be delivered
+// before being dead-lettered. A var so tests can lower it (see
+// export_test.go); production code never mutates it.
+var maxDeliveries = 10
 
 // retryDelay returns an exponential backoff delay with jitter.
 // Base delay doubles each attempt (1s, 2s, 4s, …) capped at 240s,
@@ -99,7 +112,7 @@ func retryDelay(attempt uint64) time.Duration {
 type DeliveryInfo struct {
 	// Attempt is the 1-based delivery attempt number.
 	Attempt uint64
-	// LastAttempt is true when this is the final delivery before the message is dropped.
+	// LastAttempt is true when this is the final delivery before the message is dead-lettered.
 	LastAttempt bool
 }
 
@@ -140,16 +153,27 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 			}
 			info := DeliveryInfo{
 				Attempt:     attempt,
-				LastAttempt: attempt >= maxDeliveries,
+				LastAttempt: attempt >= uint64(maxDeliveries),
 			}
 
 			if err := handler(ctx, msg.Data(), info); err != nil {
-				var pe PermanentError
-				if errors.As(err, &pe) && pe.Permanent() {
+				if dead, reason := classify(err, attempt); dead {
+					if dlqErr := c.publishDeadLetter(ctx, streamName, consumer, subject, reason, attempt, err, msg.Data()); dlqErr != nil {
+						// Never destroy a message we failed to preserve. Past
+						// MaxDeliver the Nak is a no-op and the message lingers
+						// in the source stream until MaxAge — same as before
+						// this feature existed. Note: if a PermanentError fails
+						// to publish here at an early attempt, the redelivery may
+						// eventually dead-letter it as max_deliveries rather than
+						// terminated. The safety invariant still holds, and
+						// HermesDLQPublishFailure will already be firing.
+						_ = msg.NakWithDelay(retryDelay(attempt))
+						return
+					}
 					_ = msg.Term()
-				} else {
-					_ = msg.NakWithDelay(retryDelay(attempt))
+					return
 				}
+				_ = msg.NakWithDelay(retryDelay(attempt))
 				return
 			}
 			_ = msg.Ack()

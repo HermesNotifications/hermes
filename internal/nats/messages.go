@@ -3,7 +3,10 @@
 
 package hermenats
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // SendMessage is published to notification.send by the Send service.
 type SendMessage struct {
@@ -74,5 +77,34 @@ func UnmarshalDelivery(data []byte) (*DeliveryMessage, error) {
 
 func UnmarshalEvent(data []byte) (*EventMessage, error) {
 	var m EventMessage
+	return &m, json.Unmarshal(data, &m)
+}
+
+// Dead-letter reasons recorded on DeadLetter.Reason.
+const (
+	// DeadLetterReasonMaxDeliveries marks a message that failed every delivery attempt.
+	DeadLetterReasonMaxDeliveries = "max_deliveries"
+	// DeadLetterReasonTerminated marks a message rejected with a PermanentError.
+	DeadLetterReasonTerminated = "terminated"
+)
+
+// DeadLetter wraps a message that exhausted its delivery attempts or was
+// permanently rejected by a consumer. Published to "dlq.<original subject>"
+// on the DLQ stream by internal/messaging.
+type DeadLetter struct {
+	Subject  string          `json:"subject"`   // original subject, e.g. "delivery.email"
+	Stream   string          `json:"stream"`    // source stream, e.g. "DELIVERY"
+	Consumer string          `json:"consumer"`  // durable consumer name
+	Reason   string          `json:"reason"`    // DeadLetterReasonMaxDeliveries or DeadLetterReasonTerminated
+	Attempts uint64          `json:"attempts"`  // delivery attempts consumed
+	Error    string          `json:"error"`     // handler error from the final attempt
+	FailedAt time.Time       `json:"failed_at"` // when the message was dead-lettered
+	Payload  json.RawMessage `json:"payload"`   // original message body, verbatim
+}
+
+func (m *DeadLetter) Marshal() ([]byte, error) { return json.Marshal(m) }
+
+func UnmarshalDeadLetter(data []byte) (*DeadLetter, error) {
+	var m DeadLetter
 	return &m, json.Unmarshal(data, &m)
 }

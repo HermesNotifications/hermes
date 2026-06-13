@@ -104,6 +104,32 @@ channels:
           maxAge: 604800000000000
 
   # ---------------------------------------------------------------------------
+  # NATS JetStream — DLQ stream
+  # ---------------------------------------------------------------------------
+  deadLetters:
+    address: dlq.>
+    description: |
+      Dead-letter capture. When a consumer exhausts its delivery attempts or
+      rejects a message as permanently unprocessable, the messaging layer
+      publishes a DeadLetter envelope to dlq.<original subject> and removes
+      the original. Consumed manually by operators (nats CLI) for inspection
+      and replay — no in-process consumer. See
+      docs/observability/runbooks/dead-letter-queue.md.
+    servers:
+      - $ref: '#/servers/nats'
+    messages:
+      deadLetter:
+        $ref: '#/components/messages/DeadLetter'
+    bindings:
+      nats:
+        jetstream:
+          stream: DLQ
+          retention: limits
+          storage: file
+          maxAge: 604800000000000  # 7 days in nanoseconds
+          maxBytes: 1073741824     # 1 GiB
+
+  # ---------------------------------------------------------------------------
   # Real-time WebSocket — user channels
   # ---------------------------------------------------------------------------
   userInboxUpdated:
@@ -157,6 +183,16 @@ operations:
     channel:
       $ref: '#/channels/notificationEvents'
     summary: Dispatch service or worker publishes a delivery lifecycle event
+
+  captureDeadLetter:
+    action: send
+    channel:
+      $ref: '#/channels/deadLetters'
+    summary: Messaging layer captures a terminally failed message
+    description: |
+      Published by internal/messaging in any service when a handler error is
+      terminal (max deliveries exhausted, or a PermanentError). There is no
+      in-process receive operation — operators consume the DLQ via the nats CLI.
 
   pushInboxUpdate:
     action: send
@@ -228,6 +264,13 @@ components:
       summary: Delivery lifecycle event
       payload:
         $ref: '#/components/schemas/EventMessage'
+
+    DeadLetter:
+      name: DeadLetter
+      contentType: application/json
+      summary: Terminally failed message captured for inspection and replay
+      payload:
+        $ref: '#/components/schemas/DeadLetter'
 
     InboxUpdatedEvent:
       name: InboxUpdatedEvent
@@ -344,6 +387,47 @@ components:
           description: |
             Event-specific metadata. Successful deliveries include provider_name
             and provider_id. Failures include error message.
+
+    DeadLetter:
+      type: object
+      required:
+        - subject
+        - stream
+        - consumer
+        - reason
+        - attempts
+        - error
+        - failed_at
+        - payload
+      properties:
+        subject:
+          type: string
+          description: Original subject; republish the payload here to replay.
+          examples:
+            - delivery.email
+        stream:
+          type: string
+          enum: [NOTIFICATIONS, DELIVERY, EVENTS]
+        consumer:
+          type: string
+          description: Durable consumer that gave up on the message.
+        reason:
+          type: string
+          enum: [max_deliveries, terminated]
+        attempts:
+          type: integer
+          minimum: 1
+          description: Delivery attempts consumed before dead-lettering.
+        error:
+          type: string
+          description: Handler error from the final attempt.
+        failed_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+          description: Original message body, verbatim.
 
     MessageContent:
       type: object

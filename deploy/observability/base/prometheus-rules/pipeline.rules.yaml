@@ -19,3 +19,23 @@ spec:
             summary: "NATS consumer lag on {{ $labels.stream }}/{{ $labels.consumer }}"
             description: "{{ $labels.consumer }} on {{ $labels.stream }} has {{ $value }} pending messages for 5 minutes."
             runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/nats-consumer-lag.md"
+        - alert: HermesDeadLetterDetected
+          expr: increase(hermes_messaging_dead_letters_total[15m]) > 0
+          for: 1m
+          labels:
+            severity: warn
+            component: pipeline
+          annotations:
+            summary: "Dead letters on {{ $labels.stream }}/{{ $labels.consumer }} ({{ $labels.reason }})"
+            description: "{{ $value }} message(s) were dead-lettered in the last 15 minutes. Messages are preserved on the DLQ stream — inspect and replay per the runbook."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/dead-letter-queue.md"
+        - alert: HermesDLQPublishFailure
+          expr: increase(hermes_messaging_dlq_publish_failures_total[5m]) > 0
+          for: 2m
+          labels:
+            severity: critical
+            component: pipeline
+          annotations:
+            summary: "DLQ publish failures on {{ $labels.stream }}/{{ $labels.consumer }}"
+            description: "Terminal failures could not be captured to the DLQ. Originals remain unacked in the source stream until MaxAge, but the safety net itself is failing — NATS is likely unhealthy."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/dead-letter-queue.md"
