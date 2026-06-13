@@ -156,28 +156,38 @@ external_id)` avoids the GSI race. Validate during the spike.
 
 ### `hermes-notifications` (Phase 2)
 
+> **Implementation note (2026-06-13):** The ADR originally proposed `PK=USER#<user_id> / SK=NOTIF#<id>`
+> so the inbox query could be a primary-key `Query`. The implementation uses a different layout that
+> keeps the notification itself under its own partition for O(1) `GetItem` by notification ID (the
+> primary admin access pattern), and uses a dedicated GSI for inbox listing:
+
 ```
-PK (pk):  USER#<user_id>            S
-SK (sk):  NOTIF#<notification_id>   S   (IDs are time-sortable — keyset pagination maps to LastEvaluatedKey)
+PK (pk):  NOTIF#<notification_id>   S
+SK (sk):  NOTIF#<notification_id>   S   (same as PK — single-item table pattern)
 
-GSI "by-idempotency":
-  PK:  TENANT#<tenant_id>
-  SK:  IDEM#<idempotency_key>
+GSI "gsi-by-user" (inbox listing):
+  PK:  user_id          S   (denormalized attribute on each item)
+  SK:  notif_id         S   (time-sortable ID — ScanIndexForward=false gives newest-first)
+  Projection: ALL
 
-GSI "by-tenant" (admin ListRecentNotifications):
-  PK:  TENANT#<tenant_id>
-  SK:  NOTIF#<notification_id>
+GSI "gsi-by-idempotency" (sparse — only items with idem_pk attribute are indexed):
+  PK:  idem_pk      S   (value: "TENANT#<tenant_id>#IDEM#<key>")
+  SK:  created_at   S   (RFC3339 — range query for 24-hour dedup window)
+  Projection: ALL
 
 Attributes:
+  notif_id      S
+  user_id       S
+  tenant_id     S
   status        S
   status_rank   N   (numeric rank; ConditionExpression prevents regression)
+  inbox_state   S   ("active" | "archived" | "deleted" — FilterExpression on GSI queries)
   sent_at       S   (RFC3339, nullable)
   delivered_at  S   (RFC3339, nullable)
   read_at       S   (RFC3339, nullable)
   archived_at   S   (RFC3339, nullable)
   deleted_at    S   (RFC3339, nullable)
-  title, body, channels (SS), template_id, category_id, tenant_id, ...
-  ttl           N   (optional; set on soft-delete or archive for eventual cleanup)
+  title, body, channels (SS), template_id, category_id, idem_pk (sparse), ...
 ```
 
 ## Logic ported from SQL to application code
@@ -206,9 +216,21 @@ Already Redis-backed (10-min TTL). No change needed.
 
 ### Cursor-based inbox pagination
 
-`(created_at, id) < (cursor)` in Postgres → `ExclusiveStartKey` in DynamoDB. The cursor
-encoding (`base64(created_at_ns|id)`) can be adapted to pass the DynamoDB
-`LastEvaluatedKey` directly (the notification_id encodes time already).
+Postgres keyset pagination uses a compound cursor `(created_at, id) < (cursor_ts, cursor_id)`
+(`internal/store/postgres/inbox.go`). The DynamoDB implementation uses a simpler cursor:
+`base64(notif_id)` — the notification ID is a time-sortable base62 string (from
+`internal/id/v2`), so descending SK order on `gsi-by-user` is already newest-first, and the
+cursor is just the last returned item's ID reconstructed into the `ExclusiveStartKey` map.
+
+**Cutover note.** Cursors from the Postgres inbox path are opaque to clients but are **not
+forward-compatible** with the DynamoDB path: a client holding a Postgres-format cursor
+(`created_at_ns|id` base64) will receive an `"invalid cursor"` error on the first page
+request after the store is switched to DynamoDB. This is handled gracefully in
+`NotificationStore.ListInbox` (`internal/store/dynamo/notifications.go`) — `base64.DecodeString`
+returns an error on a malformed cursor, which surfaces as `"invalid cursor: ..."` to the
+caller. Clients should treat any cursor error as an indication to re-request page 1 with an
+empty cursor. No data migration is required: cursors are short-lived session state, not
+persisted data.
 
 ## Entities considered and not migrated
 

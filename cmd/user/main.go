@@ -51,7 +51,7 @@ func main() {
 
 	var userStore userservice.UserStore = pgStore
 	if cfg.DynamoEndpoint != "" {
-		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, logger)
+		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, cfg.EventRetentionDays, logger)
 		userStore = &userStoreWithDynamoSubs{
 			Store: pgStore,
 			subs:  dynamo.NewUserSubscriptionStore(dynamoClient),

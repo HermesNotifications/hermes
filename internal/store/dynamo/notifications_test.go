@@ -631,3 +631,93 @@ func TestMarkAllRead(t *testing.T) {
 		t.Errorf("UnreadCount after MarkAllRead: want 0, got %d", count)
 	}
 }
+
+// TestUnarchive_RestoresReadStatus verifies that a notification which was read before
+// being archived returns to status=read (not status=delivered) after Unarchive.
+// This is the regression path that was broken by `if_not_exists(#s, :delivered)`.
+func TestUnarchive_RestoresReadStatus(t *testing.T) {
+	st := testNotifStore(t)
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	n := newNotif(userID, uuid.New().String())
+	if _, err := st.CreateNotification(ctx, n); err != nil {
+		t.Fatalf("CreateNotification: %v", err)
+	}
+
+	// Advance to delivered, then mark read.
+	if err := st.UpdateNotificationStatus(ctx, n.ID, models.StatusDelivered, time.Now()); err != nil {
+		t.Fatalf("UpdateNotificationStatus: %v", err)
+	}
+	wasUnread, err := st.MarkRead(ctx, userID, n.ID)
+	if err != nil {
+		t.Fatalf("MarkRead: %v", err)
+	}
+	if !wasUnread {
+		t.Fatal("expected wasUnread=true before MarkRead")
+	}
+
+	// Archive the already-read notification.
+	wasUnread2, err := st.Archive(ctx, userID, n.ID)
+	if err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
+	if wasUnread2 {
+		t.Error("expected wasUnread=false (notification was already read when archived)")
+	}
+
+	// Unarchive: should restore status=read, not status=delivered.
+	nowUnread, err := st.Unarchive(ctx, userID, n.ID)
+	if err != nil {
+		t.Fatalf("Unarchive: %v", err)
+	}
+	if nowUnread {
+		t.Error("expected nowUnread=false (notification was read before archiving)")
+	}
+
+	got, err := st.GetNotificationByID(ctx, n.ID)
+	if err != nil {
+		t.Fatalf("GetNotificationByID after Unarchive: %v", err)
+	}
+	if got.Status != models.StatusRead {
+		t.Errorf("status after Unarchive: want read, got %s (regression: status was not restored)", got.Status)
+	}
+	if got.ArchivedAt != nil {
+		t.Error("archived_at should be nil after Unarchive")
+	}
+	if got.ReadAt == nil {
+		t.Error("read_at should still be set after Unarchive")
+	}
+}
+
+// TestMarkAllRead_LargeInbox exercises the parallel worker-pool path (>10 items per page).
+func TestMarkAllRead_LargeInbox(t *testing.T) {
+	st := testNotifStore(t)
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	tenantID := uuid.New().String()
+
+	const total = 30
+	for i := 0; i < total; i++ {
+		n := newNotif(userID, tenantID)
+		if _, err := st.CreateNotification(ctx, n); err != nil {
+			t.Fatalf("CreateNotification %d: %v", i, err)
+		}
+		if err := st.UpdateNotificationStatus(ctx, n.ID, models.StatusDelivered, time.Now()); err != nil {
+			t.Fatalf("UpdateNotificationStatus %d: %v", i, err)
+		}
+	}
+
+	if err := st.MarkAllRead(ctx, userID); err != nil {
+		t.Fatalf("MarkAllRead: %v", err)
+	}
+
+	count, err := st.UnreadCount(ctx, userID)
+	if err != nil {
+		t.Fatalf("UnreadCount: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("UnreadCount after MarkAllRead on %d items: want 0, got %d", total, count)
+	}
+}

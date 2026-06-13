@@ -17,6 +17,7 @@ package dynamo
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -39,12 +40,15 @@ const (
 	gsiByIdempotency   = "gsi-by-idempotency"   // PK=idem_pk, SK=created_at — dispatch dedup
 )
 
-// Client wraps a DynamoDB client with table-name configuration.
+// Client wraps a DynamoDB client with table-name and retention configuration.
 type Client struct {
 	db                     *dynamodb.Client
 	EventsTable            string
 	UserSubscriptionsTable string
 	NotificationsTable     string
+	// RetentionDays is the number of days before event items are expired via DynamoDB TTL.
+	// Defaults to 90. Set via bootstrap.MustConnectDynamo from cfg.EventRetentionDays.
+	RetentionDays int
 }
 
 // NewClient constructs a Client. If endpoint is non-empty the client is
@@ -79,20 +83,72 @@ func NewClient(ctx context.Context, endpoint, region string) (*Client, error) {
 		EventsTable:            defaultEventsTable,
 		UserSubscriptionsTable: defaultUserSubscriptionsTable,
 		NotificationsTable:     defaultNotificationsTable,
+		RetentionDays:          90,
 	}, nil
 }
 
-// EnsureTables creates the DynamoDB tables if they do not already exist.
+// EnsureTables creates the DynamoDB tables if they do not already exist, and
+// activates native TTL on the events table so the `ttl` attribute is honoured.
 // Idempotent — safe to call on every startup. In production (real DynamoDB)
 // tables should be pre-provisioned via IaC; this helper targets local/ExtendDB.
 func (c *Client) EnsureTables(ctx context.Context) error {
 	if err := c.ensureTable(ctx, c.EventsTable, "pk", "sk"); err != nil {
 		return err
 	}
+	if err := c.enableTTL(ctx, c.EventsTable, ttlAttr); err != nil {
+		return err
+	}
 	if err := c.ensureTable(ctx, c.UserSubscriptionsTable, "pk", "sk"); err != nil {
 		return err
 	}
 	return c.ensureNotificationsTable(ctx)
+}
+
+// enableTTL activates DynamoDB native TTL on the given table/attribute if not already enabled.
+// Idempotent: skips the API call when the TTL spec is already ENABLED or ENABLING.
+// DynamoDB Local may return a ValidationException for TTL operations; that is swallowed.
+func (c *Client) enableTTL(ctx context.Context, tableName, attrName string) error {
+	desc, err := c.db.DescribeTimeToLive(ctx, &dynamodb.DescribeTimeToLiveInput{
+		TableName: aws.String(tableName),
+	})
+	if err != nil {
+		// DynamoDB Local does not fully support DescribeTimeToLive — treat as not-yet-enabled.
+		// Fall through to UpdateTimeToLive which will also be a no-op or harmless error.
+		desc = nil
+	}
+	if desc != nil && desc.TimeToLiveDescription != nil {
+		s := desc.TimeToLiveDescription.TimeToLiveStatus
+		if s == types.TimeToLiveStatusEnabled || s == types.TimeToLiveStatusEnabling {
+			return nil // already active
+		}
+	}
+
+	_, err = c.db.UpdateTimeToLive(ctx, &dynamodb.UpdateTimeToLiveInput{
+		TableName: aws.String(tableName),
+		TimeToLiveSpecification: &types.TimeToLiveSpecification{
+			Enabled:       aws.Bool(true),
+			AttributeName: aws.String(attrName),
+		},
+	})
+	if err != nil {
+		// Enabling TTL is best-effort. The well-known cases below are non-fatal and
+		// must not block startup — checked via the smithy APIError interface so we
+		// don't import the smithy package directly (it is already an indirect dep):
+		//   ValidationException     — DynamoDB Local lacks TTL support, or TTL is already enabling
+		//   AccessDeniedException   — pre-provisioned (IaC) table where the app role has only
+		//                             data-plane permissions; TTL is managed out-of-band
+		//   ResourceNotFoundException — table managed elsewhere; nothing for us to configure
+		type apiErr interface{ ErrorCode() string }
+		var ae apiErr
+		if errors.As(err, &ae) {
+			switch ae.ErrorCode() {
+			case "ValidationException", "AccessDeniedException", "ResourceNotFoundException":
+				return nil
+			}
+		}
+		return fmt.Errorf("enable TTL on %s: %w", tableName, err)
+	}
+	return nil
 }
 
 // ensureNotificationsTable creates hermes-notifications with its two GSIs.

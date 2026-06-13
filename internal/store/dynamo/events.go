@@ -190,13 +190,15 @@ func (s *EventStore) DeleteEventsOlderThan(_ context.Context, _ time.Time, _ int
 	return 0, nil
 }
 
-// ttlSeconds returns the Unix epoch second at which events should expire,
-// based on HERMES_EVENT_RETENTION_DAYS (default 90). For simplicity the
-// EventStore uses the same 90-day default; callers may override by wrapping.
+// ttlSeconds returns the Unix epoch second at which events should expire.
+// Retention period comes from Client.RetentionDays (set from cfg.EventRetentionDays);
+// falls back to 90 days when the value is unset (≤0).
 func (s *EventStore) ttlSeconds(createdAt time.Time) string {
-	// 90-day retention — mirrors the default EventRetentionDays in config.
-	// TODO(phase-2): thread config.EventRetentionDays through EventStore.
-	expiry := createdAt.Add(90 * 24 * time.Hour)
+	days := s.client.RetentionDays
+	if days <= 0 {
+		days = 90
+	}
+	expiry := createdAt.Add(time.Duration(days) * 24 * time.Hour)
 	return strconv.FormatInt(expiry.Unix(), 10)
 }
 

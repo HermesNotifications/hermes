@@ -37,7 +37,7 @@ func main() {
 
 	var eventRepo store.EventRepository = pgStore
 	if cfg.DynamoEndpoint != "" {
-		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, logger)
+		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, cfg.EventRetentionDays, logger)
 		// Phase 2: EventStore delegates status updates to NotificationStore (DynamoDB)
 		// instead of pgStore (Postgres), completing the migration of the notifications table.
 		evStore := dynamo.NewEventStore(dynamoClient, pgStore) // placeholder; updated below

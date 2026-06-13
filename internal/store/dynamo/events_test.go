@@ -1,5 +1,8 @@
 //go:build integration
 
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
 package dynamo_test
 
 import (
@@ -372,5 +375,16 @@ func TestBatchUpdateNotificationStatuses_Delegation(t *testing.T) {
 	}
 	if n2.Status != models.StatusSent {
 		t.Errorf("id2: expected sent, got %s", n2.Status)
+	}
+}
+
+// TestEnsureTables_Idempotent asserts that EnsureTables (including the enableTTL step on
+// hermes-events) can be called repeatedly without error. The actual TTL-enabled status is
+// not asserted here: DynamoDB Local does not report it reliably. The ttl value derivation
+// is covered by the ttlSeconds unit test (events_internal_test.go).
+func TestEnsureTables_Idempotent(t *testing.T) {
+	client := testClient(t)
+	if err := client.EnsureTables(context.Background()); err != nil {
+		t.Fatalf("EnsureTables (second call): %v", err)
 	}
 }
