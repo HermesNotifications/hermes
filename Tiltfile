@@ -157,12 +157,67 @@ if datadog_enabled:
 # --- Observability stack (opt-in) ---
 # Enable with: `tilt up -- --observability`
 # Brings up Prometheus, Loki, Tempo, Grafana, OTel Collector, Alloy DaemonSet, and infra
-# exporters in the `observability` namespace. kube-prometheus-stack CRDs must be installed
-# before anything that references them (PrometheusRule, ServiceMonitor) — Tilt handles the
-# ordering via resource_deps.
+# exporters in the `observability` namespace.
+#
+# The kube-prometheus-stack CRDs are too large for client-side apply: the
+# kubectl.kubernetes.io/last-applied-configuration annotation exceeds the 256KB
+# object limit, so Tilt falls back to create-or-replace for them. That fallback
+# registers the CRDs too late for the Prometheus/Alertmanager custom resources
+# applied in the same pass, which then fail with `no matches for kind "Prometheus"`
+# and abort the whole apply — leaving everything after that point (including the
+# postgres-exporter DSN Secret) uncreated.
+#
+# Fix: split the render into three phases so the custom resources only apply once
+# their CRDs are established.
+#   1. observability-crds      — the 10 CustomResourceDefinitions
+#   2. plain objects           — workloads, services, configmaps, secrets, webhooks
+#                                (none reference the CRDs, so no ordering needed)
+#   3. observability-monitors  — every monitoring.coreos.com custom resource,
+#                                gated on observability-crds via resource_deps
 if observability_enabled:
     # `kustomize --enable-helm` is required; recent Tilt versions pass flags after `--`.
-    k8s_yaml(kustomize("deploy/observability/overlays/local", flags=["--enable-helm"]))
+    obs_objects = [
+        o
+        for o in decode_yaml_stream(
+            kustomize("deploy/observability/overlays/local", flags=["--enable-helm"])
+        )
+        if o
+    ]
+    obs_crds = [o for o in obs_objects if o["kind"] == "CustomResourceDefinition"]
+    obs_crd_kinds = [o["spec"]["names"]["kind"] for o in obs_crds]
+    obs_crs = [o for o in obs_objects if o["kind"] in obs_crd_kinds]
+    obs_plain = [
+        o
+        for o in obs_objects
+        if o["kind"] != "CustomResourceDefinition" and o["kind"] not in obs_crd_kinds
+    ]
+
+    # Phase 1: CustomResourceDefinitions.
+    k8s_yaml(encode_yaml_stream(obs_crds))
+    k8s_resource(
+        new_name="observability-crds",
+        objects=[
+            "{}:customresourcedefinition".format(o["metadata"]["name"]) for o in obs_crds
+        ],
+        labels=["observability"],
+    )
+
+    # Phase 2: everything that does not reference a CRD (includes the
+    # postgres-exporter DSN Secret, which previously never applied because the
+    # aborted apply stopped before reaching it).
+    k8s_yaml(encode_yaml_stream(obs_plain))
+
+    # Phase 3: the monitoring.coreos.com custom resources, gated on the CRDs.
+    k8s_yaml(encode_yaml_stream(obs_crs))
+    k8s_resource(
+        new_name="observability-monitors",
+        objects=[
+            "{}:{}".format(o["metadata"]["name"], o["kind"].lower()) for o in obs_crs
+        ],
+        resource_deps=["observability-crds"],
+        labels=["observability"],
+    )
+
     # Port-forward Grafana (admin/admin). Prometheus and Alertmanager are
     # operator-managed StatefulSets — port-forward them manually if needed:
     #   kubectl -n observability port-forward svc/kps-prometheus 9090:9090
