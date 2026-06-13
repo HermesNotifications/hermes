@@ -1,0 +1,58 @@
+# Dependabot version updates. Grouping is the point here: without it, every Go
+# submodule (each aws-sdk-go-v2/* package, each otel module, ...) opens its own
+# PR and triggers its own full CI run. Grouped updates collapse those into a few
+# PRs per week, each a single CI run.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+      go-minor-patch:
+        # Everything else: bundle minor/patch bumps together; majors stay separate.
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/web/admin"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: docker
+    directories:
+      - "/deploy/docker"
+      - "/cmd/loadseed"
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"

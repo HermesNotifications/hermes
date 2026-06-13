@@ -1,12 +1,16 @@
 name: CD
 
 on:
-  push:
+  # Build & push only after CI succeeds on main, so we never publish images for a
+  # commit that failed CI. Kargo's automated image-tag commits don't trigger CI
+  # (excluded via CI's paths-ignore), so they don't reach CD either.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
+  # Version tags are cut from already-merged, CI-passed commits.
+  push:
     tags: ["v*"]
-    paths-ignore:
-      # Don't trigger on Kargo's automated image tag updates
-      - 'deploy/k8s/overlays/*/images/kustomization.yaml'
 
 permissions:
   id-token: write    # OIDC for AWS
@@ -17,9 +21,10 @@ env:
   AWS_REGION: us-east-1
 
 jobs:
-  # Only run CD if CI passed (reuse CI checks)
   build-and-push:
     name: Build & Push ${{ matrix.service }}
+    # Tag pushes always proceed; CI-completion runs only proceed on success.
+    if: ${{ github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -34,8 +39,15 @@ jobs:
           - inbox
           - user
           - migrate
+    env:
+      # The exact commit CI validated. For workflow_run, github.sha is the branch
+      # tip (which can race ahead), so we pin to the run's head_sha; for tag
+      # pushes there's no workflow_run, so fall back to github.sha.
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,13 +65,14 @@ jobs:
       - name: Build and push Docker image
         env:
           SERVICE: ${{ matrix.service }}
-          IMAGE_TAG: ${{ github.sha }}
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --build-arg SERVICE="$SERVICE" \
             -t "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
+            --cache-from "type=gha,scope=cd-${SERVICE}" \
+            --cache-to "type=gha,mode=max,scope=cd-${SERVICE}" \
             --push \
             -f deploy/docker/Dockerfile .
 
@@ -67,7 +80,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           SERVICE: ${{ matrix.service }}
-          IMAGE_TAG: ${{ github.sha }}
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           VERSION=${GITHUB_REF_NAME#v}
