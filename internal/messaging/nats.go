@@ -57,6 +57,21 @@ func (c *Client) SetupStreams(ctx context.Context) error {
 			return fmt.Errorf("create stream %s: %w", s.Name, err)
 		}
 	}
+	// The DLQ stream is deliberately NOT in Streams: nothing Subscribes to it
+	// in-process (operators consume it manually via the nats CLI), and keeping
+	// it out of the subject→stream lookup prevents accidental consumers.
+	_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:      dlqStreamName,
+		Subjects:  []string{"dlq.>"},
+		Retention: jetstream.LimitsPolicy,
+		Storage:   jetstream.FileStorage,
+		MaxAge:    7 * 24 * time.Hour,
+		MaxBytes:  1 << 30, // 1 GiB; oldest dead letters discarded first
+		Discard:   jetstream.DiscardOld,
+	})
+	if err != nil {
+		return fmt.Errorf("create stream %s: %w", dlqStreamName, err)
+	}
 	return nil
 }
 

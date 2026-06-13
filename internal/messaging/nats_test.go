@@ -106,3 +106,46 @@ func TestPublish_And_Subscribe(t *testing.T) {
 		t.Fatal("timeout waiting for message")
 	}
 }
+
+func TestSetupStreams_CreatesDLQ(t *testing.T) {
+	client, err := messaging.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+
+	nc, err := nats.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+
+	stream, err := js.Stream(context.Background(), "DLQ")
+	if err != nil {
+		t.Fatalf("DLQ stream not found: %v", err)
+	}
+	cfg := stream.CachedInfo().Config
+	if cfg.Retention != jetstream.LimitsPolicy {
+		t.Errorf("Retention = %v, want LimitsPolicy", cfg.Retention)
+	}
+	if len(cfg.Subjects) != 1 || cfg.Subjects[0] != "dlq.>" {
+		t.Errorf("Subjects = %v, want [dlq.>]", cfg.Subjects)
+	}
+	if cfg.MaxBytes != 1<<30 {
+		t.Errorf("MaxBytes = %d, want %d", cfg.MaxBytes, 1<<30)
+	}
+	if cfg.MaxAge != 7*24*time.Hour {
+		t.Errorf("MaxAge = %v, want 168h", cfg.MaxAge)
+	}
+	if cfg.Discard != jetstream.DiscardOld {
+		t.Errorf("Discard = %v, want DiscardOld", cfg.Discard)
+	}
+}
