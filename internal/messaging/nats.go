@@ -141,6 +141,19 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 		return fmt.Errorf("create consumer: %w", err)
 	}
 
+	// With more than one consumer loop, cap each loop to a single in-flight
+	// message (PullMaxMessages(1)). Otherwise the first loop's initial pull
+	// prefetches the whole default batch (500) into its buffer and starves its
+	// siblings, so the effective parallelism collapses below `concurrency` and a
+	// slow message head-of-line-blocks the rest of that buffer. One message per
+	// loop makes `concurrency` mean exactly N evenly-distributed parallel
+	// handlers. Single-loop consumers (e.g. event-writer, which acks immediately
+	// into an in-memory batcher) keep the default prefetch firehose.
+	var consumeOpts []jetstream.PullConsumeOpt
+	if concurrency > 1 {
+		consumeOpts = append(consumeOpts, jetstream.PullMaxMessages(1))
+	}
+
 	for i := 0; i < concurrency; i++ {
 		_, err = cons.Consume(func(msg jetstream.Msg) {
 			ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
@@ -177,7 +190,7 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 				return
 			}
 			_ = msg.Ack()
-		})
+		}, consumeOpts...)
 		if err != nil {
 			return fmt.Errorf("start consumer %d: %w", i, err)
 		}

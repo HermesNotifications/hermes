@@ -9,6 +9,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -107,6 +109,53 @@ func TestPublish_And_Subscribe(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("timeout waiting for message")
 	}
+}
+
+// TestSubscribe_ProcessesConcurrently guards the parallelism dispatch relies on:
+// Subscribe with concurrency=N must process N messages simultaneously. Each handler
+// holds its message in-flight on a release channel; only true parallelism lets all N
+// reach the barrier. With concurrency=1 the barrier is never reached and this times out.
+func TestSubscribe_ProcessesConcurrently(t *testing.T) {
+	client, err := messaging.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS")
+
+	const concurrency = 4
+	for i := 0; i < concurrency; i++ {
+		if err := client.Publish(context.Background(), "notification.send", []byte(`{"n":1}`)); err != nil {
+			t.Fatalf("Publish: %v", err)
+		}
+	}
+
+	var inFlight atomic.Int32
+	allInFlight := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+
+	if err := client.Subscribe("notification.send", "concurrency-test", 256, concurrency, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
+		if inFlight.Add(1) == concurrency {
+			once.Do(func() { close(allInFlight) })
+		}
+		<-release // hold in-flight until the test releases every handler at once
+		return nil
+	}); err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	select {
+	case <-allInFlight:
+		// success: all `concurrency` handlers ran in parallel
+	case <-time.After(10 * time.Second):
+		close(release)
+		t.Fatalf("only %d/%d handlers ran concurrently; expected %d", inFlight.Load(), concurrency, concurrency)
+	}
+	close(release)
 }
 
 func TestSetupStreams_CreatesDLQ(t *testing.T) {

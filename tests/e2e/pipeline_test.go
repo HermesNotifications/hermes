@@ -135,7 +135,7 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	}
 
 	// ── Start Dispatch + Event Writer BEFORE sending ───────────────────
-	if err := rtr.Start(); err != nil {
+	if err := rtr.Start(1); err != nil {
 		t.Fatalf("start dispatch: %v", err)
 	}
 	if err := ew.Start(ctx); err != nil {

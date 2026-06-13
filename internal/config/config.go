@@ -20,17 +20,24 @@ type EmailConfig struct {
 }
 
 type Config struct {
-	HTTPPort         int
-	DatabaseURL      string
-	NATSUrl          string
-	RedisURL         string
-	JWTSecret        string
-	CentrifugoAPIURL string
-	CentrifugoAPIKey string
-	Email            EmailConfig
-	SMSWebhookURL    string
+	HTTPPort           int
+	DatabaseURL        string
+	NATSUrl            string
+	RedisURL           string
+	JWTSecret          string
+	CentrifugoAPIURL   string
+	CentrifugoAPIKey   string
+	Email              EmailConfig
+	SMSWebhookURL      string
 	APIKeyHMACSecret   string
 	EventRetentionDays int
+
+	// DispatchConcurrency is the number of parallel consumer loops the dispatch
+	// service runs against the notification.send work queue. Distinct notifications
+	// are independent (per-notification status rollup is monotonic downstream), so
+	// they can be processed in parallel to lift dispatch throughput. Tunable for
+	// load-test sweeps.
+	DispatchConcurrency int
 
 	// DynamoDB / ExtendDB — set DynamoEndpoint to an ExtendDB URL for local dev and
 	// multi-cloud environments; leave empty to use native DynamoDB on AWS.
@@ -57,11 +64,12 @@ func Load() Config {
 			SESRegion:    envStr("HERMES_EMAIL_SES_REGION", "us-east-1"),
 			LayoutPath:   envStr("HERMES_EMAIL_LAYOUT_PATH", ""),
 		},
-		SMSWebhookURL:    envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
-		APIKeyHMACSecret:   envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
-		EventRetentionDays: envInt("HERMES_EVENT_RETENTION_DAYS", 90),
-		DynamoEndpoint:     envStr("HERMES_DYNAMO_ENDPOINT", ""),
-		DynamoRegion:       envStr("HERMES_DYNAMO_REGION", "us-east-1"),
+		SMSWebhookURL:       envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
+		APIKeyHMACSecret:    envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
+		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
+		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 4),
+		DynamoEndpoint:      envStr("HERMES_DYNAMO_ENDPOINT", ""),
+		DynamoRegion:        envStr("HERMES_DYNAMO_REGION", "us-east-1"),
 	}
 }
 

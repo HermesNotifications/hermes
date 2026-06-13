@@ -53,7 +53,7 @@ func main() {
 
 	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, tenants, templateResolver, channelResolver, logger)
 
-	if err := d.Start(); err != nil {
+	if err := d.Start(cfg.DispatchConcurrency); err != nil {
 		logger.Error("dispatch start failed", "error", err)
 		os.Exit(1)
 	}
