@@ -23,7 +23,6 @@ kubectl -n hermes port-forward svc/nats 4222:4222 &
 
 # How many dead letters, and on which subjects?
 nats stream info DLQ
-nats stream subjects DLQ
 ```
 
 - `reason=max_deliveries` → the handler kept failing. Usually a downstream outage
@@ -69,9 +68,10 @@ Clean up the inspection consumer when done: `nats consumer rm DLQ inspect -f`.
    nats pub delivery.email '{"notification_id":"...", ...}'
    ```
 
-3. Replay is safe to repeat: every pipeline stage is idempotent (Redis/DB dedup
-   keys in dispatch, conditional writes in the event writer). A duplicate replay
-   is a no-op, not a duplicate notification.
+3. Replay is safe to repeat: every pipeline stage is idempotent (the Send service
+   dedups on the idempotency key in Redis, dispatch dedups notification creation
+   in the DB, and the event writer uses conditional rank-based writes). A duplicate
+   replay is a no-op, not a duplicate notification.
 4. For `reason=terminated` messages: do NOT replay until the defect that made the
    payload unprocessable is fixed — they will terminate again on first delivery.
 
