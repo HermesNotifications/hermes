@@ -32,6 +32,9 @@ export function NavUser() {
   const router = useRouter();
   const [mounted, setMounted] = React.useState(false);
 
+  // Intentional client-mount guard so the theme-dependent menu item renders only
+  // after hydration (the next-themes pattern); the one-time setState is expected.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setMounted(true), []);
 
   const email = session?.user?.email ?? "";

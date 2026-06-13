@@ -59,6 +59,9 @@ charts/hermes/charts/
 web/admin/node_modules/
 web/admin/.next/
 web/admin/.env.local
+# Incremental TypeScript build cache — committing it lets a stale cache mask
+# type errors in CI (tsc --noEmit would skip "unchanged" files). Keep it local.
+web/admin/*.tsbuildinfo
 
 # pnpm workspace root
 node_modules/
