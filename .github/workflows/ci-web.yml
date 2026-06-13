@@ -1,0 +1,84 @@
+name: CI (Web)
+
+# JavaScript/TypeScript CI for the pnpm workspace (web/admin + sdks/typescript).
+# The main `ci.yml` only covers the Go services, so dependency bumps and code
+# changes under web/admin and the TS SDKs previously shipped with zero CI. This
+# workflow closes that gap. Path-filtered so it only runs when JS sources, the
+# workspace manifests, or this workflow change.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/admin/**"
+      - "sdks/typescript/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/ci-web.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "web/admin/**"
+      - "sdks/typescript/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/ci-web.yml"
+
+concurrency:
+  group: ci-web-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "22"
+  # Pin pnpm to the version that generated pnpm-lock.yaml so --frozen-lockfile
+  # checks the lockfile format consistently.
+  PNPM_VERSION: "10.28.2"
+
+jobs:
+  sdk:
+    name: TypeScript SDKs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      # --frozen-lockfile also guards against the failure mode where a Dependabot
+      # PR updates web/admin/package.json without regenerating the workspace-root
+      # pnpm-lock.yaml (which previously slipped through because nothing ran it).
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build server SDK
+        # Only @hermes-notifications/server builds cleanly today. The hermes-client
+        # SDK has generated-type drift vs api/{user,inbox}/openapi.yaml, and both
+        # hermes-react and hermes-web depend on it — so those three are excluded
+        # until hermes-client is fixed. TODO(#36): re-include them once green.
+        run: pnpm --filter "@hermes-notifications/server" build
+
+  web-admin:
+    name: Admin Portal (lint + typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      # web/admin imports @hermes-notifications/server (workspace:*); its types
+      # resolve from the compiled dist/, so the SDK must be built before typecheck.
+      - name: Build workspace SDK dependency
+        run: pnpm --filter "@hermes-notifications/server" build
+      - name: Lint
+        run: pnpm --filter "@hermes/admin" lint
+      - name: Typecheck
+        run: pnpm --filter "@hermes/admin" typecheck
