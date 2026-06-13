@@ -1,6 +1,6 @@
 # ADR 0001: Adopt the DynamoDB programming model for the hot notification path
 
-**Status:** Accepted  
+**Status:** Accepted (amended 2026-06-12: dual-path store is permanent — see Rollout posture)  
 **Date:** 2026-05-29  
 **Author:** Daryl Robbins
 
@@ -31,13 +31,17 @@ abstraction for the high-volume notification path. Select the backend per enviro
 
 | Environment | Backend |
 |---|---|
+| Self-hosted default | Native Postgres repositories (`internal/store/postgres/`) — no extra dependency |
 | Local dev / CI | DynamoDB Local (`amazon/dynamodb-local`) — no auth, no TLS, no init step |
-| Multi-cloud / on-prem / air-gapped | ExtendDB + Postgres (or Cassandra for horizontal scale) |
+| Multi-cloud / on-prem / air-gapped at scale | ExtendDB + Postgres (or Cassandra for horizontal scale) |
 | AWS at scale | Native DynamoDB — **zero application code change** |
 
-Backend selection is env-driven: `HERMES_DYNAMO_ENDPOINT` empty = real DynamoDB (AWS
-SDK default credential chain); set = ExtendDB or any DynamoDB-compatible endpoint.
-`HERMES_DYNAMO_REGION` defaults to `us-east-1`.
+Backend selection is env-driven: `HERMES_DYNAMO_ENDPOINT` unset = native Postgres
+repositories (`internal/store/postgres/`, the self-host default); set = DynamoDB Local,
+ExtendDB, or any DynamoDB-compatible endpoint. Native DynamoDB on AWS (endpoint set to
+the regional AWS endpoint, SDK default credential chain) is pending the credential
+wiring noted in `internal/store/dynamo/dynamo.go`. `HERMES_DYNAMO_REGION` defaults to
+`us-east-1`.
 
 Config/control-plane tables (`tenants`, `subscription_categories`, `subscriptions`,
 `notification_templates`, `api_keys`, `jwt_signing_keys`, `users`) and the Better Auth
@@ -51,7 +55,7 @@ Migrate in three phases, lowest-risk first:
 |---|---|
 | 1 (spike) | `notification_events` → `hermes-events` table; `user_subscriptions` → `hermes-user-subscriptions` table |
 | 2 | `notifications` → `hermes-notifications` table (inbox path, status rollup) |
-| 3 | Observability, load test, cutover |
+| 3 | Observability, load-test validation of both store backends |
 
 ## Table design
 
@@ -183,8 +187,17 @@ encoding (`base64(created_at_ns|id)`) can be adapted to pass the DynamoDB
    pattern and table creation in-cluster via ExtendDB.
 2. **Phase 2:** Dual-write to both Postgres and DynamoDB for `notifications`; read from
    Postgres until validation is complete, then flip the read path.
-3. **Phase 3:** Remove Postgres code paths for migrated tables; decommission Postgres
-   columns.
+3. **Phase 3 (amended 2026-06-12):** The Postgres implementations are **not** removed.
+   Hermes is distributed as a self-hosted product, and requiring a DynamoDB-compatible
+   endpoint (DynamoDB Local or ExtendDB) would add a fifth stateful dependency to every
+   installation. Both store paths are permanent:
+   - **Postgres** (native repositories in `internal/store/postgres/`) is the self-host
+     default — `HERMES_DYNAMO_ENDPOINT` unset selects it.
+   - **DynamoDB model** (`internal/store/dynamo/`) is the scale option — native DynamoDB
+     on AWS, or ExtendDB elsewhere.
+   Phase 3 work is therefore observability parity and load-test validation of both
+   backends, not cutover. Both paths are covered by the integration test suite and must
+   stay behaviorally equivalent (status rollup, idempotency window, pagination).
 
 ## Consequences
 
