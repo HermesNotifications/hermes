@@ -63,13 +63,17 @@ func MustConnectRedis(url string, logger *slog.Logger) *cache.Client {
 
 // MustConnectDynamo creates a DynamoDB client (or ExtendDB client when endpoint
 // is non-empty) and ensures the required tables exist, or exits the process.
+// retentionDays sets the event TTL window (pass cfg.EventRetentionDays; 0 → default 90).
 // It is safe to call even when the DynamoDB path is not yet wired into service
 // handlers — table creation is idempotent.
-func MustConnectDynamo(ctx context.Context, endpoint, region string, logger *slog.Logger) *dynamo.Client {
+func MustConnectDynamo(ctx context.Context, endpoint, region string, retentionDays int, logger *slog.Logger) *dynamo.Client {
 	client, err := dynamo.NewClient(ctx, endpoint, region)
 	if err != nil {
 		logger.Error("dynamo client creation failed", "error", err)
 		os.Exit(1)
+	}
+	if retentionDays > 0 {
+		client.RetentionDays = retentionDays
 	}
 	if err := client.EnsureTables(ctx); err != nil {
 		logger.Error("dynamo ensure tables failed", "error", err)
@@ -79,6 +83,6 @@ func MustConnectDynamo(ctx context.Context, endpoint, region string, logger *slo
 	if endpoint != "" {
 		mode = "ExtendDB @ " + endpoint
 	}
-	logger.Info("dynamo connected", "mode", mode)
+	logger.Info("dynamo connected", "mode", mode, "event_retention_days", client.RetentionDays)
 	return client
 }

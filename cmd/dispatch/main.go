@@ -44,7 +44,7 @@ func main() {
 
 	var notifRepo store.NotificationRepository = pgStore
 	if cfg.DynamoEndpoint != "" {
-		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, logger)
+		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, cfg.EventRetentionDays, logger)
 		// EventStore is created here only to satisfy NotificationStore's events field;
 		// dispatch doesn't insert events — it only creates/updates notification records.
 		evStore := dynamo.NewEventStore(dynamoClient, pgStore)

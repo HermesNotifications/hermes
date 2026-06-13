@@ -57,7 +57,7 @@ func main() {
 
 	var inboxStore inbox.InboxStore = pgStore
 	if cfg.DynamoEndpoint != "" {
-		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, logger)
+		dynamoClient := bootstrap.MustConnectDynamo(ctx, cfg.DynamoEndpoint, cfg.DynamoRegion, cfg.EventRetentionDays, logger)
 		evStore := dynamo.NewEventStore(dynamoClient, pgStore)
 		notifStore := dynamo.NewNotificationStore(dynamoClient, evStore)
 		inboxStore = &inboxStoreWithDynamoInbox{

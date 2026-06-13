@@ -21,6 +21,14 @@ func main() {
 	batchSize := flag.Int("batch-size", 5000, "Number of rows to delete per batch")
 	flag.Parse()
 
+	// When DynamoDB is active (HERMES_DYNAMO_ENDPOINT is set), events live in
+	// hermes-events and expire automatically via native DynamoDB TTL. The Postgres
+	// notification_events table is not the source of truth, so this job is a no-op.
+	if os.Getenv("HERMES_DYNAMO_ENDPOINT") != "" {
+		log.Println("HERMES_DYNAMO_ENDPOINT is set: events are DynamoDB TTL-managed; nothing to do")
+		os.Exit(0)
+	}
+
 	if *dbURL == "" {
 		log.Fatal("database-url is required (or set HERMES_DATABASE_URL)")
 	}

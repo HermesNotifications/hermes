@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/store"
@@ -531,12 +532,40 @@ func (s *NotificationStore) Archive(ctx context.Context, userID, notificationID 
 
 // Unarchive restores a notification to the active inbox.
 // Returns true if the notification is now unread (so caller can increment unread count cache).
+//
+// Uses two conditional paths (mirroring MarkRead) to correctly restore the pre-archive status:
+//   - If the notification had been read before archiving → restore status=read (rank 3), return false (still read).
+//   - If the notification was unread when archived → restore status=delivered (rank 2), return true (now unread).
 func (s *NotificationStore) Unarchive(ctx context.Context, userID, notificationID string) (bool, error) {
-	out, err := s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+	// Path A: was read before archiving — restore to read state.
+	_, err := s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName:           aws.String(s.client.NotificationsTable),
 		Key:                 notifKey(notificationID),
-		ConditionExpression: aws.String("user_id = :uid AND inbox_state = :archived"),
-		UpdateExpression:    aws.String("REMOVE archived_at SET inbox_state = :active, #s = if_not_exists(#s, :delivered), status_rank = if_not_exists(status_rank, :r2)"),
+		ConditionExpression: aws.String("user_id = :uid AND inbox_state = :archived AND attribute_exists(read_at)"),
+		UpdateExpression:    aws.String("REMOVE archived_at SET inbox_state = :active, #s = :read, status_rank = :r3"),
+		ExpressionAttributeNames: map[string]string{"#s": "status"},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":uid":      strVal(userID),
+			":archived": strVal(inboxStateArchived),
+			":active":   strVal(inboxStateActive),
+			":read":     strVal(string(models.StatusRead)),
+			":r3":       numVal("3"),
+		},
+	})
+	if err == nil {
+		return false, nil // restored to read — still read, not unread
+	}
+	var ccfe *types.ConditionalCheckFailedException
+	if !errors.As(err, &ccfe) {
+		return false, fmt.Errorf("unarchive: %w", err)
+	}
+
+	// Path B: was unread when archived — restore to delivered state.
+	_, err = s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           aws.String(s.client.NotificationsTable),
+		Key:                 notifKey(notificationID),
+		ConditionExpression: aws.String("user_id = :uid AND inbox_state = :archived AND attribute_not_exists(read_at)"),
+		UpdateExpression:    aws.String("REMOVE archived_at SET inbox_state = :active, #s = :delivered, status_rank = :r2"),
 		ExpressionAttributeNames: map[string]string{"#s": "status"},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":uid":       strVal(userID),
@@ -545,17 +574,14 @@ func (s *NotificationStore) Unarchive(ctx context.Context, userID, notificationI
 			":delivered": strVal(string(models.StatusDelivered)),
 			":r2":        numVal("2"),
 		},
-		ReturnValues: types.ReturnValueAllNew,
 	})
-	if err != nil {
-		var ccfe *types.ConditionalCheckFailedException
-		if errors.As(err, &ccfe) {
-			return false, nil // not archived
-		}
-		return false, fmt.Errorf("unarchive: %w", err)
+	if err == nil {
+		return true, nil // restored to delivered — now unread
 	}
-	_, hasReadAt := out.Attributes["read_at"]
-	return !hasReadAt, nil
+	if errors.As(err, &ccfe) {
+		return false, nil // not archived (or wrong user)
+	}
+	return false, fmt.Errorf("unarchive: %w", err)
 }
 
 // SoftDelete soft-deletes a notification.
@@ -580,24 +606,21 @@ func (s *NotificationStore) SoftDelete(ctx context.Context, userID, notification
 		}
 		return false, fmt.Errorf("soft delete: %w", err)
 	}
+	// ALL_NEW gives post-update state: inbox_state is now "deleted".
+	// Proxy for "was active before delete": archived_at absent → was active.
 	_, hasReadAt := out.Attributes["read_at"]
-	wasActive := false
-	if v, ok := out.Attributes["inbox_state"].(*types.AttributeValueMemberS); ok {
-		wasActive = v.Value == inboxStateDeleted // after update it's deleted; check prior state via archived_at
-	}
-	_ = wasActive
-	// Determine: was it active and unread before the delete?
-	// ALL_NEW gives us the post-update state. inbox_state is now "deleted".
-	// We need to know what it was before. Proxy: if archived_at is absent, it was active.
 	_, hadArchivedAt := out.Attributes["archived_at"]
 	wasUnread := !hasReadAt && !hadArchivedAt
 	return wasUnread, nil
 }
 
 // MarkAllRead marks all unread, active, non-deleted notifications as read for a user.
+// Per-item MarkRead calls are dispatched concurrently (up to markAllReadConcurrency) to
+// reduce wall-clock time for users with large inboxes.
+const markAllReadConcurrency = 10
+
 func (s *NotificationStore) MarkAllRead(ctx context.Context, userID string) error {
 	var lastKey map[string]types.AttributeValue
-	now := strVal(time.Now().UTC().Format(time.RFC3339Nano))
 
 	for {
 		out, err := s.client.db.Query(ctx, &dynamodb.QueryInput{
@@ -615,15 +638,22 @@ func (s *NotificationStore) MarkAllRead(ctx context.Context, userID string) erro
 			return fmt.Errorf("mark all read (query): %w", err)
 		}
 
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(markAllReadConcurrency)
 		for _, item := range out.Items {
 			id, _ := strAttr(item, "notif_id")
 			if id == "" {
 				continue
 			}
-			if _, err := s.MarkRead(ctx, userID, id); err != nil {
-				return fmt.Errorf("mark all read (update %s): %w", id, err)
-			}
-			_ = now
+			g.Go(func() error {
+				if _, err := s.MarkRead(gctx, userID, id); err != nil {
+					return fmt.Errorf("mark all read (update %s): %w", id, err)
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
 		}
 
 		if out.LastEvaluatedKey == nil {
