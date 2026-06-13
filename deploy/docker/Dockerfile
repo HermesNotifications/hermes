@@ -2,7 +2,6 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 RUN apk --no-cache add tzdata ca-certificates
-RUN go install github.com/DataDog/orchestrion@v1.8.0
 
 ARG SERVICE
 ARG VERSION=dev
@@ -11,6 +10,12 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
+
+# Install the orchestrion CLI at exactly the version pinned in go.mod. orchestrion
+# refuses to build when the installed CLI version differs from the go.mod tool
+# directive, so we derive the version from go.mod instead of hardcoding it here —
+# keeping go.mod the single source of truth as Dependabot bumps the dependency.
+RUN go install github.com/DataDog/orchestrion@"$(go list -m -f '{{.Version}}' github.com/DataDog/orchestrion)"
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
