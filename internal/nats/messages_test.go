@@ -1,0 +1,62 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
+package hermenats
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+)
+
+func TestDeadLetter_RoundTrip(t *testing.T) {
+	in := &DeadLetter{
+		Subject:  "delivery.email",
+		Stream:   "DELIVERY",
+		Consumer: "worker-email",
+		Reason:   DeadLetterReasonMaxDeliveries,
+		Attempts: 10,
+		Error:    "smtp: connection refused",
+		FailedAt: time.Date(2026, 6, 12, 10, 0, 0, 0, time.UTC),
+		Payload:  json.RawMessage(`{"notification_id":"abc123"}`),
+	}
+
+	data, err := in.Marshal()
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	out, err := UnmarshalDeadLetter(data)
+	if err != nil {
+		t.Fatalf("UnmarshalDeadLetter: %v", err)
+	}
+
+	if out.Subject != in.Subject || out.Stream != in.Stream || out.Consumer != in.Consumer {
+		t.Errorf("identity fields mismatch: got %+v", out)
+	}
+	if out.Reason != DeadLetterReasonMaxDeliveries {
+		t.Errorf("Reason = %q, want %q", out.Reason, DeadLetterReasonMaxDeliveries)
+	}
+	if out.Attempts != 10 {
+		t.Errorf("Attempts = %d, want 10", out.Attempts)
+	}
+	if out.Error != in.Error {
+		t.Errorf("Error = %q, want %q", out.Error, in.Error)
+	}
+	if !out.FailedAt.Equal(in.FailedAt) {
+		t.Errorf("FailedAt = %v, want %v", out.FailedAt, in.FailedAt)
+	}
+	// Payload must pass through verbatim so operators can replay it.
+	if string(out.Payload) != string(in.Payload) {
+		t.Errorf("Payload = %s, want %s", out.Payload, in.Payload)
+	}
+}
+
+func TestDeadLetterReasons(t *testing.T) {
+	if DeadLetterReasonMaxDeliveries != "max_deliveries" {
+		t.Errorf("DeadLetterReasonMaxDeliveries = %q", DeadLetterReasonMaxDeliveries)
+	}
+	if DeadLetterReasonTerminated != "terminated" {
+		t.Errorf("DeadLetterReasonTerminated = %q", DeadLetterReasonTerminated)
+	}
+}
