@@ -1,6 +1,6 @@
 # ADR 0001: Adopt the DynamoDB programming model for the hot notification path
 
-**Status:** Accepted  
+**Status:** Accepted (amended 2026-06-12: dual store path retained as a temporary hedge while ExtendDB matures — see Rollout posture)  
 **Date:** 2026-05-29  
 **Author:** Daryl Robbins
 
@@ -31,17 +31,27 @@ abstraction for the high-volume notification path. Select the backend per enviro
 
 | Environment | Backend |
 |---|---|
+| Self-hosted default | Native Postgres repositories (`internal/store/postgres/`) — no extra dependency |
 | Local dev / CI | DynamoDB Local (`amazon/dynamodb-local`) — no auth, no TLS, no init step |
-| Multi-cloud / on-prem / air-gapped | ExtendDB + Postgres (or Cassandra for horizontal scale) |
+| Multi-cloud / on-prem / air-gapped at scale | ExtendDB + Postgres (or Cassandra for horizontal scale) |
 | AWS at scale | Native DynamoDB — **zero application code change** |
 
-Backend selection is env-driven: `HERMES_DYNAMO_ENDPOINT` empty = real DynamoDB (AWS
-SDK default credential chain); set = ExtendDB or any DynamoDB-compatible endpoint.
-`HERMES_DYNAMO_REGION` defaults to `us-east-1`.
+Backend selection is env-driven: `HERMES_DYNAMO_ENDPOINT` unset = native Postgres
+repositories (`internal/store/postgres/`, the self-host default); set = DynamoDB Local,
+ExtendDB, or any DynamoDB-compatible endpoint. Native DynamoDB on AWS (endpoint set to
+the regional AWS endpoint, SDK default credential chain) is pending the credential
+wiring noted in `internal/store/dynamo/dynamo.go`. `HERMES_DYNAMO_REGION` defaults to
+`us-east-1`.
 
 Config/control-plane tables (`tenants`, `subscription_categories`, `subscriptions`,
-`notification_templates`, `api_keys`, `jwt_signing_keys`, `users`) and the Better Auth
-tables remain on native Postgres.
+`notification_templates`, `api_keys`, `jwt_signing_keys`) and the Better Auth tables
+remain on native Postgres — see [Entities considered and not migrated](#entities-considered-and-not-migrated)
+for the per-table rationale.
+
+`users` is **not** in that list: it grows unbounded with the customer's end-user base —
+the same scaling axis as `notifications` and `user_subscriptions` — and is accessed by
+key on the hot path. It is a Phase 2 candidate; see [`hermes-users`](#hermes-users-phase-2-candidate)
+below.
 
 ## Scope
 
@@ -50,8 +60,8 @@ Migrate in three phases, lowest-risk first:
 | Phase | Tables / interfaces |
 |---|---|
 | 1 (spike) | `notification_events` → `hermes-events` table; `user_subscriptions` → `hermes-user-subscriptions` table |
-| 2 | `notifications` → `hermes-notifications` table (inbox path, status rollup) |
-| 3 | Observability, load test, cutover |
+| 2 | `notifications` → `hermes-notifications` table (inbox path, status rollup); `users` → `hermes-users` (co-located with the `USER#` partition) |
+| 3 | Observability, load-test validation of both store backends |
 
 ## Table design
 
@@ -98,6 +108,51 @@ Access patterns:
 - `GetUserSubscriptions` → `Query` PK, SK begins_with `SUB#`
 - `SetUserSubscription` → `PutItem` (upsert — overwrites existing)
 - `DeleteUserSubscription` → `DeleteItem`
+
+### `hermes-users` (Phase 2 candidate)
+
+Replaces `users` (the Hermes end-user profile/contact table — **not** the Better Auth
+identity tables, which stay on Postgres). End users grow unbounded with the customer's
+user base, are read by key on the hot path (`EnsureUser` on every send, `GetUserByID`
+for contact info), and have no rich-SQL access needs — so they fit the DynamoDB model
+by the same criteria as the events/subscriptions tables.
+
+The profile co-locates in the **same `USER#<user_id>` partition** as
+`hermes-user-subscriptions`, so "load a user with their subscriptions" is a single
+`Query`:
+
+```
+PK (pk):  USER#<user_id>            S
+SK (sk):  PROFILE#                  S   (singleton item per user)
+
+GSI "by-external-id" (EnsureUser upsert lookup):
+  PK:  TENANT#<tenant_id>
+  SK:  EXT#<external_id>
+
+GSI "by-tenant" (admin ListUsers):
+  PK:  TENANT#<tenant_id>
+  SK:  USER#<user_id>
+
+Attributes:
+  user_id      S
+  tenant_id    S
+  external_id  S
+  email        S   (nullable)
+  phone        S   (nullable)
+  locale       S   (nullable)
+  created_at   S   (RFC3339)
+```
+
+Access patterns:
+- `GetUserByID` → `GetItem` (PK `USER#<id>`, SK `PROFILE#`)
+- `EnsureUser(tenant_id, external_id)` → `Query` the `by-external-id` GSI, then
+  `PutItem` if absent (the upsert is the only composite-key path that needs a GSI)
+- `ListUsers(tenant_id)` → `Query` the `by-tenant` GSI (replaces the Postgres scan)
+
+Open question for Phase 2: `EnsureUser` is a read-then-write that must stay idempotent
+under concurrent first-sends for the same external user; a conditional `PutItem`
+(`attribute_not_exists`) on a deterministic `user_id` derived from `(tenant_id,
+external_id)` avoids the GSI race. Validate during the spike.
 
 ### `hermes-notifications` (Phase 2)
 
@@ -155,6 +210,29 @@ Already Redis-backed (10-min TTL). No change needed.
 encoding (`base64(created_at_ns|id)`) can be adapted to pass the DynamoDB
 `LastEvaluatedKey` directly (the notification_id encodes time already).
 
+## Entities considered and not migrated
+
+The deciding criterion for moving a table to the DynamoDB model is **unbounded growth
+with traffic/user base**, combined with key-only access and no rich-SQL need. Being a
+point-lookup is *not* on its own a reason to migrate — Postgres serves keyed reads fine,
+and a small, cached table gains nothing from DynamoDB. Each control-plane table was
+checked against that bar and stays on Postgres:
+
+| Table | Grows with traffic? | Hot path? | Cached today | Verdict |
+|---|---|---|---|---|
+| `api_keys` | No — bounded (keys per namespace) | Yes (Send auth, every request) | Redis 5 min + in-process fallback (`validateAPIKey`) | **Stay.** The hot read is already absorbed by cache; the table doesn't grow; admin list/rotate/scope wants SQL. |
+| `jwt_signing_keys` | No — 1–5 rows | Loaded once at startup | In-process (1 min) + Redis (10 min) | **Stay.** Bulk-loaded, not keyed; tiny; already optimal. |
+| `tenants` | No — 10s–100s | Yes (dispatch `EnsureTenant`) | Redis 24 h | **Stay.** Tiny, long-TTL cached; admin queries want SQL. |
+| `notification_templates` | No — config | Yes (dispatch `Resolve` by slug) | Redis 5 min | **Stay.** Bounded config; cache is effective. |
+| `subscription_categories`, `subscriptions` | No — config | Yes (channel resolution) | Redis 5 min | **Stay.** Bounded config; cached. |
+| Better Auth tables | No | Auth flows | — | **Stay.** Relational identity model; coupled to SQL. |
+
+`api_keys` is the instructive case: it *feels* like a DynamoDB candidate because it is
+read on every Send request, but the thing that makes it feel hot (the read volume) is
+already handled by caching, and the thing that would justify DynamoDB (unbounded growth)
+is absent. `users` is the opposite — it is the one control-plane-adjacent table that
+*does* grow unbounded, which is why it moves (see `hermes-users` above).
+
 ## Tradeoffs
 
 **Gains:**
@@ -181,14 +259,52 @@ encoding (`base64(created_at_ns|id)`) can be adapted to pass the DynamoDB
    in `internal/store/dynamo/`. Backend selected per env via `HERMES_DYNAMO_ENDPOINT`.
    Postgres impls remain as fallback. The spike validates the DynamoDB conditional-write
    pattern and table creation in-cluster via ExtendDB.
-2. **Phase 2:** Dual-write to both Postgres and DynamoDB for `notifications`; read from
-   Postgres until validation is complete, then flip the read path.
-3. **Phase 3:** Remove Postgres code paths for migrated tables; decommission Postgres
-   columns.
+2. **Phase 2:** Dual-write to both Postgres and DynamoDB for `notifications` (and `users`,
+   if the `hermes-users` design validates in the spike); read from Postgres until
+   validation is complete, then flip the read path.
+3. **Phase 3 (amended 2026-06-12):** Cutover is **deferred, not cancelled.** The original
+   plan — collapse to a single DynamoDB-model code path with ExtendDB+Postgres as the
+   self-host backend — remains the target architecture. The native Postgres
+   implementations in `internal/store/postgres/` are retained for now as a **temporary
+   hedge**, for one reason: ExtendDB was announced May 2026 and is, at the time of this
+   amendment, roughly one month old. Making a one-month-old adapter a hard runtime
+   dependency for *every* self-host install — with no native fallback to the database
+   operators already trust — is a maturity risk we are not yet willing to take.
+
+   Note that ExtendDB is **stateless**: it is a protocol adapter in front of Postgres, not
+   a fifth stateful dependency. The cost of the single-path approach is therefore an extra
+   *process* to deploy, monitor, and upgrade (plus dependence on its correctness and
+   performance), not extra stored state.
+
+   Until that risk clears, both store paths are maintained:
+   - **Postgres** (native repositories in `internal/store/postgres/`) is the self-host
+     default — `HERMES_DYNAMO_ENDPOINT` unset selects it.
+   - **DynamoDB model** (`internal/store/dynamo/`) is the scale option — native DynamoDB
+     on AWS, or ExtendDB elsewhere.
+
+   Both paths are covered by the integration test suite and must stay behaviorally
+   equivalent (status rollup, idempotency window, pagination). Near-term Phase 3 work is
+   therefore observability parity and load-test validation of both backends.
+
+   **Revisit trigger.** (Tracked in [#18](https://github.com/darylrobbins/hermes/issues/18).)
+   Re-evaluate collapsing to the single ExtendDB path once ExtendDB has a track record we
+   trust — concretely, when **all** of the following hold:
+   - ExtendDB has run the Hermes hot path under production-representative load for a
+     sustained period without correctness or availability regressions vs. the Postgres
+     path;
+   - it has cut at least one stable (non-RC) release line with a documented upgrade and
+     security-patch cadence;
+   - operating it (deploy, monitor, upgrade, recover) is well understood and runbooked.
+
+   When the trigger is met, removing the native Postgres path becomes a deliberate
+   follow-up decision (its own ADR or amendment), not an automatic step — so the
+   "permanent vs. temporary" question is revisited with evidence rather than presumed
+   either way.
 
 ## Consequences
 
-- `internal/store/dynamo/` package added with `EventStore` and `UserSubscriptionStore`.
+- `internal/store/dynamo/` package added with `EventStore` and `UserSubscriptionStore`
+  (and, in Phase 2, a `UserStore` for the `hermes-users` table).
 - `internal/config/config.go` gains `DynamoEndpoint` and `DynamoRegion`.
 - `internal/bootstrap/bootstrap.go` gains `MustConnectDynamo`.
 - `deploy/k8s/overlays/local/extenddb.yaml` and `Tiltfile` updated to run ExtendDB
