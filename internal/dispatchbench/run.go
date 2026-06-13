@@ -36,7 +36,9 @@ type Runner struct {
 	Poll     time.Duration // consumer-info poll interval, e.g. 50ms
 }
 
-// Drain runs one repetition and returns throughput in msgs/sec.
+// Drain runs one repetition and returns throughput in msgs/sec. ctx SHOULD carry
+// a deadline: if dispatch stalls (e.g. a consumer wedged with in-flight messages)
+// waitDrained blocks until ctx is cancelled. The harness passes a per-drain timeout.
 func (r *Runner) Drain(ctx context.Context, cell Cell) (float64, error) {
 	if err := r.Reset(ctx); err != nil {
 		return 0, fmt.Errorf("reset: %w", err)
