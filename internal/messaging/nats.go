@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"sync"
 	"time"
 
 	"github.com/hermes-notifications/hermes/internal/observability"
@@ -17,6 +18,11 @@ import (
 type Client struct {
 	conn *nats.Conn
 	js   jetstream.JetStream
+
+	// done is closed by Close to unblock the worker pools and fetcher callbacks
+	// started by Subscribe so they exit instead of leaking. closeOnce guards it.
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 type StreamConfig struct {
@@ -40,7 +46,7 @@ func Connect(url string) (*Client, error) {
 		nc.Close()
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
-	return &Client{conn: nc, js: js}, nil
+	return &Client{conn: nc, js: js, done: make(chan struct{})}, nil
 }
 
 func (c *Client) SetupStreams(ctx context.Context) error {
@@ -116,23 +122,65 @@ type DeliveryInfo struct {
 	LastAttempt bool
 }
 
-func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency int, handler func(ctx context.Context, data []byte, info DeliveryInfo) error) error {
-	streamName := ""
+// defaultPrefetch is the fetcher's in-flight buffer when a SubscribeConfig leaves
+// Prefetch unset. Large enough that the 50%-threshold refill keeps the pull
+// pipeline full (no per-message round trip), small enough to avoid hoarding.
+const defaultPrefetch = 64
+
+// SubscribeConfig configures a Subscribe consumer. A single fetcher loop pulls
+// from the durable consumer and hands each message to a pool of Workers; the
+// fetcher blocks when every worker is busy, so in-flight work is bounded by the
+// pool and by MaxAckPending. Prefetch decouples fetching from processing so the
+// pull pipeline stays full without one consumer hoarding the whole backlog.
+type SubscribeConfig struct {
+	Subject  string
+	Consumer string
+	// MaxAckPending caps server-side unacked messages. Raised if below
+	// Prefetch+Workers so the server never throttles below the in-flight budget.
+	MaxAckPending int
+	// Workers is the size of the processing pool. < 1 is treated as 1.
+	Workers int
+	// Prefetch is the fetcher's in-flight buffer (PullMaxMessages). < 1 uses
+	// defaultPrefetch. Batching consumers (event-writer) set this high.
+	Prefetch int
+}
+
+func streamForSubject(subject string) string {
 	for _, s := range Streams {
 		for _, subj := range s.Subjects {
 			if subj == subject {
-				streamName = s.Name
-				break
+				return s.Name
 			}
 		}
 	}
+	return ""
+}
+
+func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context, data []byte, info DeliveryInfo) error) error {
+	streamName := streamForSubject(cfg.Subject)
 	if streamName == "" {
-		return fmt.Errorf("no stream found for subject %s", subject)
+		return fmt.Errorf("no stream found for subject %s", cfg.Subject)
+	}
+
+	workers := cfg.Workers
+	if workers < 1 {
+		workers = 1
+	}
+	prefetch := cfg.Prefetch
+	if prefetch < 1 {
+		prefetch = defaultPrefetch
+	}
+	// The server must allow at least as many unacked messages as we can hold in
+	// flight (prefetch buffer + one being processed per worker), or it would
+	// throttle delivery below our own backpressure point.
+	maxAckPending := cfg.MaxAckPending
+	if minPending := prefetch + workers; maxAckPending < minPending {
+		maxAckPending = minPending
 	}
 
 	cons, err := c.js.CreateOrUpdateConsumer(context.Background(), streamName, jetstream.ConsumerConfig{
-		Durable:       consumer,
-		FilterSubject: subject,
+		Durable:       cfg.Consumer,
+		FilterSubject: cfg.Subject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		MaxAckPending: maxAckPending,
 		MaxDeliver:    maxDeliveries,
@@ -141,63 +189,90 @@ func (c *Client) Subscribe(subject, consumer string, maxAckPending, concurrency 
 		return fmt.Errorf("create consumer: %w", err)
 	}
 
-	// With more than one consumer loop, cap each loop to a single in-flight
-	// message (PullMaxMessages(1)). Otherwise the first loop's initial pull
-	// prefetches the whole default batch (500) into its buffer and starves its
-	// siblings, so the effective parallelism collapses below `concurrency` and a
-	// slow message head-of-line-blocks the rest of that buffer. One message per
-	// loop makes `concurrency` mean exactly N evenly-distributed parallel
-	// handlers. Single-loop consumers (e.g. event-writer, which acks immediately
-	// into an in-memory batcher) keep the default prefetch firehose.
-	var consumeOpts []jetstream.PullConsumeOpt
-	if concurrency > 1 {
-		consumeOpts = append(consumeOpts, jetstream.PullMaxMessages(1))
-	}
-
-	for i := 0; i < concurrency; i++ {
-		_, err = cons.Consume(func(msg jetstream.Msg) {
-			ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
-			defer span.End()
-
-			meta, _ := msg.Metadata()
-			attempt := uint64(1)
-			if meta != nil {
-				attempt = meta.NumDelivered
-			}
-			info := DeliveryInfo{
-				Attempt:     attempt,
-				LastAttempt: attempt >= uint64(maxDeliveries),
-			}
-
-			if err := handler(ctx, msg.Data(), info); err != nil {
-				if dead, reason := classify(err, attempt); dead {
-					if dlqErr := c.publishDeadLetter(ctx, streamName, consumer, subject, reason, attempt, err, msg.Data()); dlqErr != nil {
-						// Never destroy a message we failed to preserve. Past
-						// MaxDeliver the Nak is a no-op and the message lingers
-						// in the source stream until MaxAge — same as before
-						// this feature existed. Note: if a PermanentError fails
-						// to publish here at an early attempt, the redelivery may
-						// eventually dead-letter it as max_deliveries rather than
-						// terminated. The safety invariant still holds, and
-						// HermesDLQPublishFailure will already be firing.
-						_ = msg.NakWithDelay(retryDelay(attempt))
-						return
-					}
-					_ = msg.Term()
+	// One fetcher (the Consume loop) hands messages to a bounded worker pool over
+	// an unbuffered channel. When all workers are busy the hand-off blocks, which
+	// stops the fetcher draining its prefetch buffer — natural backpressure. The
+	// prefetch buffer (PullMaxMessages) lives inside Consume and keeps the pull
+	// pipeline full so the fetcher never stalls on a per-message round trip.
+	work := make(chan jetstream.Msg)
+	for i := 0; i < workers; i++ {
+		go func() {
+			for {
+				select {
+				case msg := <-work:
+					c.processMessage(streamName, cfg.Consumer, cfg.Subject, msg, handler)
+				case <-c.done:
 					return
 				}
-				_ = msg.NakWithDelay(retryDelay(attempt))
-				return
 			}
-			_ = msg.Ack()
-		}, consumeOpts...)
-		if err != nil {
-			return fmt.Errorf("start consumer %d: %w", i, err)
+		}()
+	}
+
+	_, err = cons.Consume(func(msg jetstream.Msg) {
+		select {
+		case work <- msg:
+		case <-c.done:
+			// Shutting down: drop without ack; the message is redelivered later.
 		}
+	}, jetstream.PullMaxMessages(prefetch))
+	if err != nil {
+		return fmt.Errorf("start consumer: %w", err)
 	}
 	return nil
 }
 
+// processMessage runs one message through the handler and applies the ack policy.
+// Success acks; a terminal error is dead-lettered then terminated; any other
+// error (including a recovered handler panic) is nak'd for retry with backoff.
+func (c *Client) processMessage(streamName, consumer, subject string, msg jetstream.Msg, handler func(ctx context.Context, data []byte, info DeliveryInfo) error) {
+	ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
+	defer span.End()
+
+	meta, _ := msg.Metadata()
+	attempt := uint64(1)
+	if meta != nil {
+		attempt = meta.NumDelivered
+	}
+	info := DeliveryInfo{
+		Attempt:     attempt,
+		LastAttempt: attempt >= uint64(maxDeliveries),
+	}
+
+	if err := safeHandle(ctx, handler, msg.Data(), info); err != nil {
+		if dead, reason := classify(err, attempt); dead {
+			if dlqErr := c.publishDeadLetter(ctx, streamName, consumer, subject, reason, attempt, err, msg.Data()); dlqErr != nil {
+				// Never destroy a message we failed to preserve. Past MaxDeliver
+				// the Nak is a no-op and the message lingers in the source stream
+				// until MaxAge — same as before this feature existed. Note: if a
+				// PermanentError fails to publish here at an early attempt, the
+				// redelivery may eventually dead-letter it as max_deliveries
+				// rather than terminated. The safety invariant still holds, and
+				// HermesDLQPublishFailure will already be firing.
+				_ = msg.NakWithDelay(retryDelay(attempt))
+				return
+			}
+			_ = msg.Term()
+			return
+		}
+		_ = msg.NakWithDelay(retryDelay(attempt))
+		return
+	}
+	_ = msg.Ack()
+}
+
+// safeHandle invokes handler, converting a panic into a (retryable) error so one
+// poison message can't take down a whole worker — it gets nak'd and, after
+// MaxDeliver attempts, dead-lettered like any other persistent failure.
+func safeHandle(ctx context.Context, handler func(ctx context.Context, data []byte, info DeliveryInfo) error, data []byte, info DeliveryInfo) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("handler panic: %v", r)
+		}
+	}()
+	return handler(ctx, data, info)
+}
+
 func (c *Client) Close() {
+	c.closeOnce.Do(func() { close(c.done) })
 	c.conn.Close()
 }

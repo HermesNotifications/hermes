@@ -32,12 +32,15 @@ type Config struct {
 	APIKeyHMACSecret   string
 	EventRetentionDays int
 
-	// DispatchConcurrency is the number of parallel consumer loops the dispatch
-	// service runs against the notification.send work queue. Distinct notifications
+	// DispatchConcurrency is the size of the dispatch worker pool — how many
+	// notification.send messages are processed in parallel. Distinct notifications
 	// are independent (per-notification status rollup is monotonic downstream), so
-	// they can be processed in parallel to lift dispatch throughput. Tunable for
-	// load-test sweeps.
+	// they can be processed in parallel to lift dispatch throughput.
 	DispatchConcurrency int
+	// DispatchPrefetch is the dispatch fetcher's in-flight buffer (PullMaxMessages)
+	// that feeds the worker pool. Decouples fetching from processing so the pull
+	// pipeline stays full without hoarding the backlog. Tunable for load-test sweeps.
+	DispatchPrefetch int
 
 	// DynamoDB / ExtendDB — set DynamoEndpoint to an ExtendDB URL for local dev and
 	// multi-cloud environments; leave empty to use native DynamoDB on AWS.
@@ -68,6 +71,7 @@ func Load() Config {
 		APIKeyHMACSecret:    envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
 		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
 		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 4),
+		DispatchPrefetch:    envInt("HERMES_DISPATCH_PREFETCH", 64),
 		DynamoEndpoint:      envStr("HERMES_DYNAMO_ENDPOINT", ""),
 		DynamoRegion:        envStr("HERMES_DYNAMO_REGION", "us-east-1"),
 	}

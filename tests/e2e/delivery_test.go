@@ -178,7 +178,7 @@ func TestDeliveryPipeline(t *testing.T) {
 	}
 
 	// ── Start all services BEFORE sending ───────────────────────────────
-	if err := rtr.Start(1); err != nil {
+	if err := rtr.Start(1, 0); err != nil {
 		t.Fatalf("start dispatch: %v", err)
 	}
 	if err := ew.Start(ctx); err != nil {

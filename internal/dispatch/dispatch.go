@@ -41,15 +41,19 @@ func NewDispatch(nats *messaging.Client, store store.NotificationRepository, use
 	}
 }
 
-// Start begins consuming notification.send with the given number of parallel
-// consumer loops. Distinct notifications are independent — each carries its own
-// record and status rollup is monotonic downstream — so they can be processed
-// concurrently to lift dispatch throughput. concurrency < 1 is treated as 1.
-func (d *Dispatch) Start(concurrency int) error {
-	if concurrency < 1 {
-		concurrency = 1
-	}
-	return d.nats.Subscribe("notification.send", "dispatch", 256, concurrency, func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
+// Start begins consuming notification.send with a pool of `workers` processing
+// notifications in parallel, backed by a `prefetch`-deep fetch buffer. Distinct
+// notifications are independent — each carries its own record and status rollup
+// is monotonic downstream — so they can be processed concurrently to lift
+// dispatch throughput.
+func (d *Dispatch) Start(workers, prefetch int) error {
+	return d.nats.Subscribe(messaging.SubscribeConfig{
+		Subject:       "notification.send",
+		Consumer:      "dispatch",
+		MaxAckPending: 256,
+		Workers:       workers,
+		Prefetch:      prefetch,
+	}, func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
 		return d.handleSend(ctx, data, info)
 	})
 }

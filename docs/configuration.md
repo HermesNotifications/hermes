@@ -23,7 +23,8 @@ configuration at all.
 | `HERMES_CENTRIFUGO_API_KEY` | `centrifugo-api-key` | Centrifugo HTTP API key. |
 | `HERMES_SMS_WEBHOOK_URL` | `http://localhost:9090/sms` | Webhook the SMS worker POSTs to. |
 | `HERMES_EVENT_RETENTION_DAYS` | `90` | Age threshold for `cmd/cleanup` to delete `notification_events`. |
-| `HERMES_DISPATCH_CONCURRENCY` | `4` | Number of parallel consumer loops the **dispatch** service runs against `notification.send`. Each loop holds one in-flight message, so this is the cap on notifications dispatched in parallel. Distinct notifications are independent (status rollup is monotonic downstream), so raising this lifts dispatch throughput; tune against load tests. |
+| `HERMES_DISPATCH_CONCURRENCY` | `4` | Size of the **dispatch** worker pool — how many `notification.send` messages are processed in parallel. Distinct notifications are independent (status rollup is monotonic downstream), so raising this lifts dispatch throughput; tune against load tests. |
+| `HERMES_DISPATCH_PREFETCH` | `64` | Dispatch fetcher's in-flight buffer (NATS `PullMaxMessages`) feeding the worker pool. Decouples fetching from processing so the pull pipeline stays full without one consumer hoarding the backlog. Auto-raised to at least `concurrency + 1`; the consumer's server-side `MaxAckPending` is raised to at least `prefetch + concurrency`. Tune against load tests. |
 
 ### Email (`worker-email`)
 

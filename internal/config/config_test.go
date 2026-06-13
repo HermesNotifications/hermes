@@ -26,6 +26,9 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.DispatchConcurrency != 4 {
 		t.Fatalf("expected default DispatchConcurrency 4, got %d", cfg.DispatchConcurrency)
 	}
+	if cfg.DispatchPrefetch != 64 {
+		t.Fatalf("expected default DispatchPrefetch 64, got %d", cfg.DispatchPrefetch)
+	}
 }
 
 func TestLoad_DispatchConcurrencyOverride(t *testing.T) {

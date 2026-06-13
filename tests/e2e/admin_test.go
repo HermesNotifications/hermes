@@ -146,7 +146,7 @@ func TestSendNotification_E2E(t *testing.T) {
 	}
 
 	// Start dispatch + event writer so notifications get persisted and routed.
-	if err := rtr.Start(1); err != nil {
+	if err := rtr.Start(1, 0); err != nil {
 		t.Fatalf("start dispatch: %v", err)
 	}
 	if err := ew.Start(ctx); err != nil {

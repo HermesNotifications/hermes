@@ -37,7 +37,15 @@ func New(nats *messaging.Client, st store.EventRepository, logger *slog.Logger) 
 }
 
 func (w *Writer) Start(_ context.Context) error {
-	return w.nats.Subscribe("notification.events", "event-writer", 1000, 1, func(ctx context.Context, data []byte, _ messaging.DeliveryInfo) error {
+	// One worker feeds the in-memory batcher, which flushes on size/time; a deep
+	// prefetch keeps the batch fed (firehose) rather than throttling per message.
+	return w.nats.Subscribe(messaging.SubscribeConfig{
+		Subject:       "notification.events",
+		Consumer:      "event-writer",
+		MaxAckPending: 1000,
+		Workers:       1,
+		Prefetch:      256,
+	}, func(ctx context.Context, data []byte, _ messaging.DeliveryInfo) error {
 		msg, err := hermenats.UnmarshalEvent(data)
 		if err != nil {
 			w.logger.Error("unmarshal event", "error", err)
