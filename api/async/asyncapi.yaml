@@ -127,6 +127,7 @@ channels:
           retention: limits
           storage: file
           maxAge: 604800000000000  # 7 days in nanoseconds
+          maxBytes: 1073741824     # 1 GiB
 
   # ---------------------------------------------------------------------------
   # Real-time WebSocket — user channels
@@ -190,7 +191,8 @@ operations:
     summary: Messaging layer captures a terminally failed message
     description: |
       Published by internal/messaging in any service when a handler error is
-      terminal (max deliveries exhausted, or a PermanentError).
+      terminal (max deliveries exhausted, or a PermanentError). There is no
+      in-process receive operation — operators consume the DLQ via the nats CLI.
 
   pushInboxUpdate:
     action: send
