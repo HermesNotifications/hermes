@@ -286,8 +286,9 @@ is absent. `users` is the opposite — it is the one control-plane-adjacent tabl
    equivalent (status rollup, idempotency window, pagination). Near-term Phase 3 work is
    therefore observability parity and load-test validation of both backends.
 
-   **Revisit trigger.** Re-evaluate collapsing to the single ExtendDB path once ExtendDB
-   has a track record we trust — concretely, when **all** of the following hold:
+   **Revisit trigger.** (Tracked in [#18](https://github.com/darylrobbins/hermes/issues/18).)
+   Re-evaluate collapsing to the single ExtendDB path once ExtendDB has a track record we
+   trust — concretely, when **all** of the following hold:
    - ExtendDB has run the Hermes hot path under production-representative load for a
      sustained period without correctness or availability regressions vs. the Postgres
      path;
