@@ -56,3 +56,36 @@ func TestRegistry_ProviderForUnknownChannelPanics(t *testing.T) {
 	}()
 	r.RegisterProvider(Manifest{ID: "smtp", Channel: "email"})
 }
+
+func TestRegistry_EmptySlugPanics(t *testing.T) {
+	r := NewRegistry()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on empty channel slug")
+		}
+	}()
+	r.RegisterChannel(ChannelDescriptor{Slug: ""})
+}
+
+func TestRegistry_EmptyProviderIDPanics(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterChannel(ChannelDescriptor{Slug: "email"})
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on empty provider ID")
+		}
+	}()
+	r.RegisterProvider(Manifest{ID: "", Channel: "email"})
+}
+
+func TestRegistry_DuplicateProviderPanics(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterChannel(ChannelDescriptor{Slug: "email"})
+	r.RegisterProvider(Manifest{ID: "smtp", Channel: "email"})
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on duplicate provider ID")
+		}
+	}()
+	r.RegisterProvider(Manifest{ID: "smtp", Channel: "email"})
+}
