@@ -9,11 +9,12 @@ import (
 	"encoding/json"
 	"fmt"
 	htmltemplate "html/template"
-	"time"
 	texttemplate "text/template"
+	"time"
 
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermes-notifications/hermes/internal/provider"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
@@ -54,6 +55,26 @@ type RenderedContent struct {
 	SMSBody      string
 	InboxTitle   string
 	InboxBody    string
+}
+
+// Field returns a rendered-content value by its provider field key (see
+// internal/provider Field* constants). Unknown/empty keys return "". This maps
+// the legacy fixed RenderedContent onto the registry's field keys and is
+// removed in phase 2 when content becomes a normalized per-channel table.
+func (rc *RenderedContent) Field(key string) string {
+	switch key {
+	case provider.FieldEmailSubject:
+		return rc.EmailSubject
+	case provider.FieldEmailBody:
+		return rc.EmailBody
+	case provider.FieldSMSBody:
+		return rc.SMSBody
+	case provider.FieldInboxTitle:
+		return rc.InboxTitle
+	case provider.FieldInboxBody:
+		return rc.InboxBody
+	}
+	return ""
 }
 
 func RenderTemplates(nt *models.NotificationTemplate, data map[string]any) (*RenderedContent, error) {

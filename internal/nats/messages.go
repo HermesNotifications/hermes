@@ -40,6 +40,20 @@ type Recipient struct {
 	Phone string `json:"phone,omitempty"`
 }
 
+// AddressFor returns the contact address for a channel's address key ("email"
+// or "phone"). Unknown keys return "". This maps the legacy fixed Recipient
+// onto the registry's address keys and is removed in phase 2 when contacts
+// become normalized contact points.
+func (r Recipient) AddressFor(key string) string {
+	switch key {
+	case "email":
+		return r.Email
+	case "phone":
+		return r.Phone
+	}
+	return ""
+}
+
 // DeliveryMessage is published to delivery.{channel} by the Dispatch service.
 type DeliveryMessage struct {
 	NotificationID string          `json:"notification_id"`
