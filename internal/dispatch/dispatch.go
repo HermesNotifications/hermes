@@ -16,6 +16,7 @@ import (
 
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermes-notifications/hermes/internal/provider"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
@@ -355,15 +356,9 @@ func contentForChannel(channel string, original hermenats.MessageContent, render
 		ActionLabel: original.ActionLabel,
 	}
 
-	switch channel {
-	case "email":
-		mc.Title = rendered.EmailSubject
-		mc.Body = rendered.EmailBody
-	case "sms":
-		mc.Body = rendered.SMSBody
-	case "inbox":
-		mc.Title = rendered.InboxTitle
-		mc.Body = rendered.InboxBody
+	if desc, ok := provider.Builtins.Channel(channel); ok {
+		mc.Title = rendered.Field(desc.TitleField)
+		mc.Body = rendered.Field(desc.BodyField)
 	}
 
 	return mc

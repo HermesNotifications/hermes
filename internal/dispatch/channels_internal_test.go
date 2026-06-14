@@ -77,6 +77,39 @@ func TestFilterChannelsForTemplate(t *testing.T) {
 
 func sp(s string) *string { return &s }
 
+func TestContentForChannel(t *testing.T) {
+	url := "https://x"
+	original := hermenats.MessageContent{ActionURL: &url}
+	rc := &RenderedContent{
+		EmailSubject: "es", EmailBody: "eb",
+		SMSBody:    "sb",
+		InboxTitle: "it", InboxBody: "ib",
+	}
+
+	// rendered == nil -> passthrough of original.
+	if got := contentForChannel("email", original, nil); got.ActionURL != &url {
+		t.Fatal("nil rendered: expected original passthrough")
+	}
+
+	email := contentForChannel("email", original, rc)
+	if email.Title != "es" || email.Body != "eb" || email.ActionURL != &url {
+		t.Fatalf("email: got %+v", email)
+	}
+	sms := contentForChannel("sms", original, rc)
+	if sms.Title != "" || sms.Body != "sb" {
+		t.Fatalf("sms: got title=%q body=%q, want title empty", sms.Title, sms.Body)
+	}
+	inbox := contentForChannel("inbox", original, rc)
+	if inbox.Title != "it" || inbox.Body != "ib" {
+		t.Fatalf("inbox: got %+v", inbox)
+	}
+	// unknown channel -> empty title/body (ActionURL still carried).
+	bogus := contentForChannel("bogus", original, rc)
+	if bogus.Title != "" || bogus.Body != "" || bogus.ActionURL != &url {
+		t.Fatalf("bogus: got %+v", bogus)
+	}
+}
+
 func TestFilterChannelsByContact(t *testing.T) {
 	// email + sms required; inbox always kept. Recipient has email only.
 	rec := hermenats.Recipient{Email: "a@b.c"}
