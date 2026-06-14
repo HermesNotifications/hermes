@@ -51,8 +51,8 @@ func (d *Dispatch) Start() error {
 // It implements messaging.PermanentError so the NATS subscriber acks instead of nacking.
 type permanentError struct{ err error }
 
-func (e *permanentError) Error() string  { return e.err.Error() }
-func (e *permanentError) Unwrap() error  { return e.err }
+func (e *permanentError) Error() string   { return e.err.Error() }
+func (e *permanentError) Unwrap() error   { return e.err }
 func (e *permanentError) Permanent() bool { return true }
 
 func permanent(err error) error { return &permanentError{err: err} }
@@ -284,28 +284,13 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 		recipient.Phone = msg.Phone
 	}
 
-	// Filter channels that require contact info
-	var filteredChannels []string
-	for _, ch := range channels {
-		switch ch {
-		case "email":
-			if recipient.Email == "" {
-				log.Warn("skipping email channel: user has no email", "user_id", user.ID)
-				d.publishEvent(ctx, msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
-					"reason": "user has no email address",
-				})
-				continue
-			}
-		case "sms":
-			if recipient.Phone == "" {
-				log.Warn("skipping sms channel: user has no phone", "user_id", user.ID)
-				d.publishEvent(ctx, msg.NotificationID, ch, "routing.no_contact", "warn", map[string]any{
-					"reason": "user has no phone number",
-				})
-				continue
-			}
-		}
-		filteredChannels = append(filteredChannels, ch)
+	// Filter channels that require contact info (per the channel registry).
+	filteredChannels, skipped := filterChannelsByContact(channels, recipient)
+	for _, s := range skipped {
+		log.Warn(fmt.Sprintf("skipping %s channel: user has no %s", s.Channel, s.AddressKey), "user_id", user.ID)
+		d.publishEvent(ctx, msg.NotificationID, s.Channel, "routing.no_contact", "warn", map[string]any{
+			"reason": "user has no " + s.AddressLabel,
+		})
 	}
 	channels = filteredChannels
 

@@ -76,3 +76,24 @@ func TestFilterChannelsForTemplate(t *testing.T) {
 }
 
 func sp(s string) *string { return &s }
+
+func TestFilterChannelsByContact(t *testing.T) {
+	// email + sms required; inbox always kept. Recipient has email only.
+	rec := hermenats.Recipient{Email: "a@b.c"}
+	kept, skipped := filterChannelsByContact([]string{"email", "sms", "inbox"}, rec)
+
+	wantKept := []string{"email", "inbox"}
+	if len(kept) != len(wantKept) || kept[0] != "email" || kept[1] != "inbox" {
+		t.Fatalf("kept: got %v, want %v", kept, wantKept)
+	}
+	if len(skipped) != 1 || skipped[0].Channel != "sms" {
+		t.Fatalf("skipped: got %v, want one sms skip", skipped)
+	}
+	// Exact strings the call site formats from the skip:
+	if got := "skipping " + skipped[0].Channel + " channel: user has no " + skipped[0].AddressKey; got != "skipping sms channel: user has no phone" {
+		t.Fatalf("log string: got %q", got)
+	}
+	if got := "user has no " + skipped[0].AddressLabel; got != "user has no phone number" {
+		t.Fatalf("event reason: got %q", got)
+	}
+}
