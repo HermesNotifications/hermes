@@ -70,7 +70,7 @@ func Load() Config {
 		SMSWebhookURL:       envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
 		APIKeyHMACSecret:    envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
 		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
-		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 4),
+		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 8),
 		DispatchPrefetch:    envInt("HERMES_DISPATCH_PREFETCH", 64),
 		DynamoEndpoint:      envStr("HERMES_DYNAMO_ENDPOINT", ""),
 		DynamoRegion:        envStr("HERMES_DYNAMO_REGION", "us-east-1"),

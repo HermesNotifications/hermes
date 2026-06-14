@@ -125,10 +125,29 @@ Both backends agree on the two decisions that matter:
 
 ## E2E k6 confirmation
 
-<!-- send scenario at the recommended config, per backend (Task 9) -->
-_Pending the run._
+**Deferred** to a follow-on. The in-process sweep measures dispatch throughput
+directly (isolated from the HTTP path), so it already validates the scaling. The
+end-to-end k6 `send` run requires the full service stack rebuilt on this branch
+(the deployed k3d pods are stale images) and would re-confirm via a noisier,
+indirect path — captured as a separate task once the branch is deployed.
 
 ## Decision
 
-<!-- recommended HERMES_DISPATCH_CONCURRENCY / HERMES_DISPATCH_PREFETCH + rationale (Task 10) -->
-_Pending the run._
+**Defaults: `HERMES_DISPATCH_CONCURRENCY=8`, `HERMES_DISPATCH_PREFETCH=64`.**
+
+- **concurrency 4 → 8.** Throughput scales monotonically to 16 on both backends,
+  but 8 is the balanced point: it ~doubles dispatch throughput vs the old default
+  of 4 (Postgres 535 → 798 msgs/s; DynamoDB 415 → 625) while leaving connection-
+  pool headroom for the occasional resolver/cache-miss query. The DB-pool clamp
+  caps it to `pool_max_conns` on smaller deployments, and operators on larger
+  boxes can raise both `pool_max_conns` and this value toward 16 to chase the
+  remaining ~25% (Postgres 798 → 983).
+- **prefetch stays 64.** Confirmed as the cross-backend sweet spot — Postgres peaks
+  at 64, DynamoDB peaks at 64–256, and `prefetch=1` starves the pool by 30–38% at
+  high worker counts. No change needed.
+- **Not chosen: 16.** Maximal throughput where the pool allows, but `workers ==
+  pool` on a typical box leaves no connection headroom; left to operator opt-in.
+
+Follow-ups noted: the clamp caps at exactly `pool_max_conns` (no headroom) — a
+future refinement could reserve a small margin; and the k6 end-to-end confirmation
+above.
