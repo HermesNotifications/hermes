@@ -129,4 +129,14 @@ func TestFilterChannelsByContact(t *testing.T) {
 	if got := "user has no " + skipped[0].AddressLabel; got != "user has no phone number" {
 		t.Fatalf("event reason: got %q", got)
 	}
+
+	// Unknown channel has no address requirement — must be kept, matching the
+	// original switch which had no default case.
+	keptBogus, skippedBogus := filterChannelsByContact([]string{"bogus"}, hermenats.Recipient{})
+	if len(keptBogus) != 1 || keptBogus[0] != "bogus" {
+		t.Fatalf("unknown channel: got kept=%v, want [bogus]", keptBogus)
+	}
+	if len(skippedBogus) != 0 {
+		t.Fatalf("unknown channel: got skipped=%v, want none", skippedBogus)
+	}
 }
