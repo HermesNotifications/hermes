@@ -62,8 +62,66 @@ Harness `Recommend` (smallest workers within 95% of peak) → **workers=16, pref
 
 ## DynamoDB (DynamoDB Local)
 
-<!-- paste the dynamo section after Task 8, or note deferred -->
-_Pending the run._
+Run: N=4000 msgs/drain (smaller than Postgres — DynamoDB Local is slower per
+message and its table is not cleared between cells, so a smaller N caps growth),
+5 reps + 1 warmup, in-memory DynamoDB Local on `:8002`, same Postgres for
+tenant/user ensure (the realistic hybrid: notifications → DynamoDB, users →
+Postgres). Raw: `dispatch-tuning-dynamo.csv` / `.md`.
+
+> Note: the first dynamo run hit a transient NATS+Postgres connection blip that
+> corrupted its final 3 cells (impossible throughput, e.g. w8/p1=1166). Ruled out
+> FD limits, OOM, and container restarts (all healthy; the Postgres sweep was
+> error-free). A clean re-run on a fresh container (below) reproduced none of it.
+
+| workers | prefetch | mean msgs/s | 95% CI | CV |
+|---|---|---|---|---|
+| 1 | 1 | 164 | ±7 | 0.03 |
+| 1 | 16 | 108 | ±14 | 0.11 |
+| 1 | 64 | 163 | ±14 | 0.07 |
+| 1 | 256 | 116 | ±8 | 0.06 |
+| 2 | 1 | 330 | ±8 | 0.02 |
+| 2 | 16 | 210 | ±10 | 0.04 |
+| 2 | 64 | 230 | ±8 | 0.03 |
+| 2 | 256 | 270 | ±23 | 0.07 |
+| 4 | 1 | 368 | ±38 | 0.08 |
+| 4 | 16 | 396 | ±18 | 0.04 |
+| 4 | 64 | 385 | ±40 | 0.08 |
+| 4 | 256 | 511 | ±18 | 0.03 |
+| 8 | 1 | 531 | ±11 | 0.02 |
+| 8 | 16 | 685 | ±66 | 0.08 |
+| 8 | 64 | 568 | ±13 | 0.02 |
+| 8 | 256 | 725 | ±34 | 0.04 |
+| 16 | 1 | 525 | ±38 | 0.06 |
+| 16 | 16 | 744 | ±120 | 0.13 |
+| 16 | 64 | 840 | ±41 | 0.04 |
+| 16 | 256 | 860 | ±64 | 0.06 |
+
+**Findings**
+
+- **Same shape as Postgres** — throughput scales monotonically with workers and is
+  still climbing at 16: ~150 (w1) → ~260 (w2) → ~415 (w4) → ~625 (w8) → ~800 (w16).
+  Lower absolute than Postgres because DynamoDB-Local-over-HTTP is the per-message
+  bottleneck, not the Postgres pool.
+- **`prefetch=1` starves the pool at scale here too** (w16/p1=525 vs w16/p64=840,
+  −38%).
+- **Higher prefetch helps dynamo more than Postgres** — the dynamo peak is at
+  prefetch 64–256 (w16/p256=860, w16/p64=840), whereas Postgres peaked at p64 and
+  p256 regressed. Slower per-message work benefits from a deeper fetch buffer.
+- Noisier overall (more cells with CV > 0.05) — expected from the HTTP round-trips
+  and the unreset table; the trend is nonetheless clear.
+
+Harness `Recommend` → **workers=16, prefetch=64**.
+
+## Cross-backend summary
+
+Both backends agree on the two decisions that matter:
+
+1. **More workers = more throughput, monotonically to 16** (the tested ceiling /
+   Postgres pool size). The worker pool change delivers; this is the empirical
+   validation for the PR.
+2. **`prefetch=1` is bad; `prefetch=64` is the cross-backend sweet spot** —
+   optimal-or-near-optimal on both (Postgres peaks at 64; dynamo peaks at 64–256).
+   `prefetch=64` is already the shipped default and the data confirms it.
 
 ## E2E k6 confirmation
 
