@@ -11,6 +11,7 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | # | Title | Status | Date |
 |---|---|---|---|
 | [0001](0001-dynamodb-model-via-extenddb.md) | Adopt the DynamoDB programming model for the hot notification path | Accepted | 2026-05-29 |
+| [0002](0002-provider-plugin-model-bus-native-isolation.md) | Adopt a provider plugin model with bus-native (NATS subject) isolation | Accepted | 2026-06-13 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 
