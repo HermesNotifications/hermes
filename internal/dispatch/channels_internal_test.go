@@ -6,6 +6,7 @@ package dispatch
 import (
 	"testing"
 
+	"github.com/hermes-notifications/hermes/internal/models"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 	"github.com/hermes-notifications/hermes/internal/provider"
 )
@@ -45,4 +46,33 @@ func TestRecipient_AddressFor(t *testing.T) {
 	if got := r.AddressFor(""); got != "" {
 		t.Errorf("AddressFor(\"\"): got %q, want empty", got)
 	}
+	if got := r.AddressFor("unknown"); got != "" {
+		t.Errorf("AddressFor(unknown): got %q, want empty", got)
+	}
 }
+
+func TestFilterChannelsForTemplate(t *testing.T) {
+	nt := &models.NotificationTemplate{
+		EmailBody:  sp("e"),
+		InboxTitle: sp("i"),
+		// SMSBody nil -> sms filtered out
+	}
+	got := FilterChannelsForTemplate([]string{"email", "sms", "inbox", "bogus"}, nt)
+	want := []string{"email", "inbox"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+
+	// nil template passes everything through unchanged.
+	all := []string{"email", "sms", "anything"}
+	if got := FilterChannelsForTemplate(all, nil); len(got) != 3 {
+		t.Fatalf("nil template: got %v, want passthrough", got)
+	}
+}
+
+func sp(s string) *string { return &s }
