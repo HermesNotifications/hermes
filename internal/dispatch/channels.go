@@ -11,6 +11,8 @@ import (
 
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/models"
+	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermes-notifications/hermes/internal/provider"
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
@@ -131,27 +133,50 @@ func (cr *ChannelResolver) ResolveChannels(ctx context.Context, explicitChannels
 	return channels, nil
 }
 
-// FilterChannelsForTemplate filters channels to only those with templates defined.
-// For direct sends (nil template), all channels pass through.
+// contactSkip records a channel dropped because the recipient lacks the
+// channel's required contact address. AddressKey/AddressLabel are carried so
+// the caller can reproduce today's exact log and event-reason strings.
+type contactSkip struct {
+	Channel      string
+	AddressKey   string
+	AddressLabel string
+}
+
+// filterChannelsByContact keeps only channels whose required contact point is
+// present on the recipient. Channels with no address requirement (AddressKey
+// "") are always kept, as are unknown channels (matching the prior switch,
+// which had no default case). Returns kept channels and the skipped ones.
+func filterChannelsByContact(channels []string, recipient hermenats.Recipient) (kept []string, skipped []contactSkip) {
+	for _, ch := range channels {
+		desc, ok := provider.Builtins.Channel(ch)
+		if ok && desc.AddressKey != "" && recipient.AddressFor(desc.AddressKey) == "" {
+			skipped = append(skipped, contactSkip{
+				Channel:      ch,
+				AddressKey:   desc.AddressKey,
+				AddressLabel: desc.AddressLabel,
+			})
+			continue
+		}
+		kept = append(kept, ch)
+	}
+	return kept, skipped
+}
+
+// FilterChannelsForTemplate filters channels to only those with template
+// content defined for them, per the channel registry. For direct sends (nil
+// template), all channels pass through. Unknown channels are dropped.
 func FilterChannelsForTemplate(channels []string, nt *models.NotificationTemplate) []string {
 	if nt == nil {
 		return channels
 	}
 	var filtered []string
 	for _, ch := range channels {
-		switch ch {
-		case "email":
-			if nt.EmailSubject != nil || nt.EmailBody != nil {
-				filtered = append(filtered, ch)
-			}
-		case "sms":
-			if nt.SMSBody != nil {
-				filtered = append(filtered, ch)
-			}
-		case "inbox":
-			if nt.InboxTitle != nil || nt.InboxBody != nil {
-				filtered = append(filtered, ch)
-			}
+		desc, ok := provider.Builtins.Channel(ch)
+		if !ok || desc.HasContent == nil {
+			continue
+		}
+		if desc.HasContent(nt) {
+			filtered = append(filtered, ch)
 		}
 	}
 	return filtered
