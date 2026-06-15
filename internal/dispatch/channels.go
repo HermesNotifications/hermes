@@ -149,7 +149,7 @@ type contactSkip struct {
 func filterChannelsByContact(channels []string, recipient hermenats.Recipient) (kept []string, skipped []contactSkip) {
 	for _, ch := range channels {
 		desc, ok := provider.Builtins.Channel(ch)
-		if ok && desc.AddressKey != "" && recipient.AddressFor(desc.AddressKey) == "" {
+		if ok && desc.AddressKey != "" && recipient[desc.AddressKey] == "" {
 			skipped = append(skipped, contactSkip{
 				Channel:      ch,
 				AddressKey:   desc.AddressKey,

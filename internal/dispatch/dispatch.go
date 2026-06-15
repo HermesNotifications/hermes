@@ -264,17 +264,14 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	}
 
 	recipient := hermenats.Recipient{}
-	if user.Email != nil {
-		recipient.Email = *user.Email
-	}
-	if user.Phone != nil {
-		recipient.Phone = *user.Phone
+	for k, v := range user.Contacts {
+		recipient[k] = v
 	}
 	if msg.Email != "" {
-		recipient.Email = msg.Email
+		recipient["email"] = msg.Email
 	}
 	if msg.Phone != "" {
-		recipient.Phone = msg.Phone
+		recipient["phone"] = msg.Phone
 	}
 
 	// Filter channels that require contact info (per the channel registry).

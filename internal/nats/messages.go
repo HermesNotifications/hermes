@@ -34,25 +34,10 @@ type MessageMetadata struct {
 	Template string `json:"template,omitempty"`
 }
 
-// Recipient holds resolved contact information for the notification target.
-type Recipient struct {
-	Email string `json:"email,omitempty"`
-	Phone string `json:"phone,omitempty"`
-}
-
-// AddressFor returns the contact address for a channel's address key ("email"
-// or "phone"). Unknown keys return "". This maps the legacy fixed Recipient
-// onto the registry's address keys and is removed in phase 2 when contacts
-// become normalized contact points.
-func (r Recipient) AddressFor(key string) string {
-	switch key {
-	case "email":
-		return r.Email
-	case "phone":
-		return r.Phone
-	}
-	return ""
-}
+// Recipient holds the resolved contact addresses for a notification target,
+// keyed by address key ("email", "phone", ...). Marshals to the same JSON
+// object shape as the previous fixed struct.
+type Recipient map[string]string
 
 // DeliveryMessage is published to delivery.{channel} by the Dispatch service.
 type DeliveryMessage struct {

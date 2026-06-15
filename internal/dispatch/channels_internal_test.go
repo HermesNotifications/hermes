@@ -10,22 +10,6 @@ import (
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 )
 
-func TestRecipient_AddressFor(t *testing.T) {
-	r := hermenats.Recipient{Email: "a@b.c", Phone: "+15551234"}
-	if got := r.AddressFor("email"); got != "a@b.c" {
-		t.Errorf("AddressFor(email): got %q", got)
-	}
-	if got := r.AddressFor("phone"); got != "+15551234" {
-		t.Errorf("AddressFor(phone): got %q", got)
-	}
-	if got := r.AddressFor(""); got != "" {
-		t.Errorf("AddressFor(\"\"): got %q, want empty", got)
-	}
-	if got := r.AddressFor("unknown"); got != "" {
-		t.Errorf("AddressFor(unknown): got %q, want empty", got)
-	}
-}
-
 func TestFilterChannelsForTemplate(t *testing.T) {
 	nt := &models.NotificationTemplate{
 		Content: map[string]map[string]string{
@@ -85,7 +69,7 @@ func TestContentForChannel(t *testing.T) {
 
 func TestFilterChannelsByContact(t *testing.T) {
 	// email + sms required; inbox always kept. Recipient has email only.
-	rec := hermenats.Recipient{Email: "a@b.c"}
+	rec := hermenats.Recipient{"email": "a@b.c"}
 	kept, skipped := filterChannelsByContact([]string{"email", "sms", "inbox"}, rec)
 
 	wantKept := []string{"email", "inbox"}
