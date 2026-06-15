@@ -56,6 +56,8 @@ type UserRepository interface {
 	GetUserByID(ctx context.Context, userID string) (*models.User, error)
 	UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error)
 	ListUsers(ctx context.Context, tenantID string) ([]models.User, error)
+	GetUserContacts(ctx context.Context, userID string) (map[string]string, error)
+	SetUserContact(ctx context.Context, userID, addressKey, address string) error
 }
 
 // UserSubscriptionRepository defines operations for managing user subscription preferences.

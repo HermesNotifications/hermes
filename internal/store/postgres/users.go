@@ -32,6 +32,11 @@ func (s *Store) EnsureUser(ctx context.Context, tenantID, externalID string) (*m
 	if err != nil {
 		return nil, fmt.Errorf("ensure user: %w", err)
 	}
+	contacts, err := s.GetUserContacts(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	u.Contacts = contacts
 	return u, nil
 }
 
@@ -44,6 +49,11 @@ func (s *Store) GetUserByID(ctx context.Context, userID string) (*models.User, e
 	if err != nil {
 		return nil, fmt.Errorf("get user by id: %w", err)
 	}
+	contacts, err := s.GetUserContacts(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	u.Contacts = contacts
 	return u, nil
 }
 
@@ -73,7 +83,17 @@ func (s *Store) ListUsers(ctx context.Context, tenantID string) ([]models.User, 
 		}
 		users = append(users, u)
 	}
-	return users, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range users {
+		contacts, err := s.GetUserContacts(ctx, users[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		users[i].Contacts = contacts
+	}
+	return users, nil
 }
 
 func (s *Store) UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error) {
@@ -88,5 +108,20 @@ func (s *Store) UpdateUserContacts(ctx context.Context, userID string, email, ph
 	if err != nil {
 		return nil, fmt.Errorf("update user contacts: %w", err)
 	}
+	if email != nil {
+		if err := s.SetUserContact(ctx, userID, "email", *email); err != nil {
+			return nil, err
+		}
+	}
+	if phone != nil {
+		if err := s.SetUserContact(ctx, userID, "phone", *phone); err != nil {
+			return nil, err
+		}
+	}
+	contacts, err := s.GetUserContacts(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	u.Contacts = contacts
 	return u, nil
 }
