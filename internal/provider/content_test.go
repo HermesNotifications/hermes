@@ -29,4 +29,8 @@ func TestBuiltins_ContentSchema(t *testing.T) {
 	if !ok || title.MapsTo != "title" || title.Render != RenderText {
 		t.Fatalf("inbox title field: got %+v ok=%v", title, ok)
 	}
+	bodyI, ok := inbox.ContentFieldByKey("body")
+	if !ok || bodyI.MapsTo != "body" || bodyI.Render != RenderText {
+		t.Fatalf("inbox body field: got %+v ok=%v", bodyI, ok)
+	}
 }
