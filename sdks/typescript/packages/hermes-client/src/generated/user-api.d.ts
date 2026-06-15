@@ -89,7 +89,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ErrorModel.json
+             * @example //schemas/ErrorModel.json
              */
             readonly $schema?: string;
             /**
@@ -136,7 +136,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PreferenceCenterOutputBody.json
+             * @example //schemas/PreferenceCenterOutputBody.json
              */
             readonly $schema?: string;
             categories: components["schemas"]["PreferenceCategory"][] | null;
@@ -152,7 +152,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SetPreferenceInputBody.json
+             * @example //schemas/SetPreferenceInputBody.json
              */
             readonly $schema?: string;
             /** @description Whether the user is subscribed */
@@ -162,7 +162,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/StatusOutputBody.json
+             * @example //schemas/StatusOutputBody.json
              */
             readonly $schema?: string;
             /**
@@ -175,28 +175,29 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateContactsInputBody.json
+             * @example //schemas/UpdateContactsInputBody.json
              */
             readonly $schema?: string;
-            /** @description Email address */
-            email?: string;
-            /** @description Phone number */
-            phone?: string;
+            /** @description Contact addresses: address key ("email","phone") -> address */
+            contacts?: {
+                [key: string]: string;
+            };
         };
         User: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/User.json
+             * @example //schemas/User.json
              */
             readonly $schema?: string;
+            contacts?: {
+                [key: string]: string;
+            };
             /** Format: date-time */
             created_at: string;
-            email?: string;
             external_id: string;
             id: string;
             locale?: string;
-            phone?: string;
             tenant_id: string;
         };
     };

@@ -9,7 +9,7 @@ Name | Type | Description | Notes
 **created_at** | **datetime** |  | 
 **event** | **str** |  | 
 **id** | **str** |  | 
-**metadata** | **str** |  | [optional] 
+**metadata** | **object** |  | [optional] 
 **notification_id** | **str** |  | 
 **severity** | **str** |  | 
 

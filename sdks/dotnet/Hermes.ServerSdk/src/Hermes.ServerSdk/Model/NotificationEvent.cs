@@ -41,7 +41,7 @@ namespace Hermes.ServerSdk.Model
         /// <param name="severity">severity</param>
         /// <param name="metadata">metadata</param>
         [JsonConstructor]
-        public NotificationEvent(string channel, DateTime createdAt, string @event, string id, string notificationId, string severity, Option<string?> metadata = default)
+        public NotificationEvent(string channel, DateTime createdAt, string @event, string id, string notificationId, string severity, Option<Object?> metadata = default)
         {
             Channel = channel;
             CreatedAt = createdAt;
@@ -96,13 +96,13 @@ namespace Hermes.ServerSdk.Model
         /// </summary>
         [JsonIgnore]
         [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> MetadataOption { get; private set; }
+        public Option<Object?> MetadataOption { get; private set; }
 
         /// <summary>
         /// Gets or Sets Metadata
         /// </summary>
         [JsonPropertyName("metadata")]
-        public string? Metadata { get { return this.MetadataOption; } set { this.MetadataOption = new(value); } }
+        public Object? Metadata { get { return this.MetadataOption; } set { this.MetadataOption = new(value); } }
 
         /// <summary>
         /// Returns the string presentation of the object
@@ -167,7 +167,7 @@ namespace Hermes.ServerSdk.Model
             Option<string?> id = default;
             Option<string?> notificationId = default;
             Option<string?> severity = default;
-            Option<string?> metadata = default;
+            Option<Object?> metadata = default;
 
             while (utf8JsonReader.Read())
             {
@@ -203,7 +203,7 @@ namespace Hermes.ServerSdk.Model
                             severity = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
                         case "metadata":
-                            metadata = new Option<string?>(utf8JsonReader.GetString()!);
+                            metadata = new Option<Object?>(JsonSerializer.Deserialize<Object>(ref utf8JsonReader, jsonSerializerOptions));
                             break;
                         default:
                             break;
@@ -247,9 +247,6 @@ namespace Hermes.ServerSdk.Model
             if (severity.IsSet && severity.Value == null)
                 throw new ArgumentNullException(nameof(severity), "Property is not nullable for class NotificationEvent.");
 
-            if (metadata.IsSet && metadata.Value == null)
-                throw new ArgumentNullException(nameof(metadata), "Property is not nullable for class NotificationEvent.");
-
             return new NotificationEvent(channel.Value!, createdAt.Value!.Value!, varEvent.Value!, id.Value!, notificationId.Value!, severity.Value!, metadata);
         }
 
@@ -292,9 +289,6 @@ namespace Hermes.ServerSdk.Model
             if (notificationEvent.Severity == null)
                 throw new ArgumentNullException(nameof(notificationEvent.Severity), "Property is required for class NotificationEvent.");
 
-            if (notificationEvent.MetadataOption.IsSet && notificationEvent.Metadata == null)
-                throw new ArgumentNullException(nameof(notificationEvent.Metadata), "Property is required for class NotificationEvent.");
-
             writer.WriteString("channel", notificationEvent.Channel);
 
             writer.WriteString("created_at", notificationEvent.CreatedAt.ToString(CreatedAtFormat));
@@ -308,7 +302,13 @@ namespace Hermes.ServerSdk.Model
             writer.WriteString("severity", notificationEvent.Severity);
 
             if (notificationEvent.MetadataOption.IsSet)
-                writer.WriteString("metadata", notificationEvent.Metadata);
+                if (notificationEvent.MetadataOption.Value != null)
+                {
+                    writer.WritePropertyName("metadata");
+                    JsonSerializer.Serialize(writer, notificationEvent.Metadata, jsonSerializerOptions);
+                }
+                else
+                    writer.WriteNull("metadata");
         }
     }
 }

@@ -35,15 +35,13 @@ namespace Hermes.ServerSdk.Model
         /// </summary>
         /// <param name="tenantId">Tenant identifier</param>
         /// <param name="userId">External user identifier</param>
-        /// <param name="email">Optional email address for this notification</param>
-        /// <param name="phone">Optional phone number for this notification</param>
+        /// <param name="contacts">Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address</param>
         [JsonConstructor]
-        public SendRecipient(string tenantId, string userId, Option<string?> email = default, Option<string?> phone = default)
+        public SendRecipient(string tenantId, string userId, Option<Dictionary<string, string>?> contacts = default)
         {
             TenantId = tenantId;
             UserId = userId;
-            EmailOption = email;
-            PhoneOption = phone;
+            ContactsOption = contacts;
             OnCreated();
         }
 
@@ -64,32 +62,18 @@ namespace Hermes.ServerSdk.Model
         public string UserId { get; set; }
 
         /// <summary>
-        /// Used to track the state of Email
+        /// Used to track the state of Contacts
         /// </summary>
         [JsonIgnore]
         [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> EmailOption { get; private set; }
+        public Option<Dictionary<string, string>?> ContactsOption { get; private set; }
 
         /// <summary>
-        /// Optional email address for this notification
+        /// Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address
         /// </summary>
-        /// <value>Optional email address for this notification</value>
-        [JsonPropertyName("email")]
-        public string? Email { get { return this.EmailOption; } set { this.EmailOption = new(value); } }
-
-        /// <summary>
-        /// Used to track the state of Phone
-        /// </summary>
-        [JsonIgnore]
-        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> PhoneOption { get; private set; }
-
-        /// <summary>
-        /// Optional phone number for this notification
-        /// </summary>
-        /// <value>Optional phone number for this notification</value>
-        [JsonPropertyName("phone")]
-        public string? Phone { get { return this.PhoneOption; } set { this.PhoneOption = new(value); } }
+        /// <value>Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address</value>
+        [JsonPropertyName("contacts")]
+        public Dictionary<string, string>? Contacts { get { return this.ContactsOption; } set { this.ContactsOption = new(value); } }
 
         /// <summary>
         /// Returns the string presentation of the object
@@ -101,8 +85,7 @@ namespace Hermes.ServerSdk.Model
             sb.Append("class SendRecipient {\n");
             sb.Append("  TenantId: ").Append(TenantId).Append("\n");
             sb.Append("  UserId: ").Append(UserId).Append("\n");
-            sb.Append("  Email: ").Append(Email).Append("\n");
-            sb.Append("  Phone: ").Append(Phone).Append("\n");
+            sb.Append("  Contacts: ").Append(Contacts).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }
@@ -154,8 +137,7 @@ namespace Hermes.ServerSdk.Model
 
             Option<string?> tenantId = default;
             Option<string?> userId = default;
-            Option<string?> email = default;
-            Option<string?> phone = default;
+            Option<Dictionary<string, string>?> contacts = default;
 
             while (utf8JsonReader.Read())
             {
@@ -178,11 +160,8 @@ namespace Hermes.ServerSdk.Model
                         case "user_id":
                             userId = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
-                        case "email":
-                            email = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
-                        case "phone":
-                            phone = new Option<string?>(utf8JsonReader.GetString()!);
+                        case "contacts":
+                            contacts = new Option<Dictionary<string, string>?>(JsonSerializer.Deserialize<Dictionary<string, string>>(ref utf8JsonReader, jsonSerializerOptions)!);
                             break;
                         default:
                             break;
@@ -202,13 +181,10 @@ namespace Hermes.ServerSdk.Model
             if (userId.IsSet && userId.Value == null)
                 throw new ArgumentNullException(nameof(userId), "Property is not nullable for class SendRecipient.");
 
-            if (email.IsSet && email.Value == null)
-                throw new ArgumentNullException(nameof(email), "Property is not nullable for class SendRecipient.");
+            if (contacts.IsSet && contacts.Value == null)
+                throw new ArgumentNullException(nameof(contacts), "Property is not nullable for class SendRecipient.");
 
-            if (phone.IsSet && phone.Value == null)
-                throw new ArgumentNullException(nameof(phone), "Property is not nullable for class SendRecipient.");
-
-            return new SendRecipient(tenantId.Value!, userId.Value!, email, phone);
+            return new SendRecipient(tenantId.Value!, userId.Value!, contacts);
         }
 
         /// <summary>
@@ -241,21 +217,18 @@ namespace Hermes.ServerSdk.Model
             if (sendRecipient.UserId == null)
                 throw new ArgumentNullException(nameof(sendRecipient.UserId), "Property is required for class SendRecipient.");
 
-            if (sendRecipient.EmailOption.IsSet && sendRecipient.Email == null)
-                throw new ArgumentNullException(nameof(sendRecipient.Email), "Property is required for class SendRecipient.");
-
-            if (sendRecipient.PhoneOption.IsSet && sendRecipient.Phone == null)
-                throw new ArgumentNullException(nameof(sendRecipient.Phone), "Property is required for class SendRecipient.");
+            if (sendRecipient.ContactsOption.IsSet && sendRecipient.Contacts == null)
+                throw new ArgumentNullException(nameof(sendRecipient.Contacts), "Property is required for class SendRecipient.");
 
             writer.WriteString("tenant_id", sendRecipient.TenantId);
 
             writer.WriteString("user_id", sendRecipient.UserId);
 
-            if (sendRecipient.EmailOption.IsSet)
-                writer.WriteString("email", sendRecipient.Email);
-
-            if (sendRecipient.PhoneOption.IsSet)
-                writer.WriteString("phone", sendRecipient.Phone);
+            if (sendRecipient.ContactsOption.IsSet)
+            {
+                writer.WritePropertyName("contacts");
+                JsonSerializer.Serialize(writer, sendRecipient.Contacts, jsonSerializerOptions);
+            }
         }
     }
 }

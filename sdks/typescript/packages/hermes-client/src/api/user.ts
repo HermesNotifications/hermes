@@ -25,13 +25,10 @@ export class UserAPI {
     return data;
   }
 
-  async updateContacts(contacts: {
-    email?: string;
-    phone?: string;
-  }): Promise<User> {
+  async updateContacts(contacts: Record<string, string>): Promise<User> {
     const { data, error, response } = await this.client.PUT(
       "/v1/users/me/contacts",
-      { body: contacts }
+      { body: { contacts } }
     );
     if (error) throw new Error(`User API error (${response.status})`);
     return data;

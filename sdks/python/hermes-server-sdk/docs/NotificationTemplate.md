@@ -6,16 +6,12 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **var_schema** | **str** | A URL to the JSON Schema for this object. | [optional] [readonly] 
+**content** | **Dict[str, Dict[str, str]]** |  | [optional] 
 **created_at** | **datetime** |  | 
 **default_channels** | **List[str]** |  | 
-**email_body** | **str** |  | [optional] 
-**email_subject** | **str** |  | [optional] 
 **id** | **str** |  | 
-**inbox_body** | **str** |  | [optional] 
-**inbox_title** | **str** |  | [optional] 
 **name** | **str** |  | 
 **slug** | **str** |  | 
-**sms_body** | **str** |  | [optional] 
 **subscription_id** | **str** |  | [optional] 
 
 ## Example

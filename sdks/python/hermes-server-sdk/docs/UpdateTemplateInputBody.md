@@ -6,13 +6,9 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **var_schema** | **str** | A URL to the JSON Schema for this object. | [optional] [readonly] 
+**content** | **Dict[str, Dict[str, str]]** | Per-channel content: channel slug -&gt; field key -&gt; template string (e.g. {\&quot;email\&quot;:{\&quot;subject\&quot;:\&quot;...\&quot;,\&quot;body\&quot;:\&quot;...\&quot;}}) | [optional] 
 **default_channels** | **List[str]** | Default channels (used when no subscription) | [optional] 
-**email_body** | **str** | Email body template (HTML) | [optional] 
-**email_subject** | **str** | Email subject template | [optional] 
-**inbox_body** | **str** | Inbox body template | [optional] 
-**inbox_title** | **str** | Inbox title template | [optional] 
 **name** | **str** | Human-readable name | 
-**sms_body** | **str** | SMS body template | [optional] 
 **subscription_id** | **str** | Subscription ID (null for standalone) | [optional] 
 
 ## Example

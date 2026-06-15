@@ -2,7 +2,7 @@
 
 Hermes Admin API
 - API version: 1.0.0
-  - Build date: 2026-03-29T15:48:54.030379-04:00[America/Toronto]
+  - Build date: 2026-06-15T19:42:17.343876-04:00[America/Toronto]
   - Generator version: 7.20.0
 
 Server-to-server API for managing subscription categories, templates, and notifications.
@@ -120,6 +120,7 @@ Class | Method | HTTP request | Description
 *ApiKeysApi* | [**listApiKeys**](docs/ApiKeysApi.md#listApiKeys) | **GET** /v1/apikeys | List all API keys
 *AuthApi* | [**exchangeToken**](docs/AuthApi.md#exchangeToken) | **POST** /v1/auth/token | Exchange credentials for a user JWT token
 *NotificationsApi* | [**getNotification**](docs/NotificationsApi.md#getNotification) | **GET** /v1/notifications/{id} | Get notification status and events
+*NotificationsApi* | [**listNotifications**](docs/NotificationsApi.md#listNotifications) | **GET** /v1/notifications | List recent notifications
 *NotificationsApi* | [**sendNotification**](docs/NotificationsApi.md#sendNotification) | **POST** /v1/send | Send a notification
 *SubscriptionsApi* | [**createSubscription**](docs/SubscriptionsApi.md#createSubscription) | **POST** /v1/subscriptions/categories/{category_id}/subscriptions | Create a subscription
 *SubscriptionsApi* | [**createSubscriptionCategory**](docs/SubscriptionsApi.md#createSubscriptionCategory) | **POST** /v1/subscriptions/categories | Create a subscription category
@@ -133,6 +134,9 @@ Class | Method | HTTP request | Description
 *TemplatesApi* | [**deleteTemplate**](docs/TemplatesApi.md#deleteTemplate) | **DELETE** /v1/templates/{id} | Delete a notification template
 *TemplatesApi* | [**listTemplates**](docs/TemplatesApi.md#listTemplates) | **GET** /v1/templates | List notification templates
 *TemplatesApi* | [**updateTemplate**](docs/TemplatesApi.md#updateTemplate) | **PUT** /v1/templates/{id} | Update a notification template
+*TenantsApi* | [**createTenant**](docs/TenantsApi.md#createTenant) | **POST** /v1/tenants | Create a tenant
+*TenantsApi* | [**listTenants**](docs/TenantsApi.md#listTenants) | **GET** /v1/tenants | List tenants
+*UsersApi* | [**listUsers**](docs/UsersApi.md#listUsers) | **GET** /v1/users | List users
 
 
 ## Documentation for Models
@@ -142,11 +146,13 @@ Class | Method | HTTP request | Description
  - [CreateCategoryInputBody](docs/CreateCategoryInputBody.md)
  - [CreateSubscriptionInputBody](docs/CreateSubscriptionInputBody.md)
  - [CreateTemplateInputBody](docs/CreateTemplateInputBody.md)
+ - [CreateTenantInputBody](docs/CreateTenantInputBody.md)
  - [ErrorDetail](docs/ErrorDetail.md)
  - [ErrorModel](docs/ErrorModel.md)
  - [Item](docs/Item.md)
  - [Notification](docs/Notification.md)
  - [NotificationEvent](docs/NotificationEvent.md)
+ - [NotificationItem](docs/NotificationItem.md)
  - [NotificationStatusOutputBody](docs/NotificationStatusOutputBody.md)
  - [NotificationTemplate](docs/NotificationTemplate.md)
  - [SendContent](docs/SendContent.md)
@@ -155,11 +161,13 @@ Class | Method | HTTP request | Description
  - [SendRecipient](docs/SendRecipient.md)
  - [Subscription](docs/Subscription.md)
  - [SubscriptionCategory](docs/SubscriptionCategory.md)
+ - [TenantItem](docs/TenantItem.md)
  - [TokenInputBody](docs/TokenInputBody.md)
  - [TokenOutputBody](docs/TokenOutputBody.md)
  - [UpdateCategoryInputBody](docs/UpdateCategoryInputBody.md)
  - [UpdateSubscriptionInputBody](docs/UpdateSubscriptionInputBody.md)
  - [UpdateTemplateInputBody](docs/UpdateTemplateInputBody.md)
+ - [UserItem](docs/UserItem.md)
 
 
 <a id="documentation-for-authorization"></a>

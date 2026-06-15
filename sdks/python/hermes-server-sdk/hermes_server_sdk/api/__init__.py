@@ -6,4 +6,6 @@ from hermes_server_sdk.api.auth_api import AuthApi
 from hermes_server_sdk.api.notifications_api import NotificationsApi
 from hermes_server_sdk.api.subscriptions_api import SubscriptionsApi
 from hermes_server_sdk.api.templates_api import TemplatesApi
+from hermes_server_sdk.api.tenants_api import TenantsApi
+from hermes_server_sdk.api.users_api import UsersApi
 

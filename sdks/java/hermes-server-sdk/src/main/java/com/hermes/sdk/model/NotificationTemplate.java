@@ -24,7 +24,9 @@ import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -52,12 +54,17 @@ import com.hermes.sdk.JSON;
 /**
  * NotificationTemplate
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-29T15:48:54.030379-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
 public class NotificationTemplate {
   public static final String SERIALIZED_NAME_$_SCHEMA = "$schema";
   @SerializedName(SERIALIZED_NAME_$_SCHEMA)
   @javax.annotation.Nullable
   private URI $schema;
+
+  public static final String SERIALIZED_NAME_CONTENT = "content";
+  @SerializedName(SERIALIZED_NAME_CONTENT)
+  @javax.annotation.Nullable
+  private Map<String, Map<String, String>> content = new HashMap<>();
 
   public static final String SERIALIZED_NAME_CREATED_AT = "created_at";
   @SerializedName(SERIALIZED_NAME_CREATED_AT)
@@ -69,30 +76,10 @@ public class NotificationTemplate {
   @javax.annotation.Nullable
   private List<String> defaultChannels;
 
-  public static final String SERIALIZED_NAME_EMAIL_BODY = "email_body";
-  @SerializedName(SERIALIZED_NAME_EMAIL_BODY)
-  @javax.annotation.Nullable
-  private String emailBody;
-
-  public static final String SERIALIZED_NAME_EMAIL_SUBJECT = "email_subject";
-  @SerializedName(SERIALIZED_NAME_EMAIL_SUBJECT)
-  @javax.annotation.Nullable
-  private String emailSubject;
-
   public static final String SERIALIZED_NAME_ID = "id";
   @SerializedName(SERIALIZED_NAME_ID)
   @javax.annotation.Nonnull
   private String id;
-
-  public static final String SERIALIZED_NAME_INBOX_BODY = "inbox_body";
-  @SerializedName(SERIALIZED_NAME_INBOX_BODY)
-  @javax.annotation.Nullable
-  private String inboxBody;
-
-  public static final String SERIALIZED_NAME_INBOX_TITLE = "inbox_title";
-  @SerializedName(SERIALIZED_NAME_INBOX_TITLE)
-  @javax.annotation.Nullable
-  private String inboxTitle;
 
   public static final String SERIALIZED_NAME_NAME = "name";
   @SerializedName(SERIALIZED_NAME_NAME)
@@ -103,11 +90,6 @@ public class NotificationTemplate {
   @SerializedName(SERIALIZED_NAME_SLUG)
   @javax.annotation.Nonnull
   private String slug;
-
-  public static final String SERIALIZED_NAME_SMS_BODY = "sms_body";
-  @SerializedName(SERIALIZED_NAME_SMS_BODY)
-  @javax.annotation.Nullable
-  private String smsBody;
 
   public static final String SERIALIZED_NAME_SUBSCRIPTION_ID = "subscription_id";
   @SerializedName(SERIALIZED_NAME_SUBSCRIPTION_ID)
@@ -133,6 +115,33 @@ public class NotificationTemplate {
     return $schema;
   }
 
+
+
+  public NotificationTemplate content(@javax.annotation.Nullable Map<String, Map<String, String>> content) {
+    this.content = content;
+    return this;
+  }
+
+  public NotificationTemplate putContentItem(String key, Map<String, String> contentItem) {
+    if (this.content == null) {
+      this.content = new HashMap<>();
+    }
+    this.content.put(key, contentItem);
+    return this;
+  }
+
+  /**
+   * Get content
+   * @return content
+   */
+  @javax.annotation.Nullable
+  public Map<String, Map<String, String>> getContent() {
+    return content;
+  }
+
+  public void setContent(@javax.annotation.Nullable Map<String, Map<String, String>> content) {
+    this.content = content;
+  }
 
 
   public NotificationTemplate createdAt(@javax.annotation.Nonnull OffsetDateTime createdAt) {
@@ -181,44 +190,6 @@ public class NotificationTemplate {
   }
 
 
-  public NotificationTemplate emailBody(@javax.annotation.Nullable String emailBody) {
-    this.emailBody = emailBody;
-    return this;
-  }
-
-  /**
-   * Get emailBody
-   * @return emailBody
-   */
-  @javax.annotation.Nullable
-  public String getEmailBody() {
-    return emailBody;
-  }
-
-  public void setEmailBody(@javax.annotation.Nullable String emailBody) {
-    this.emailBody = emailBody;
-  }
-
-
-  public NotificationTemplate emailSubject(@javax.annotation.Nullable String emailSubject) {
-    this.emailSubject = emailSubject;
-    return this;
-  }
-
-  /**
-   * Get emailSubject
-   * @return emailSubject
-   */
-  @javax.annotation.Nullable
-  public String getEmailSubject() {
-    return emailSubject;
-  }
-
-  public void setEmailSubject(@javax.annotation.Nullable String emailSubject) {
-    this.emailSubject = emailSubject;
-  }
-
-
   public NotificationTemplate id(@javax.annotation.Nonnull String id) {
     this.id = id;
     return this;
@@ -235,44 +206,6 @@ public class NotificationTemplate {
 
   public void setId(@javax.annotation.Nonnull String id) {
     this.id = id;
-  }
-
-
-  public NotificationTemplate inboxBody(@javax.annotation.Nullable String inboxBody) {
-    this.inboxBody = inboxBody;
-    return this;
-  }
-
-  /**
-   * Get inboxBody
-   * @return inboxBody
-   */
-  @javax.annotation.Nullable
-  public String getInboxBody() {
-    return inboxBody;
-  }
-
-  public void setInboxBody(@javax.annotation.Nullable String inboxBody) {
-    this.inboxBody = inboxBody;
-  }
-
-
-  public NotificationTemplate inboxTitle(@javax.annotation.Nullable String inboxTitle) {
-    this.inboxTitle = inboxTitle;
-    return this;
-  }
-
-  /**
-   * Get inboxTitle
-   * @return inboxTitle
-   */
-  @javax.annotation.Nullable
-  public String getInboxTitle() {
-    return inboxTitle;
-  }
-
-  public void setInboxTitle(@javax.annotation.Nullable String inboxTitle) {
-    this.inboxTitle = inboxTitle;
   }
 
 
@@ -314,25 +247,6 @@ public class NotificationTemplate {
   }
 
 
-  public NotificationTemplate smsBody(@javax.annotation.Nullable String smsBody) {
-    this.smsBody = smsBody;
-    return this;
-  }
-
-  /**
-   * Get smsBody
-   * @return smsBody
-   */
-  @javax.annotation.Nullable
-  public String getSmsBody() {
-    return smsBody;
-  }
-
-  public void setSmsBody(@javax.annotation.Nullable String smsBody) {
-    this.smsBody = smsBody;
-  }
-
-
   public NotificationTemplate subscriptionId(@javax.annotation.Nullable String subscriptionId) {
     this.subscriptionId = subscriptionId;
     return this;
@@ -363,22 +277,18 @@ public class NotificationTemplate {
     }
     NotificationTemplate notificationTemplate = (NotificationTemplate) o;
     return Objects.equals(this.$schema, notificationTemplate.$schema) &&
+        Objects.equals(this.content, notificationTemplate.content) &&
         Objects.equals(this.createdAt, notificationTemplate.createdAt) &&
         Objects.equals(this.defaultChannels, notificationTemplate.defaultChannels) &&
-        Objects.equals(this.emailBody, notificationTemplate.emailBody) &&
-        Objects.equals(this.emailSubject, notificationTemplate.emailSubject) &&
         Objects.equals(this.id, notificationTemplate.id) &&
-        Objects.equals(this.inboxBody, notificationTemplate.inboxBody) &&
-        Objects.equals(this.inboxTitle, notificationTemplate.inboxTitle) &&
         Objects.equals(this.name, notificationTemplate.name) &&
         Objects.equals(this.slug, notificationTemplate.slug) &&
-        Objects.equals(this.smsBody, notificationTemplate.smsBody) &&
         Objects.equals(this.subscriptionId, notificationTemplate.subscriptionId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, createdAt, defaultChannels, emailBody, emailSubject, id, inboxBody, inboxTitle, name, slug, smsBody, subscriptionId);
+    return Objects.hash($schema, content, createdAt, defaultChannels, id, name, slug, subscriptionId);
   }
 
   @Override
@@ -386,16 +296,12 @@ public class NotificationTemplate {
     StringBuilder sb = new StringBuilder();
     sb.append("class NotificationTemplate {\n");
     sb.append("    $schema: ").append(toIndentedString($schema)).append("\n");
+    sb.append("    content: ").append(toIndentedString(content)).append("\n");
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
     sb.append("    defaultChannels: ").append(toIndentedString(defaultChannels)).append("\n");
-    sb.append("    emailBody: ").append(toIndentedString(emailBody)).append("\n");
-    sb.append("    emailSubject: ").append(toIndentedString(emailSubject)).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
-    sb.append("    inboxBody: ").append(toIndentedString(inboxBody)).append("\n");
-    sb.append("    inboxTitle: ").append(toIndentedString(inboxTitle)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    slug: ").append(toIndentedString(slug)).append("\n");
-    sb.append("    smsBody: ").append(toIndentedString(smsBody)).append("\n");
     sb.append("    subscriptionId: ").append(toIndentedString(subscriptionId)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -418,7 +324,7 @@ public class NotificationTemplate {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "created_at", "default_channels", "email_body", "email_subject", "id", "inbox_body", "inbox_title", "name", "slug", "sms_body", "subscription_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "content", "created_at", "default_channels", "id", "name", "slug", "subscription_id"));
 
     // a set of required properties/fields (JSON key names)
     openapiRequiredFields = new HashSet<String>(Arrays.asList("created_at", "default_channels", "id", "name", "slug"));
@@ -461,29 +367,14 @@ public class NotificationTemplate {
       } else if (!jsonObj.get("default_channels").isJsonArray() && !jsonObj.get("default_channels").isJsonNull()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `default_channels` to be an array in the JSON string but got `%s`", jsonObj.get("default_channels").toString()));
       }
-      if ((jsonObj.get("email_body") != null && !jsonObj.get("email_body").isJsonNull()) && !jsonObj.get("email_body").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `email_body` to be a primitive type in the JSON string but got `%s`", jsonObj.get("email_body").toString()));
-      }
-      if ((jsonObj.get("email_subject") != null && !jsonObj.get("email_subject").isJsonNull()) && !jsonObj.get("email_subject").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `email_subject` to be a primitive type in the JSON string but got `%s`", jsonObj.get("email_subject").toString()));
-      }
       if (!jsonObj.get("id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("id").toString()));
-      }
-      if ((jsonObj.get("inbox_body") != null && !jsonObj.get("inbox_body").isJsonNull()) && !jsonObj.get("inbox_body").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `inbox_body` to be a primitive type in the JSON string but got `%s`", jsonObj.get("inbox_body").toString()));
-      }
-      if ((jsonObj.get("inbox_title") != null && !jsonObj.get("inbox_title").isJsonNull()) && !jsonObj.get("inbox_title").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `inbox_title` to be a primitive type in the JSON string but got `%s`", jsonObj.get("inbox_title").toString()));
       }
       if (!jsonObj.get("name").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `name` to be a primitive type in the JSON string but got `%s`", jsonObj.get("name").toString()));
       }
       if (!jsonObj.get("slug").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `slug` to be a primitive type in the JSON string but got `%s`", jsonObj.get("slug").toString()));
-      }
-      if ((jsonObj.get("sms_body") != null && !jsonObj.get("sms_body").isJsonNull()) && !jsonObj.get("sms_body").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `sms_body` to be a primitive type in the JSON string but got `%s`", jsonObj.get("sms_body").toString()));
       }
       if ((jsonObj.get("subscription_id") != null && !jsonObj.get("subscription_id").isJsonNull()) && !jsonObj.get("subscription_id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `subscription_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("subscription_id").toString()));

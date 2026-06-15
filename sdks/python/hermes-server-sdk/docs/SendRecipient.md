@@ -5,8 +5,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**email** | **str** | Optional email address for this notification | [optional] 
-**phone** | **str** | Optional phone number for this notification | [optional] 
+**contacts** | **Dict[str, str]** | Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address | [optional] 
 **tenant_id** | **str** | Tenant identifier | 
 **user_id** | **str** | External user identifier | 
 

@@ -31,7 +31,7 @@ class NotificationEvent(BaseModel):
     created_at: datetime
     event: StrictStr
     id: StrictStr
-    metadata: Optional[StrictStr] = None
+    metadata: Optional[Any] = None
     notification_id: StrictStr
     severity: StrictStr
     __properties: ClassVar[List[str]] = ["channel", "created_at", "event", "id", "metadata", "notification_id", "severity"]
@@ -75,6 +75,11 @@ class NotificationEvent(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if metadata (nullable) is None
+        # and model_fields_set contains the field
+        if self.metadata is None and "metadata" in self.model_fields_set:
+            _dict['metadata'] = None
+
         return _dict
 
     @classmethod

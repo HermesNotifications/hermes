@@ -175,11 +175,7 @@ export class TemplatesService {
     name: string;
     subscriptionId?: string;
     defaultChannels?: string[];
-    emailSubject?: string;
-    emailBody?: string;
-    smsBody?: string;
-    inboxTitle?: string;
-    inboxBody?: string;
+    content?: Record<string, Record<string, string>>;
   }): Promise<NotificationTemplate> {
     const result = await this.client.POST("/v1/templates", {
       body: {
@@ -187,11 +183,7 @@ export class TemplatesService {
         name: body.name,
         subscription_id: body.subscriptionId,
         default_channels: body.defaultChannels ?? null,
-        email_subject: body.emailSubject,
-        email_body: body.emailBody,
-        sms_body: body.smsBody,
-        inbox_title: body.inboxTitle,
-        inbox_body: body.inboxBody,
+        content: body.content,
       },
     });
     return unwrap(result);
@@ -202,11 +194,7 @@ export class TemplatesService {
     body: {
       name?: string;
       defaultChannels?: string[];
-      emailSubject?: string;
-      emailBody?: string;
-      smsBody?: string;
-      inboxTitle?: string;
-      inboxBody?: string;
+      content?: Record<string, Record<string, string>>;
     }
   ): Promise<NotificationTemplate> {
     const result = await this.client.PUT("/v1/templates/{id}", {
@@ -214,11 +202,7 @@ export class TemplatesService {
       body: {
         name: body.name ?? "",
         default_channels: body.defaultChannels ?? null,
-        email_subject: body.emailSubject,
-        email_body: body.emailBody,
-        sms_body: body.smsBody,
-        inbox_title: body.inboxTitle,
-        inbox_body: body.inboxBody,
+        content: body.content,
       },
     });
     return unwrap(result);
@@ -236,8 +220,7 @@ export interface SendOptions {
   to: {
     tenantId: string;
     userId: string;
-    email?: string;
-    phone?: string;
+    contacts?: Record<string, string>;
   };
   template?: string;
   content?: {
@@ -265,8 +248,7 @@ export class NotificationsService {
         to: {
           tenant_id: options.to.tenantId,
           user_id: options.to.userId,
-          email: options.to.email,
-          phone: options.to.phone,
+          contacts: options.to.contacts,
         },
         template: options.template,
         content: options.content

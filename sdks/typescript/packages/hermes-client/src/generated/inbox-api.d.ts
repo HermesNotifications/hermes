@@ -99,7 +99,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ActionOutputBody.json
+             * @example //schemas/ActionOutputBody.json
              */
             readonly $schema?: string;
             /**
@@ -120,7 +120,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ErrorModel.json
+             * @example //schemas/ErrorModel.json
              */
             readonly $schema?: string;
             /**
@@ -159,7 +159,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ListInboxOutputBody.json
+             * @example //schemas/ListInboxOutputBody.json
              */
             readonly $schema?: string;
             /** @description Cursor for next page */

@@ -5,6 +5,7 @@ All URIs are relative to *http://localhost*
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
 | [**getNotification**](NotificationsApi.md#getNotification) | **GET** /v1/notifications/{id} | Get notification status and events |
+| [**listNotifications**](NotificationsApi.md#listNotifications) | **GET** /v1/notifications | List recent notifications |
 | [**sendNotification**](NotificationsApi.md#sendNotification) | **POST** /v1/send | Send a notification |
 
 
@@ -53,6 +54,67 @@ public class Example {
 ### Return type
 
 [**NotificationStatusOutputBody**](NotificationStatusOutputBody.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json, application/problem+json
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | OK |  -  |
+| **0** | Error |  -  |
+
+<a id="listNotifications"></a>
+# **listNotifications**
+> List&lt;NotificationItem&gt; listNotifications(limit)
+
+List recent notifications
+
+### Example
+```java
+// Import classes:
+import com.hermes.sdk.ApiClient;
+import com.hermes.sdk.ApiException;
+import com.hermes.sdk.Configuration;
+import com.hermes.sdk.models.*;
+import com.hermes.sdk.api.NotificationsApi;
+
+public class Example {
+  public static void main(String[] args) {
+    ApiClient defaultClient = Configuration.getDefaultApiClient();
+    defaultClient.setBasePath("http://localhost");
+
+    NotificationsApi apiInstance = new NotificationsApi(defaultClient);
+    Long limit = 56L; // Long | Max results (default 50)
+    try {
+      List<NotificationItem> result = apiInstance.listNotifications(limit);
+      System.out.println(result);
+    } catch (ApiException e) {
+      System.err.println("Exception when calling NotificationsApi#listNotifications");
+      System.err.println("Status code: " + e.getCode());
+      System.err.println("Reason: " + e.getResponseBody());
+      System.err.println("Response headers: " + e.getResponseHeaders());
+      e.printStackTrace();
+    }
+  }
+}
+```
+
+### Parameters
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **limit** | **Long**| Max results (default 50) | [optional] |
+
+### Return type
+
+[**List&lt;NotificationItem&gt;**](NotificationItem.md)
 
 ### Authorization
 
