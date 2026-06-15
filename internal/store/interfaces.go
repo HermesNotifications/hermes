@@ -46,6 +46,8 @@ type TemplateRepository interface {
 	ListTemplates(ctx context.Context) ([]models.NotificationTemplate, error)
 	UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
 	DeleteTemplate(ctx context.Context, id string) error
+	GetTemplateContent(ctx context.Context, templateID string) (map[string]map[string]string, error)
+	SetTemplateContent(ctx context.Context, templateID string, content map[string]map[string]string) error
 }
 
 // UserRepository defines operations for managing users.

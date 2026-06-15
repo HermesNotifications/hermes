@@ -26,6 +26,10 @@ func (s *Store) CreateTemplate(ctx context.Context, input *models.NotificationTe
 	if err != nil {
 		return nil, fmt.Errorf("create template: %w", err)
 	}
+	if err := s.SetTemplateContent(ctx, input.ID, contentFromFixedColumns(input)); err != nil {
+		return nil, err
+	}
+	input.Content = contentFromFixedColumns(input)
 	return input, nil
 }
 
@@ -40,6 +44,11 @@ func (s *Store) GetTemplateByID(ctx context.Context, id string) (*models.Notific
 	if err != nil {
 		return nil, fmt.Errorf("get template by id: %w", err)
 	}
+	content, err := s.GetTemplateContent(ctx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	t.Content = content
 	return t, nil
 }
 
@@ -54,6 +63,11 @@ func (s *Store) GetTemplateBySlug(ctx context.Context, slug string) (*models.Not
 	if err != nil {
 		return nil, fmt.Errorf("get template by slug: %w", err)
 	}
+	content, err := s.GetTemplateContent(ctx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	t.Content = content
 	return t, nil
 }
 
@@ -76,7 +90,17 @@ func (s *Store) ListTemplates(ctx context.Context) ([]models.NotificationTemplat
 		}
 		templates = append(templates, t)
 	}
-	return templates, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range templates {
+		content, err := s.GetTemplateContent(ctx, templates[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		templates[i].Content = content
+	}
+	return templates, nil
 }
 
 func (s *Store) UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error) {
@@ -94,6 +118,10 @@ func (s *Store) UpdateTemplate(ctx context.Context, input *models.NotificationTe
 	if err != nil {
 		return nil, fmt.Errorf("update template: %w", err)
 	}
+	if err := s.SetTemplateContent(ctx, input.ID, contentFromFixedColumns(input)); err != nil {
+		return nil, err
+	}
+	input.Content = contentFromFixedColumns(input)
 	return input, nil
 }
 
