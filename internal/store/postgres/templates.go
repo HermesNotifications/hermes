@@ -26,10 +26,11 @@ func (s *Store) CreateTemplate(ctx context.Context, input *models.NotificationTe
 	if err != nil {
 		return nil, fmt.Errorf("create template: %w", err)
 	}
-	if err := s.SetTemplateContent(ctx, input.ID, contentFromFixedColumns(input)); err != nil {
+	content := contentFromFixedColumns(input)
+	if err := s.SetTemplateContent(ctx, input.ID, content); err != nil {
 		return nil, err
 	}
-	input.Content = contentFromFixedColumns(input)
+	input.Content = content
 	return input, nil
 }
 
@@ -118,10 +119,11 @@ func (s *Store) UpdateTemplate(ctx context.Context, input *models.NotificationTe
 	if err != nil {
 		return nil, fmt.Errorf("update template: %w", err)
 	}
-	if err := s.SetTemplateContent(ctx, input.ID, contentFromFixedColumns(input)); err != nil {
+	content := contentFromFixedColumns(input)
+	if err := s.SetTemplateContent(ctx, input.ID, content); err != nil {
 		return nil, err
 	}
-	input.Content = contentFromFixedColumns(input)
+	input.Content = content
 	return input, nil
 }
 
