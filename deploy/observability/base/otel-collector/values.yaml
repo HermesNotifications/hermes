@@ -1,11 +1,14 @@
 # OpenTelemetry Collector — gateway pattern.
 # Single fan-out point for all app telemetry. Replacing/adding backends is a config change here.
+# Prometheus/LGTM remains the canonical in-cluster observability stack; optional
+# backends such as SigNoz are collector fan-out targets, not app-side SDKs.
 #
 # Phase 1 flow:
 #   hermes services ──OTLP/gRPC──▶ this collector
 #                                       ├── otlp/tempo           (traces → Tempo)
 #                                       ├── prometheusremotewrite (metrics → Prometheus)
-#                                       └── datadog               (all signals → DD, preserves parity)
+#                                       ├── datadog               (all signals → DD, preserves parity)
+#                                       └── otlp/signoz           (optional all signals → SigNoz)
 #
 # The datadog exporter is gated by the DD_API_KEY env var. Overlays inject it from ExternalSecret
 # in staging/production; the local overlay omits it entirely so the DD pipeline is a no-op branch.
@@ -105,6 +108,17 @@ config:
     # without DD_API_KEY fails validation even when unused by pipelines.
     # Staging/production overlays inject it via their own values (see
     # docs/observability/operations.md).
+    #
+    # SigNoz is also intentionally absent from base pipelines so local LGTM
+    # rendering is unchanged. Opt-in overlays add the exporter below and append
+    # `otlp/signoz` to traces, metrics, and logs pipelines:
+    #
+    # otlp/signoz:
+    #   endpoint: ${env:SIGNOZ_OTLP_ENDPOINT}  # e.g. ingest.<region>.signoz.cloud:443
+    #   tls:
+    #     insecure: false
+    #   headers:
+    #     signoz-ingestion-key: ${env:SIGNOZ_INGESTION_KEY}
 
   extensions:
     health_check:

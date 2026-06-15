@@ -1,4 +1,4 @@
-{{- if and .Values.observability.enabled (eq .Values.observability.provider "otel") }}
+{{- if and .Values.observability.enabled .Values.observability.serviceMonitor.enabled }}
 {{- $fullName := include "hermes.fullname" . -}}
 {{- $labels := include "hermes.labels" . -}}
 {{- range $service := list "admin" "send" "dispatch" "inbox" "user" "worker-email" "worker-sms" "worker-inbox" "worker-events" }}

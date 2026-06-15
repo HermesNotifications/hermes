@@ -35,3 +35,10 @@ data:
   HERMES_SMS_WEBHOOK_URL: {{ .Values.hermes.sms.webhookUrl | quote }}
   {{- end }}
   HERMES_EVENT_RETENTION_DAYS: {{ .Values.hermes.events.retentionDays | quote }}
+  {{- if .Values.observability.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.observability.otel.endpoint | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ .Values.observability.otel.protocol | quote }}
+  {{- if .Values.observability.resourceAttributes }}
+  OTEL_RESOURCE_ATTRIBUTES: {{ .Values.observability.resourceAttributes | quote }}
+  {{- end }}
+  {{- end }}

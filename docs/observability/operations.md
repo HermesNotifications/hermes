@@ -41,6 +41,25 @@ Syncing is handled by ArgoCD Applications:
 
 Production changes land via PR. When merged to `main`, ArgoCD shows "Out of sync" on the production app; an operator clicks Sync in the UI after reviewing the diff.
 
+### Optional SigNoz fan-out
+
+SigNoz is enabled at the Collector, not in Hermes services. The default staging
+and production overlays remain LGTM + Datadog only. Use
+`deploy/observability/overlays/staging-signoz` or
+`deploy/observability/overlays/production-signoz` only after the corresponding
+SigNoz backend and secret are ready.
+
+The SigNoz overlays expect an `otel-collector-signoz` Secret populated by
+External Secrets from:
+
+- `hermes/staging/signoz`
+- `hermes/production/signoz`
+
+Each secret must provide `otlp-endpoint` and `ingestion-key`. The local stack
+stays LGTM-only with `tilt up -- --observability`; local SigNoz export requires
+`tilt up -- --observability --signoz` and assumes an OTLP/gRPC endpoint is
+reachable at `host.k3d.internal:4317`.
+
 ## Upgrading a Helm chart
 
 1. Bump the `version` in `deploy/observability/base/<component>/kustomization.yaml`.
@@ -96,6 +115,17 @@ The `memory_limiter` processor is set to 80% soft / 25% spike. If it's triggerin
 2. Short-term: bump the Deployment's memory limit in an overlay patch.
 3. Medium-term: add more replicas (the Service is headless-balanced).
 4. Long-term: tail-based sampling (Phase 2) drops the firehose.
+
+### "SigNoz export is failing"
+
+SigNoz failures should stay isolated to the Collector. Hermes pods should remain
+healthy because they still emit only to the in-cluster Collector.
+
+1. Check Collector self-metrics for `otelcol_exporter_send_failed_*{exporter="otlp/signoz"}` and queue growth.
+2. Check Collector logs for TLS, DNS, timeout, or authentication errors.
+3. Confirm `SIGNOZ_OTLP_ENDPOINT` is present in the Collector pod and resolves from the `observability` namespace.
+4. Confirm the SigNoz ingestion key Secret exists and the remote backend expects the `signoz-ingestion-key` header.
+5. Confirm the metrics pipeline still includes `prometheusremotewrite`; SigNoz export must not remove Prometheus alerts or dashboards.
 
 ## Retention / PV sizing
 

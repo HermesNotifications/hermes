@@ -30,7 +30,7 @@ During Phase 1 we need telemetry to land in **both** our new OSS backends (Tempo
 
 ### Why the Collector wins
 
-- **Single fan-out point.** All backend changes — adding Tempo, adding SigNoz if we ever switch, removing Datadog — are a config edit to `deploy/observability/base/otel-collector/values.yaml`. Zero app changes.
+- **Single fan-out point.** All backend changes — adding Tempo, adding SigNoz, removing Datadog — are a config edit to the Collector deployment values or overlays. Zero app changes.
 - **OTel is the app-side identity.** Forever. Backends come and go; the SDK stays the same.
 - **Built-in processing.** memory_limiter, batch, resource injection, cardinality stripping, filtering — all handled at the Collector, not in 9 services.
 - **Operational isolation.** If the Collector has a bad deploy, apps don't — they emit OTLP, and if no one receives, they back off. Apps never link against backend libraries directly.
@@ -45,3 +45,8 @@ During Phase 1 we need telemetry to land in **both** our new OSS backends (Tempo
 Phase 1 exit state: every service talks OTLP to the Collector; `dd-trace-go` is removed from `go.mod`; Datadog data flows via Collector's `datadog` exporter.
 
 Phase 2 cutover: delete the `datadog` exporter block from the pipeline configs, `ExternalSecret` for `DD_API_KEY`, and the DD Agent DaemonSet. The app stack is unchanged.
+
+SigNoz is now a concrete example of this design: environments can add an
+`otlp/signoz` exporter to the Collector and append it to traces, metrics, and
+logs pipelines while Hermes services continue to emit only OTLP to the
+Collector.

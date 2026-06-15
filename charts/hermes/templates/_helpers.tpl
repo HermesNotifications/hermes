@@ -137,3 +137,14 @@ Return the Centrifugo API URL.
 {{- .Values.externalCentrifugo.apiUrl -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Render per-service OpenTelemetry service identity. Call with
+(dict "root" . "service" "admin").
+*/}}
+{{- define "hermes.otelServiceEnv" -}}
+{{- if .root.Values.observability.enabled -}}
+- name: OTEL_SERVICE_NAME
+  value: hermes-{{ .service }}
+{{- end }}
+{{- end }}

@@ -317,10 +317,19 @@ ingress:
 
 # -- Observability / telemetry configuration
 observability:
-  # -- Enable metrics and tracing sidecars or annotations
+  # -- Enable OpenTelemetry export environment for Hermes services
   enabled: false
-  # -- Telemetry provider: otel or datadog
-  provider: "otel"
+  otel:
+    # -- OTLP endpoint for the OpenTelemetry Collector
+    endpoint: "http://otel-collector-opentelemetry-collector.observability.svc:4317"
+    # -- OTLP protocol used by Hermes services
+    protocol: "grpc"
+  # -- Comma-separated OTEL_RESOURCE_ATTRIBUTES appended at SDK startup
+  resourceAttributes: ""
+  serviceMonitor:
+    # -- Emit Prometheus Operator ServiceMonitor resources for Hermes services.
+    # Defaults to true to preserve the old observability.enabled=true behavior.
+    enabled: true
 
 # ---------------------------------------------------------------------------
 # Network Policy

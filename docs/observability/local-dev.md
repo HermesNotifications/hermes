@@ -16,6 +16,16 @@ Combined with Datadog:
 tilt up -- --datadog --observability
 ```
 
+With local SigNoz dual-export to an existing OTLP/gRPC endpoint:
+
+```bash
+tilt up -- --observability --signoz
+```
+
+The local SigNoz overlay points the Collector at `host.k3d.internal:4317`, which
+is intended for a SigNoz instance running outside the k3d cluster. Plain
+`tilt up -- --observability` remains LGTM-only.
+
 ## First-run timing
 
 On a cold `tilt up`, the observability stack takes 2–4 minutes to fully come up. The order you'll see in the Tilt UI:
@@ -48,6 +58,7 @@ Once everything is green in Tilt:
 2. Open Grafana → **Explore → Tempo**, enter `service.name = hermes-send`, click "Run query". The span should appear within 30s.
 3. Open **Explore → Prometheus**, query `http_server_request_duration_seconds_count{service="hermes-send"}`. Non-zero = metrics flowing.
 4. Open **Explore → Loki**, query `{service="hermes-send"}`. Logs should appear with `trace_id` in structured metadata.
+5. If `--signoz` is enabled, open SigNoz and confirm the same `hermes-send` trace appears. Prometheus should still show the metric above; SigNoz export is additive.
 
 If any of those fail, [operations.md](operations.md#debugging-common-issues) has the triage paths.
 

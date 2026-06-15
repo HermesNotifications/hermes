@@ -92,34 +92,43 @@ hermes:
 ### OpenTelemetry
 
 ```yaml
-hermes:
-  otel:
-    enabled: true
-    endpoint: "otel-collector.monitoring:4317"
-    insecure: true
-    samplingRatio: 0.1             # Sample 10% of traces
-```
-
-### Datadog
-
-```yaml
-hermes:
-  datadog:
-    enabled: true
-    # Uses DD_AGENT_HOST and DD_ENTITY_ID from the Datadog admission controller
-    # No additional configuration needed if using the Datadog Operator
-```
-
-### Prometheus (ServiceMonitor)
-
-```yaml
-serviceMonitor:
+observability:
   enabled: true
-  namespace: monitoring            # Namespace where Prometheus Operator watches
-  interval: 30s
-  labels:
-    release: prometheus
+  otel:
+    endpoint: "http://otel-collector-opentelemetry-collector.observability.svc:4317"
+    protocol: "grpc"
+  resourceAttributes: "deployment.environment=production"
 ```
+
+### Prometheus ServiceMonitor
+
+```yaml
+observability:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+```
+
+This emits one `ServiceMonitor` per long-running Hermes service. It is the
+default when `observability.enabled=true`, preserving the old chart behavior.
+The current alert rules and dashboards depend on Prometheus scraping and
+remote-write, so do not disable this when adding SigNoz unless you also provide
+a separate Prometheus replacement plan.
+
+### SigNoz Collector fan-out
+
+The Helm chart configures Hermes services to export OTLP to a Collector; it
+does not render or operate the Collector itself. To fan out to SigNoz, configure
+the Collector deployment. In this repository's Kustomize observability stack,
+use the opt-in overlays:
+
+- `deploy/observability/overlays/local-signoz`
+- `deploy/observability/overlays/staging-signoz`
+- `deploy/observability/overlays/production-signoz`
+
+SigNoz support is additive. Hermes services still export to the OpenTelemetry
+Collector, and the Collector fans out to SigNoz. Enabling SigNoz does not remove
+Prometheus alerts, `ServiceMonitor` scraping, or Grafana dashboards.
 
 ## Per-Service Overrides
 

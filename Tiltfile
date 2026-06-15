@@ -3,9 +3,11 @@ load("ext://helm_remote", "helm_remote")
 
 config.define_bool("datadog", usage="Enable Datadog Agent and orchestrion instrumentation (requires DD_API_KEY)")
 config.define_bool("observability", usage="Enable the OSS observability stack (Prometheus/Loki/Tempo/Grafana/OTel Collector)")
+config.define_bool("signoz", usage="Enable SigNoz OTel Collector export to an existing SigNoz endpoint")
 cfg = config.parse()
 datadog_enabled = cfg.get("datadog", False)
 observability_enabled = cfg.get("observability", False)
+signoz_enabled = cfg.get("signoz", False)
 
 # --- Config ---
 k3d_registry = "k3d-hermes-registry.localhost:5111"
@@ -205,11 +207,12 @@ if datadog_enabled:
 #   3. observability-monitors  — every monitoring.coreos.com custom resource,
 #                                gated on observability-crds via resource_deps
 if observability_enabled:
+    observability_overlay = "deploy/observability/overlays/local-signoz" if signoz_enabled else "deploy/observability/overlays/local"
     # `kustomize --enable-helm` is required; recent Tilt versions pass flags after `--`.
     obs_objects = [
         o
         for o in decode_yaml_stream(
-            kustomize("deploy/observability/overlays/local", flags=["--enable-helm"])
+            kustomize(observability_overlay, flags=["--enable-helm"])
         )
         if o
     ]

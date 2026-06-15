@@ -38,6 +38,7 @@ spec:
           env:
             - name: HERMES_HTTP_PORT
               value: {{ .Values.user.port | quote }}
+            {{- include "hermes.otelServiceEnv" $svcCtx | nindent 12 }}
             {{- if .Values.hermes.jwt.existingSecret }}
             - name: HERMES_JWT_SECRET
               valueFrom:

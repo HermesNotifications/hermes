@@ -1,7 +1,7 @@
 # ADR-001: LGTM stack over SigNoz
 
 **Date:** 2026-04-19
-**Status:** Accepted
+**Status:** Accepted; amended 2026-06-13
 
 ## Context
 
@@ -13,6 +13,12 @@ Hermes is introducing open-source full-stack monitoring to **supplement Datadog*
 ## Decision
 
 **LGTM stack.**
+
+SigNoz is supported as an optional OTLP destination behind the OpenTelemetry
+Collector. This does not replace LGTM or Prometheus: Prometheus remains the
+metrics, alerting, and dashboard data plane for the current stack, while SigNoz
+can receive a dual-export copy of telemetry when an environment explicitly
+enables the Collector fan-out.
 
 ## Consequences
 
@@ -31,7 +37,7 @@ Hermes is introducing open-source full-stack monitoring to **supplement Datadog*
 
 ### Reversibility
 
-If this decision is wrong, migration **from** LGTM **to** SigNoz is low-cost: the instrumentation (OTel SDK) is shared. The OTel Collector config gets a new exporter block. No app-side changes.
+If this decision is wrong, migration **from** LGTM **to** SigNoz is low-cost: the instrumentation (OTel SDK) is shared. The OTel Collector config gets a new exporter block. No app-side changes. The 2026-06-13 amendment uses that reversibility for optional dual-export only; a SigNoz-primary migration would still need a separate plan for Prometheus alerts, dashboards, and infra metrics.
 
 ## Alternatives considered
 

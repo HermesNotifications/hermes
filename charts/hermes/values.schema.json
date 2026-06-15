@@ -86,10 +86,31 @@
         "enabled": {
           "type": "boolean"
         },
-        "provider": {
+        "otel": {
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "description": "OTLP endpoint for the OpenTelemetry Collector"
+            },
+            "protocol": {
+              "type": "string",
+              "enum": ["grpc", "http/protobuf"],
+              "description": "OTLP protocol used by Hermes services"
+            }
+          }
+        },
+        "resourceAttributes": {
           "type": "string",
-          "enum": ["otel", "datadog"],
-          "description": "Telemetry provider"
+          "description": "Comma-separated OTEL_RESOURCE_ATTRIBUTES"
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
         }
       }
     },

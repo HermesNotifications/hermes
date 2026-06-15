@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector-opentelemetry-collector
+  namespace: observability
+spec:
+  template:
+    spec:
+      containers:
+        - name: opentelemetry-collector
+          env:
+            - name: SIGNOZ_OTLP_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: otel-collector-signoz
+                  key: SIGNOZ_OTLP_ENDPOINT
+            - name: SIGNOZ_INGESTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: otel-collector-signoz
+                  key: SIGNOZ_INGESTION_KEY
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-opentelemetry-collector
+  namespace: observability
+data:
+  relay: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch:
+        send_batch_size: 8192
+        send_batch_max_size: 16384
+        timeout: 10s
+      resource:
+        attributes:
+          - key: k8s.cluster.name
+            value: ${env:K8S_CLUSTER_NAME}
+            action: insert
+          - key: deployment.environment
+            from_attribute: k8s.namespace.name
+            action: insert
+      attributes/metrics:
+        actions:
+          - key: user_id
+            action: delete
+          - key: notification_id
+            action: delete
+          - key: tenant_id
+            action: delete
+
+    exporters:
+      otlp/tempo:
+        endpoint: tempo.observability.svc:4317
+        tls:
+          insecure: true
+      datadog:
+        api:
+          key: ${env:DD_API_KEY}
+      otlp/signoz:
+        endpoint: ${env:SIGNOZ_OTLP_ENDPOINT}
+        headers:
+          signoz-ingestion-key: ${env:SIGNOZ_INGESTION_KEY}
+      prometheusremotewrite:
+        endpoint: http://kps-prometheus.observability.svc:9090/api/v1/write
+        resource_to_telemetry_conversion:
+          enabled: true
+      debug:
+        verbosity: basic
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp/tempo, datadog, otlp/signoz]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, attributes/metrics, batch]
+          exporters: [prometheusremotewrite, datadog, otlp/signoz]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [debug, datadog, otlp/signoz]
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888

@@ -9,7 +9,7 @@ All in the `observability` namespace.
 | **kube-prometheus-stack** | prometheus-community | single Prometheus (50Gi / 15d) | Metrics ingest + scrape; bundles Alertmanager (2 replicas), Grafana, node-exporter, kube-state-metrics |
 | **Loki** | grafana | single-binary (100Gi / 14d) | Log storage |
 | **Tempo** | grafana | single-binary (50Gi / 14d) | Trace storage |
-| **OpenTelemetry Collector** | opentelemetry-helm-charts | Deployment (2 replicas) | OTLP gateway; fans out to Tempo, Prometheus, Datadog |
+| **OpenTelemetry Collector** | opentelemetry-helm-charts | Deployment (2 replicas) | OTLP gateway; fans out to Tempo, Prometheus, Datadog, and optional SigNoz |
 | **Grafana Alloy** | grafana | DaemonSet | Container stdout → Loki |
 | **nats-exporter** | (plain YAML) | Deployment | NATS JetStream metrics |
 | **postgres-exporter** | (plain YAML) | Deployment | Postgres pg_stat_* metrics |
@@ -37,6 +37,10 @@ flowchart LR
         DDAgent[DD Agent]
     end
 
+    subgraph signoz[Optional SigNoz]
+        SigNoz[SigNoz OTLP ingest]
+    end
+
     App -->|OTLP/gRPC| OTel
     Stdout --> Alloy
     Alloy --> Loki
@@ -45,6 +49,7 @@ flowchart LR
     OTel -->|otlp| Tempo
     OTel -->|remote-write| Prom
     OTel -->|datadog exporter| DDAgent
+    OTel -.->|otlp/signoz| SigNoz
 
     Prom -->|scrape| NATSExp[nats-exporter]
     Prom -->|scrape| PGExp[postgres-exporter]
@@ -57,7 +62,7 @@ flowchart LR
 
 ## Why these choices (short version)
 
-- **LGTM, not SigNoz:** larger ecosystem, modular components, Grafana familiarity from load tests. See [adr/001-lgtm-over-signoz.md](adr/001-lgtm-over-signoz.md).
+- **LGTM primary, optional SigNoz:** larger ecosystem, modular components, Grafana familiarity from load tests. SigNoz can be enabled as additive Collector fan-out, but Prometheus remains required for current alert rules and dashboards. See [adr/001-lgtm-over-signoz.md](adr/001-lgtm-over-signoz.md).
 - **OTel Collector as single fan-out point:** adding/removing a backend (including eventual Datadog removal) is a config change, not a code change. See [adr/002-otel-collector-fan-out.md](adr/002-otel-collector-fan-out.md).
 - **Alloy, not OTel Logs SDK:** logs already go to stdout as slog JSON. Scraping is zero app code. See [adr/003-alloy-for-logs.md](adr/003-alloy-for-logs.md).
 - **No DSM replacement:** Datadog's Data Streams Monitoring is proprietary — trace-based NATS latency is the substitute. See [adr/004-accepting-dsm-loss.md](adr/004-accepting-dsm-loss.md).
@@ -70,6 +75,7 @@ Services live in the `hermes` namespace; the observability stack lives in `obser
 - Apps export to `otel-collector-opentelemetry-collector.observability.svc:4317`.
 - Prometheus scrapes cross-namespace by selecting `ServiceMonitor` resources labeled `app.kubernetes.io/part-of: hermes`, regardless of which namespace they live in.
 - The Datadog Agent DaemonSet remains in `hermes` (unchanged) during Phase 1; Phase 2 removes it.
+- Optional SigNoz export leaves the app endpoint unchanged; the Collector sends a second OTLP copy to the configured SigNoz endpoint.
 
 ## Topology
 

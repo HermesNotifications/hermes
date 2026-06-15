@@ -20,7 +20,7 @@ Phase 1 runs the OSS stack **alongside** Datadog — everything is dual-emitted 
 
 ## The one-paragraph version
 
-Every Hermes service initializes OpenTelemetry at startup (`internal/observability.Init`). Traces, metrics, and OTLP logs go out as OTLP/gRPC to the **OTel Collector** (gateway pattern) in the `observability` namespace. The Collector fans out to **Tempo** (traces), **Prometheus** (metrics via remote-write), and **Datadog** (all three, for parity during Phase 1). Container stdout is scraped by the **Alloy** DaemonSet and shipped to **Loki**; a small `slog.Handler` injects `trace_id` / `span_id` into every log line so Grafana can pivot from a log to its trace and back. Alertmanager runs with rules codified but **routing is deliberately silent** — Phase 2 wires Slack/PagerDuty once signal-to-noise is tuned.
+Every Hermes service initializes OpenTelemetry at startup (`internal/observability.Init`). Traces, metrics, and OTLP logs go out as OTLP/gRPC to the **OTel Collector** (gateway pattern) in the `observability` namespace. The Collector fans out to **Tempo** (traces), **Prometheus** (metrics via remote-write), **Datadog** (all three, for parity during Phase 1), and optionally **SigNoz** when an environment enables that exporter. Container stdout is scraped by the **Alloy** DaemonSet and shipped to **Loki**; a small `slog.Handler` injects `trace_id` / `span_id` into every log line so Grafana can pivot from a log to its trace and back. Alertmanager runs with rules codified but **routing is deliberately silent** — Phase 2 wires Slack/PagerDuty once signal-to-noise is tuned.
 
 ## Phase status
 
