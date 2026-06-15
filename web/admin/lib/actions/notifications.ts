@@ -24,8 +24,7 @@ export async function sendNotification(options: {
   to: {
     tenantId: string;
     userId: string;
-    email?: string;
-    phone?: string;
+    contacts?: Record<string, string>;
   };
   template?: string;
   content?: {

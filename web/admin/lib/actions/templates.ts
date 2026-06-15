@@ -11,6 +11,34 @@ export async function listTemplates() {
   return hermes.templates.list();
 }
 
+interface FlatTemplateContent {
+  emailSubject?: string;
+  emailBody?: string;
+  smsBody?: string;
+  inboxTitle?: string;
+  inboxBody?: string;
+}
+
+function toContent(
+  f: FlatTemplateContent
+): Record<string, Record<string, string>> {
+  const c: Record<string, Record<string, string>> = {};
+  if (f.emailSubject || f.emailBody) {
+    c.email = {
+      ...(f.emailSubject ? { subject: f.emailSubject } : {}),
+      ...(f.emailBody ? { body: f.emailBody } : {}),
+    };
+  }
+  if (f.smsBody) c.sms = { body: f.smsBody };
+  if (f.inboxTitle || f.inboxBody) {
+    c.inbox = {
+      ...(f.inboxTitle ? { title: f.inboxTitle } : {}),
+      ...(f.inboxBody ? { body: f.inboxBody } : {}),
+    };
+  }
+  return c;
+}
+
 export async function createTemplate(data: {
   slug: string;
   name: string;
@@ -23,7 +51,12 @@ export async function createTemplate(data: {
   inboxBody?: string;
 }) {
   const hermes = getHermes();
-  const result = await hermes.templates.create(data);
+  const { emailSubject, emailBody, smsBody, inboxTitle, inboxBody, ...rest } =
+    data;
+  const result = await hermes.templates.create({
+    ...rest,
+    content: toContent({ emailSubject, emailBody, smsBody, inboxTitle, inboxBody }),
+  });
   revalidatePath("/templates");
   return result;
 }
@@ -42,7 +75,12 @@ export async function updateTemplate(
   }
 ) {
   const hermes = getHermes();
-  const result = await hermes.templates.update(id, data);
+  const { emailSubject, emailBody, smsBody, inboxTitle, inboxBody, ...rest } =
+    data;
+  const result = await hermes.templates.update(id, {
+    ...rest,
+    content: toContent({ emailSubject, emailBody, smsBody, inboxTitle, inboxBody }),
+  });
   revalidatePath("/templates");
   return result;
 }

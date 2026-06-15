@@ -27,8 +27,8 @@ function getChannelContents(
       label: "Email",
       icon: Mail,
       fields: [
-        { label: "Subject", value: template?.email_subject ?? notification.title },
-        { label: "Body", value: template?.email_body ?? notification.body },
+        { label: "Subject", value: template?.content?.email?.subject ?? notification.title },
+        { label: "Body", value: template?.content?.email?.body ?? notification.body },
       ],
     });
   }
@@ -39,7 +39,7 @@ function getChannelContents(
       label: "SMS",
       icon: MessageSquare,
       fields: [
-        { label: "Body", value: template?.sms_body ?? notification.body },
+        { label: "Body", value: template?.content?.sms?.body ?? notification.body },
       ],
     });
   }
@@ -50,8 +50,8 @@ function getChannelContents(
       label: "Inbox",
       icon: Inbox,
       fields: [
-        { label: "Title", value: template?.inbox_title ?? notification.title },
-        { label: "Body", value: template?.inbox_body ?? notification.body },
+        { label: "Title", value: template?.content?.inbox?.title ?? notification.title },
+        { label: "Body", value: template?.content?.inbox?.body ?? notification.body },
       ],
     });
   }
