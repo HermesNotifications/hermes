@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,15 +24,15 @@ func newTemplatesCmd() *cobra.Command {
 
 func templateChannels(t client.NotificationTemplate) string {
 	var channels []string
-	if t.EmailSubject != nil {
-		channels = append(channels, "email")
+	for slug, fields := range t.Content {
+		for _, v := range fields {
+			if v != "" {
+				channels = append(channels, slug)
+				break
+			}
+		}
 	}
-	if t.SMSBody != nil {
-		channels = append(channels, "sms")
-	}
-	if t.InboxTitle != nil {
-		channels = append(channels, "inbox")
-	}
+	sort.Strings(channels)
 	return strings.Join(channels, ",")
 }
 
@@ -77,11 +78,15 @@ func newTemplatesCreateCmd() *cobra.Command {
 			if cmd.Flags().Changed("subscription-id") {
 				req.SubscriptionID = &subscriptionID
 			}
-			setOptionalString(cmd, "email-subject", &req.EmailSubject, emailSubject)
-			setOptionalString(cmd, "email-body", &req.EmailBody, emailBody)
-			setOptionalString(cmd, "sms-body", &req.SMSBody, smsBody)
-			setOptionalString(cmd, "inbox-title", &req.InboxTitle, inboxTitle)
-			setOptionalString(cmd, "inbox-body", &req.InboxBody, inboxBody)
+			content := map[string]map[string]string{}
+			setContentField(cmd, content, "email-subject", "email", "subject", emailSubject)
+			setContentField(cmd, content, "email-body", "email", "body", emailBody)
+			setContentField(cmd, content, "sms-body", "sms", "body", smsBody)
+			setContentField(cmd, content, "inbox-title", "inbox", "title", inboxTitle)
+			setContentField(cmd, content, "inbox-body", "inbox", "body", inboxBody)
+			if len(content) > 0 {
+				req.Content = content
+			}
 
 			c := newClientFromCmd(cmd)
 			t, err := c.Templates.Create(cmd.Context(), req)
@@ -120,11 +125,15 @@ func newTemplatesUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("name") {
 				req.Name = name
 			}
-			setOptionalString(cmd, "email-subject", &req.EmailSubject, emailSubject)
-			setOptionalString(cmd, "email-body", &req.EmailBody, emailBody)
-			setOptionalString(cmd, "sms-body", &req.SMSBody, smsBody)
-			setOptionalString(cmd, "inbox-title", &req.InboxTitle, inboxTitle)
-			setOptionalString(cmd, "inbox-body", &req.InboxBody, inboxBody)
+			content := map[string]map[string]string{}
+			setContentField(cmd, content, "email-subject", "email", "subject", emailSubject)
+			setContentField(cmd, content, "email-body", "email", "body", emailBody)
+			setContentField(cmd, content, "sms-body", "sms", "body", smsBody)
+			setContentField(cmd, content, "inbox-title", "inbox", "title", inboxTitle)
+			setContentField(cmd, content, "inbox-body", "inbox", "body", inboxBody)
+			if len(content) > 0 {
+				req.Content = content
+			}
 
 			c := newClientFromCmd(cmd)
 			t, err := c.Templates.Update(cmd.Context(), id, req)
@@ -172,9 +181,12 @@ func newTemplatesDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-// setOptionalString sets a *string pointer only when the flag was explicitly provided.
-func setOptionalString(cmd *cobra.Command, flagName string, target **string, val string) {
+// setContentField populates content[channel][field] when the flag was explicitly provided.
+func setContentField(cmd *cobra.Command, content map[string]map[string]string, flagName, channel, field, val string) {
 	if cmd.Flags().Changed(flagName) {
-		*target = &val
+		if content[channel] == nil {
+			content[channel] = map[string]string{}
+		}
+		content[channel][field] = val
 	}
 }

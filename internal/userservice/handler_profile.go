@@ -14,8 +14,7 @@ import (
 
 type updateContactsInput struct {
 	Body struct {
-		Email *string `json:"email,omitempty" doc:"Email address"`
-		Phone *string `json:"phone,omitempty" doc:"Phone number"`
+		Contacts map[string]string `json:"contacts,omitempty" doc:"Contact addresses: address key (\"email\",\"phone\") -> address"`
 	}
 }
 
@@ -56,11 +55,18 @@ func (s *Server) registerProfileRoutes() {
 			return nil, huma.Error401Unauthorized("missing user")
 		}
 
-		if input.Body.Email == nil && input.Body.Phone == nil {
-			return nil, huma.Error400BadRequest("at least one of email or phone must be provided")
+		var email, phone *string
+		if v, ok := input.Body.Contacts["email"]; ok {
+			email = &v
+		}
+		if v, ok := input.Body.Contacts["phone"]; ok {
+			phone = &v
+		}
+		if email == nil && phone == nil {
+			return nil, huma.Error400BadRequest("at least one contact (email or phone) must be provided")
 		}
 
-		user, err := s.store.UpdateUserContacts(ctx, userID, input.Body.Email, input.Body.Phone)
+		user, err := s.store.UpdateUserContacts(ctx, userID, email, phone)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}

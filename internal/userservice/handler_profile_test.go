@@ -62,7 +62,7 @@ func TestHandleGetProfile_NoUser(t *testing.T) {
 func TestHandleUpdateContacts(t *testing.T) {
 	srv, store := newTestServer(t)
 
-	body := `{"email":"new@example.com","phone":"+15551234567"}`
+	body := `{"contacts":{"email":"new@example.com","phone":"+15551234567"}}`
 	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/contacts", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	req = requestWithUser(req, testUserID)

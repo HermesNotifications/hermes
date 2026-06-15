@@ -27,15 +27,24 @@ func newNotifSendCmd() *cobra.Command {
 		Use:   "send",
 		Short: "Send a notification",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			contacts := map[string]string{}
+			if email != "" {
+				contacts["email"] = email
+			}
+			if phone != "" {
+				contacts["phone"] = phone
+			}
 			req := client.SendRequest{
 				To: client.Recipient{
 					TenantID: tenantID,
 					UserID:   userID,
-					Email:    email,
-					Phone:    phone,
+					Contacts: contacts,
 				},
 				Template: template,
 				Channels: channels,
+			}
+			if len(contacts) == 0 {
+				req.To.Contacts = nil
 			}
 
 			if title != "" || body != "" {
