@@ -13,29 +13,21 @@ import (
 
 type createTemplateInput struct {
 	Body struct {
-		Slug            string   `json:"slug" required:"true" minLength:"1" doc:"URL-friendly identifier"`
-		Name            string   `json:"name" required:"true" minLength:"1" doc:"Human-readable name"`
-		SubscriptionID  *string  `json:"subscription_id,omitempty" doc:"Subscription ID (null for standalone)"`
-		DefaultChannels []string `json:"default_channels,omitempty" doc:"Default channels (used when no subscription)"`
-		EmailSubject    *string  `json:"email_subject,omitempty" doc:"Email subject template"`
-		EmailBody       *string  `json:"email_body,omitempty" doc:"Email body template (HTML)"`
-		SMSBody         *string  `json:"sms_body,omitempty" doc:"SMS body template"`
-		InboxTitle      *string  `json:"inbox_title,omitempty" doc:"Inbox title template"`
-		InboxBody       *string  `json:"inbox_body,omitempty" doc:"Inbox body template"`
+		Slug            string                       `json:"slug" required:"true" minLength:"1" doc:"URL-friendly identifier"`
+		Name            string                       `json:"name" required:"true" minLength:"1" doc:"Human-readable name"`
+		SubscriptionID  *string                      `json:"subscription_id,omitempty" doc:"Subscription ID (null for standalone)"`
+		DefaultChannels []string                     `json:"default_channels,omitempty" doc:"Default channels (used when no subscription)"`
+		Content         map[string]map[string]string `json:"content,omitempty" doc:"Per-channel content: channel slug -> field key -> template string (e.g. {\"email\":{\"subject\":\"...\",\"body\":\"...\"}})"`
 	}
 }
 
 type updateTemplateInput struct {
-	ID string `path:"id" doc:"Template ID"`
+	ID   string `path:"id" doc:"Template ID"`
 	Body struct {
-		Name            string   `json:"name" doc:"Human-readable name"`
-		SubscriptionID  *string  `json:"subscription_id,omitempty" doc:"Subscription ID (null for standalone)"`
-		DefaultChannels []string `json:"default_channels,omitempty" doc:"Default channels (used when no subscription)"`
-		EmailSubject    *string  `json:"email_subject,omitempty" doc:"Email subject template"`
-		EmailBody       *string  `json:"email_body,omitempty" doc:"Email body template (HTML)"`
-		SMSBody         *string  `json:"sms_body,omitempty" doc:"SMS body template"`
-		InboxTitle      *string  `json:"inbox_title,omitempty" doc:"Inbox title template"`
-		InboxBody       *string  `json:"inbox_body,omitempty" doc:"Inbox body template"`
+		Name            string                       `json:"name" doc:"Human-readable name"`
+		SubscriptionID  *string                      `json:"subscription_id,omitempty" doc:"Subscription ID (null for standalone)"`
+		DefaultChannels []string                     `json:"default_channels,omitempty" doc:"Default channels (used when no subscription)"`
+		Content         map[string]map[string]string `json:"content,omitempty" doc:"Per-channel content: channel slug -> field key -> template string (e.g. {\"email\":{\"subject\":\"...\",\"body\":\"...\"}})"`
 	}
 }
 
@@ -77,8 +69,7 @@ func (s *Server) registerTemplateRoutes() {
 		nt := &models.NotificationTemplate{
 			Slug: input.Body.Slug, Name: input.Body.Name,
 			SubscriptionID: input.Body.SubscriptionID, DefaultChannels: input.Body.DefaultChannels,
-			EmailSubject: input.Body.EmailSubject, EmailBody: input.Body.EmailBody,
-			SMSBody: input.Body.SMSBody, InboxTitle: input.Body.InboxTitle, InboxBody: input.Body.InboxBody,
+			Content: input.Body.Content,
 		}
 		nt, err := s.store.CreateTemplate(ctx, nt)
 		if err != nil {
@@ -98,8 +89,7 @@ func (s *Server) registerTemplateRoutes() {
 		nt := &models.NotificationTemplate{
 			ID: input.ID, Name: input.Body.Name,
 			SubscriptionID: input.Body.SubscriptionID, DefaultChannels: input.Body.DefaultChannels,
-			EmailSubject: input.Body.EmailSubject, EmailBody: input.Body.EmailBody,
-			SMSBody: input.Body.SMSBody, InboxTitle: input.Body.InboxTitle, InboxBody: input.Body.InboxBody,
+			Content: input.Body.Content,
 		}
 		nt, err := s.store.UpdateTemplate(ctx, nt)
 		if err != nil {

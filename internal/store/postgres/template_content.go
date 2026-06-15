@@ -7,9 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/provider"
 )
 
 // GetTemplateContent returns the normalized per-channel content map for a template:
@@ -73,25 +70,4 @@ func (s *Store) SetTemplateContent(ctx context.Context, templateID string, conte
 		return fmt.Errorf("set template content commit: %w", err)
 	}
 	return nil
-}
-
-// contentFromFixedColumns derives the normalized content map from a template's fixed
-// Email*/SMS*/Inbox* fields. Transitional bridge during phase 2; removed in phase 2e.
-func contentFromFixedColumns(t *models.NotificationTemplate) map[string]map[string]string {
-	out := map[string]map[string]string{}
-	put := func(channel, key string, v *string) {
-		if v == nil {
-			return
-		}
-		if out[channel] == nil {
-			out[channel] = map[string]string{}
-		}
-		out[channel][key] = *v
-	}
-	put(provider.ChannelEmail, "subject", t.EmailSubject)
-	put(provider.ChannelEmail, "body", t.EmailBody)
-	put(provider.ChannelSMS, "body", t.SMSBody)
-	put(provider.ChannelInbox, "title", t.InboxTitle)
-	put(provider.ChannelInbox, "body", t.InboxBody)
-	return out
 }

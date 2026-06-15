@@ -18,7 +18,7 @@ func TestHandleCreateTemplate(t *testing.T) {
 	srv := newTestServer(t)
 
 	// Create template
-	body := `{"slug":"invoice.paid","name":"Invoice Paid","email_subject":"Invoice paid"}`
+	body := `{"slug":"invoice.paid","name":"Invoice Paid","content":{"email":{"subject":"Invoice paid"}}}`
 	req := httptest.NewRequest("POST", "/v1/templates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -102,7 +102,7 @@ func TestHandleUpdateTemplate(t *testing.T) {
 	srv := newTestServer(t)
 
 	// Create
-	body := `{"slug":"welcome","name":"Welcome","email_subject":"Hello"}`
+	body := `{"slug":"welcome","name":"Welcome","content":{"email":{"subject":"Hello"}}}`
 	req := httptest.NewRequest("POST", "/v1/templates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -117,7 +117,7 @@ func TestHandleUpdateTemplate(t *testing.T) {
 	templateID := tmpl["id"].(string)
 
 	// Update
-	updateBody := `{"name":"Welcome Updated","email_subject":"Hello Updated"}`
+	updateBody := `{"name":"Welcome Updated","content":{"email":{"subject":"Hello Updated"}}}`
 	req = httptest.NewRequest("PUT", "/v1/templates/"+templateID, bytes.NewBufferString(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()

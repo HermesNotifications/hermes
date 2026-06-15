@@ -16,21 +16,17 @@ var templateIDGen = id.NewGenerator(id.Config{Prefix: "ntpl", TimeBits: 48, Rand
 func (s *Store) CreateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error) {
 	input.ID = templateIDGen.New()
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO notification_templates (id, subscription_id, slug, name, default_channels, email_subject, email_body, sms_body, inbox_title, inbox_body)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`INSERT INTO notification_templates (id, subscription_id, slug, name, default_channels)
+		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING created_at`,
 		input.ID, input.SubscriptionID, input.Slug, input.Name, input.DefaultChannels,
-		input.EmailSubject, input.EmailBody, input.SMSBody,
-		input.InboxTitle, input.InboxBody,
 	).Scan(&input.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create template: %w", err)
 	}
-	content := contentFromFixedColumns(input)
-	if err := s.SetTemplateContent(ctx, input.ID, content); err != nil {
+	if err := s.SetTemplateContent(ctx, input.ID, input.Content); err != nil {
 		return nil, err
 	}
-	input.Content = content
 	return input, nil
 }
 
@@ -107,23 +103,17 @@ func (s *Store) ListTemplates(ctx context.Context) ([]models.NotificationTemplat
 func (s *Store) UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error) {
 	err := s.pool.QueryRow(ctx,
 		`UPDATE notification_templates
-		 SET name = $2, subscription_id = $3, default_channels = $4, email_subject = $5, email_body = $6, sms_body = $7, inbox_title = $8, inbox_body = $9
+		 SET name = $2, subscription_id = $3, default_channels = $4
 		 WHERE id = $1
-		 RETURNING id, subscription_id, slug, name, default_channels, email_subject, email_body, sms_body, inbox_title, inbox_body, created_at`,
+		 RETURNING id, subscription_id, slug, name, default_channels, created_at`,
 		input.ID, input.Name, input.SubscriptionID, input.DefaultChannels,
-		input.EmailSubject, input.EmailBody,
-		input.SMSBody, input.InboxTitle, input.InboxBody,
-	).Scan(&input.ID, &input.SubscriptionID, &input.Slug, &input.Name, &input.DefaultChannels,
-		&input.EmailSubject, &input.EmailBody, &input.SMSBody,
-		&input.InboxTitle, &input.InboxBody, &input.CreatedAt)
+	).Scan(&input.ID, &input.SubscriptionID, &input.Slug, &input.Name, &input.DefaultChannels, &input.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("update template: %w", err)
 	}
-	content := contentFromFixedColumns(input)
-	if err := s.SetTemplateContent(ctx, input.ID, content); err != nil {
+	if err := s.SetTemplateContent(ctx, input.ID, input.Content); err != nil {
 		return nil, err
 	}
-	input.Content = content
 	return input, nil
 }
 

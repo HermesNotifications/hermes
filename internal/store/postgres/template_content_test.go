@@ -17,20 +17,20 @@ func TestTemplateContent_DualWriteAndLoad(t *testing.T) {
 	cleanTable(t, pool, "notification_templates", "subscription_categories")
 	ctx := context.Background()
 
-	subject, body, sms := "Hi {{.name}}", "<p>x</p>", "hi"
 	created, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
 		Slug: "tc-dualwrite", Name: "T",
 		DefaultChannels: []string{"email", "sms"},
-		EmailSubject:    &subject,
-		EmailBody:       &body,
-		SMSBody:         &sms,
+		Content: map[string]map[string]string{
+			"email": {"subject": "Hi {{.name}}", "body": "<p>x</p>"},
+			"sms":   {"body": "hi"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.Content["email"]["subject"] != subject ||
-		created.Content["email"]["body"] != body ||
-		created.Content["sms"]["body"] != sms {
+	if created.Content["email"]["subject"] != "Hi {{.name}}" ||
+		created.Content["email"]["body"] != "<p>x</p>" ||
+		created.Content["sms"]["body"] != "hi" {
 		t.Fatalf("create content: %+v", created.Content)
 	}
 
@@ -38,24 +38,23 @@ func TestTemplateContent_DualWriteAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Content["email"]["subject"] != subject || got.Content["sms"]["body"] != sms {
+	if got.Content["email"]["subject"] != "Hi {{.name}}" || got.Content["sms"]["body"] != "hi" {
 		t.Fatalf("reload content: %+v", got.Content)
 	}
 
-	updatedSubject := "Updated"
-	got.EmailSubject = &updatedSubject
+	got.Content["email"]["subject"] = "Updated"
 	updated, err := s.UpdateTemplate(ctx, got)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Content["email"]["subject"] != updatedSubject {
+	if updated.Content["email"]["subject"] != "Updated" {
 		t.Fatalf("update content: %+v", updated.Content)
 	}
 	reload, err := s.GetTemplateContent(ctx, got.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reload["email"]["subject"] != updatedSubject {
+	if reload["email"]["subject"] != "Updated" {
 		t.Fatalf("reloaded content after update: %+v", reload)
 	}
 }
