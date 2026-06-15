@@ -208,7 +208,7 @@ func TestDeliveryPipeline(t *testing.T) {
 		"to": map[string]any{
 			"tenant_id": tenantID,
 			"user_id":   "delivery-user-" + runID,
-			"email":     "delivery-user-" + runID + "@example.com",
+			"contacts":  map[string]any{"email": "delivery-user-" + runID + "@example.com"},
 		},
 		"template": templateSlug,
 		"data":     map[string]string{"name": "Alice"},

@@ -169,7 +169,7 @@ func TestSendNotification_E2E(t *testing.T) {
 
 	// 4. POST /v1/send — template-based send via the Send service.
 	rec := doReq(sendHandler, "POST", "/v1/send", map[string]any{
-		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-1", "email": "ext-user-e2e-1@example.com"},
+		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-1", "contacts": map[string]any{"email": "ext-user-e2e-1@example.com"}},
 		"template": templateSlug,
 		"data":     map[string]string{"number": "INV-001"},
 	}, nil)
@@ -208,7 +208,7 @@ func TestSendNotification_E2E(t *testing.T) {
 	// 6. Idempotency — two direct-content sends with the same key return the same ID.
 	idemKey := "test-idem-key-" + runID
 	idemBody := map[string]any{
-		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-4", "email": "ext-user-e2e-4@example.com"},
+		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-4", "contacts": map[string]any{"email": "ext-user-e2e-4@example.com"}},
 		"content":  map[string]string{"title": "Idem", "body": "Body"},
 		"channels": []string{"inbox"},
 	}

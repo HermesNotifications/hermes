@@ -159,7 +159,7 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 		"to": map[string]any{
 			"tenant_id": tenantID,
 			"user_id":   "pipeline-user-" + runID,
-			"email":     "pipeline-user-" + runID + "@example.com",
+			"contacts":  map[string]any{"email": "pipeline-user-" + runID + "@example.com"},
 		},
 		"template": templateSlug,
 		"data":     map[string]string{"name": "Alice"},

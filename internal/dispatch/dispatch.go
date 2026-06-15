@@ -267,11 +267,10 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	for k, v := range user.Contacts {
 		recipient[k] = v
 	}
-	if msg.Email != "" {
-		recipient["email"] = msg.Email
-	}
-	if msg.Phone != "" {
-		recipient["phone"] = msg.Phone
+	for k, v := range msg.Contacts {
+		if v != "" {
+			recipient[k] = v
+		}
 	}
 
 	// Filter channels that require contact info (per the channel registry).

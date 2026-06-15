@@ -10,17 +10,16 @@ import (
 
 // SendMessage is published to notification.send by the Send service.
 type SendMessage struct {
-	NotificationID string          `json:"notification_id"`
-	TenantID       string          `json:"tenant_id"`
-	ExternalUserID string          `json:"external_user_id"`
-	Email          string          `json:"email,omitempty"`
-	Phone          string          `json:"phone,omitempty"`
-	Content        *MessageContent `json:"content,omitempty"`
-	Metadata       MessageMetadata `json:"metadata"`
-	Data           map[string]any  `json:"data,omitempty"`
-	Channels       []string        `json:"channels,omitempty"`
-	IdempotencyKey string          `json:"idempotency_key,omitempty"`
-	Attempt        int             `json:"attempt"`
+	NotificationID string            `json:"notification_id"`
+	TenantID       string            `json:"tenant_id"`
+	ExternalUserID string            `json:"external_user_id"`
+	Contacts       map[string]string `json:"contacts,omitempty"` // per-send address overrides: address key -> address
+	Content        *MessageContent   `json:"content,omitempty"`
+	Metadata       MessageMetadata   `json:"metadata"`
+	Data           map[string]any    `json:"data,omitempty"`
+	Channels       []string          `json:"channels,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	Attempt        int               `json:"attempt"`
 }
 
 type MessageContent struct {
