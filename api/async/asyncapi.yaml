@@ -322,6 +322,11 @@ components:
             type: string
             enum: [email, sms, inbox]
           description: Explicit channel override. If omitted, resolved from user preferences or group defaults.
+        contacts:
+          type: object
+          additionalProperties:
+            type: string
+          description: Per-send recipient address overrides, keyed by address key (e.g. email, phone).
         attempt:
           type: integer
           minimum: 1
@@ -351,6 +356,11 @@ components:
           $ref: '#/components/schemas/MessageContent'
         metadata:
           $ref: '#/components/schemas/MessageMetadata'
+        recipient:
+          type: object
+          additionalProperties:
+            type: string
+          description: Resolved recipient addresses, keyed by address key (e.g. email, phone).
         attempt:
           type: integer
           minimum: 1
