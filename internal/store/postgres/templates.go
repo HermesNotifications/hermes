@@ -27,6 +27,9 @@ func (s *Store) CreateTemplate(ctx context.Context, input *models.NotificationTe
 	if err := s.SetTemplateContent(ctx, input.ID, input.Content); err != nil {
 		return nil, err
 	}
+	if input.Content, err = s.GetTemplateContent(ctx, input.ID); err != nil {
+		return nil, err
+	}
 	return input, nil
 }
 
@@ -112,6 +115,9 @@ func (s *Store) UpdateTemplate(ctx context.Context, input *models.NotificationTe
 		return nil, fmt.Errorf("update template: %w", err)
 	}
 	if err := s.SetTemplateContent(ctx, input.ID, input.Content); err != nil {
+		return nil, err
+	}
+	if input.Content, err = s.GetTemplateContent(ctx, input.ID); err != nil {
 		return nil, err
 	}
 	return input, nil
