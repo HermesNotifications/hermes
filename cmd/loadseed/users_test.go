@@ -45,11 +45,13 @@ func TestInsertUsers_Copy(t *testing.T) {
 		t.Fatalf("want 500 rows, got %d", count)
 	}
 
-	var email string
-	if err := pool.QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, ids[0]).Scan(&email); err != nil {
-		t.Fatalf("email: %v", err)
+	var addr string
+	if err := pool.QueryRow(ctx,
+		`SELECT address FROM user_contact_points WHERE user_id = $1 AND address_key = 'email'`,
+		ids[0]).Scan(&addr); err != nil {
+		t.Fatalf("email contact: %v", err)
 	}
-	if email == "" {
-		t.Fatalf("empty email")
+	if addr == "" {
+		t.Fatalf("empty email contact")
 	}
 }
