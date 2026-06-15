@@ -135,14 +135,27 @@ func TestSendNotification_E2E(t *testing.T) {
 
 	// 3. Seed a standalone template (email+inbox) directly in the DB.
 	templateSlug := "invoice.paid.e2e." + runID
+	templateID := uuid.New().String()
 	_, err = pool.Exec(ctx,
 		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, inbox_title, inbox_body)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		uuid.New().String(), templateSlug, "Invoice Paid", []string{"email", "inbox"},
+		templateID, templateSlug, "Invoice Paid", []string{"email", "inbox"},
 		"Invoice {{.number}} paid", "Invoice paid", "Your invoice {{.number}} has been paid",
 	)
 	if err != nil {
 		t.Fatalf("create template: %v", err)
+	}
+	// Seed normalized per-channel content (matches the fixed columns above) so
+	// dispatch's content-gated routing fans out to email + inbox.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO template_channel_content (template_id, channel_slug, content) VALUES
+		 ($1, 'email', $2), ($1, 'inbox', $3)`,
+		templateID,
+		`{"subject":"Invoice {{.number}} paid"}`,
+		`{"title":"Invoice paid","body":"Your invoice {{.number}} has been paid"}`,
+	)
+	if err != nil {
+		t.Fatalf("create template content: %v", err)
 	}
 
 	// Start dispatch + event writer so notifications get persisted and routed.
