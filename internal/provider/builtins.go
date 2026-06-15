@@ -23,6 +23,10 @@ func newBuiltinRegistry() *Registry {
 		HasContent: func(t *models.NotificationTemplate) bool {
 			return t.EmailSubject != nil || t.EmailBody != nil
 		},
+		Content: []ContentField{
+			{Key: "subject", Render: RenderText, MapsTo: "title"},
+			{Key: "body", Render: RenderHTML, MapsTo: "body"},
+		},
 	})
 	r.RegisterChannel(ChannelDescriptor{
 		Slug:         ChannelSMS,
@@ -32,6 +36,9 @@ func newBuiltinRegistry() *Registry {
 		HasContent: func(t *models.NotificationTemplate) bool {
 			return t.SMSBody != nil
 		},
+		Content: []ContentField{
+			{Key: "body", Render: RenderText, MapsTo: "body"},
+		},
 	})
 	r.RegisterChannel(ChannelDescriptor{
 		Slug:       ChannelInbox,
@@ -40,6 +47,10 @@ func newBuiltinRegistry() *Registry {
 		BodyField:  FieldInboxBody,
 		HasContent: func(t *models.NotificationTemplate) bool {
 			return t.InboxTitle != nil || t.InboxBody != nil
+		},
+		Content: []ContentField{
+			{Key: "title", Render: RenderText, MapsTo: "title"},
+			{Key: "body", Render: RenderText, MapsTo: "body"},
 		},
 	})
 
