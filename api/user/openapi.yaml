@@ -196,15 +196,11 @@ components:
         created_at:
           format: date-time
           type: string
-        email:
-          type: string
         external_id:
           type: string
         id:
           type: string
         locale:
-          type: string
-        phone:
           type: string
         tenant_id:
           type: string

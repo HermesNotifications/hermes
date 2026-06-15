@@ -435,21 +435,11 @@ components:
           type:
             - array
             - "null"
-        email_body:
-          type: string
-        email_subject:
-          type: string
         id:
-          type: string
-        inbox_body:
-          type: string
-        inbox_title:
           type: string
         name:
           type: string
         slug:
-          type: string
-        sms_body:
           type: string
         subscription_id:
           type: string
@@ -790,22 +780,18 @@ components:
     UserItem:
       additionalProperties: false
       properties:
+        contacts:
+          additionalProperties:
+            type: string
+          type: object
         created_at:
           format: date-time
           type: string
-        email:
-          type:
-            - string
-            - "null"
         external_id:
           type: string
         id:
           type: string
         locale:
-          type:
-            - string
-            - "null"
-        phone:
           type:
             - string
             - "null"
@@ -817,8 +803,6 @@ components:
         - id
         - tenant_id
         - external_id
-        - email
-        - phone
         - locale
         - tenant_name
         - created_at
