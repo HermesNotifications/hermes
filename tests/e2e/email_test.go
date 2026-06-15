@@ -149,14 +149,24 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 
 	// Seed a standalone template with email content (default channel: email).
 	templateSlug := "email.template." + runID
+	templateID := uuid.New().String()
 	_, err = pool.Exec(ctx,
 		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, email_body)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		uuid.New().String(), templateSlug, "Email Test Template", []string{"email"},
+		templateID, templateSlug, "Email Test Template", []string{"email"},
 		"Welcome {{.name}}!", "<h1>Hello {{.name}}</h1><p>Your order #{{.order_id}} has been confirmed.</p>",
 	)
 	if err != nil {
 		t.Fatalf("create template: %v", err)
+	}
+	// Populate normalized content map so dispatch can filter and render channels.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO template_channel_content (template_id, channel_slug, content) VALUES
+		 ($1, 'email', '{"subject":"Welcome {{.name}}!","body":"<h1>Hello {{.name}}</h1><p>Your order #{{.order_id}} has been confirmed.</p>"}')`,
+		templateID,
+	)
+	if err != nil {
+		t.Fatalf("create template content: %v", err)
 	}
 
 	// ── Start services ──────────────────────────────────────────────────

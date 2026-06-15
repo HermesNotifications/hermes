@@ -12,9 +12,11 @@ import (
 
 func TestFilterChannelsForTemplate_AllTemplates(t *testing.T) {
 	nt := &models.NotificationTemplate{
-		EmailSubject: strPtr("subject"),
-		SMSBody:      strPtr("body"),
-		InboxTitle:   strPtr("title"),
+		Content: map[string]map[string]string{
+			"email": {"subject": "subject"},
+			"sms":   {"body": "body"},
+			"inbox": {"title": "title"},
+		},
 	}
 	got := dispatch.FilterChannelsForTemplate([]string{"email", "sms", "inbox"}, nt)
 	if len(got) != 3 {
@@ -24,7 +26,7 @@ func TestFilterChannelsForTemplate_AllTemplates(t *testing.T) {
 
 func TestFilterChannelsForTemplate_NoEmailTemplate(t *testing.T) {
 	nt := &models.NotificationTemplate{
-		InboxTitle: strPtr("title"),
+		Content: map[string]map[string]string{"inbox": {"title": "title"}},
 	}
 	got := dispatch.FilterChannelsForTemplate([]string{"email", "inbox"}, nt)
 	if len(got) != 1 || got[0] != "inbox" {

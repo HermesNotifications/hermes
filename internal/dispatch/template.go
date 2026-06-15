@@ -49,68 +49,40 @@ func (tr *TemplateResolver) Resolve(ctx context.Context, slug string) (*models.N
 	return nt, nil
 }
 
-type RenderedContent struct {
-	EmailSubject string
-	EmailBody    string
-	SMSBody      string
-	InboxTitle   string
-	InboxBody    string
-}
+// RenderedContent holds rendered per-channel content: channel slug -> field key
+// -> rendered value. Produced by RenderTemplates from a template's normalized
+// Content map and the channel registry's render kinds.
+type RenderedContent map[string]map[string]string
 
-// Field returns a rendered-content value by its provider field key (see
-// internal/provider Field* constants). Unknown/empty keys return "". This maps
-// the legacy fixed RenderedContent onto the registry's field keys and is
-// removed in phase 2 when content becomes a normalized per-channel table.
-func (rc *RenderedContent) Field(key string) string {
-	switch key {
-	case provider.FieldEmailSubject:
-		return rc.EmailSubject
-	case provider.FieldEmailBody:
-		return rc.EmailBody
-	case provider.FieldSMSBody:
-		return rc.SMSBody
-	case provider.FieldInboxTitle:
-		return rc.InboxTitle
-	case provider.FieldInboxBody:
-		return rc.InboxBody
-	}
-	return ""
-}
-
-func RenderTemplates(nt *models.NotificationTemplate, data map[string]any) (*RenderedContent, error) {
-	rc := &RenderedContent{}
-	var err error
-	if nt.EmailSubject != nil {
-		rc.EmailSubject, err = renderText(*nt.EmailSubject, data)
-		if err != nil {
-			return nil, fmt.Errorf("render email_subject: %w", err)
+func RenderTemplates(nt *models.NotificationTemplate, data map[string]any) (RenderedContent, error) {
+	out := RenderedContent{}
+	for channel, fields := range nt.Content {
+		desc, ok := provider.Builtins.Channel(channel)
+		rendered := make(map[string]string, len(fields))
+		for key, tmpl := range fields {
+			renderHTMLField := false
+			if ok {
+				if cf, found := desc.ContentFieldByKey(key); found {
+					renderHTMLField = cf.Render == provider.RenderHTML
+				}
+			}
+			var (
+				val string
+				err error
+			)
+			if renderHTMLField {
+				val, err = renderHTML(tmpl, data)
+			} else {
+				val, err = renderText(tmpl, data)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("render %s.%s: %w", channel, key, err)
+			}
+			rendered[key] = val
 		}
+		out[channel] = rendered
 	}
-	if nt.EmailBody != nil {
-		rc.EmailBody, err = renderHTML(*nt.EmailBody, data)
-		if err != nil {
-			return nil, fmt.Errorf("render email_body: %w", err)
-		}
-	}
-	if nt.SMSBody != nil {
-		rc.SMSBody, err = renderText(*nt.SMSBody, data)
-		if err != nil {
-			return nil, fmt.Errorf("render sms_body: %w", err)
-		}
-	}
-	if nt.InboxTitle != nil {
-		rc.InboxTitle, err = renderText(*nt.InboxTitle, data)
-		if err != nil {
-			return nil, fmt.Errorf("render inbox_title: %w", err)
-		}
-	}
-	if nt.InboxBody != nil {
-		rc.InboxBody, err = renderText(*nt.InboxBody, data)
-		if err != nil {
-			return nil, fmt.Errorf("render inbox_body: %w", err)
-		}
-	}
-	return rc, nil
+	return out, nil
 }
 
 func RenderDirectContent(title, body string, data map[string]any) (string, string, error) {

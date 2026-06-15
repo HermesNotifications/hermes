@@ -182,7 +182,7 @@ func classifyError(err error) string {
 // Errors returned from this function are permanent (will not succeed on retry).
 func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *hermenats.SendMessage, n *models.Notification, user *models.User) error {
 	var nt *models.NotificationTemplate
-	var rendered *RenderedContent
+	var rendered RenderedContent
 	var content hermenats.MessageContent
 	if msg.Content != nil {
 		content = *msg.Content
@@ -233,8 +233,7 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	if needsUpdate {
 		update := &models.Notification{ID: n.ID, TemplateID: templateID, CategoryID: categoryID}
 		if rendered != nil {
-			update.Title = rendered.InboxTitle
-			update.Body = rendered.InboxBody
+			update.Title, update.Body = projectContent(provider.ChannelInbox, rendered)
 		} else if len(msg.Data) > 0 {
 			update.Title = content.Title
 			update.Body = content.Body
@@ -336,24 +335,37 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	return nil
 }
 
-// contentForChannel returns the appropriate MessageContent for a given channel.
-// For template-based sends, it uses the already-rendered templates.
-// For direct sends (rendered == nil), it passes through the original content.
-func contentForChannel(channel string, original hermenats.MessageContent, rendered *RenderedContent) hermenats.MessageContent {
+// projectContent returns the title and body that a channel's content schema maps
+// its rendered fields onto.
+func projectContent(channel string, rendered RenderedContent) (title, body string) {
+	desc, ok := provider.Builtins.Channel(channel)
+	if !ok {
+		return "", ""
+	}
+	fields := rendered[channel]
+	for _, f := range desc.Content {
+		switch f.MapsTo {
+		case "title":
+			title = fields[f.Key]
+		case "body":
+			body = fields[f.Key]
+		}
+	}
+	return title, body
+}
+
+// contentForChannel returns the MessageContent for a channel. For template sends
+// it projects the rendered per-channel content; for direct sends (rendered nil)
+// it passes through the original content.
+func contentForChannel(channel string, original hermenats.MessageContent, rendered RenderedContent) hermenats.MessageContent {
 	if rendered == nil {
 		return original
 	}
-
 	mc := hermenats.MessageContent{
 		ActionURL:   original.ActionURL,
 		ActionLabel: original.ActionLabel,
 	}
-
-	if desc, ok := provider.Builtins.Channel(channel); ok {
-		mc.Title = rendered.Field(desc.TitleField)
-		mc.Body = rendered.Field(desc.BodyField)
-	}
-
+	mc.Title, mc.Body = projectContent(channel, rendered)
 	return mc
 }
 
