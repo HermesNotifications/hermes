@@ -151,10 +151,9 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	templateSlug := "email.template." + runID
 	templateID := uuid.New().String()
 	_, err = pool.Exec(ctx,
-		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, email_body)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		`INSERT INTO notification_templates (id, slug, name, default_channels)
+		 VALUES ($1, $2, $3, $4)`,
 		templateID, templateSlug, "Email Test Template", []string{"email"},
-		"Welcome {{.name}}!", "<h1>Hello {{.name}}</h1><p>Your order #{{.order_id}} has been confirmed.</p>",
 	)
 	if err != nil {
 		t.Fatalf("create template: %v", err)

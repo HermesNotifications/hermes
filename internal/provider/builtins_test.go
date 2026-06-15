@@ -5,11 +5,7 @@ package provider
 
 import (
 	"testing"
-
-	"github.com/hermes-notifications/hermes/internal/models"
 )
-
-func sp(s string) *string { return &s }
 
 func TestBuiltins_Channels(t *testing.T) {
 	for _, slug := range []string{ChannelEmail, ChannelSMS, ChannelInbox} {
@@ -30,24 +26,6 @@ func TestBuiltins_AddressKeys(t *testing.T) {
 		if desc.AddressKey != want.key || desc.AddressLabel != want.label {
 			t.Errorf("%s: got (%q,%q), want (%q,%q)", slug, desc.AddressKey, desc.AddressLabel, want.key, want.label)
 		}
-	}
-}
-
-func TestBuiltins_HasContent(t *testing.T) {
-	email, _ := Builtins.Channel(ChannelEmail)
-	if !email.HasContent(&models.NotificationTemplate{EmailBody: sp("x")}) {
-		t.Error("email HasContent: expected true when EmailBody set")
-	}
-	if email.HasContent(&models.NotificationTemplate{SMSBody: sp("x")}) {
-		t.Error("email HasContent: expected false when only SMSBody set")
-	}
-	sms, _ := Builtins.Channel(ChannelSMS)
-	if !sms.HasContent(&models.NotificationTemplate{SMSBody: sp("x")}) {
-		t.Error("sms HasContent: expected true when SMSBody set")
-	}
-	inbox, _ := Builtins.Channel(ChannelInbox)
-	if !inbox.HasContent(&models.NotificationTemplate{InboxTitle: sp("x")}) {
-		t.Error("inbox HasContent: expected true when InboxTitle set")
 	}
 }
 

@@ -14,7 +14,6 @@ import (
 // tenantIdx namespaces the IDs so multiple tenants' trees don't collide.
 // subscription_categories and notification_templates have UNIQUE indexes on slug,
 // so slugs include the runID + tenantIdx to stay globally unique across runs.
-//
 func insertSubscriptionTree(ctx context.Context, pool *pgxpool.Pool, runID string, tenantIdx, numCats, subsPerCat, tmplsPerSub int) ([]Category, error) {
 	cats := make([]Category, numCats)
 
@@ -47,13 +46,21 @@ func insertSubscriptionTree(ctx context.Context, pool *pgxpool.Pool, runID strin
 				tmplSlug := fmt.Sprintf("lt_%s_t%d_c%d_s%d_tpl%d", runID, tenantIdx, ci, si, ti)
 				if _, err := pool.Exec(ctx,
 					`INSERT INTO notification_templates
-					 (id, subscription_id, slug, name, default_channels, email_subject, email_body, inbox_title, inbox_body)
-					 VALUES ($1, $2, $3, $4, '{inbox,email}', $5, $6, $7, $8)`,
+					 (id, subscription_id, slug, name, default_channels)
+					 VALUES ($1, $2, $3, $4, '{inbox,email}')`,
 					tmplID, subID, tmplSlug, fmt.Sprintf("Template %d", ti),
-					"Load test {{.subject}}", "Hello {{.name}}, this is a load test.",
-					"Load Test", "{{.name}}: {{.subject}}",
 				); err != nil {
 					return nil, fmt.Errorf("insert template: %w", err)
+				}
+				if _, err := pool.Exec(ctx,
+					`INSERT INTO template_channel_content (template_id, channel_slug, content) VALUES
+					 ($1, 'email', $2),
+					 ($1, 'inbox', $3)`,
+					tmplID,
+					`{"subject":"Load test {{.subject}}","body":"Hello {{.name}}, this is a load test."}`,
+					`{"title":"Load Test","body":"{{.name}}: {{.subject}}"}`,
+				); err != nil {
+					return nil, fmt.Errorf("insert template content: %w", err)
 				}
 				sub.Templates[ti] = Template{ID: tmplID, Slug: tmplSlug, Channels: []string{"inbox", "email"}}
 			}

@@ -126,10 +126,9 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	templateSlug := "pipeline.template." + runID
 	templateID := uuid.New().String()
 	_, err = pool.Exec(ctx,
-		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, inbox_title, inbox_body)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO notification_templates (id, slug, name, default_channels)
+		 VALUES ($1, $2, $3, $4)`,
 		templateID, templateSlug, "Pipeline Template", []string{"email", "inbox"},
-		"Hello {{.name}}", "Hi {{.name}}", "Welcome {{.name}}",
 	)
 	if err != nil {
 		t.Fatalf("create template: %v", err)

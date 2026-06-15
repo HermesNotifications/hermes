@@ -36,11 +36,9 @@ func (s *Store) CreateTemplate(ctx context.Context, input *models.NotificationTe
 func (s *Store) GetTemplateByID(ctx context.Context, id string) (*models.NotificationTemplate, error) {
 	t := &models.NotificationTemplate{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, subscription_id, slug, name, default_channels, email_subject, email_body, sms_body, inbox_title, inbox_body, created_at
+		`SELECT id, subscription_id, slug, name, default_channels, created_at
 		 FROM notification_templates WHERE id = $1`, id,
-	).Scan(&t.ID, &t.SubscriptionID, &t.Slug, &t.Name, &t.DefaultChannels,
-		&t.EmailSubject, &t.EmailBody, &t.SMSBody,
-		&t.InboxTitle, &t.InboxBody, &t.CreatedAt)
+	).Scan(&t.ID, &t.SubscriptionID, &t.Slug, &t.Name, &t.DefaultChannels, &t.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get template by id: %w", err)
 	}
@@ -55,11 +53,9 @@ func (s *Store) GetTemplateByID(ctx context.Context, id string) (*models.Notific
 func (s *Store) GetTemplateBySlug(ctx context.Context, slug string) (*models.NotificationTemplate, error) {
 	t := &models.NotificationTemplate{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, subscription_id, slug, name, default_channels, email_subject, email_body, sms_body, inbox_title, inbox_body, created_at
+		`SELECT id, subscription_id, slug, name, default_channels, created_at
 		 FROM notification_templates WHERE slug = $1`, slug,
-	).Scan(&t.ID, &t.SubscriptionID, &t.Slug, &t.Name, &t.DefaultChannels,
-		&t.EmailSubject, &t.EmailBody, &t.SMSBody,
-		&t.InboxTitle, &t.InboxBody, &t.CreatedAt)
+	).Scan(&t.ID, &t.SubscriptionID, &t.Slug, &t.Name, &t.DefaultChannels, &t.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get template by slug: %w", err)
 	}
@@ -73,7 +69,7 @@ func (s *Store) GetTemplateBySlug(ctx context.Context, slug string) (*models.Not
 
 func (s *Store) ListTemplates(ctx context.Context) ([]models.NotificationTemplate, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, subscription_id, slug, name, default_channels, email_subject, email_body, sms_body, inbox_title, inbox_body, created_at
+		`SELECT id, subscription_id, slug, name, default_channels, created_at
 		 FROM notification_templates ORDER BY created_at`)
 	if err != nil {
 		return nil, fmt.Errorf("list templates: %w", err)
@@ -83,9 +79,7 @@ func (s *Store) ListTemplates(ctx context.Context) ([]models.NotificationTemplat
 	var templates []models.NotificationTemplate
 	for rows.Next() {
 		var t models.NotificationTemplate
-		if err := rows.Scan(&t.ID, &t.SubscriptionID, &t.Slug, &t.Name, &t.DefaultChannels,
-			&t.EmailSubject, &t.EmailBody, &t.SMSBody,
-			&t.InboxTitle, &t.InboxBody, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.SubscriptionID, &t.Slug, &t.Name, &t.DefaultChannels, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan template: %w", err)
 		}
 		templates = append(templates, t)

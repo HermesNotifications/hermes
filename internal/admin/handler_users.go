@@ -16,14 +16,13 @@ type listUsersInput struct {
 }
 
 type userItem struct {
-	ID         string    `json:"id"`
-	TenantID   string    `json:"tenant_id"`
-	ExternalID string    `json:"external_id"`
-	Email      *string   `json:"email"`
-	Phone      *string   `json:"phone"`
-	Locale     *string   `json:"locale"`
-	TenantName string    `json:"tenant_name"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         string            `json:"id"`
+	TenantID   string            `json:"tenant_id"`
+	ExternalID string            `json:"external_id"`
+	Contacts   map[string]string `json:"contacts,omitempty"`
+	Locale     *string           `json:"locale"`
+	TenantName string            `json:"tenant_name"`
+	CreatedAt  time.Time         `json:"created_at"`
 }
 
 type userListOutput struct {
@@ -61,8 +60,7 @@ func (s *Server) registerUserRoutes() {
 				ID:         u.ID,
 				TenantID:   u.TenantID,
 				ExternalID: u.ExternalID,
-				Email:      u.Email,
-				Phone:      u.Phone,
+				Contacts:   u.Contacts,
 				Locale:     u.Locale,
 				TenantName: tenantNames[u.TenantID],
 				CreatedAt:  u.CreatedAt,

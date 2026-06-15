@@ -3,24 +3,11 @@
 
 package provider
 
-import "github.com/hermes-notifications/hermes/internal/models"
-
 // Built-in channel slugs.
 const (
 	ChannelEmail = "email"
 	ChannelSMS   = "sms"
 	ChannelInbox = "inbox"
-)
-
-// Rendered-content field keys. ChannelDescriptor.TitleField / BodyField
-// reference these; dispatch's RenderedContent.Field resolves them against the
-// (still fixed, until phase 2) rendered columns.
-const (
-	FieldEmailSubject = "email_subject"
-	FieldEmailBody    = "email_body"
-	FieldSMSBody      = "sms_body"
-	FieldInboxTitle   = "inbox_title"
-	FieldInboxBody    = "inbox_body"
 )
 
 // Render kinds for a content field.
@@ -57,20 +44,9 @@ type ChannelDescriptor struct {
 	// "phone number"). Empty when AddressKey is "".
 	AddressLabel string
 
-	// TitleField / BodyField name the rendered-content fields projected onto
-	// the delivery message's Title / Body. Empty means the channel has no
-	// title / no body.
-	TitleField string
-	BodyField  string
-
-	// HasContent reports whether a template provides content for this channel.
-	// Replaces the FilterChannelsForTemplate switch.
-	HasContent func(t *models.NotificationTemplate) bool
-
 	// Content is the channel's content schema: the ordered set of content
 	// fields a template provides for this channel. Stored per channel in
-	// template_channel_content. Supersedes TitleField/BodyField/HasContent
-	// (removed in phase 2e).
+	// template_channel_content.
 	Content []ContentField
 }
 

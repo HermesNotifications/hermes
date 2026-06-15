@@ -41,8 +41,8 @@ func TestHandleGetProfile(t *testing.T) {
 	if user.ID != testUserID {
 		t.Fatalf("expected user ID %q, got %q", testUserID, user.ID)
 	}
-	if user.Email == nil || *user.Email != "user@example.com" {
-		t.Fatalf("expected email user@example.com, got %v", user.Email)
+	if user.Contacts["email"] != "user@example.com" {
+		t.Fatalf("expected email user@example.com, got %v", user.Contacts["email"])
 	}
 }
 
@@ -78,15 +78,15 @@ func TestHandleUpdateContacts(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&user); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if user.Email == nil || *user.Email != "new@example.com" {
-		t.Fatalf("expected email new@example.com, got %v", user.Email)
+	if user.Contacts["email"] != "new@example.com" {
+		t.Fatalf("expected email new@example.com, got %v", user.Contacts["email"])
 	}
-	if user.Phone == nil || *user.Phone != "+15551234567" {
-		t.Fatalf("expected phone +15551234567, got %v", user.Phone)
+	if user.Contacts["phone"] != "+15551234567" {
+		t.Fatalf("expected phone +15551234567, got %v", user.Contacts["phone"])
 	}
 
 	// Verify store was updated
-	if store.users[0].Email == nil || *store.users[0].Email != "new@example.com" {
+	if store.users[0].Contacts["email"] != "new@example.com" {
 		t.Fatal("store was not updated")
 	}
 }

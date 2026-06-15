@@ -36,11 +36,14 @@ func (m *mockUserStore) GetUserByID(ctx context.Context, userID string) (*models
 func (m *mockUserStore) UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error) {
 	for i, u := range m.users {
 		if u.ID == userID {
+			if m.users[i].Contacts == nil {
+				m.users[i].Contacts = make(map[string]string)
+			}
 			if email != nil {
-				m.users[i].Email = email
+				m.users[i].Contacts["email"] = *email
 			}
 			if phone != nil {
-				m.users[i].Phone = phone
+				m.users[i].Contacts["phone"] = *phone
 			}
 			updated := m.users[i]
 			return &updated, nil
@@ -121,10 +124,9 @@ const testUserID = "test-user-id"
 func newTestServer(t *testing.T) (*userservice.Server, *mockUserStore) {
 	t.Helper()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	email := "user@example.com"
 	store := &mockUserStore{
 		users: []models.User{
-			{ID: testUserID, TenantID: "tenant-1", ExternalID: "ext-1", Email: &email, CreatedAt: time.Now()},
+			{ID: testUserID, TenantID: "tenant-1", ExternalID: "ext-1", Contacts: map[string]string{"email": "user@example.com"}, CreatedAt: time.Now()},
 		},
 		categories: []models.SubscriptionCategory{
 			{ID: "sct-1", Slug: "general", Name: "General", DefaultChannels: []string{"email", "inbox"}, DefaultState: "on"},
