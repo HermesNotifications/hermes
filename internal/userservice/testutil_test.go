@@ -33,23 +33,17 @@ func (m *mockUserStore) GetUserByID(ctx context.Context, userID string) (*models
 	return nil, fmt.Errorf("user not found: %s", userID)
 }
 
-func (m *mockUserStore) UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error) {
-	for i, u := range m.users {
-		if u.ID == userID {
+func (m *mockUserStore) SetUserContact(ctx context.Context, userID, addressKey, address string) error {
+	for i := range m.users {
+		if m.users[i].ID == userID {
 			if m.users[i].Contacts == nil {
 				m.users[i].Contacts = make(map[string]string)
 			}
-			if email != nil {
-				m.users[i].Contacts["email"] = *email
-			}
-			if phone != nil {
-				m.users[i].Contacts["phone"] = *phone
-			}
-			updated := m.users[i]
-			return &updated, nil
+			m.users[i].Contacts[addressKey] = address
+			return nil
 		}
 	}
-	return nil, fmt.Errorf("user not found: %s", userID)
+	return fmt.Errorf("user not found: %s", userID)
 }
 
 func (m *mockUserStore) GetUserSubscriptions(ctx context.Context, userID string) ([]models.UserSubscription, error) {

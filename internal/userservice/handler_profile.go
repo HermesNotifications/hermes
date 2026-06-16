@@ -55,18 +55,16 @@ func (s *Server) registerProfileRoutes() {
 			return nil, huma.Error401Unauthorized("missing user")
 		}
 
-		var email, phone *string
-		if v, ok := input.Body.Contacts["email"]; ok {
-			email = &v
+		if len(input.Body.Contacts) == 0 {
+			return nil, huma.Error400BadRequest("at least one contact must be provided")
 		}
-		if v, ok := input.Body.Contacts["phone"]; ok {
-			phone = &v
-		}
-		if email == nil && phone == nil {
-			return nil, huma.Error400BadRequest("at least one contact (email or phone) must be provided")
+		for key, address := range input.Body.Contacts {
+			if err := s.store.SetUserContact(ctx, userID, key, address); err != nil {
+				return nil, huma.Error500InternalServerError("internal server error")
+			}
 		}
 
-		user, err := s.store.UpdateUserContacts(ctx, userID, email, phone)
+		user, err := s.store.GetUserByID(ctx, userID)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
