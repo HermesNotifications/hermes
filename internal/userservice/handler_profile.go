@@ -5,12 +5,41 @@ package userservice
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermes-notifications/hermes/internal/provider"
 )
+
+var (
+	emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+	phoneRe = regexp.MustCompile(`^\+?[0-9]{7,15}$`)
+)
+
+// validateContact checks an address value for a known address key. Keys without
+// a specific format (future address types) require only a non-empty value.
+func validateContact(key, address string) error {
+	switch key {
+	case "email":
+		if !emailRe.MatchString(address) {
+			return fmt.Errorf("invalid email address")
+		}
+	case "phone":
+		if !phoneRe.MatchString(address) {
+			return fmt.Errorf("invalid phone number")
+		}
+	default:
+		if strings.TrimSpace(address) == "" {
+			return fmt.Errorf("empty address")
+		}
+	}
+	return nil
+}
 
 type updateContactsInput struct {
 	Body struct {
@@ -57,6 +86,16 @@ func (s *Server) registerProfileRoutes() {
 
 		if len(input.Body.Contacts) == 0 {
 			return nil, huma.Error400BadRequest("at least one contact must be provided")
+		}
+		// Validate every key against the channel registry's known address keys and
+		// the per-key value format before persisting (no arbitrary keys/values).
+		for key, address := range input.Body.Contacts {
+			if !provider.Builtins.IsAddressKey(key) {
+				return nil, huma.Error400BadRequest("unsupported contact key: " + key)
+			}
+			if err := validateContact(key, address); err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
+			}
 		}
 		for key, address := range input.Body.Contacts {
 			if err := s.store.SetUserContact(ctx, userID, key, address); err != nil {

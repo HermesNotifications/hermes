@@ -91,6 +91,46 @@ func TestHandleUpdateContacts(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateContacts_UnsupportedKey(t *testing.T) {
+	srv, store := newTestServer(t)
+
+	body := `{"contacts":{"slack":"@nope"}}`
+	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/contacts", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUser(req, testUserID)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unsupported key, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Nothing should have been written.
+	if _, ok := store.users[0].Contacts["slack"]; ok {
+		t.Fatal("unsupported key was persisted")
+	}
+}
+
+func TestHandleUpdateContacts_InvalidFormat(t *testing.T) {
+	srv, store := newTestServer(t)
+
+	body := `{"contacts":{"email":"not-an-email","phone":"+15551234567"}}`
+	req := httptest.NewRequest(http.MethodPut, "/v1/users/me/contacts", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = requestWithUser(req, testUserID)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid email, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Validation runs before any write, so the valid phone must NOT be persisted either.
+	if store.users[0].Contacts["phone"] == "+15551234567" {
+		t.Fatal("partial write occurred despite an invalid contact in the same request")
+	}
+}
+
 func TestHandleUpdateContacts_MissingFields(t *testing.T) {
 	srv, _ := newTestServer(t)
 

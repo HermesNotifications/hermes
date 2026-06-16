@@ -15,6 +15,19 @@ func TestBuiltins_Channels(t *testing.T) {
 	}
 }
 
+func TestBuiltins_IsAddressKey(t *testing.T) {
+	for _, key := range []string{"email", "phone"} {
+		if !Builtins.IsAddressKey(key) {
+			t.Errorf("expected %q to be a valid address key", key)
+		}
+	}
+	for _, key := range []string{"", "inbox", "slack", "unknown"} {
+		if Builtins.IsAddressKey(key) {
+			t.Errorf("expected %q to NOT be a valid address key", key)
+		}
+	}
+}
+
 func TestBuiltins_AddressKeys(t *testing.T) {
 	cases := map[string]struct{ key, label string }{
 		ChannelEmail: {"email", "email address"},

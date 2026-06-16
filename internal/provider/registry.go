@@ -61,3 +61,18 @@ func (r *Registry) RegisterProvider(m Manifest) {
 func (r *Registry) ProvidersForChannel(channel string) []string {
 	return r.byChannel[channel]
 }
+
+// IsAddressKey reports whether key is a contact address key declared by some
+// registered channel (e.g. "email", "phone"). The empty key (channels needing
+// no external address, like inbox) is never valid.
+func (r *Registry) IsAddressKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for _, d := range r.channels {
+		if d.AddressKey == key {
+			return true
+		}
+	}
+	return false
+}
