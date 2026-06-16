@@ -3,7 +3,7 @@
 
 import createClient, { type Middleware } from "openapi-fetch";
 import type { paths } from "../generated/user-api.js";
-import type { User, UserPreference } from "../types.js";
+import type { User, PreferenceCategory } from "../types.js";
 
 export class UserAPI {
   private client: ReturnType<typeof createClient<paths>>;
@@ -34,33 +34,32 @@ export class UserAPI {
     return data;
   }
 
-  async listPreferences(): Promise<UserPreference[]> {
+  async getPreferenceCenter(): Promise<PreferenceCategory[]> {
     const { data, error, response } = await this.client.GET(
       "/v1/users/me/preferences"
     );
     if (error) throw new Error(`User API error (${response.status})`);
-    return data.data ?? [];
+    return data.categories ?? [];
   }
 
   async setPreference(
-    groupId: string,
-    channels: string[]
-  ): Promise<UserPreference> {
-    const { data, error, response } = await this.client.PUT(
-      "/v1/users/me/preferences/{group_id}",
+    subscriptionId: string,
+    optedIn: boolean
+  ): Promise<void> {
+    const { error, response } = await this.client.PUT(
+      "/v1/users/me/preferences/{subscription_id}",
       {
-        params: { path: { group_id: groupId } },
-        body: { channels },
+        params: { path: { subscription_id: subscriptionId } },
+        body: { opted_in: optedIn },
       }
     );
     if (error) throw new Error(`User API error (${response.status})`);
-    return data;
   }
 
-  async deletePreference(groupId: string): Promise<void> {
+  async deletePreference(subscriptionId: string): Promise<void> {
     const { error, response } = await this.client.DELETE(
-      "/v1/users/me/preferences/{group_id}",
-      { params: { path: { group_id: groupId } } }
+      "/v1/users/me/preferences/{subscription_id}",
+      { params: { path: { subscription_id: subscriptionId } } }
     );
     if (error) throw new Error(`User API error (${response.status})`);
   }

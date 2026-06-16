@@ -6,7 +6,8 @@ import type { components as UserComponents } from "./generated/user-api.js";
 
 export type Notification = InboxComponents["schemas"]["Notification"];
 export type User = UserComponents["schemas"]["User"];
-export type UserPreference = UserComponents["schemas"]["UserPreference"];
+export type PreferenceCategory = UserComponents["schemas"]["PreferenceCategory"];
+export type PreferenceSubscription = UserComponents["schemas"]["PreferenceSubscription"];
 
 export interface InboxPage {
   data: Notification[];

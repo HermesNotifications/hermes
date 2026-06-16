@@ -15,7 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/generated dist/generated",
     "clean": "rm -rf dist",
     "generate:inbox": "openapi-typescript ../../../../api/inbox/openapi.yaml -o src/generated/inbox-api.d.ts",
     "generate:user": "openapi-typescript ../../../../api/user/openapi.yaml -o src/generated/user-api.d.ts",
