@@ -244,6 +244,14 @@ loadtest-local-clean: ## Tear down local load-test infra and clean seed
 	[ -f loadtest/seed-manifest.json ] && go run ./cmd/loadseed --cleanup || true
 	rm -f loadtest/seed-manifest.json
 
+.PHONY: dispatchbench
+dispatchbench:     ## Run the dispatch concurrency sweep (requires make infra-up; pool_max_conns >= max workers). BACKENDS=postgres|dynamo, HERMES_DYNAMO_ENDPOINT for dynamo.
+	go run ./cmd/dispatchbench \
+	  --db "$(or $(HERMES_DATABASE_URL),postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable&pool_max_conns=20)" \
+	  --backends "$(or $(BACKENDS),postgres)" \
+	  --csv docs/loadtest/dispatch-tuning.csv \
+	  --md docs/loadtest/dispatch-tuning.md
+
 .PHONY: loadtest-k8s loadtest-k8s-clean loadtest-k8s-install
 loadtest-k8s-install: ## One-time install of k6-operator + Prom + Grafana in loadtest namespace
 	loadtest/k8s/install.sh
