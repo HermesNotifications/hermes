@@ -23,6 +23,21 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.HTTPPort == 0 {
 		t.Fatal("expected default HTTPPort")
 	}
+	if cfg.DispatchConcurrency != 8 {
+		t.Fatalf("expected default DispatchConcurrency 8, got %d", cfg.DispatchConcurrency)
+	}
+	if cfg.DispatchPrefetch != 64 {
+		t.Fatalf("expected default DispatchPrefetch 64, got %d", cfg.DispatchPrefetch)
+	}
+}
+
+func TestLoad_DispatchConcurrencyOverride(t *testing.T) {
+	t.Setenv("HERMES_DISPATCH_CONCURRENCY", "12")
+
+	cfg := config.Load()
+	if cfg.DispatchConcurrency != 12 {
+		t.Fatalf("expected DispatchConcurrency 12, got %d", cfg.DispatchConcurrency)
+	}
 }
 
 func TestLoad_OverrideFromEnv(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -92,7 +93,9 @@ func TestPublish_And_Subscribe(t *testing.T) {
 	defer cancel()
 
 	received := make(chan []byte, 1)
-	if err := client.Subscribe("notification.send", "test-consumer", 256, 1, func(_ context.Context, data []byte, _ messaging.DeliveryInfo) error {
+	if err := client.Subscribe(messaging.SubscribeConfig{
+		Subject: "notification.send", Consumer: "test-consumer", MaxAckPending: 256, Workers: 1,
+	}, func(_ context.Context, data []byte, _ messaging.DeliveryInfo) error {
 		received <- data
 		return nil
 	}); err != nil {
@@ -107,6 +110,114 @@ func TestPublish_And_Subscribe(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("timeout waiting for message")
 	}
+}
+
+// TestSubscribe_PoolBoundsConcurrency guards the worker-pool semantics dispatch
+// relies on: the single fetcher feeds exactly Workers parallel handlers — no fewer
+// (parallelism works) and no more (concurrency is bounded even when far more
+// messages are available than workers). Each handler holds its message in-flight on
+// a release channel. We publish well more than Workers messages, confirm exactly
+// Workers reach the barrier, and confirm no extra handler starts while they block.
+func TestSubscribe_PoolBoundsConcurrency(t *testing.T) {
+	client, err := messaging.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS")
+
+	const workers = 4
+	const total = 12
+	for i := 0; i < total; i++ {
+		if err := client.Publish(context.Background(), "notification.send", []byte(`{"n":1}`)); err != nil {
+			t.Fatalf("Publish: %v", err)
+		}
+	}
+
+	var inFlight atomic.Int32
+	reached := make(chan struct{}, total)
+	release := make(chan struct{})
+
+	if err := client.Subscribe(messaging.SubscribeConfig{
+		Subject: "notification.send", Consumer: "pool-test", MaxAckPending: 256, Workers: workers, Prefetch: 8,
+	}, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
+		inFlight.Add(1)
+		reached <- struct{}{}
+		<-release // hold in-flight until the test releases every worker at once
+		inFlight.Add(-1)
+		return nil
+	}); err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	// All `workers` handlers must reach the barrier (parallelism works).
+	for i := 0; i < workers; i++ {
+		select {
+		case <-reached:
+		case <-time.After(10 * time.Second):
+			close(release)
+			t.Fatalf("only %d/%d workers ran concurrently", inFlight.Load(), workers)
+		}
+	}
+
+	// While all workers block, no additional handler may start, even though 8 more
+	// messages are queued — the pool bounds concurrency to Workers (backpressure).
+	time.Sleep(500 * time.Millisecond)
+	if got := inFlight.Load(); got != workers {
+		close(release)
+		t.Fatalf("in-flight = %d, want exactly %d (pool not bounded)", got, workers)
+	}
+	select {
+	case <-reached:
+		close(release)
+		t.Fatal("a 5th handler started while the pool was saturated; concurrency not bounded")
+	default:
+	}
+	close(release)
+}
+
+// TestSubscribe_RecoversFromHandlerPanic verifies a panicking handler does not
+// crash the worker pool: the panic is recovered and treated as a retryable failure,
+// so the message is redelivered and (here, with maxDeliveries=2) eventually dead-
+// lettered. If the pool died, no dead letter would ever appear.
+func TestSubscribe_RecoversFromHandlerPanic(t *testing.T) {
+	client, err := messaging.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS", "DLQ")
+
+	restore := messaging.SetMaxDeliveriesForTest(2)
+	defer restore()
+
+	payload := []byte(`{"notification_id":"panic-test-1"}`)
+	if err := client.Publish(context.Background(), "notification.send", payload); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	if err := client.Subscribe(messaging.SubscribeConfig{
+		Subject: "notification.send", Consumer: "panic-test", MaxAckPending: 256, Workers: 2,
+	}, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
+		panic("boom")
+	}); err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	dl := fetchDeadLetter(t, testNATSUrl(t), 15*time.Second)
+	if dl.Reason != hermenats.DeadLetterReasonMaxDeliveries {
+		t.Errorf("Reason = %q, want %q", dl.Reason, hermenats.DeadLetterReasonMaxDeliveries)
+	}
+	if dl.Attempts != 2 {
+		t.Errorf("Attempts = %d, want 2", dl.Attempts)
+	}
+	waitForEmptyStream(t, testNATSUrl(t), "NOTIFICATIONS", 5*time.Second)
 }
 
 func TestSetupStreams_CreatesDLQ(t *testing.T) {
@@ -241,7 +352,9 @@ func TestSubscribe_DeadLettersAfterMaxDeliveries(t *testing.T) {
 		t.Fatalf("Publish: %v", err)
 	}
 
-	if err := client.Subscribe("notification.send", "dlq-exhaust-test", 256, 1, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
+	if err := client.Subscribe(messaging.SubscribeConfig{
+		Subject: "notification.send", Consumer: "dlq-exhaust-test", MaxAckPending: 256, Workers: 1,
+	}, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
 		return errors.New("simulated transient failure")
 	}); err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -289,7 +402,9 @@ func TestSubscribe_DeadLettersPermanentError(t *testing.T) {
 		t.Fatalf("Publish: %v", err)
 	}
 
-	if err := client.Subscribe("notification.send", "dlq-perm-test", 256, 1, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
+	if err := client.Subscribe(messaging.SubscribeConfig{
+		Subject: "notification.send", Consumer: "dlq-perm-test", MaxAckPending: 256, Workers: 1,
+	}, func(_ context.Context, _ []byte, _ messaging.DeliveryInfo) error {
 		return permanentTestError{}
 	}); err != nil {
 		t.Fatalf("Subscribe: %v", err)
