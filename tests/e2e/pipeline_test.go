@@ -124,14 +124,24 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 
 	// Seed a standalone template with email+inbox content.
 	templateSlug := "pipeline.template." + runID
+	templateID := uuid.New().String()
 	_, err = pool.Exec(ctx,
-		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, inbox_title, inbox_body)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		uuid.New().String(), templateSlug, "Pipeline Template", []string{"email", "inbox"},
-		"Hello {{.name}}", "Hi {{.name}}", "Welcome {{.name}}",
+		`INSERT INTO notification_templates (id, slug, name, default_channels)
+		 VALUES ($1, $2, $3, $4)`,
+		templateID, templateSlug, "Pipeline Template", []string{"email", "inbox"},
 	)
 	if err != nil {
 		t.Fatalf("create template: %v", err)
+	}
+	// Populate normalized content map so dispatch can filter and render channels.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO template_channel_content (template_id, channel_slug, content) VALUES
+		 ($1, 'email', '{"subject":"Hello {{.name}}"}'),
+		 ($1, 'inbox', '{"title":"Hi {{.name}}","body":"Welcome {{.name}}"}')`,
+		templateID,
+	)
+	if err != nil {
+		t.Fatalf("create template content: %v", err)
 	}
 
 	// ── Start Dispatch + Event Writer BEFORE sending ───────────────────
@@ -148,7 +158,7 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 		"to": map[string]any{
 			"tenant_id": tenantID,
 			"user_id":   "pipeline-user-" + runID,
-			"email":     "pipeline-user-" + runID + "@example.com",
+			"contacts":  map[string]any{"email": "pipeline-user-" + runID + "@example.com"},
 		},
 		"template": templateSlug,
 		"data":     map[string]string{"name": "Alice"},

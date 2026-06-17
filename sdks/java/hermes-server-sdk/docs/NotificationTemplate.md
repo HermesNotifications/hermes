@@ -8,16 +8,12 @@
 | Name | Type | Description | Notes |
 |------------ | ------------- | ------------- | -------------|
 |**$schema** | **URI** | A URL to the JSON Schema for this object. |  [optional] [readonly] |
+|**content** | **Map&lt;String, Map&lt;String, String&gt;&gt;** |  |  [optional] |
 |**createdAt** | **OffsetDateTime** |  |  |
 |**defaultChannels** | **List&lt;String&gt;** |  |  |
-|**emailBody** | **String** |  |  [optional] |
-|**emailSubject** | **String** |  |  [optional] |
 |**id** | **String** |  |  |
-|**inboxBody** | **String** |  |  [optional] |
-|**inboxTitle** | **String** |  |  [optional] |
 |**name** | **String** |  |  |
 |**slug** | **String** |  |  |
-|**smsBody** | **String** |  |  [optional] |
 |**subscriptionId** | **String** |  |  [optional] |
 
 

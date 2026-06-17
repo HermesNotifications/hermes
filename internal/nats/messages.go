@@ -10,17 +10,16 @@ import (
 
 // SendMessage is published to notification.send by the Send service.
 type SendMessage struct {
-	NotificationID string          `json:"notification_id"`
-	TenantID       string          `json:"tenant_id"`
-	ExternalUserID string          `json:"external_user_id"`
-	Email          string          `json:"email,omitempty"`
-	Phone          string          `json:"phone,omitempty"`
-	Content        *MessageContent `json:"content,omitempty"`
-	Metadata       MessageMetadata `json:"metadata"`
-	Data           map[string]any  `json:"data,omitempty"`
-	Channels       []string        `json:"channels,omitempty"`
-	IdempotencyKey string          `json:"idempotency_key,omitempty"`
-	Attempt        int             `json:"attempt"`
+	NotificationID string            `json:"notification_id"`
+	TenantID       string            `json:"tenant_id"`
+	ExternalUserID string            `json:"external_user_id"`
+	Contacts       map[string]string `json:"contacts,omitempty"` // per-send address overrides: address key -> address
+	Content        *MessageContent   `json:"content,omitempty"`
+	Metadata       MessageMetadata   `json:"metadata"`
+	Data           map[string]any    `json:"data,omitempty"`
+	Channels       []string          `json:"channels,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	Attempt        int               `json:"attempt"`
 }
 
 type MessageContent struct {
@@ -34,25 +33,10 @@ type MessageMetadata struct {
 	Template string `json:"template,omitempty"`
 }
 
-// Recipient holds resolved contact information for the notification target.
-type Recipient struct {
-	Email string `json:"email,omitempty"`
-	Phone string `json:"phone,omitempty"`
-}
-
-// AddressFor returns the contact address for a channel's address key ("email"
-// or "phone"). Unknown keys return "". This maps the legacy fixed Recipient
-// onto the registry's address keys and is removed in phase 2 when contacts
-// become normalized contact points.
-func (r Recipient) AddressFor(key string) string {
-	switch key {
-	case "email":
-		return r.Email
-	case "phone":
-		return r.Phone
-	}
-	return ""
-}
+// Recipient holds the resolved contact addresses for a notification target,
+// keyed by address key ("email", "phone", ...). Marshals to the same JSON
+// object shape as the previous fixed struct.
+type Recipient map[string]string
 
 // DeliveryMessage is published to delivery.{channel} by the Dispatch service.
 type DeliveryMessage struct {

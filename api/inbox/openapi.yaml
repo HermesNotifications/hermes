@@ -6,7 +6,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/ActionOutputBody.json
+            - //schemas/ActionOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -36,7 +36,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/ErrorModel.json
+            - //schemas/ErrorModel.json
           format: uri
           readOnly: true
           type: string
@@ -83,7 +83,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/ListInboxOutputBody.json
+            - //schemas/ListInboxOutputBody.json
           format: uri
           readOnly: true
           type: string

@@ -83,11 +83,11 @@ func TestUpdateUserContacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateUserContacts (email): %v", err)
 	}
-	if updated.Email == nil || *updated.Email != email {
-		t.Fatalf("expected email %q, got %v", email, updated.Email)
+	if updated.Contacts["email"] != email {
+		t.Fatalf("expected email %q, got %v", email, updated.Contacts["email"])
 	}
-	if updated.Phone != nil {
-		t.Fatalf("expected nil phone, got %v", updated.Phone)
+	if _, ok := updated.Contacts["phone"]; ok {
+		t.Fatalf("expected no phone contact, got %v", updated.Contacts["phone"])
 	}
 
 	// Update phone only — email should remain
@@ -96,11 +96,11 @@ func TestUpdateUserContacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateUserContacts (phone): %v", err)
 	}
-	if updated.Phone == nil || *updated.Phone != phone {
-		t.Fatalf("expected phone %q, got %v", phone, updated.Phone)
+	if updated.Contacts["phone"] != phone {
+		t.Fatalf("expected phone %q, got %v", phone, updated.Contacts["phone"])
 	}
-	if updated.Email == nil || *updated.Email != email {
-		t.Fatalf("expected email still %q, got %v", email, updated.Email)
+	if updated.Contacts["email"] != email {
+		t.Fatalf("expected email still %q, got %v", email, updated.Contacts["email"])
 	}
 
 	// Update both
@@ -110,11 +110,11 @@ func TestUpdateUserContacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateUserContacts (both): %v", err)
 	}
-	if updated.Email == nil || *updated.Email != email2 {
-		t.Fatalf("expected email %q, got %v", email2, updated.Email)
+	if updated.Contacts["email"] != email2 {
+		t.Fatalf("expected email %q, got %v", email2, updated.Contacts["email"])
 	}
-	if updated.Phone == nil || *updated.Phone != phone2 {
-		t.Fatalf("expected phone %q, got %v", phone2, updated.Phone)
+	if updated.Contacts["phone"] != phone2 {
+		t.Fatalf("expected phone %q, got %v", phone2, updated.Contacts["phone"])
 	}
 }
 

@@ -17,10 +17,9 @@ type Content struct {
 }
 
 type Recipient struct {
-	TenantID string `json:"tenant_id"`
-	UserID   string `json:"user_id"`
-	Email    string `json:"email,omitempty"`
-	Phone    string `json:"phone,omitempty"`
+	TenantID string            `json:"tenant_id"`
+	UserID   string            `json:"user_id"`
+	Contacts map[string]string `json:"contacts,omitempty"`
 }
 
 type SendRequest struct {
@@ -61,7 +60,7 @@ type NotificationEvent struct {
 }
 
 type NotificationStatus struct {
-	Notification NotificationDetail `json:"notification"`
+	Notification NotificationDetail  `json:"notification"`
 	Events       []NotificationEvent `json:"events"`
 }
 

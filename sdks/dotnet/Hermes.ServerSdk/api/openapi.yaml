@@ -103,6 +103,41 @@ paths:
       summary: Exchange credentials for a user JWT token
       tags:
       - Auth
+  /v1/notifications:
+    get:
+      operationId: list-notifications
+      parameters:
+      - description: Max results (default 50)
+        explode: false
+        in: query
+        name: limit
+        required: false
+        schema:
+          description: Max results (default 50)
+          format: int64
+          maximum: 200
+          minimum: 1
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/NotificationItem"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List recent notifications
+      tags:
+      - Notifications
   /v1/notifications/{id}:
     get:
       operationId: get-notification
@@ -502,6 +537,84 @@ paths:
       summary: Update a notification template
       tags:
       - Templates
+  /v1/tenants:
+    get:
+      operationId: list-tenants
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/TenantItem"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List tenants
+      tags:
+      - Tenants
+    post:
+      operationId: create-tenant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTenantInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantItem"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a tenant
+      tags:
+      - Tenants
+  /v1/users:
+    get:
+      operationId: list-users
+      parameters:
+      - description: Filter by tenant ID
+        explode: false
+        in: query
+        name: tenant_id
+        required: false
+        schema:
+          description: Filter by tenant ID
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/UserItem"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List users
+      tags:
+      - Users
 components:
   schemas:
     ApiKeyCreatedOutputBody:
@@ -645,16 +758,14 @@ components:
       additionalProperties: false
       example:
         subscription_id: subscription_id
-        inbox_title: inbox_title
         $schema: https://openapi-generator.tech
-        email_body: email_body
         default_channels:
         - default_channels
         - default_channels
-        inbox_body: inbox_body
         name: name
-        sms_body: sms_body
-        email_subject: email_subject
+        content:
+          key:
+            key: content
         slug: slug
       properties:
         $schema:
@@ -662,24 +773,18 @@ components:
           format: uri
           readOnly: true
           type: string
+        content:
+          additionalProperties:
+            additionalProperties:
+              type: string
+          description: "Per-channel content: channel slug -> field key -> template\
+            \ string (e.g. {\"email\":{\"subject\":\"...\",\"body\":\"...\"}})"
         default_channels:
           description: Default channels (used when no subscription)
           items:
             type: string
           nullable: true
           type: array
-        email_body:
-          description: Email body template (HTML)
-          type: string
-        email_subject:
-          description: Email subject template
-          type: string
-        inbox_body:
-          description: Inbox body template
-          type: string
-        inbox_title:
-          description: Inbox title template
-          type: string
         name:
           description: Human-readable name
           minLength: 1
@@ -688,15 +793,29 @@ components:
           description: URL-friendly identifier
           minLength: 1
           type: string
-        sms_body:
-          description: SMS body template
-          type: string
         subscription_id:
           description: Subscription ID (null for standalone)
           type: string
       required:
       - name
       - slug
+    CreateTenantInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        name: name
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Tenant name
+          minLength: 1
+          type: string
+      required:
+      - name
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -832,7 +951,7 @@ components:
       additionalProperties: false
       example:
         severity: severity
-        metadata: metadata
+        metadata: ""
         channel: channel
         created_at: 2000-01-23T04:56:07.000+00:00
         id: id
@@ -848,8 +967,7 @@ components:
           type: string
         id:
           type: string
-        metadata:
-          type: string
+        metadata: {}
         notification_id:
           type: string
         severity:
@@ -861,6 +979,59 @@ components:
       - id
       - notification_id
       - severity
+    NotificationItem:
+      additionalProperties: false
+      example:
+        tenant_id: tenant_id
+        category_id: category_id
+        channels:
+        - channels
+        - channels
+        template_slug: template_slug
+        user_id: user_id
+        created_at: 2000-01-23T04:56:07.000+00:00
+        template_id: template_id
+        id: id
+        body: body
+        title: title
+        status: status
+      properties:
+        body:
+          type: string
+        category_id:
+          type: string
+        channels:
+          items:
+            type: string
+          nullable: true
+          type: array
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        status:
+          type: string
+        template_id:
+          type: string
+        template_slug:
+          type: string
+        tenant_id:
+          type: string
+        title:
+          type: string
+        user_id:
+          type: string
+      required:
+      - body
+      - category_id
+      - channels
+      - created_at
+      - id
+      - status
+      - tenant_id
+      - title
+      - user_id
     NotificationStatusOutputBody:
       additionalProperties: false
       example:
@@ -868,14 +1039,14 @@ components:
         $schema: https://openapi-generator.tech
         events:
         - severity: severity
-          metadata: metadata
+          metadata: ""
           channel: channel
           created_at: 2000-01-23T04:56:07.000+00:00
           id: id
           notification_id: notification_id
           event: event
         - severity: severity
-          metadata: metadata
+          metadata: ""
           channel: channel
           created_at: 2000-01-23T04:56:07.000+00:00
           id: id
@@ -904,18 +1075,16 @@ components:
       additionalProperties: false
       example:
         subscription_id: subscription_id
-        inbox_title: inbox_title
         $schema: https://openapi-generator.tech
-        email_body: email_body
         default_channels:
         - default_channels
         - default_channels
-        inbox_body: inbox_body
         name: name
         created_at: 2000-01-23T04:56:07.000+00:00
         id: id
-        sms_body: sms_body
-        email_subject: email_subject
+        content:
+          key:
+            key: content
         slug: slug
       properties:
         $schema:
@@ -923,6 +1092,10 @@ components:
           format: uri
           readOnly: true
           type: string
+        content:
+          additionalProperties:
+            additionalProperties:
+              type: string
         created_at:
           format: date-time
           type: string
@@ -931,21 +1104,11 @@ components:
             type: string
           nullable: true
           type: array
-        email_body:
-          type: string
-        email_subject:
-          type: string
         id:
-          type: string
-        inbox_body:
-          type: string
-        inbox_title:
           type: string
         name:
           type: string
         slug:
-          type: string
-        sms_body:
           type: string
         subscription_id:
           type: string
@@ -1032,12 +1195,11 @@ components:
     SendRecipient:
       additionalProperties: false
       properties:
-        email:
-          description: Optional email address for this notification
-          type: string
-        phone:
-          description: Optional phone number for this notification
-          type: string
+        contacts:
+          additionalProperties:
+            type: string
+          description: "Per-channel address overrides: address key (\"email\",\"phone\"\
+            ) -> address"
         tenant_id:
           description: Tenant identifier
           minLength: 1
@@ -1132,6 +1294,39 @@ components:
       - name
       - slug
       - sort_order
+    TenantItem:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        user_count: 0
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        default_locale: default_locale
+        id: id
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        default_locale:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        user_count:
+          format: int64
+          type: integer
+      required:
+      - created_at
+      - default_locale
+      - id
+      - name
+      - user_count
     TokenInputBody:
       additionalProperties: false
       example:
@@ -1252,49 +1447,74 @@ components:
       additionalProperties: false
       example:
         subscription_id: subscription_id
-        inbox_title: inbox_title
         $schema: https://openapi-generator.tech
-        email_body: email_body
         default_channels:
         - default_channels
         - default_channels
-        inbox_body: inbox_body
         name: name
-        sms_body: sms_body
-        email_subject: email_subject
+        content:
+          key:
+            key: content
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
           format: uri
           readOnly: true
           type: string
+        content:
+          additionalProperties:
+            additionalProperties:
+              type: string
+          description: "Per-channel content: channel slug -> field key -> template\
+            \ string (e.g. {\"email\":{\"subject\":\"...\",\"body\":\"...\"}})"
         default_channels:
           description: Default channels (used when no subscription)
           items:
             type: string
           nullable: true
           type: array
-        email_body:
-          description: Email body template (HTML)
-          type: string
-        email_subject:
-          description: Email subject template
-          type: string
-        inbox_body:
-          description: Inbox body template
-          type: string
-        inbox_title:
-          description: Inbox title template
-          type: string
         name:
           description: Human-readable name
-          type: string
-        sms_body:
-          description: SMS body template
           type: string
         subscription_id:
           description: Subscription ID (null for standalone)
           type: string
       required:
       - name
+    UserItem:
+      additionalProperties: false
+      example:
+        tenant_id: tenant_id
+        tenant_name: tenant_name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        external_id: external_id
+        id: id
+        locale: locale
+        contacts:
+          key: contacts
+      properties:
+        contacts:
+          additionalProperties:
+            type: string
+        created_at:
+          format: date-time
+          type: string
+        external_id:
+          type: string
+        id:
+          type: string
+        locale:
+          nullable: true
+          type: string
+        tenant_id:
+          type: string
+        tenant_name:
+          type: string
+      required:
+      - created_at
+      - external_id
+      - id
+      - locale
+      - tenant_id
+      - tenant_name
 

@@ -27,11 +27,10 @@ class SendRecipient(BaseModel):
     """
     SendRecipient
     """ # noqa: E501
-    email: Optional[StrictStr] = Field(default=None, description="Optional email address for this notification")
-    phone: Optional[StrictStr] = Field(default=None, description="Optional phone number for this notification")
+    contacts: Optional[Dict[str, StrictStr]] = Field(default=None, description="Per-channel address overrides: address key (\"email\",\"phone\") -> address")
     tenant_id: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Tenant identifier")
     user_id: Annotated[str, Field(min_length=1, strict=True)] = Field(description="External user identifier")
-    __properties: ClassVar[List[str]] = ["email", "phone", "tenant_id", "user_id"]
+    __properties: ClassVar[List[str]] = ["contacts", "tenant_id", "user_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -84,8 +83,7 @@ class SendRecipient(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "email": obj.get("email"),
-            "phone": obj.get("phone"),
+            "contacts": obj.get("contacts"),
             "tenant_id": obj.get("tenant_id"),
             "user_id": obj.get("user_id")
         })

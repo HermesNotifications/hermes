@@ -120,7 +120,9 @@ export function EventTimeline({ events }: { events: NotificationEvent[] }) {
             <p className="mt-0.5 text-xs text-muted-foreground">
               {formatTimestamp(event.created_at)}
             </p>
-            {event.metadata && <EventMetadata metadata={event.metadata} severity={event.severity} />}
+            {typeof event.metadata === "string" && event.metadata && (
+              <EventMetadata metadata={event.metadata} severity={event.severity} />
+            )}
           </div>
         </div>
       ))}

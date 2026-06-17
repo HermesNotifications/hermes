@@ -14,13 +14,11 @@ import (
 	"github.com/hermes-notifications/hermes/pkg/client"
 )
 
-func ptr(s string) *string { return &s }
-
 func TestTemplatesList(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	templates := []client.NotificationTemplate{
 		{ID: "t1", Slug: "welcome", Name: "Welcome", CreatedAt: now},
-		{ID: "t2", Slug: "alert", Name: "Alert", EmailSubject: ptr("Alert!"), CreatedAt: now},
+		{ID: "t2", Slug: "alert", Name: "Alert", Content: map[string]map[string]string{"email": {"subject": "Alert!"}}, CreatedAt: now},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +47,7 @@ func TestTemplatesList(t *testing.T) {
 	if result[0].ID != "t1" || result[0].Slug != "welcome" {
 		t.Errorf("unexpected first template: %+v", result[0])
 	}
-	if result[1].ID != "t2" || result[1].EmailSubject == nil || *result[1].EmailSubject != "Alert!" {
+	if result[1].ID != "t2" || result[1].Content == nil || result[1].Content["email"]["subject"] != "Alert!" {
 		t.Errorf("unexpected second template: %+v", result[1])
 	}
 }
@@ -57,11 +55,11 @@ func TestTemplatesList(t *testing.T) {
 func TestTemplatesCreate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	created := client.NotificationTemplate{
-		ID:           "t3",
-		Slug:         "newsletter",
-		Name:         "Newsletter",
-		EmailSubject: ptr("Your weekly digest"),
-		CreatedAt:    now,
+		ID:        "t3",
+		Slug:      "newsletter",
+		Name:      "Newsletter",
+		Content:   map[string]map[string]string{"email": {"subject": "Your weekly digest"}},
+		CreatedAt: now,
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +89,9 @@ func TestTemplatesCreate(t *testing.T) {
 
 	c := client.New(srv.URL, "test-key")
 	result, err := c.Templates.Create(context.Background(), client.CreateTemplateRequest{
-		Slug:         "newsletter",
-		Name:         "Newsletter",
-		EmailSubject: ptr("Your weekly digest"),
+		Slug:    "newsletter",
+		Name:    "Newsletter",
+		Content: map[string]map[string]string{"email": {"subject": "Your weekly digest"}},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -104,19 +102,19 @@ func TestTemplatesCreate(t *testing.T) {
 	if result.Slug != "newsletter" {
 		t.Errorf("expected slug newsletter, got %s", result.Slug)
 	}
-	if result.EmailSubject == nil || *result.EmailSubject != "Your weekly digest" {
-		t.Errorf("unexpected email subject: %v", result.EmailSubject)
+	if result.Content == nil || result.Content["email"]["subject"] != "Your weekly digest" {
+		t.Errorf("unexpected content: %v", result.Content)
 	}
 }
 
 func TestTemplatesUpdate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	updated := client.NotificationTemplate{
-		ID:           "t1",
-		Slug:         "welcome",
-		Name:         "Welcome Updated",
-		EmailSubject: ptr("Welcome aboard!"),
-		CreatedAt:    now,
+		ID:        "t1",
+		Slug:      "welcome",
+		Name:      "Welcome Updated",
+		Content:   map[string]map[string]string{"email": {"subject": "Welcome aboard!"}},
+		CreatedAt: now,
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -142,8 +140,8 @@ func TestTemplatesUpdate(t *testing.T) {
 
 	c := client.New(srv.URL, "test-key")
 	result, err := c.Templates.Update(context.Background(), "t1", client.UpdateTemplateRequest{
-		Name:         "Welcome Updated",
-		EmailSubject: ptr("Welcome aboard!"),
+		Name:    "Welcome Updated",
+		Content: map[string]map[string]string{"email": {"subject": "Welcome aboard!"}},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -149,7 +149,7 @@ type contactSkip struct {
 func filterChannelsByContact(channels []string, recipient hermenats.Recipient) (kept []string, skipped []contactSkip) {
 	for _, ch := range channels {
 		desc, ok := provider.Builtins.Channel(ch)
-		if ok && desc.AddressKey != "" && recipient.AddressFor(desc.AddressKey) == "" {
+		if ok && desc.AddressKey != "" && recipient[desc.AddressKey] == "" {
 			skipped = append(skipped, contactSkip{
 				Channel:      ch,
 				AddressKey:   desc.AddressKey,
@@ -162,20 +162,16 @@ func filterChannelsByContact(channels []string, recipient hermenats.Recipient) (
 	return kept, skipped
 }
 
-// FilterChannelsForTemplate filters channels to only those with template
-// content defined for them, per the channel registry. For direct sends (nil
-// template), all channels pass through. Unknown channels are dropped.
+// FilterChannelsForTemplate keeps only channels that have normalized content
+// defined in the template. For direct sends (nil template), all channels pass
+// through. Channels with no content are dropped.
 func FilterChannelsForTemplate(channels []string, nt *models.NotificationTemplate) []string {
 	if nt == nil {
 		return channels
 	}
 	var filtered []string
 	for _, ch := range channels {
-		desc, ok := provider.Builtins.Channel(ch)
-		if !ok || desc.HasContent == nil {
-			continue
-		}
-		if desc.HasContent(nt) {
+		if len(nt.Content[ch]) > 0 {
 			filtered = append(filtered, ch)
 		}
 	}

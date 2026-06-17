@@ -6,7 +6,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/ApiKeyCreatedOutputBody.json
+            - //schemas/ApiKeyCreatedOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -38,7 +38,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/CreateAPIKeyInputBody.json
+            - //schemas/CreateAPIKeyInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -62,7 +62,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/CreateCategoryInputBody.json
+            - //schemas/CreateCategoryInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -103,7 +103,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/CreateSubscriptionInputBody.json
+            - //schemas/CreateSubscriptionInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -129,10 +129,17 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/CreateTemplateInputBody.json
+            - //schemas/CreateTemplateInputBody.json
           format: uri
           readOnly: true
           type: string
+        content:
+          additionalProperties:
+            additionalProperties:
+              type: string
+            type: object
+          description: "Per-channel content: channel slug -> field key -> template string (e.g. {\"email\":{\"subject\":\"...\",\"body\":\"...\"}})"
+          type: object
         default_channels:
           description: Default channels (used when no subscription)
           items:
@@ -140,18 +147,6 @@ components:
           type:
             - array
             - "null"
-        email_body:
-          description: Email body template (HTML)
-          type: string
-        email_subject:
-          description: Email subject template
-          type: string
-        inbox_body:
-          description: Inbox body template
-          type: string
-        inbox_title:
-          description: Inbox title template
-          type: string
         name:
           description: Human-readable name
           minLength: 1
@@ -159,9 +154,6 @@ components:
         slug:
           description: URL-friendly identifier
           minLength: 1
-          type: string
-        sms_body:
-          description: SMS body template
           type: string
         subscription_id:
           description: Subscription ID (null for standalone)
@@ -176,7 +168,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/CreateTenantInputBody.json
+            - //schemas/CreateTenantInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -205,7 +197,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/ErrorModel.json
+            - //schemas/ErrorModel.json
           format: uri
           readOnly: true
           type: string
@@ -400,7 +392,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/NotificationStatusOutputBody.json
+            - //schemas/NotificationStatusOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -424,10 +416,16 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/NotificationTemplate.json
+            - //schemas/NotificationTemplate.json
           format: uri
           readOnly: true
           type: string
+        content:
+          additionalProperties:
+            additionalProperties:
+              type: string
+            type: object
+          type: object
         created_at:
           format: date-time
           type: string
@@ -437,21 +435,11 @@ components:
           type:
             - array
             - "null"
-        email_body:
-          type: string
-        email_subject:
-          type: string
         id:
-          type: string
-        inbox_body:
-          type: string
-        inbox_title:
           type: string
         name:
           type: string
         slug:
-          type: string
-        sms_body:
           type: string
         subscription_id:
           type: string
@@ -487,7 +475,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/SendInputBody.json
+            - //schemas/SendInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -520,7 +508,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/SendOutputBody.json
+            - //schemas/SendOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -533,12 +521,11 @@ components:
     SendRecipient:
       additionalProperties: false
       properties:
-        email:
-          description: Optional email address for this notification
-          type: string
-        phone:
-          description: Optional phone number for this notification
-          type: string
+        contacts:
+          additionalProperties:
+            type: string
+          description: "Per-channel address overrides: address key (\"email\",\"phone\") -> address"
+          type: object
         tenant_id:
           description: Tenant identifier
           minLength: 1
@@ -557,7 +544,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/Subscription.json
+            - //schemas/Subscription.json
           format: uri
           readOnly: true
           type: string
@@ -589,7 +576,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/SubscriptionCategory.json
+            - //schemas/SubscriptionCategory.json
           format: uri
           readOnly: true
           type: string
@@ -628,7 +615,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/TenantItem.json
+            - //schemas/TenantItem.json
           format: uri
           readOnly: true
           type: string
@@ -657,7 +644,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/TokenInputBody.json
+            - //schemas/TokenInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -685,7 +672,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/TokenOutputBody.json
+            - //schemas/TokenOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -705,7 +692,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/UpdateCategoryInputBody.json
+            - //schemas/UpdateCategoryInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -742,7 +729,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/UpdateSubscriptionInputBody.json
+            - //schemas/UpdateSubscriptionInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -763,10 +750,17 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/UpdateTemplateInputBody.json
+            - //schemas/UpdateTemplateInputBody.json
           format: uri
           readOnly: true
           type: string
+        content:
+          additionalProperties:
+            additionalProperties:
+              type: string
+            type: object
+          description: "Per-channel content: channel slug -> field key -> template string (e.g. {\"email\":{\"subject\":\"...\",\"body\":\"...\"}})"
+          type: object
         default_channels:
           description: Default channels (used when no subscription)
           items:
@@ -774,23 +768,8 @@ components:
           type:
             - array
             - "null"
-        email_body:
-          description: Email body template (HTML)
-          type: string
-        email_subject:
-          description: Email subject template
-          type: string
-        inbox_body:
-          description: Inbox body template
-          type: string
-        inbox_title:
-          description: Inbox title template
-          type: string
         name:
           description: Human-readable name
-          type: string
-        sms_body:
-          description: SMS body template
           type: string
         subscription_id:
           description: Subscription ID (null for standalone)
@@ -801,22 +780,18 @@ components:
     UserItem:
       additionalProperties: false
       properties:
+        contacts:
+          additionalProperties:
+            type: string
+          type: object
         created_at:
           format: date-time
           type: string
-        email:
-          type:
-            - string
-            - "null"
         external_id:
           type: string
         id:
           type: string
         locale:
-          type:
-            - string
-            - "null"
-        phone:
           type:
             - string
             - "null"
@@ -828,8 +803,6 @@ components:
         - id
         - tenant_id
         - external_id
-        - email
-        - phone
         - locale
         - tenant_name
         - created_at

@@ -18,11 +18,13 @@ from hermes_server_sdk.models.create_api_key_input_body import CreateAPIKeyInput
 from hermes_server_sdk.models.create_category_input_body import CreateCategoryInputBody
 from hermes_server_sdk.models.create_subscription_input_body import CreateSubscriptionInputBody
 from hermes_server_sdk.models.create_template_input_body import CreateTemplateInputBody
+from hermes_server_sdk.models.create_tenant_input_body import CreateTenantInputBody
 from hermes_server_sdk.models.error_detail import ErrorDetail
 from hermes_server_sdk.models.error_model import ErrorModel
 from hermes_server_sdk.models.item import Item
 from hermes_server_sdk.models.notification import Notification
 from hermes_server_sdk.models.notification_event import NotificationEvent
+from hermes_server_sdk.models.notification_item import NotificationItem
 from hermes_server_sdk.models.notification_status_output_body import NotificationStatusOutputBody
 from hermes_server_sdk.models.notification_template import NotificationTemplate
 from hermes_server_sdk.models.send_content import SendContent
@@ -31,9 +33,11 @@ from hermes_server_sdk.models.send_output_body import SendOutputBody
 from hermes_server_sdk.models.send_recipient import SendRecipient
 from hermes_server_sdk.models.subscription import Subscription
 from hermes_server_sdk.models.subscription_category import SubscriptionCategory
+from hermes_server_sdk.models.tenant_item import TenantItem
 from hermes_server_sdk.models.token_input_body import TokenInputBody
 from hermes_server_sdk.models.token_output_body import TokenOutputBody
 from hermes_server_sdk.models.update_category_input_body import UpdateCategoryInputBody
 from hermes_server_sdk.models.update_subscription_input_body import UpdateSubscriptionInputBody
 from hermes_server_sdk.models.update_template_input_body import UpdateTemplateInputBody
+from hermes_server_sdk.models.user_item import UserItem
 

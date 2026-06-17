@@ -37,16 +37,12 @@ const CHANNELS = [
 ] as const;
 
 function extractTemplateVariables(template: NotificationTemplate): string[] {
-  const fields = [
-    template.email_subject,
-    template.email_body,
-    template.sms_body,
-    template.inbox_title,
-    template.inbox_body,
-  ];
+  const templateStrings = Object.values(template.content ?? {}).flatMap(
+    (fields) => Object.values(fields)
+  );
   const pattern = /\{\{\s*\.(\w+)\s*\}\}/g;
   const vars = new Set<string>();
-  for (const field of fields) {
+  for (const field of templateStrings) {
     if (!field) continue;
     for (const match of field.matchAll(pattern)) {
       vars.add(match[1]);
@@ -157,12 +153,16 @@ export function SendNotificationForm({
               )
             : undefined;
 
+        const contacts: Record<string, string> = {
+          ...(formData.email ? { email: formData.email } : {}),
+          ...(formData.phone ? { phone: formData.phone } : {}),
+        };
+
         const result = await sendNotification({
           to: {
             tenantId,
             userId: formData.userId,
-            email: formData.email || undefined,
-            phone: formData.phone || undefined,
+            contacts: Object.keys(contacts).length > 0 ? contacts : undefined,
           },
           template: formData.mode === "template" ? formData.template : undefined,
           content:

@@ -24,13 +24,14 @@ func TestCreateTemplate_And_GetBySlug(t *testing.T) {
 	}
 
 	subID := sub.ID
-	subject := "Invoice {{.invoice_number}} paid"
 	nt, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
 		SubscriptionID:  &subID,
 		Slug:            "invoice.paid",
 		Name:            "Invoice Paid",
 		DefaultChannels: []string{"email"},
-		EmailSubject:    &subject,
+		Content: map[string]map[string]string{
+			"email": {"subject": "Invoice {{.invoice_number}} paid"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateTemplate: %v", err)
@@ -70,19 +71,21 @@ func TestUpdateTemplate(t *testing.T) {
 	cleanTable(t, pool, "notification_templates", "subscription_categories")
 
 	ctx := context.Background()
-	subject := "Hello"
 	nt, err := s.CreateTemplate(ctx, &models.NotificationTemplate{
 		Slug: "welcome", Name: "Welcome", DefaultChannels: []string{"email"},
-		EmailSubject: &subject,
+		Content: map[string]map[string]string{
+			"email": {"subject": "Hello"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateTemplate: %v", err)
 	}
 
-	newSubject := "Hello Updated"
 	updated, err := s.UpdateTemplate(ctx, &models.NotificationTemplate{
 		ID: nt.ID, Name: "Welcome Updated", DefaultChannels: []string{"email", "inbox"},
-		EmailSubject: &newSubject,
+		Content: map[string]map[string]string{
+			"email": {"subject": "Hello Updated"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("UpdateTemplate: %v", err)
@@ -90,8 +93,8 @@ func TestUpdateTemplate(t *testing.T) {
 	if updated.Name != "Welcome Updated" {
 		t.Errorf("expected name 'Welcome Updated', got %q", updated.Name)
 	}
-	if *updated.EmailSubject != "Hello Updated" {
-		t.Errorf("expected email_subject 'Hello Updated', got %q", *updated.EmailSubject)
+	if updated.Content["email"]["subject"] != "Hello Updated" {
+		t.Errorf("expected content email.subject 'Hello Updated', got %q", updated.Content["email"]["subject"])
 	}
 }
 

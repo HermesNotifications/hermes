@@ -8,54 +8,15 @@ import (
 
 	"github.com/hermes-notifications/hermes/internal/models"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
-	"github.com/hermes-notifications/hermes/internal/provider"
 )
-
-func TestRenderedContent_Field(t *testing.T) {
-	rc := &RenderedContent{
-		EmailSubject: "subj",
-		EmailBody:    "ebody",
-		SMSBody:      "sbody",
-		InboxTitle:   "ititle",
-		InboxBody:    "ibody",
-	}
-	cases := map[string]string{
-		provider.FieldEmailSubject: "subj",
-		provider.FieldEmailBody:    "ebody",
-		provider.FieldSMSBody:      "sbody",
-		provider.FieldInboxTitle:   "ititle",
-		provider.FieldInboxBody:    "ibody",
-		"":                         "",
-		"unknown":                  "",
-	}
-	for key, want := range cases {
-		if got := rc.Field(key); got != want {
-			t.Errorf("Field(%q): got %q, want %q", key, got, want)
-		}
-	}
-}
-
-func TestRecipient_AddressFor(t *testing.T) {
-	r := hermenats.Recipient{Email: "a@b.c", Phone: "+15551234"}
-	if got := r.AddressFor("email"); got != "a@b.c" {
-		t.Errorf("AddressFor(email): got %q", got)
-	}
-	if got := r.AddressFor("phone"); got != "+15551234" {
-		t.Errorf("AddressFor(phone): got %q", got)
-	}
-	if got := r.AddressFor(""); got != "" {
-		t.Errorf("AddressFor(\"\"): got %q, want empty", got)
-	}
-	if got := r.AddressFor("unknown"); got != "" {
-		t.Errorf("AddressFor(unknown): got %q, want empty", got)
-	}
-}
 
 func TestFilterChannelsForTemplate(t *testing.T) {
 	nt := &models.NotificationTemplate{
-		EmailBody:  sp("e"),
-		InboxTitle: sp("i"),
-		// SMSBody nil -> sms filtered out
+		Content: map[string]map[string]string{
+			"email": {"body": "e"},
+			"inbox": {"title": "i"},
+			// sms absent -> filtered out
+		},
 	}
 	got := FilterChannelsForTemplate([]string{"email", "sms", "inbox", "bogus"}, nt)
 	want := []string{"email", "inbox"}
@@ -68,22 +29,19 @@ func TestFilterChannelsForTemplate(t *testing.T) {
 		}
 	}
 
-	// nil template passes everything through unchanged.
 	all := []string{"email", "sms", "anything"}
 	if got := FilterChannelsForTemplate(all, nil); len(got) != 3 {
 		t.Fatalf("nil template: got %v, want passthrough", got)
 	}
 }
 
-func sp(s string) *string { return &s }
-
 func TestContentForChannel(t *testing.T) {
 	url := "https://x"
 	original := hermenats.MessageContent{ActionURL: &url}
-	rc := &RenderedContent{
-		EmailSubject: "es", EmailBody: "eb",
-		SMSBody:    "sb",
-		InboxTitle: "it", InboxBody: "ib",
+	rc := RenderedContent{
+		"email": {"subject": "es", "body": "eb"},
+		"sms":   {"body": "sb"},
+		"inbox": {"title": "it", "body": "ib"},
 	}
 
 	// rendered == nil -> passthrough of original.
@@ -103,7 +61,6 @@ func TestContentForChannel(t *testing.T) {
 	if inbox.Title != "it" || inbox.Body != "ib" {
 		t.Fatalf("inbox: got %+v", inbox)
 	}
-	// unknown channel -> empty title/body (ActionURL still carried).
 	bogus := contentForChannel("bogus", original, rc)
 	if bogus.Title != "" || bogus.Body != "" || bogus.ActionURL != &url {
 		t.Fatalf("bogus: got %+v", bogus)
@@ -112,7 +69,7 @@ func TestContentForChannel(t *testing.T) {
 
 func TestFilterChannelsByContact(t *testing.T) {
 	// email + sms required; inbox always kept. Recipient has email only.
-	rec := hermenats.Recipient{Email: "a@b.c"}
+	rec := hermenats.Recipient{"email": "a@b.c"}
 	kept, skipped := filterChannelsByContact([]string{"email", "sms", "inbox"}, rec)
 
 	wantKept := []string{"email", "inbox"}

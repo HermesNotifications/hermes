@@ -45,11 +45,11 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
     subscriptionId: template.subscription_id,
     defaultChannels: ((template.default_channels ?? []) as string[])
       .filter((c: string) => ["email", "sms", "inbox"].includes(c)) as Array<"email" | "sms" | "inbox">,
-    emailSubject: template.email_subject,
-    emailBody: template.email_body,
-    smsBody: template.sms_body,
-    inboxTitle: template.inbox_title,
-    inboxBody: template.inbox_body,
+    emailSubject: template.content?.email?.subject,
+    emailBody: template.content?.email?.body,
+    smsBody: template.content?.sms?.body,
+    inboxTitle: template.content?.inbox?.title,
+    inboxBody: template.content?.inbox?.body,
   };
 
   return (

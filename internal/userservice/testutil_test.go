@@ -33,20 +33,17 @@ func (m *mockUserStore) GetUserByID(ctx context.Context, userID string) (*models
 	return nil, fmt.Errorf("user not found: %s", userID)
 }
 
-func (m *mockUserStore) UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error) {
-	for i, u := range m.users {
-		if u.ID == userID {
-			if email != nil {
-				m.users[i].Email = email
+func (m *mockUserStore) SetUserContact(ctx context.Context, userID, addressKey, address string) error {
+	for i := range m.users {
+		if m.users[i].ID == userID {
+			if m.users[i].Contacts == nil {
+				m.users[i].Contacts = make(map[string]string)
 			}
-			if phone != nil {
-				m.users[i].Phone = phone
-			}
-			updated := m.users[i]
-			return &updated, nil
+			m.users[i].Contacts[addressKey] = address
+			return nil
 		}
 	}
-	return nil, fmt.Errorf("user not found: %s", userID)
+	return fmt.Errorf("user not found: %s", userID)
 }
 
 func (m *mockUserStore) GetUserSubscriptions(ctx context.Context, userID string) ([]models.UserSubscription, error) {
@@ -121,10 +118,9 @@ const testUserID = "test-user-id"
 func newTestServer(t *testing.T) (*userservice.Server, *mockUserStore) {
 	t.Helper()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	email := "user@example.com"
 	store := &mockUserStore{
 		users: []models.User{
-			{ID: testUserID, TenantID: "tenant-1", ExternalID: "ext-1", Email: &email, CreatedAt: time.Now()},
+			{ID: testUserID, TenantID: "tenant-1", ExternalID: "ext-1", Contacts: map[string]string{"email": "user@example.com"}, CreatedAt: time.Now()},
 		},
 		categories: []models.SubscriptionCategory{
 			{ID: "sct-1", Slug: "general", Name: "General", DefaultChannels: []string{"email", "inbox"}, DefaultState: "on"},

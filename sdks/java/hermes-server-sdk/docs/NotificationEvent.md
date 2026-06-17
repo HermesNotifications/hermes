@@ -11,7 +11,7 @@
 |**createdAt** | **OffsetDateTime** |  |  |
 |**event** | **String** |  |  |
 |**id** | **String** |  |  |
-|**metadata** | **String** |  |  [optional] |
+|**metadata** | **Object** |  |  [optional] |
 |**notificationId** | **String** |  |  |
 |**severity** | **String** |  |  |
 

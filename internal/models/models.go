@@ -25,13 +25,12 @@ type APIKey struct {
 }
 
 type User struct {
-	ID         string    `json:"id"`
-	TenantID   string    `json:"tenant_id"`
-	ExternalID string    `json:"external_id"`
-	Email      *string   `json:"email,omitempty"`
-	Phone      *string   `json:"phone,omitempty"`
-	Locale     *string   `json:"locale,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         string            `json:"id"`
+	TenantID   string            `json:"tenant_id"`
+	ExternalID string            `json:"external_id"`
+	Contacts   map[string]string `json:"contacts,omitempty"`
+	Locale     *string           `json:"locale,omitempty"`
+	CreatedAt  time.Time         `json:"created_at"`
 }
 
 type SubscriptionCategory struct {
@@ -54,17 +53,13 @@ type Subscription struct {
 }
 
 type NotificationTemplate struct {
-	ID              string    `json:"id"`
-	SubscriptionID  *string   `json:"subscription_id,omitempty"`
-	Slug            string    `json:"slug"`
-	Name            string    `json:"name"`
-	DefaultChannels []string  `json:"default_channels"`
-	EmailSubject    *string   `json:"email_subject,omitempty"`
-	EmailBody       *string   `json:"email_body,omitempty"`
-	SMSBody         *string   `json:"sms_body,omitempty"`
-	InboxTitle      *string   `json:"inbox_title,omitempty"`
-	InboxBody       *string   `json:"inbox_body,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              string                       `json:"id"`
+	SubscriptionID  *string                      `json:"subscription_id,omitempty"`
+	Slug            string                       `json:"slug"`
+	Name            string                       `json:"name"`
+	DefaultChannels []string                     `json:"default_channels"`
+	Content         map[string]map[string]string `json:"content,omitempty"`
+	CreatedAt       time.Time                    `json:"created_at"`
 }
 
 type Notification struct {
@@ -89,13 +84,13 @@ type Notification struct {
 }
 
 type NotificationEvent struct {
-	ID             string    `json:"id"`
-	NotificationID string    `json:"notification_id"`
-	Channel        string    `json:"channel"`
-	Event          string    `json:"event"`
-	Severity       string    `json:"severity"`
+	ID             string          `json:"id"`
+	NotificationID string          `json:"notification_id"`
+	Channel        string          `json:"channel"`
+	Event          string          `json:"event"`
+	Severity       string          `json:"severity"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 type UserSubscription struct {

@@ -11,40 +11,28 @@ import (
 )
 
 type NotificationTemplate struct {
-	ID              string    `json:"id"`
-	SubscriptionID  *string   `json:"subscription_id,omitempty"`
-	Slug            string    `json:"slug"`
-	Name            string    `json:"name"`
-	DefaultChannels []string  `json:"default_channels"`
-	EmailSubject    *string   `json:"email_subject,omitempty"`
-	EmailBody       *string   `json:"email_body,omitempty"`
-	SMSBody         *string   `json:"sms_body,omitempty"`
-	InboxTitle      *string   `json:"inbox_title,omitempty"`
-	InboxBody       *string   `json:"inbox_body,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              string                       `json:"id"`
+	SubscriptionID  *string                      `json:"subscription_id,omitempty"`
+	Slug            string                       `json:"slug"`
+	Name            string                       `json:"name"`
+	DefaultChannels []string                     `json:"default_channels"`
+	Content         map[string]map[string]string `json:"content,omitempty"`
+	CreatedAt       time.Time                    `json:"created_at"`
 }
 
 type CreateTemplateRequest struct {
-	Slug            string   `json:"slug"`
-	Name            string   `json:"name"`
-	SubscriptionID  *string  `json:"subscription_id,omitempty"`
-	DefaultChannels []string `json:"default_channels,omitempty"`
-	EmailSubject    *string  `json:"email_subject,omitempty"`
-	EmailBody       *string  `json:"email_body,omitempty"`
-	SMSBody         *string  `json:"sms_body,omitempty"`
-	InboxTitle      *string  `json:"inbox_title,omitempty"`
-	InboxBody       *string  `json:"inbox_body,omitempty"`
+	Slug            string                       `json:"slug"`
+	Name            string                       `json:"name"`
+	SubscriptionID  *string                      `json:"subscription_id,omitempty"`
+	DefaultChannels []string                     `json:"default_channels,omitempty"`
+	Content         map[string]map[string]string `json:"content,omitempty"`
 }
 
 type UpdateTemplateRequest struct {
-	Name            string   `json:"name"`
-	SubscriptionID  *string  `json:"subscription_id,omitempty"`
-	DefaultChannels []string `json:"default_channels,omitempty"`
-	EmailSubject    *string  `json:"email_subject,omitempty"`
-	EmailBody       *string  `json:"email_body,omitempty"`
-	SMSBody         *string  `json:"sms_body,omitempty"`
-	InboxTitle      *string  `json:"inbox_title,omitempty"`
-	InboxBody       *string  `json:"inbox_body,omitempty"`
+	Name            string                       `json:"name"`
+	SubscriptionID  *string                      `json:"subscription_id,omitempty"`
+	DefaultChannels []string                     `json:"default_channels,omitempty"`
+	Content         map[string]map[string]string `json:"content,omitempty"`
 }
 
 type TemplatesService struct{ client *Client }

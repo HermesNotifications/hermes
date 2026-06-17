@@ -10,7 +10,7 @@ Name | Type | Description | Notes
 **Id** | **string** |  | 
 **NotificationId** | **string** |  | 
 **Severity** | **string** |  | 
-**Metadata** | **string** |  | [optional] 
+**Metadata** | **Object** |  | [optional] 
 
 [[Back to Model list]](../../README.md#documentation-for-models) [[Back to API list]](../../README.md#documentation-for-api-endpoints) [[Back to README]](../../README.md)
 

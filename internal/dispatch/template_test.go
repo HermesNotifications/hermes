@@ -10,14 +10,12 @@ import (
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-func strPtr(s string) *string { return &s }
-
 func TestRenderTemplates(t *testing.T) {
 	nt := &models.NotificationTemplate{
-		EmailSubject: strPtr("Invoice {{.number}} paid"),
-		EmailBody:    strPtr("<p>Hi {{.name}}, invoice {{.number}} is paid.</p>"),
-		InboxTitle:   strPtr("Invoice {{.number}} paid"),
-		InboxBody:    strPtr("Your invoice {{.number}} has been paid."),
+		Content: map[string]map[string]string{
+			"email": {"subject": "Invoice {{.number}} paid", "body": "<p>Hi {{.name}}, invoice {{.number}} is paid.</p>"},
+			"inbox": {"title": "Invoice {{.number}} paid", "body": "Your invoice {{.number}} has been paid."},
+		},
 	}
 	data := map[string]any{"number": "INV-001", "name": "Alice"}
 
@@ -25,27 +23,27 @@ func TestRenderTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderTemplates: %v", err)
 	}
-	if rc.EmailSubject != "Invoice INV-001 paid" {
-		t.Fatalf("email_subject: got %q", rc.EmailSubject)
+	if rc["email"]["subject"] != "Invoice INV-001 paid" {
+		t.Fatalf("email subject: got %q", rc["email"]["subject"])
 	}
-	if rc.InboxTitle != "Invoice INV-001 paid" {
-		t.Fatalf("inbox_title: got %q", rc.InboxTitle)
+	if rc["inbox"]["title"] != "Invoice INV-001 paid" {
+		t.Fatalf("inbox title: got %q", rc["inbox"]["title"])
 	}
-	if rc.InboxBody != "Your invoice INV-001 has been paid." {
-		t.Fatalf("inbox_body: got %q", rc.InboxBody)
+	if rc["inbox"]["body"] != "Your invoice INV-001 has been paid." {
+		t.Fatalf("inbox body: got %q", rc["inbox"]["body"])
 	}
 }
 
 func TestRenderTemplates_HTMLEscaping(t *testing.T) {
 	nt := &models.NotificationTemplate{
-		EmailBody: strPtr("<p>Hello {{.name}}</p>"),
+		Content: map[string]map[string]string{"email": {"body": "<p>Hello {{.name}}</p>"}},
 	}
 	data := map[string]any{"name": "<script>alert('xss')</script>"}
 	rc, err := dispatch.RenderTemplates(nt, data)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	if rc.EmailBody == "<p>Hello <script>alert('xss')</script></p>" {
+	if rc["email"]["body"] == "<p>Hello <script>alert('xss')</script></p>" {
 		t.Fatal("expected HTML escaping but got raw script tag")
 	}
 }

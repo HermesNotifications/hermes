@@ -17,6 +17,7 @@ import (
 //
 func insertUsers(ctx context.Context, pool *pgxpool.Pool, tenantID string, n int, runID string, tenantIdx int) ([]string, error) {
 	rows := make([][]any, n)
+	contactRows := make([][]any, 0, n*2)
 	ids := make([]string, n)
 	for i := 0; i < n; i++ {
 		id := fmt.Sprintf("lt-%s-t%d-u%d", runID, tenantIdx, i)
@@ -24,14 +25,25 @@ func insertUsers(ctx context.Context, pool *pgxpool.Pool, tenantID string, n int
 		phone := fmt.Sprintf("+1555%010d", (tenantIdx*1_000_000)+i)
 		extID := fmt.Sprintf("ext-%d-%d", tenantIdx, i)
 		ids[i] = id
-		rows[i] = []any{id, tenantID, extID, email, phone, "en"}
+		rows[i] = []any{id, tenantID, extID, "en"}
+		contactRows = append(contactRows,
+			[]any{id, "email", email, false},
+			[]any{id, "phone", phone, false},
+		)
 	}
 	if _, err := pool.CopyFrom(ctx,
 		pgx.Identifier{"users"},
-		[]string{"id", "tenant_id", "external_id", "email", "phone", "locale"},
+		[]string{"id", "tenant_id", "external_id", "locale"},
 		pgx.CopyFromRows(rows),
 	); err != nil {
 		return nil, fmt.Errorf("copy users: %w", err)
+	}
+	if _, err := pool.CopyFrom(ctx,
+		pgx.Identifier{"user_contact_points"},
+		[]string{"user_id", "address_key", "address", "verified"},
+		pgx.CopyFromRows(contactRows),
+	); err != nil {
+		return nil, fmt.Errorf("copy user contacts: %w", err)
 	}
 	return ids, nil
 }

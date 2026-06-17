@@ -21,6 +21,8 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -48,17 +50,12 @@ import com.hermes.sdk.JSON;
 /**
  * SendRecipient
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-29T15:48:54.030379-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
 public class SendRecipient {
-  public static final String SERIALIZED_NAME_EMAIL = "email";
-  @SerializedName(SERIALIZED_NAME_EMAIL)
+  public static final String SERIALIZED_NAME_CONTACTS = "contacts";
+  @SerializedName(SERIALIZED_NAME_CONTACTS)
   @javax.annotation.Nullable
-  private String email;
-
-  public static final String SERIALIZED_NAME_PHONE = "phone";
-  @SerializedName(SERIALIZED_NAME_PHONE)
-  @javax.annotation.Nullable
-  private String phone;
+  private Map<String, String> contacts = new HashMap<>();
 
   public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
   @SerializedName(SERIALIZED_NAME_TENANT_ID)
@@ -73,41 +70,30 @@ public class SendRecipient {
   public SendRecipient() {
   }
 
-  public SendRecipient email(@javax.annotation.Nullable String email) {
-    this.email = email;
+  public SendRecipient contacts(@javax.annotation.Nullable Map<String, String> contacts) {
+    this.contacts = contacts;
+    return this;
+  }
+
+  public SendRecipient putContactsItem(String key, String contactsItem) {
+    if (this.contacts == null) {
+      this.contacts = new HashMap<>();
+    }
+    this.contacts.put(key, contactsItem);
     return this;
   }
 
   /**
-   * Optional email address for this notification
-   * @return email
+   * Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address
+   * @return contacts
    */
   @javax.annotation.Nullable
-  public String getEmail() {
-    return email;
+  public Map<String, String> getContacts() {
+    return contacts;
   }
 
-  public void setEmail(@javax.annotation.Nullable String email) {
-    this.email = email;
-  }
-
-
-  public SendRecipient phone(@javax.annotation.Nullable String phone) {
-    this.phone = phone;
-    return this;
-  }
-
-  /**
-   * Optional phone number for this notification
-   * @return phone
-   */
-  @javax.annotation.Nullable
-  public String getPhone() {
-    return phone;
-  }
-
-  public void setPhone(@javax.annotation.Nullable String phone) {
-    this.phone = phone;
+  public void setContacts(@javax.annotation.Nullable Map<String, String> contacts) {
+    this.contacts = contacts;
   }
 
 
@@ -159,23 +145,21 @@ public class SendRecipient {
       return false;
     }
     SendRecipient sendRecipient = (SendRecipient) o;
-    return Objects.equals(this.email, sendRecipient.email) &&
-        Objects.equals(this.phone, sendRecipient.phone) &&
+    return Objects.equals(this.contacts, sendRecipient.contacts) &&
         Objects.equals(this.tenantId, sendRecipient.tenantId) &&
         Objects.equals(this.userId, sendRecipient.userId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(email, phone, tenantId, userId);
+    return Objects.hash(contacts, tenantId, userId);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class SendRecipient {\n");
-    sb.append("    email: ").append(toIndentedString(email)).append("\n");
-    sb.append("    phone: ").append(toIndentedString(phone)).append("\n");
+    sb.append("    contacts: ").append(toIndentedString(contacts)).append("\n");
     sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
     sb.append("    userId: ").append(toIndentedString(userId)).append("\n");
     sb.append("}");
@@ -199,7 +183,7 @@ public class SendRecipient {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("email", "phone", "tenant_id", "user_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("contacts", "tenant_id", "user_id"));
 
     // a set of required properties/fields (JSON key names)
     openapiRequiredFields = new HashSet<String>(Arrays.asList("tenant_id", "user_id"));
@@ -233,12 +217,6 @@ public class SendRecipient {
         }
       }
         JsonObject jsonObj = jsonElement.getAsJsonObject();
-      if ((jsonObj.get("email") != null && !jsonObj.get("email").isJsonNull()) && !jsonObj.get("email").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `email` to be a primitive type in the JSON string but got `%s`", jsonObj.get("email").toString()));
-      }
-      if ((jsonObj.get("phone") != null && !jsonObj.get("phone").isJsonNull()) && !jsonObj.get("phone").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `phone` to be a primitive type in the JSON string but got `%s`", jsonObj.get("phone").toString()));
-      }
       if (!jsonObj.get("tenant_id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_id").toString()));
       }

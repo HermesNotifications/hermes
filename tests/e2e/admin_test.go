@@ -135,14 +135,25 @@ func TestSendNotification_E2E(t *testing.T) {
 
 	// 3. Seed a standalone template (email+inbox) directly in the DB.
 	templateSlug := "invoice.paid.e2e." + runID
+	templateID := uuid.New().String()
 	_, err = pool.Exec(ctx,
-		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, inbox_title, inbox_body)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		uuid.New().String(), templateSlug, "Invoice Paid", []string{"email", "inbox"},
-		"Invoice {{.number}} paid", "Invoice paid", "Your invoice {{.number}} has been paid",
+		`INSERT INTO notification_templates (id, slug, name, default_channels)
+		 VALUES ($1, $2, $3, $4)`,
+		templateID, templateSlug, "Invoice Paid", []string{"email", "inbox"},
 	)
 	if err != nil {
 		t.Fatalf("create template: %v", err)
+	}
+	// Seed normalized per-channel content so dispatch's content-gated routing fans out to email + inbox.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO template_channel_content (template_id, channel_slug, content) VALUES
+		 ($1, 'email', $2), ($1, 'inbox', $3)`,
+		templateID,
+		`{"subject":"Invoice {{.number}} paid"}`,
+		`{"title":"Invoice paid","body":"Your invoice {{.number}} has been paid"}`,
+	)
+	if err != nil {
+		t.Fatalf("create template content: %v", err)
 	}
 
 	// Start dispatch + event writer so notifications get persisted and routed.
@@ -156,7 +167,7 @@ func TestSendNotification_E2E(t *testing.T) {
 
 	// 4. POST /v1/send — template-based send via the Send service.
 	rec := doReq(sendHandler, "POST", "/v1/send", map[string]any{
-		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-1", "email": "ext-user-e2e-1@example.com"},
+		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-1", "contacts": map[string]any{"email": "ext-user-e2e-1@example.com"}},
 		"template": templateSlug,
 		"data":     map[string]string{"number": "INV-001"},
 	}, nil)
@@ -195,7 +206,7 @@ func TestSendNotification_E2E(t *testing.T) {
 	// 6. Idempotency — two direct-content sends with the same key return the same ID.
 	idemKey := "test-idem-key-" + runID
 	idemBody := map[string]any{
-		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-4", "email": "ext-user-e2e-4@example.com"},
+		"to":       map[string]any{"tenant_id": tenantID, "user_id": "ext-user-e2e-4", "contacts": map[string]any{"email": "ext-user-e2e-4@example.com"}},
 		"content":  map[string]string{"title": "Idem", "body": "Body"},
 		"channels": []string{"inbox"},
 	}

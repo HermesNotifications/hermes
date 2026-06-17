@@ -22,6 +22,7 @@ import com.google.gson.stream.JsonWriter;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import org.openapitools.jackson.nullable.JsonNullable;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -49,7 +50,7 @@ import com.hermes.sdk.JSON;
 /**
  * NotificationEvent
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-29T15:48:54.030379-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
 public class NotificationEvent {
   public static final String SERIALIZED_NAME_CHANNEL = "channel";
   @SerializedName(SERIALIZED_NAME_CHANNEL)
@@ -74,7 +75,7 @@ public class NotificationEvent {
   public static final String SERIALIZED_NAME_METADATA = "metadata";
   @SerializedName(SERIALIZED_NAME_METADATA)
   @javax.annotation.Nullable
-  private String metadata;
+  private Object metadata = null;
 
   public static final String SERIALIZED_NAME_NOTIFICATION_ID = "notification_id";
   @SerializedName(SERIALIZED_NAME_NOTIFICATION_ID)
@@ -165,7 +166,7 @@ public class NotificationEvent {
   }
 
 
-  public NotificationEvent metadata(@javax.annotation.Nullable String metadata) {
+  public NotificationEvent metadata(@javax.annotation.Nullable Object metadata) {
     this.metadata = metadata;
     return this;
   }
@@ -175,11 +176,11 @@ public class NotificationEvent {
    * @return metadata
    */
   @javax.annotation.Nullable
-  public String getMetadata() {
+  public Object getMetadata() {
     return metadata;
   }
 
-  public void setMetadata(@javax.annotation.Nullable String metadata) {
+  public void setMetadata(@javax.annotation.Nullable Object metadata) {
     this.metadata = metadata;
   }
 
@@ -241,9 +242,20 @@ public class NotificationEvent {
         Objects.equals(this.severity, notificationEvent.severity);
   }
 
+  private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
+    return a == b || (a != null && b != null && a.isPresent() && b.isPresent() && Objects.deepEquals(a.get(), b.get()));
+  }
+
   @Override
   public int hashCode() {
     return Objects.hash(channel, createdAt, event, id, metadata, notificationId, severity);
+  }
+
+  private static <T> int hashCodeNullable(JsonNullable<T> a) {
+    if (a == null) {
+      return 1;
+    }
+    return a.isPresent() ? Arrays.deepHashCode(new Object[]{a.get()}) : 31;
   }
 
   @Override
@@ -320,9 +332,6 @@ public class NotificationEvent {
       }
       if (!jsonObj.get("id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("id").toString()));
-      }
-      if ((jsonObj.get("metadata") != null && !jsonObj.get("metadata").isJsonNull()) && !jsonObj.get("metadata").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `metadata` to be a primitive type in the JSON string but got `%s`", jsonObj.get("metadata").toString()));
       }
       if (!jsonObj.get("notification_id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `notification_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("notification_id").toString()));

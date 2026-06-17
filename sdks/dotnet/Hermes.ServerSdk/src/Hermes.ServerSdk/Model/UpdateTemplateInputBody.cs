@@ -35,24 +35,16 @@ namespace Hermes.ServerSdk.Model
         /// </summary>
         /// <param name="name">Human-readable name</param>
         /// <param name="schema">A URL to the JSON Schema for this object.</param>
+        /// <param name="content">Per-channel content: channel slug -&gt; field key -&gt; template string (e.g. {\&quot;email\&quot;:{\&quot;subject\&quot;:\&quot;...\&quot;,\&quot;body\&quot;:\&quot;...\&quot;}})</param>
         /// <param name="defaultChannels">Default channels (used when no subscription)</param>
-        /// <param name="emailBody">Email body template (HTML)</param>
-        /// <param name="emailSubject">Email subject template</param>
-        /// <param name="inboxBody">Inbox body template</param>
-        /// <param name="inboxTitle">Inbox title template</param>
-        /// <param name="smsBody">SMS body template</param>
         /// <param name="subscriptionId">Subscription ID (null for standalone)</param>
         [JsonConstructor]
-        public UpdateTemplateInputBody(string name, Option<string?> schema = default, Option<List<string>?> defaultChannels = default, Option<string?> emailBody = default, Option<string?> emailSubject = default, Option<string?> inboxBody = default, Option<string?> inboxTitle = default, Option<string?> smsBody = default, Option<string?> subscriptionId = default)
+        public UpdateTemplateInputBody(string name, Option<string?> schema = default, Option<Dictionary<string, Dictionary<string, string>>?> content = default, Option<List<string>?> defaultChannels = default, Option<string?> subscriptionId = default)
         {
             Name = name;
             SchemaOption = schema;
+            ContentOption = content;
             DefaultChannelsOption = defaultChannels;
-            EmailBodyOption = emailBody;
-            EmailSubjectOption = emailSubject;
-            InboxBodyOption = inboxBody;
-            InboxTitleOption = inboxTitle;
-            SmsBodyOption = smsBody;
             SubscriptionIdOption = subscriptionId;
             OnCreated();
         }
@@ -81,6 +73,20 @@ namespace Hermes.ServerSdk.Model
         public string? Schema { get { return this.SchemaOption; } }
 
         /// <summary>
+        /// Used to track the state of Content
+        /// </summary>
+        [JsonIgnore]
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public Option<Dictionary<string, Dictionary<string, string>>?> ContentOption { get; private set; }
+
+        /// <summary>
+        /// Per-channel content: channel slug -&gt; field key -&gt; template string (e.g. {\&quot;email\&quot;:{\&quot;subject\&quot;:\&quot;...\&quot;,\&quot;body\&quot;:\&quot;...\&quot;}})
+        /// </summary>
+        /// <value>Per-channel content: channel slug -&gt; field key -&gt; template string (e.g. {\&quot;email\&quot;:{\&quot;subject\&quot;:\&quot;...\&quot;,\&quot;body\&quot;:\&quot;...\&quot;}})</value>
+        [JsonPropertyName("content")]
+        public Dictionary<string, Dictionary<string, string>>? Content { get { return this.ContentOption; } set { this.ContentOption = new(value); } }
+
+        /// <summary>
         /// Used to track the state of DefaultChannels
         /// </summary>
         [JsonIgnore]
@@ -93,76 +99,6 @@ namespace Hermes.ServerSdk.Model
         /// <value>Default channels (used when no subscription)</value>
         [JsonPropertyName("default_channels")]
         public List<string>? DefaultChannels { get { return this.DefaultChannelsOption; } set { this.DefaultChannelsOption = new(value); } }
-
-        /// <summary>
-        /// Used to track the state of EmailBody
-        /// </summary>
-        [JsonIgnore]
-        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> EmailBodyOption { get; private set; }
-
-        /// <summary>
-        /// Email body template (HTML)
-        /// </summary>
-        /// <value>Email body template (HTML)</value>
-        [JsonPropertyName("email_body")]
-        public string? EmailBody { get { return this.EmailBodyOption; } set { this.EmailBodyOption = new(value); } }
-
-        /// <summary>
-        /// Used to track the state of EmailSubject
-        /// </summary>
-        [JsonIgnore]
-        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> EmailSubjectOption { get; private set; }
-
-        /// <summary>
-        /// Email subject template
-        /// </summary>
-        /// <value>Email subject template</value>
-        [JsonPropertyName("email_subject")]
-        public string? EmailSubject { get { return this.EmailSubjectOption; } set { this.EmailSubjectOption = new(value); } }
-
-        /// <summary>
-        /// Used to track the state of InboxBody
-        /// </summary>
-        [JsonIgnore]
-        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> InboxBodyOption { get; private set; }
-
-        /// <summary>
-        /// Inbox body template
-        /// </summary>
-        /// <value>Inbox body template</value>
-        [JsonPropertyName("inbox_body")]
-        public string? InboxBody { get { return this.InboxBodyOption; } set { this.InboxBodyOption = new(value); } }
-
-        /// <summary>
-        /// Used to track the state of InboxTitle
-        /// </summary>
-        [JsonIgnore]
-        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> InboxTitleOption { get; private set; }
-
-        /// <summary>
-        /// Inbox title template
-        /// </summary>
-        /// <value>Inbox title template</value>
-        [JsonPropertyName("inbox_title")]
-        public string? InboxTitle { get { return this.InboxTitleOption; } set { this.InboxTitleOption = new(value); } }
-
-        /// <summary>
-        /// Used to track the state of SmsBody
-        /// </summary>
-        [JsonIgnore]
-        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> SmsBodyOption { get; private set; }
-
-        /// <summary>
-        /// SMS body template
-        /// </summary>
-        /// <value>SMS body template</value>
-        [JsonPropertyName("sms_body")]
-        public string? SmsBody { get { return this.SmsBodyOption; } set { this.SmsBodyOption = new(value); } }
 
         /// <summary>
         /// Used to track the state of SubscriptionId
@@ -188,12 +124,8 @@ namespace Hermes.ServerSdk.Model
             sb.Append("class UpdateTemplateInputBody {\n");
             sb.Append("  Name: ").Append(Name).Append("\n");
             sb.Append("  Schema: ").Append(Schema).Append("\n");
+            sb.Append("  Content: ").Append(Content).Append("\n");
             sb.Append("  DefaultChannels: ").Append(DefaultChannels).Append("\n");
-            sb.Append("  EmailBody: ").Append(EmailBody).Append("\n");
-            sb.Append("  EmailSubject: ").Append(EmailSubject).Append("\n");
-            sb.Append("  InboxBody: ").Append(InboxBody).Append("\n");
-            sb.Append("  InboxTitle: ").Append(InboxTitle).Append("\n");
-            sb.Append("  SmsBody: ").Append(SmsBody).Append("\n");
             sb.Append("  SubscriptionId: ").Append(SubscriptionId).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
@@ -234,12 +166,8 @@ namespace Hermes.ServerSdk.Model
 
             Option<string?> name = default;
             Option<string?> schema = default;
+            Option<Dictionary<string, Dictionary<string, string>>?> content = default;
             Option<List<string>?> defaultChannels = default;
-            Option<string?> emailBody = default;
-            Option<string?> emailSubject = default;
-            Option<string?> inboxBody = default;
-            Option<string?> inboxTitle = default;
-            Option<string?> smsBody = default;
             Option<string?> subscriptionId = default;
 
             while (utf8JsonReader.Read())
@@ -263,23 +191,11 @@ namespace Hermes.ServerSdk.Model
                         case "$schema":
                             schema = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
+                        case "content":
+                            content = new Option<Dictionary<string, Dictionary<string, string>>?>(JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(ref utf8JsonReader, jsonSerializerOptions)!);
+                            break;
                         case "default_channels":
                             defaultChannels = new Option<List<string>?>(JsonSerializer.Deserialize<List<string>>(ref utf8JsonReader, jsonSerializerOptions));
-                            break;
-                        case "email_body":
-                            emailBody = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
-                        case "email_subject":
-                            emailSubject = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
-                        case "inbox_body":
-                            inboxBody = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
-                        case "inbox_title":
-                            inboxTitle = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
-                        case "sms_body":
-                            smsBody = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
                         case "subscription_id":
                             subscriptionId = new Option<string?>(utf8JsonReader.GetString()!);
@@ -299,25 +215,13 @@ namespace Hermes.ServerSdk.Model
             if (schema.IsSet && schema.Value == null)
                 throw new ArgumentNullException(nameof(schema), "Property is not nullable for class UpdateTemplateInputBody.");
 
-            if (emailBody.IsSet && emailBody.Value == null)
-                throw new ArgumentNullException(nameof(emailBody), "Property is not nullable for class UpdateTemplateInputBody.");
-
-            if (emailSubject.IsSet && emailSubject.Value == null)
-                throw new ArgumentNullException(nameof(emailSubject), "Property is not nullable for class UpdateTemplateInputBody.");
-
-            if (inboxBody.IsSet && inboxBody.Value == null)
-                throw new ArgumentNullException(nameof(inboxBody), "Property is not nullable for class UpdateTemplateInputBody.");
-
-            if (inboxTitle.IsSet && inboxTitle.Value == null)
-                throw new ArgumentNullException(nameof(inboxTitle), "Property is not nullable for class UpdateTemplateInputBody.");
-
-            if (smsBody.IsSet && smsBody.Value == null)
-                throw new ArgumentNullException(nameof(smsBody), "Property is not nullable for class UpdateTemplateInputBody.");
+            if (content.IsSet && content.Value == null)
+                throw new ArgumentNullException(nameof(content), "Property is not nullable for class UpdateTemplateInputBody.");
 
             if (subscriptionId.IsSet && subscriptionId.Value == null)
                 throw new ArgumentNullException(nameof(subscriptionId), "Property is not nullable for class UpdateTemplateInputBody.");
 
-            return new UpdateTemplateInputBody(name.Value!, schema, defaultChannels, emailBody, emailSubject, inboxBody, inboxTitle, smsBody, subscriptionId);
+            return new UpdateTemplateInputBody(name.Value!, schema, content, defaultChannels, subscriptionId);
         }
 
         /// <summary>
@@ -350,20 +254,8 @@ namespace Hermes.ServerSdk.Model
             if (updateTemplateInputBody.SchemaOption.IsSet && updateTemplateInputBody.Schema == null)
                 throw new ArgumentNullException(nameof(updateTemplateInputBody.Schema), "Property is required for class UpdateTemplateInputBody.");
 
-            if (updateTemplateInputBody.EmailBodyOption.IsSet && updateTemplateInputBody.EmailBody == null)
-                throw new ArgumentNullException(nameof(updateTemplateInputBody.EmailBody), "Property is required for class UpdateTemplateInputBody.");
-
-            if (updateTemplateInputBody.EmailSubjectOption.IsSet && updateTemplateInputBody.EmailSubject == null)
-                throw new ArgumentNullException(nameof(updateTemplateInputBody.EmailSubject), "Property is required for class UpdateTemplateInputBody.");
-
-            if (updateTemplateInputBody.InboxBodyOption.IsSet && updateTemplateInputBody.InboxBody == null)
-                throw new ArgumentNullException(nameof(updateTemplateInputBody.InboxBody), "Property is required for class UpdateTemplateInputBody.");
-
-            if (updateTemplateInputBody.InboxTitleOption.IsSet && updateTemplateInputBody.InboxTitle == null)
-                throw new ArgumentNullException(nameof(updateTemplateInputBody.InboxTitle), "Property is required for class UpdateTemplateInputBody.");
-
-            if (updateTemplateInputBody.SmsBodyOption.IsSet && updateTemplateInputBody.SmsBody == null)
-                throw new ArgumentNullException(nameof(updateTemplateInputBody.SmsBody), "Property is required for class UpdateTemplateInputBody.");
+            if (updateTemplateInputBody.ContentOption.IsSet && updateTemplateInputBody.Content == null)
+                throw new ArgumentNullException(nameof(updateTemplateInputBody.Content), "Property is required for class UpdateTemplateInputBody.");
 
             if (updateTemplateInputBody.SubscriptionIdOption.IsSet && updateTemplateInputBody.SubscriptionId == null)
                 throw new ArgumentNullException(nameof(updateTemplateInputBody.SubscriptionId), "Property is required for class UpdateTemplateInputBody.");
@@ -373,6 +265,11 @@ namespace Hermes.ServerSdk.Model
             if (updateTemplateInputBody.SchemaOption.IsSet)
                 writer.WriteString("$schema", updateTemplateInputBody.Schema);
 
+            if (updateTemplateInputBody.ContentOption.IsSet)
+            {
+                writer.WritePropertyName("content");
+                JsonSerializer.Serialize(writer, updateTemplateInputBody.Content, jsonSerializerOptions);
+            }
             if (updateTemplateInputBody.DefaultChannelsOption.IsSet)
                 if (updateTemplateInputBody.DefaultChannelsOption.Value != null)
                 {
@@ -381,21 +278,6 @@ namespace Hermes.ServerSdk.Model
                 }
                 else
                     writer.WriteNull("default_channels");
-            if (updateTemplateInputBody.EmailBodyOption.IsSet)
-                writer.WriteString("email_body", updateTemplateInputBody.EmailBody);
-
-            if (updateTemplateInputBody.EmailSubjectOption.IsSet)
-                writer.WriteString("email_subject", updateTemplateInputBody.EmailSubject);
-
-            if (updateTemplateInputBody.InboxBodyOption.IsSet)
-                writer.WriteString("inbox_body", updateTemplateInputBody.InboxBody);
-
-            if (updateTemplateInputBody.InboxTitleOption.IsSet)
-                writer.WriteString("inbox_title", updateTemplateInputBody.InboxTitle);
-
-            if (updateTemplateInputBody.SmsBodyOption.IsSet)
-                writer.WriteString("sms_body", updateTemplateInputBody.SmsBody);
-
             if (updateTemplateInputBody.SubscriptionIdOption.IsSet)
                 writer.WriteString("subscription_id", updateTemplateInputBody.SubscriptionId);
         }

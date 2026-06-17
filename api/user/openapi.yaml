@@ -18,7 +18,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/ErrorModel.json
+            - //schemas/ErrorModel.json
           format: uri
           readOnly: true
           type: string
@@ -96,7 +96,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/PreferenceCenterOutputBody.json
+            - //schemas/PreferenceCenterOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -135,7 +135,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/SetPreferenceInputBody.json
+            - //schemas/SetPreferenceInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -151,7 +151,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/StatusOutputBody.json
+            - //schemas/StatusOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -169,16 +169,15 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/UpdateContactsInputBody.json
+            - //schemas/UpdateContactsInputBody.json
           format: uri
           readOnly: true
           type: string
-        email:
-          description: Email address
-          type: string
-        phone:
-          description: Phone number
-          type: string
+        contacts:
+          additionalProperties:
+            type: string
+          description: "Contact addresses: address key (\"email\",\"phone\") -> address"
+          type: object
       type: object
     User:
       additionalProperties: false
@@ -186,22 +185,22 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/User.json
+            - //schemas/User.json
           format: uri
           readOnly: true
           type: string
+        contacts:
+          additionalProperties:
+            type: string
+          type: object
         created_at:
           format: date-time
-          type: string
-        email:
           type: string
         external_id:
           type: string
         id:
           type: string
         locale:
-          type: string
-        phone:
           type: string
         tenant_id:
           type: string

@@ -19,31 +19,41 @@ func (s *Store) EnsureUser(ctx context.Context, tenantID, externalID string) (*m
 			INSERT INTO users (id, tenant_id, external_id)
 			VALUES ($1, $2, $3)
 			ON CONFLICT (tenant_id, external_id) DO NOTHING
-			RETURNING id, tenant_id, external_id, email, phone, locale, created_at
+			RETURNING id, tenant_id, external_id, locale, created_at
 		)
 		SELECT * FROM ins
 		UNION ALL
-		SELECT id, tenant_id, external_id, email, phone, locale, created_at
+		SELECT id, tenant_id, external_id, locale, created_at
 		FROM users
 		WHERE tenant_id = $2 AND external_id = $3
 		LIMIT 1`,
 		newID, tenantID, externalID,
-	).Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Email, &u.Phone, &u.Locale, &u.CreatedAt)
+	).Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Locale, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("ensure user: %w", err)
 	}
+	contacts, err := s.GetUserContacts(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	u.Contacts = contacts
 	return u, nil
 }
 
 func (s *Store) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	u := &models.User{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, external_id, email, phone, locale, created_at
+		`SELECT id, tenant_id, external_id, locale, created_at
 		 FROM users WHERE id = $1`, userID,
-	).Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Email, &u.Phone, &u.Locale, &u.CreatedAt)
+	).Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Locale, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get user by id: %w", err)
 	}
+	contacts, err := s.GetUserContacts(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	u.Contacts = contacts
 	return u, nil
 }
 
@@ -51,11 +61,11 @@ func (s *Store) ListUsers(ctx context.Context, tenantID string) ([]models.User, 
 	var query string
 	var args []any
 	if tenantID != "" {
-		query = `SELECT id, tenant_id, external_id, email, phone, locale, created_at
+		query = `SELECT id, tenant_id, external_id, locale, created_at
 			FROM users WHERE tenant_id = $1 ORDER BY created_at DESC`
 		args = []any{tenantID}
 	} else {
-		query = `SELECT id, tenant_id, external_id, email, phone, locale, created_at
+		query = `SELECT id, tenant_id, external_id, locale, created_at
 			FROM users ORDER BY created_at DESC`
 	}
 
@@ -68,25 +78,34 @@ func (s *Store) ListUsers(ctx context.Context, tenantID string) ([]models.User, 
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Email, &u.Phone, &u.Locale, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Locale, &u.CreatedAt); err != nil {
 			return nil, fmt.Errorf("list users scan: %w", err)
 		}
 		users = append(users, u)
 	}
-	return users, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range users {
+		contacts, err := s.GetUserContacts(ctx, users[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		users[i].Contacts = contacts
+	}
+	return users, nil
 }
 
 func (s *Store) UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error) {
-	u := &models.User{}
-	err := s.pool.QueryRow(ctx,
-		`UPDATE users
-		 SET email = COALESCE($2, email), phone = COALESCE($3, phone)
-		 WHERE id = $1
-		 RETURNING id, tenant_id, external_id, email, phone, locale, created_at`,
-		userID, email, phone,
-	).Scan(&u.ID, &u.TenantID, &u.ExternalID, &u.Email, &u.Phone, &u.Locale, &u.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("update user contacts: %w", err)
+	if email != nil {
+		if err := s.SetUserContact(ctx, userID, "email", *email); err != nil {
+			return nil, err
+		}
 	}
-	return u, nil
+	if phone != nil {
+		if err := s.SetUserContact(ctx, userID, "phone", *phone); err != nil {
+			return nil, err
+		}
+	}
+	return s.GetUserByID(ctx, userID)
 }

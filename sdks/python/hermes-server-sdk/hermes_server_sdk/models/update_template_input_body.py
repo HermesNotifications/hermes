@@ -27,15 +27,11 @@ class UpdateTemplateInputBody(BaseModel):
     UpdateTemplateInputBody
     """ # noqa: E501
     var_schema: Optional[StrictStr] = Field(default=None, description="A URL to the JSON Schema for this object.", alias="$schema")
+    content: Optional[Dict[str, Dict[str, StrictStr]]] = Field(default=None, description="Per-channel content: channel slug -> field key -> template string (e.g. {\"email\":{\"subject\":\"...\",\"body\":\"...\"}})")
     default_channels: Optional[List[StrictStr]] = Field(default=None, description="Default channels (used when no subscription)")
-    email_body: Optional[StrictStr] = Field(default=None, description="Email body template (HTML)")
-    email_subject: Optional[StrictStr] = Field(default=None, description="Email subject template")
-    inbox_body: Optional[StrictStr] = Field(default=None, description="Inbox body template")
-    inbox_title: Optional[StrictStr] = Field(default=None, description="Inbox title template")
     name: StrictStr = Field(description="Human-readable name")
-    sms_body: Optional[StrictStr] = Field(default=None, description="SMS body template")
     subscription_id: Optional[StrictStr] = Field(default=None, description="Subscription ID (null for standalone)")
-    __properties: ClassVar[List[str]] = ["$schema", "default_channels", "email_body", "email_subject", "inbox_body", "inbox_title", "name", "sms_body", "subscription_id"]
+    __properties: ClassVar[List[str]] = ["$schema", "content", "default_channels", "name", "subscription_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -96,13 +92,9 @@ class UpdateTemplateInputBody(BaseModel):
 
         _obj = cls.model_validate({
             "$schema": obj.get("$schema"),
+            "content": obj.get("content"),
             "default_channels": obj.get("default_channels"),
-            "email_body": obj.get("email_body"),
-            "email_subject": obj.get("email_subject"),
-            "inbox_body": obj.get("inbox_body"),
-            "inbox_title": obj.get("inbox_title"),
             "name": obj.get("name"),
-            "sms_body": obj.get("sms_body"),
             "subscription_id": obj.get("subscription_id")
         })
         return _obj

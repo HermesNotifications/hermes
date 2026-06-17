@@ -167,14 +167,24 @@ func TestDeliveryPipeline(t *testing.T) {
 	// Seed a standalone template (no subscription) with email+inbox content.
 	// Channels resolve from default_channels, filtered to those with content defined.
 	templateSlug := "delivery.template." + runID
+	templateID := uuid.New().String()
 	_, err = pool.Exec(ctx,
-		`INSERT INTO notification_templates (id, slug, name, default_channels, email_subject, inbox_title, inbox_body)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		uuid.New().String(), templateSlug, "Delivery Template", []string{"email", "inbox"},
-		"Hello {{.name}}", "Hi {{.name}}", "Welcome {{.name}}",
+		`INSERT INTO notification_templates (id, slug, name, default_channels)
+		 VALUES ($1, $2, $3, $4)`,
+		templateID, templateSlug, "Delivery Template", []string{"email", "inbox"},
 	)
 	if err != nil {
 		t.Fatalf("create template: %v", err)
+	}
+	// Populate normalized content map so dispatch can filter and render channels.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO template_channel_content (template_id, channel_slug, content) VALUES
+		 ($1, 'email', '{"subject":"Hello {{.name}}"}'),
+		 ($1, 'inbox', '{"title":"Hi {{.name}}","body":"Welcome {{.name}}"}')`,
+		templateID,
+	)
+	if err != nil {
+		t.Fatalf("create template content: %v", err)
 	}
 
 	// ── Start all services BEFORE sending ───────────────────────────────
@@ -197,7 +207,7 @@ func TestDeliveryPipeline(t *testing.T) {
 		"to": map[string]any{
 			"tenant_id": tenantID,
 			"user_id":   "delivery-user-" + runID,
-			"email":     "delivery-user-" + runID + "@example.com",
+			"contacts":  map[string]any{"email": "delivery-user-" + runID + "@example.com"},
 		},
 		"template": templateSlug,
 		"data":     map[string]string{"name": "Alice"},

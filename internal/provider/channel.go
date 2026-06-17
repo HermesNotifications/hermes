@@ -3,8 +3,6 @@
 
 package provider
 
-import "github.com/hermes-notifications/hermes/internal/models"
-
 // Built-in channel slugs.
 const (
 	ChannelEmail = "email"
@@ -12,16 +10,22 @@ const (
 	ChannelInbox = "inbox"
 )
 
-// Rendered-content field keys. ChannelDescriptor.TitleField / BodyField
-// reference these; dispatch's RenderedContent.Field resolves them against the
-// (still fixed, until phase 2) rendered columns.
+// Render kinds for a content field.
 const (
-	FieldEmailSubject = "email_subject"
-	FieldEmailBody    = "email_body"
-	FieldSMSBody      = "sms_body"
-	FieldInboxTitle   = "inbox_title"
-	FieldInboxBody    = "inbox_body"
+	RenderText = "text"
+	RenderHTML = "html"
 )
+
+// ContentField declares one field in a channel's content schema. The Key is the
+// channel-local field name stored in template_channel_content's JSONB (e.g.
+// "subject", "body", "title"). Render selects text vs HTML rendering. MapsTo
+// projects the rendered value onto the delivery MessageContent ("title" |
+// "body" | "" for neither).
+type ContentField struct {
+	Key    string
+	Render string // RenderText | RenderHTML
+	MapsTo string // "title" | "body" | ""
+}
 
 // ChannelDescriptor declares everything dispatch needs to route a channel
 // without hardcoding its name. It replaces the three `switch ch` blocks in
@@ -40,13 +44,18 @@ type ChannelDescriptor struct {
 	// "phone number"). Empty when AddressKey is "".
 	AddressLabel string
 
-	// TitleField / BodyField name the rendered-content fields projected onto
-	// the delivery message's Title / Body. Empty means the channel has no
-	// title / no body.
-	TitleField string
-	BodyField  string
+	// Content is the channel's content schema: the ordered set of content
+	// fields a template provides for this channel. Stored per channel in
+	// template_channel_content.
+	Content []ContentField
+}
 
-	// HasContent reports whether a template provides content for this channel.
-	// Replaces the FilterChannelsForTemplate switch.
-	HasContent func(t *models.NotificationTemplate) bool
+// ContentFieldByKey returns the content-field schema for a local field key.
+func (d ChannelDescriptor) ContentFieldByKey(key string) (ContentField, bool) {
+	for _, f := range d.Content {
+		if f.Key == key {
+			return f, true
+		}
+	}
+	return ContentField{}, false
 }

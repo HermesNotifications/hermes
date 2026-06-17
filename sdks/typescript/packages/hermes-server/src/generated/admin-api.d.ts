@@ -258,7 +258,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ApiKeyCreatedOutputBody.json
+             * @example //schemas/ApiKeyCreatedOutputBody.json
              */
             readonly $schema?: string;
             /** Format: date-time */
@@ -272,7 +272,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateAPIKeyInputBody.json
+             * @example //schemas/CreateAPIKeyInputBody.json
              */
             readonly $schema?: string;
             /** @description Human-readable key name */
@@ -284,7 +284,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateCategoryInputBody.json
+             * @example //schemas/CreateCategoryInputBody.json
              */
             readonly $schema?: string;
             /** @description Default delivery channels */
@@ -308,7 +308,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateSubscriptionInputBody.json
+             * @example //schemas/CreateSubscriptionInputBody.json
              */
             readonly $schema?: string;
             /** @description Human-readable name */
@@ -325,25 +325,21 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateTemplateInputBody.json
+             * @example //schemas/CreateTemplateInputBody.json
              */
             readonly $schema?: string;
+            /** @description Per-channel content: channel slug -> field key -> template string (e.g. {"email":{"subject":"...","body":"..."}}) */
+            content?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
             /** @description Default channels (used when no subscription) */
             default_channels?: string[] | null;
-            /** @description Email body template (HTML) */
-            email_body?: string;
-            /** @description Email subject template */
-            email_subject?: string;
-            /** @description Inbox body template */
-            inbox_body?: string;
-            /** @description Inbox title template */
-            inbox_title?: string;
             /** @description Human-readable name */
             name: string;
             /** @description URL-friendly identifier */
             slug: string;
-            /** @description SMS body template */
-            sms_body?: string;
             /** @description Subscription ID (null for standalone) */
             subscription_id?: string;
         };
@@ -351,7 +347,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateTenantInputBody.json
+             * @example //schemas/CreateTenantInputBody.json
              */
             readonly $schema?: string;
             /** @description Tenant name */
@@ -369,7 +365,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ErrorModel.json
+             * @example //schemas/ErrorModel.json
              */
             readonly $schema?: string;
             /**
@@ -465,7 +461,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/NotificationStatusOutputBody.json
+             * @example //schemas/NotificationStatusOutputBody.json
              */
             readonly $schema?: string;
             /** @description Timeline of notification events */
@@ -477,20 +473,20 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/NotificationTemplate.json
+             * @example //schemas/NotificationTemplate.json
              */
             readonly $schema?: string;
+            content?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
             /** Format: date-time */
             created_at: string;
             default_channels: string[] | null;
-            email_body?: string;
-            email_subject?: string;
             id: string;
-            inbox_body?: string;
-            inbox_title?: string;
             name: string;
             slug: string;
-            sms_body?: string;
             subscription_id?: string;
         };
         SendContent: {
@@ -507,7 +503,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SendInputBody.json
+             * @example //schemas/SendInputBody.json
              */
             readonly $schema?: string;
             /** @description Explicit delivery channels */
@@ -527,17 +523,17 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SendOutputBody.json
+             * @example //schemas/SendOutputBody.json
              */
             readonly $schema?: string;
             /** @description ID of the created notification */
             notification_id: string;
         };
         SendRecipient: {
-            /** @description Optional email address for this notification */
-            email?: string;
-            /** @description Optional phone number for this notification */
-            phone?: string;
+            /** @description Per-channel address overrides: address key ("email","phone") -> address */
+            contacts?: {
+                [key: string]: string;
+            };
             /** @description Tenant identifier */
             tenant_id: string;
             /** @description External user identifier */
@@ -547,7 +543,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/Subscription.json
+             * @example //schemas/Subscription.json
              */
             readonly $schema?: string;
             category_id: string;
@@ -563,7 +559,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SubscriptionCategory.json
+             * @example //schemas/SubscriptionCategory.json
              */
             readonly $schema?: string;
             /** Format: date-time */
@@ -580,7 +576,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/TenantItem.json
+             * @example //schemas/TenantItem.json
              */
             readonly $schema?: string;
             /** Format: date-time */
@@ -595,7 +591,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/TokenInputBody.json
+             * @example //schemas/TokenInputBody.json
              */
             readonly $schema?: string;
             /**
@@ -612,7 +608,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/TokenOutputBody.json
+             * @example //schemas/TokenOutputBody.json
              */
             readonly $schema?: string;
             /** @description Token expiration time in RFC3339 format */
@@ -624,7 +620,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateCategoryInputBody.json
+             * @example //schemas/UpdateCategoryInputBody.json
              */
             readonly $schema?: string;
             /** @description Default delivery channels */
@@ -646,7 +642,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateSubscriptionInputBody.json
+             * @example //schemas/UpdateSubscriptionInputBody.json
              */
             readonly $schema?: string;
             /** @description Human-readable name */
@@ -661,34 +657,31 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateTemplateInputBody.json
+             * @example //schemas/UpdateTemplateInputBody.json
              */
             readonly $schema?: string;
+            /** @description Per-channel content: channel slug -> field key -> template string (e.g. {"email":{"subject":"...","body":"..."}}) */
+            content?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
             /** @description Default channels (used when no subscription) */
             default_channels?: string[] | null;
-            /** @description Email body template (HTML) */
-            email_body?: string;
-            /** @description Email subject template */
-            email_subject?: string;
-            /** @description Inbox body template */
-            inbox_body?: string;
-            /** @description Inbox title template */
-            inbox_title?: string;
             /** @description Human-readable name */
             name: string;
-            /** @description SMS body template */
-            sms_body?: string;
             /** @description Subscription ID (null for standalone) */
             subscription_id?: string;
         };
         UserItem: {
+            contacts?: {
+                [key: string]: string;
+            };
             /** Format: date-time */
             created_at: string;
-            email: string | null;
             external_id: string;
             id: string;
             locale: string | null;
-            phone: string | null;
             tenant_id: string;
             tenant_name: string;
         };

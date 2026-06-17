@@ -14,10 +14,9 @@ import (
 )
 
 type sendRecipient struct {
-	TenantID string `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
-	UserID   string `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
-	Email    string `json:"email,omitempty" doc:"Optional email address for this notification"`
-	Phone    string `json:"phone,omitempty" doc:"Optional phone number for this notification"`
+	TenantID string            `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
+	UserID   string            `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
+	Contacts map[string]string `json:"contacts,omitempty" doc:"Per-channel address overrides: address key (\"email\",\"phone\") -> address"`
 }
 
 type sendContent struct {
@@ -84,8 +83,7 @@ func (s *Server) registerSendRoutes() {
 			NotificationID: notifID,
 			TenantID:       req.To.TenantID,
 			ExternalUserID: req.To.UserID,
-			Email:          req.To.Email,
-			Phone:          req.To.Phone,
+			Contacts:       req.To.Contacts,
 			Metadata: hermenats.MessageMetadata{
 				Template: req.Template,
 			},

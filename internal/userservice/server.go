@@ -20,7 +20,7 @@ import (
 // UserStore defines the database operations the user service needs.
 type UserStore interface {
 	GetUserByID(ctx context.Context, userID string) (*models.User, error)
-	UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error)
+	SetUserContact(ctx context.Context, userID, addressKey, address string) error
 	GetUserSubscriptions(ctx context.Context, userID string) ([]models.UserSubscription, error)
 	SetUserSubscription(ctx context.Context, userID, subscriptionID string, optedIn bool) (*models.UserSubscription, error)
 	DeleteUserSubscription(ctx context.Context, userID, subscriptionID string) error

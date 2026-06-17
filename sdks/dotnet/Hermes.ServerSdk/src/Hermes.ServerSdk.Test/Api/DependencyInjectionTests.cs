@@ -80,6 +80,12 @@ namespace Hermes.ServerSdk.Test.Api
 
             var templatesApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
+
+            var tenantsApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<ITenantsApi>();
+            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
+
+            var usersApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<IUsersApi>();
+            Assert.True(usersApi.HttpClient.BaseAddress != null);
         }
 
         /// <summary>
@@ -102,6 +108,12 @@ namespace Hermes.ServerSdk.Test.Api
 
             var templatesApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
+
+            var tenantsApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<ITenantsApi>();
+            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
+
+            var usersApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<IUsersApi>();
+            Assert.True(usersApi.HttpClient.BaseAddress != null);
         }
 
         /// <summary>
@@ -124,6 +136,12 @@ namespace Hermes.ServerSdk.Test.Api
             
             var templatesApi = _hostUsingAddWithAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
+            
+            var tenantsApi = _hostUsingAddWithAClient.Services.GetRequiredService<ITenantsApi>();
+            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
+            
+            var usersApi = _hostUsingAddWithAClient.Services.GetRequiredService<IUsersApi>();
+            Assert.True(usersApi.HttpClient.BaseAddress != null);
         }
 
         /// <summary>
@@ -146,6 +164,12 @@ namespace Hermes.ServerSdk.Test.Api
 
             var templatesApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
+
+            var tenantsApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<ITenantsApi>();
+            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
+
+            var usersApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<IUsersApi>();
+            Assert.True(usersApi.HttpClient.BaseAddress != null);
         }
     }
 }

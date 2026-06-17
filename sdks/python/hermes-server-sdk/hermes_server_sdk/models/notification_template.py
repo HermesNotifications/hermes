@@ -28,18 +28,14 @@ class NotificationTemplate(BaseModel):
     NotificationTemplate
     """ # noqa: E501
     var_schema: Optional[StrictStr] = Field(default=None, description="A URL to the JSON Schema for this object.", alias="$schema")
+    content: Optional[Dict[str, Dict[str, StrictStr]]] = None
     created_at: datetime
     default_channels: Optional[List[StrictStr]]
-    email_body: Optional[StrictStr] = None
-    email_subject: Optional[StrictStr] = None
     id: StrictStr
-    inbox_body: Optional[StrictStr] = None
-    inbox_title: Optional[StrictStr] = None
     name: StrictStr
     slug: StrictStr
-    sms_body: Optional[StrictStr] = None
     subscription_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["$schema", "created_at", "default_channels", "email_body", "email_subject", "id", "inbox_body", "inbox_title", "name", "slug", "sms_body", "subscription_id"]
+    __properties: ClassVar[List[str]] = ["$schema", "content", "created_at", "default_channels", "id", "name", "slug", "subscription_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -100,16 +96,12 @@ class NotificationTemplate(BaseModel):
 
         _obj = cls.model_validate({
             "$schema": obj.get("$schema"),
+            "content": obj.get("content"),
             "created_at": obj.get("created_at"),
             "default_channels": obj.get("default_channels"),
-            "email_body": obj.get("email_body"),
-            "email_subject": obj.get("email_subject"),
             "id": obj.get("id"),
-            "inbox_body": obj.get("inbox_body"),
-            "inbox_title": obj.get("inbox_title"),
             "name": obj.get("name"),
             "slug": obj.get("slug"),
-            "sms_body": obj.get("sms_body"),
             "subscription_id": obj.get("subscription_id")
         })
         return _obj

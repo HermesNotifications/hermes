@@ -90,6 +90,7 @@ Class | Method | HTTP request | Description
 *APIKeysApi* | [**list_api_keys**](docs/APIKeysApi.md#list_api_keys) | **GET** /v1/apikeys | List all API keys
 *AuthApi* | [**exchange_token**](docs/AuthApi.md#exchange_token) | **POST** /v1/auth/token | Exchange credentials for a user JWT token
 *NotificationsApi* | [**get_notification**](docs/NotificationsApi.md#get_notification) | **GET** /v1/notifications/{id} | Get notification status and events
+*NotificationsApi* | [**list_notifications**](docs/NotificationsApi.md#list_notifications) | **GET** /v1/notifications | List recent notifications
 *NotificationsApi* | [**send_notification**](docs/NotificationsApi.md#send_notification) | **POST** /v1/send | Send a notification
 *SubscriptionsApi* | [**create_subscription**](docs/SubscriptionsApi.md#create_subscription) | **POST** /v1/subscriptions/categories/{category_id}/subscriptions | Create a subscription
 *SubscriptionsApi* | [**create_subscription_category**](docs/SubscriptionsApi.md#create_subscription_category) | **POST** /v1/subscriptions/categories | Create a subscription category
@@ -103,6 +104,9 @@ Class | Method | HTTP request | Description
 *TemplatesApi* | [**delete_template**](docs/TemplatesApi.md#delete_template) | **DELETE** /v1/templates/{id} | Delete a notification template
 *TemplatesApi* | [**list_templates**](docs/TemplatesApi.md#list_templates) | **GET** /v1/templates | List notification templates
 *TemplatesApi* | [**update_template**](docs/TemplatesApi.md#update_template) | **PUT** /v1/templates/{id} | Update a notification template
+*TenantsApi* | [**create_tenant**](docs/TenantsApi.md#create_tenant) | **POST** /v1/tenants | Create a tenant
+*TenantsApi* | [**list_tenants**](docs/TenantsApi.md#list_tenants) | **GET** /v1/tenants | List tenants
+*UsersApi* | [**list_users**](docs/UsersApi.md#list_users) | **GET** /v1/users | List users
 
 
 ## Documentation For Models
@@ -112,11 +116,13 @@ Class | Method | HTTP request | Description
  - [CreateCategoryInputBody](docs/CreateCategoryInputBody.md)
  - [CreateSubscriptionInputBody](docs/CreateSubscriptionInputBody.md)
  - [CreateTemplateInputBody](docs/CreateTemplateInputBody.md)
+ - [CreateTenantInputBody](docs/CreateTenantInputBody.md)
  - [ErrorDetail](docs/ErrorDetail.md)
  - [ErrorModel](docs/ErrorModel.md)
  - [Item](docs/Item.md)
  - [Notification](docs/Notification.md)
  - [NotificationEvent](docs/NotificationEvent.md)
+ - [NotificationItem](docs/NotificationItem.md)
  - [NotificationStatusOutputBody](docs/NotificationStatusOutputBody.md)
  - [NotificationTemplate](docs/NotificationTemplate.md)
  - [SendContent](docs/SendContent.md)
@@ -125,11 +131,13 @@ Class | Method | HTTP request | Description
  - [SendRecipient](docs/SendRecipient.md)
  - [Subscription](docs/Subscription.md)
  - [SubscriptionCategory](docs/SubscriptionCategory.md)
+ - [TenantItem](docs/TenantItem.md)
  - [TokenInputBody](docs/TokenInputBody.md)
  - [TokenOutputBody](docs/TokenOutputBody.md)
  - [UpdateCategoryInputBody](docs/UpdateCategoryInputBody.md)
  - [UpdateSubscriptionInputBody](docs/UpdateSubscriptionInputBody.md)
  - [UpdateTemplateInputBody](docs/UpdateTemplateInputBody.md)
+ - [UserItem](docs/UserItem.md)
 
 
 <a id="documentation-for-authorization"></a>
