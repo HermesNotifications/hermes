@@ -38,7 +38,7 @@ func main() {
 	defer redisClient.Close()
 
 	pgStore := postgres.New(pool)
-	tenants := cached.NewTenantRepository(pgStore, redisClient)
+	organizations := cached.NewOrganizationRepository(pgStore, redisClient)
 	templateResolver := dispatch.NewTemplateResolver(pgStore, redisClient)
 	channelResolver := dispatch.NewChannelResolver(pgStore, redisClient)
 
@@ -51,7 +51,7 @@ func main() {
 		notifRepo = dynamo.NewNotificationStore(dynamoClient, evStore)
 	}
 
-	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, tenants, templateResolver, channelResolver, logger)
+	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger)
 
 	// Cap workers at the DB pool size: each worker holds at most one Postgres
 	// connection while processing, so more workers than connections only adds

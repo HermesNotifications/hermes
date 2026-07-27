@@ -27,10 +27,10 @@ func testNotifStore(t *testing.T) *dynamo.NotificationStore {
 	return dynamo.NewNotificationStore(client, evStore)
 }
 
-func newNotif(userID, tenantID string) *models.Notification {
+func newNotif(userID, organizationID string) *models.Notification {
 	return &models.Notification{
 		ID:       id.Notification.New(),
-		TenantID: tenantID,
+		OrganizationID: organizationID,
 		UserID:   userID,
 		Title:    "test notification",
 		Body:     "test body",
@@ -46,8 +46,8 @@ func TestCreateAndGetNotification(t *testing.T) {
 	ctx := context.Background()
 
 	userID := uuid.New().String()
-	tenantID := uuid.New().String()
-	n := newNotif(userID, tenantID)
+	organizationID := uuid.New().String()
+	n := newNotif(userID, organizationID)
 	n.CategoryID = "cat-123"
 
 	created, err := st.CreateNotification(ctx, n)
@@ -65,8 +65,8 @@ func TestCreateAndGetNotification(t *testing.T) {
 	if got.UserID != userID {
 		t.Errorf("UserID: want %s got %s", userID, got.UserID)
 	}
-	if got.TenantID != tenantID {
-		t.Errorf("TenantID: want %s got %s", tenantID, got.TenantID)
+	if got.OrganizationID != organizationID {
+		t.Errorf("OrganizationID: want %s got %s", organizationID, got.OrganizationID)
 	}
 	if got.CategoryID != "cat-123" {
 		t.Errorf("CategoryID: want cat-123 got %s", got.CategoryID)
@@ -107,16 +107,16 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 	st := testNotifStore(t)
 	ctx := context.Background()
 
-	tenantID := uuid.New().String()
+	organizationID := uuid.New().String()
 	idemKey := "idem-" + uuid.New().String()
-	n := newNotif(uuid.New().String(), tenantID)
+	n := newNotif(uuid.New().String(), organizationID)
 	n.IdempotencyKey = &idemKey
 
 	if _, err := st.CreateNotification(ctx, n); err != nil {
 		t.Fatalf("CreateNotification: %v", err)
 	}
 
-	got, err := st.GetNotificationByIdempotencyKey(ctx, tenantID, idemKey)
+	got, err := st.GetNotificationByIdempotencyKey(ctx, organizationID, idemKey)
 	if err != nil {
 		t.Fatalf("GetNotificationByIdempotencyKey: %v", err)
 	}
@@ -300,13 +300,13 @@ func TestListInbox_BasicAndPagination(t *testing.T) {
 	ctx := context.Background()
 
 	userID := uuid.New().String()
-	tenantID := uuid.New().String()
+	organizationID := uuid.New().String()
 	base := time.Now().UTC()
 
 	const total = 5
 	ids := make([]string, total)
 	for i := range ids {
-		n := newNotif(userID, tenantID)
+		n := newNotif(userID, organizationID)
 		n.CreatedAt = base.Add(time.Duration(i) * time.Millisecond)
 		if _, err := st.CreateNotification(ctx, n); err != nil {
 			t.Fatalf("CreateNotification[%d]: %v", i, err)
@@ -361,10 +361,10 @@ func TestListInbox_ArchivedSeparate(t *testing.T) {
 	ctx := context.Background()
 
 	userID := uuid.New().String()
-	tenantID := uuid.New().String()
+	organizationID := uuid.New().String()
 
-	active := newNotif(userID, tenantID)
-	archived := newNotif(userID, tenantID)
+	active := newNotif(userID, organizationID)
+	archived := newNotif(userID, organizationID)
 	for _, n := range []*models.Notification{active, archived} {
 		if _, err := st.CreateNotification(ctx, n); err != nil {
 			t.Fatalf("CreateNotification: %v", err)
@@ -410,17 +410,17 @@ func TestUnreadCount(t *testing.T) {
 	ctx := context.Background()
 
 	userID := uuid.New().String()
-	tenantID := uuid.New().String()
+	organizationID := uuid.New().String()
 
 	// 3 delivered (unread), 1 read
 	for i := 0; i < 3; i++ {
-		n := newNotif(userID, tenantID)
+		n := newNotif(userID, organizationID)
 		if _, err := st.CreateNotification(ctx, n); err != nil {
 			t.Fatalf("CreateNotification: %v", err)
 		}
 		_ = st.UpdateNotificationStatus(ctx, n.ID, models.StatusDelivered, time.Now())
 	}
-	readN := newNotif(userID, tenantID)
+	readN := newNotif(userID, organizationID)
 	if _, err := st.CreateNotification(ctx, readN); err != nil {
 		t.Fatalf("CreateNotification: %v", err)
 	}
@@ -590,11 +590,11 @@ func TestMarkAllRead(t *testing.T) {
 	ctx := context.Background()
 
 	userID := uuid.New().String()
-	tenantID := uuid.New().String()
+	organizationID := uuid.New().String()
 
 	var notifIDs []string
 	for i := 0; i < 4; i++ {
-		n := newNotif(userID, tenantID)
+		n := newNotif(userID, organizationID)
 		if _, err := st.CreateNotification(ctx, n); err != nil {
 			t.Fatalf("CreateNotification: %v", err)
 		}
@@ -696,11 +696,11 @@ func TestMarkAllRead_LargeInbox(t *testing.T) {
 	ctx := context.Background()
 
 	userID := uuid.New().String()
-	tenantID := uuid.New().String()
+	organizationID := uuid.New().String()
 
 	const total = 30
 	for i := 0; i < total; i++ {
-		n := newNotif(userID, tenantID)
+		n := newNotif(userID, organizationID)
 		if _, err := st.CreateNotification(ctx, n); err != nil {
 			t.Fatalf("CreateNotification %d: %v", i, err)
 		}

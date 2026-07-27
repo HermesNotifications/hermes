@@ -30,7 +30,7 @@ var allPermissions = []string{
 	auth.PermAPIKeysManage,
 	auth.PermNotificationsSend,
 	auth.PermTemplatesManage,
-	auth.PermTenantsManage,
+	auth.PermOrganizationsManage,
 }
 
 func main() {

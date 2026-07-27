@@ -86,10 +86,10 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	ew := eventwriter.New(natsClient, st, logger)
 
 	// ── Seed Data ───────────────────────────────────────────────────────
-	tenantID := uuid.New().String()
-	_, err = pool.Exec(ctx, "INSERT INTO tenants (id, name) VALUES ($1, $2)", tenantID, "Pipeline Test Tenant")
+	organizationID := uuid.New().String()
+	_, err = pool.Exec(ctx, "INSERT INTO organizations (id, name) VALUES ($1, $2)", organizationID, "Pipeline Test Organization")
 	if err != nil {
-		t.Fatalf("create tenant: %v", err)
+		t.Fatalf("create organization: %v", err)
 	}
 
 	// API key
@@ -156,7 +156,7 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	// ── Send notification via Send service ──────────────────────────────
 	rec := doRequest("POST", "/v1/send", map[string]any{
 		"to": map[string]any{
-			"tenant_id": tenantID,
+			"organization_id": organizationID,
 			"user_id":   "pipeline-user-" + runID,
 			"contacts":  map[string]any{"email": "pipeline-user-" + runID + "@example.com"},
 		},

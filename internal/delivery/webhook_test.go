@@ -27,7 +27,7 @@ func TestWebhookProvider_Send_Success(t *testing.T) {
 
 	req := DeliveryRequest{
 		NotificationID: "notif-1",
-		TenantID:       "tenant-1",
+		OrganizationID:       "organization-1",
 		UserID:         "user-1",
 		Channel:        "email",
 		Title:          "Test Title",

@@ -3,7 +3,7 @@
 
 import http from 'k6/http';
 import { check } from 'k6';
-import { tenants, pickTemplate, instanceRange } from '../lib/seed.js';
+import { organizations, pickTemplate, instanceRange } from '../lib/seed.js';
 import { adminHeaders, userHeaders } from '../lib/auth.js';
 import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
 import { connect, recordE2EOnPush } from '../lib/centrifugo.js';
@@ -23,11 +23,11 @@ const perPodVUs  = Math.max(1, Math.floor(VUS / instCount));
 const perPodSend = Math.max(1, Math.floor(SEND_RPS / instCount));
 const perPodPoll = Math.max(1, Math.floor(POLL_RPS / instCount));
 
-// Flatten all (tenant, user) pairs for this instance's shard.
+// Flatten all (organization, user) pairs for this instance's shard.
 const allPairs = (function () {
   const pairs = [];
-  for (const t of tenants) {
-    for (const u of t.users) pairs.push({ tenant: t, user: u });
+  for (const t of organizations) {
+    for (const u of t.users) pairs.push({ organization: t, user: u });
   }
   const [s, e] = instanceRange(pairs.length);
   return pairs.slice(s, e);
@@ -79,13 +79,13 @@ function vuPair() {
 
 export function wsHold() {
   const p = allPairs[__VU % allPairs.length];
-  connect(p.user, p.tenant.id, recordE2EOnPush);
+  connect(p.user, p.organization.id, recordE2EOnPush);
 }
 
 export function drive() {
   const p = vuPair();
-  const tpl = pickTemplate(p.tenant);
-  const body = buildSendBody(p.tenant, p.user, tpl);
+  const tpl = pickTemplate(p.organization);
+  const body = buildSendBody(p.organization, p.user, tpl);
   const headers = adminHeaders({ 'X-Idempotency-Key': idempotencyKey() });
   const start = Date.now();
   const res = http.post(`${SEND_URL}/v1/send`, JSON.stringify(body), { headers });
@@ -99,7 +99,7 @@ export function drive() {
 
 export function pollInbox() {
   const p = vuPair();
-  const h = userHeaders(p.user, p.tenant.id);
+  const h = userHeaders(p.user, p.organization.id);
   const start = Date.now();
   const res = http.get(`${INBOX_URL}/v1/inbox?limit=20`, { headers: h });
   inboxListLatency.add(Date.now() - start);

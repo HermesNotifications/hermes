@@ -60,7 +60,7 @@ func handleSend(ctx context.Context, n *Notification) {
 }
 ```
 
-**Do NOT** put `user_id`, `notification_id`, `tenant_id`, or any other unbounded-cardinality value on metric attributes. See [semantic-conventions.md](semantic-conventions.md#forbidden-high-cardinality-labels).
+**Do NOT** put `user_id`, `notification_id`, `organization_id`, or any other unbounded-cardinality value on metric attributes. See [semantic-conventions.md](semantic-conventions.md#forbidden-high-cardinality-labels).
 
 ## Adding a histogram
 

@@ -16,16 +16,16 @@ import (
 
 func TestCreateNotification_And_GetByID(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-notif-1")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-notif-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestCreateNotification_And_GetByID(t *testing.T) {
 	notifID := id.Notification.New()
 	n := &models.Notification{
 		ID:         notifID,
-		TenantID:   tenantID,
+		OrganizationID:   organizationID,
 		UserID:     user.ID,
 		CategoryID: cat.ID,
 		Title:      "Hello",
@@ -72,16 +72,16 @@ func TestCreateNotification_And_GetByID(t *testing.T) {
 
 func TestGetNotificationByIdempotencyKey(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-idem-1")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-idem-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 	idemKey := "unique-key-" + id.Notification.New()
 	n := &models.Notification{
 		ID:             id.Notification.New(),
-		TenantID:       tenantID,
+		OrganizationID:       organizationID,
 		UserID:         user.ID,
 		CategoryID:     cat.ID,
 		Title:          "Alert",
@@ -109,7 +109,7 @@ func TestGetNotificationByIdempotencyKey(t *testing.T) {
 		t.Fatalf("CreateNotification: %v", err)
 	}
 
-	got, err := s.GetNotificationByIdempotencyKey(ctx, tenantID, idemKey)
+	got, err := s.GetNotificationByIdempotencyKey(ctx, organizationID, idemKey)
 	if err != nil {
 		t.Fatalf("GetNotificationByIdempotencyKey: %v", err)
 	}

@@ -1,0 +1,33 @@
+// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// See LICENSE and NOTICE in the project root for full terms and restrictions.
+
+//go:build integration
+
+package postgres_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/uuid"
+)
+
+func TestCreateOrganization_And_GetByID(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscriptions", "subscription_categories", "organizations")
+
+	ctx := context.Background()
+	organizationID := uuid.New().String()
+	organization, err := s.CreateOrganization(ctx, organizationID, "Test Organization")
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+
+	got, err := s.GetOrganizationByID(ctx, organization.ID)
+	if err != nil {
+		t.Fatalf("GetOrganizationByID: %v", err)
+	}
+	if got.Name != "Test Organization" {
+		t.Fatalf("expected Test Organization, got %s", got.Name)
+	}
+}

@@ -39,7 +39,7 @@ const (
 // GSI gsi-by-idempotency  PK=idem_pk SK=created_at  — dispatch dedup (sparse; only set when key present)
 //
 // ListRecentNotifications is intentionally not implemented — it performs a
-// cross-tenant scan that belongs to the admin control plane and is delegated
+// cross-organization scan that belongs to the admin control plane and is delegated
 // to Postgres. Wire adminStoreWithDynamoNotifs (cmd/admin) to route it there.
 type NotificationStore struct {
 	client *Client
@@ -76,7 +76,7 @@ func (s *NotificationStore) CreateNotification(ctx context.Context, n *models.No
 		"sk":          strVal("NOTIF#" + n.ID),
 		"notif_id":    strVal(n.ID),
 		"user_id":     strVal(n.UserID),
-		"tenant_id":   strVal(n.TenantID),
+		"organization_id":   strVal(n.OrganizationID),
 		"title":       strVal(n.Title),
 		"body":        strVal(n.Body),
 		"status":      strVal(string(n.Status)),
@@ -104,7 +104,7 @@ func (s *NotificationStore) CreateNotification(ctx context.Context, n *models.No
 	}
 	if n.IdempotencyKey != nil && *n.IdempotencyKey != "" {
 		item["idempotency_key"] = strVal(*n.IdempotencyKey)
-		item["idem_pk"] = strVal("TENANT#" + n.TenantID + "#IDEM#" + *n.IdempotencyKey)
+		item["idem_pk"] = strVal("ORG#" + n.OrganizationID + "#IDEM#" + *n.IdempotencyKey)
 	}
 
 	_, err := s.client.db.PutItem(ctx, &dynamodb.PutItemInput{
@@ -137,11 +137,11 @@ func (s *NotificationStore) GetNotificationByID(ctx context.Context, id string) 
 	return unmarshalNotif(out.Item)
 }
 
-// GetNotificationByIdempotencyKey returns the notification matching (tenantID, key)
+// GetNotificationByIdempotencyKey returns the notification matching (organizationID, key)
 // that was created within the last 24 hours.
-func (s *NotificationStore) GetNotificationByIdempotencyKey(ctx context.Context, tenantID, key string) (*models.Notification, error) {
+func (s *NotificationStore) GetNotificationByIdempotencyKey(ctx context.Context, organizationID, key string) (*models.Notification, error) {
 	cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339Nano)
-	idemPK := "TENANT#" + tenantID + "#IDEM#" + key
+	idemPK := "ORG#" + organizationID + "#IDEM#" + key
 
 	out, err := s.client.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(s.client.NotificationsTable),
@@ -168,7 +168,7 @@ func (s *NotificationStore) GetNotificationEvents(ctx context.Context, notificat
 }
 
 // ListRecentNotifications is not implemented for the DynamoDB path — it is a
-// cross-tenant admin scan that stays on Postgres. Callers must use the composite
+// cross-organization admin scan that stays on Postgres. Callers must use the composite
 // store in cmd/admin that routes this method to the Postgres store.
 func (s *NotificationStore) ListRecentNotifications(_ context.Context, _ int) ([]models.Notification, error) {
 	return nil, fmt.Errorf("ListRecentNotifications: not supported on DynamoDB store — use Postgres path")
@@ -706,7 +706,7 @@ func unmarshalNotif(item map[string]types.AttributeValue) (*models.Notification,
 
 	n.ID, _ = strAttr(item, "notif_id")
 	n.UserID, _ = strAttr(item, "user_id")
-	n.TenantID, _ = strAttr(item, "tenant_id")
+	n.OrganizationID, _ = strAttr(item, "organization_id")
 	n.Title, _ = strAttr(item, "title")
 	n.Body, _ = strAttr(item, "body")
 

@@ -218,10 +218,10 @@ configure-registry: ## Set ECR registry in K8s overlays (usage: make configure-r
 
 # --- Load testing ---
 .PHONY: loadseed loadseed-clean
-loadseed:          ## Seed load-test dataset (default: 10 tenants, 10k users each)
+loadseed:          ## Seed load-test dataset (default: 10 organizations, 10k users each)
 	go run ./cmd/loadseed \
-	  --tenants $(or $(LT_TENANTS),10) \
-	  --users-per-tenant $(or $(LT_USERS),10000) \
+	  --organizations $(or $(LT_ORGANIZATIONS),10) \
+	  --users-per-organization $(or $(LT_USERS),10000) \
 	  --output loadtest/seed-manifest.json
 
 loadseed-clean:    ## Delete all entities from the current seed manifest

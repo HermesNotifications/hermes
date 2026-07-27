@@ -10,10 +10,10 @@ import { SharedArray } from 'k6/data';
 // from the repo root. Override with SEED_MANIFEST env var if needed.
 const manifestPath = __ENV.SEED_MANIFEST || '../seed-manifest.json';
 
-export const tenants = new SharedArray('tenants', function () {
+export const organizations = new SharedArray('organizations', function () {
   const raw = open(manifestPath);
   const m = JSON.parse(raw);
-  return m.tenants;
+  return m.organizations;
 });
 
 export const manifest = new SharedArray('manifest_meta', function () {
@@ -30,22 +30,22 @@ export function runSeedID() {
   return manifest[0].run_seed_id;
 }
 
-// pickTenant returns a tenant object selected deterministically by VU+iter.
-export function pickTenant() {
-  const idx = (__VU + __ITER) % tenants.length;
-  return tenants[idx];
+// pickOrganization returns an organization object selected deterministically by VU+iter.
+export function pickOrganization() {
+  const idx = (__VU + __ITER) % organizations.length;
+  return organizations[idx];
 }
 
-export function pickUser(tenant) {
-  const idx = (__VU * 31 + __ITER) % tenant.users.length;
-  return tenant.users[idx];
+export function pickUser(organization) {
+  const idx = (__VU * 31 + __ITER) % organization.users.length;
+  return organization.users[idx];
 }
 
-// pickTemplate walks tenant.categories[*].subscriptions[*].templates[*]
+// pickTemplate walks organization.categories[*].subscriptions[*].templates[*]
 // and selects one uniformly at random (per-iteration variance).
-export function pickTemplate(tenant) {
+export function pickTemplate(organization) {
   const all = [];
-  for (const c of tenant.categories) {
+  for (const c of organization.categories) {
     for (const s of c.subscriptions) {
       for (const t of s.templates) all.push(t);
     }

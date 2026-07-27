@@ -22,8 +22,8 @@ spec:
         - name: loadseed
           image: "${LOADSEED_IMAGE}"
           args:
-            - --tenants=${LT_TENANTS}
-            - --users-per-tenant=${LT_USERS}
+            - --organizations=${LT_ORGANIZATIONS}
+            - --users-per-organization=${LT_USERS}
             - --output=/manifest/seed-manifest.json
           env:
             - name: HERMES_DATABASE_URL

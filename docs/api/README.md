@@ -16,7 +16,7 @@ Two modes (details in [architecture.md](../architecture.md#authentication-detail
 | **User** | JWT | `Authorization: Bearer <jwt>` |
 
 API keys are for your server-to-server backend. JWTs identify an end user and are obtained by
-exchanging a tenant + user identifier on the Admin API; the same JWT authenticates the Centrifugo
+exchanging an organization + user identifier on the Admin API; the same JWT authenticates the Centrifugo
 WebSocket connection for real-time push.
 
 ## Specs
@@ -68,7 +68,7 @@ curl -X POST http://localhost:8888/v1/send \
   -H "Authorization: Bearer $HERMES_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "to": { "tenant_id": "<uuid>", "user_id": "<external-id>" },
+    "to": { "organization_id": "<uuid>", "user_id": "<external-id>" },
     "template": "welcome",
     "data": { "name": "Alice" }
   }'

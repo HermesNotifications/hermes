@@ -19,13 +19,13 @@ channel resolution and minimal DB work — its job is to get the request onto NA
 - **Depends on:** Postgres (API-key lookup), Redis (idempotency + key cache), NATS
 
 ### Admin — `cmd/admin` (port 8080, API-key auth)
-Server-to-server management API and JWT issuer. Manages tenants, API keys, subscription
+Server-to-server management API and JWT issuer. Manages organizations, API keys, subscription
 categories, subscriptions, notification templates, and users; exchanges a user identifier for a
 Hermes JWT used by the read-path APIs and Centrifugo. Spec: `api/admin/openapi.yaml`.
 - **Depends on:** Postgres, Redis
 
 ### Dispatch — `cmd/dispatch` (port 8081, internal)
-Consumes `notification.send`. Ensures the tenant/user exist, persists the notification record
+Consumes `notification.send`. Ensures the organization/user exist, persists the notification record
 (status `pending`), resolves the template and channel set (see channel-resolution order in
 [architecture.md](architecture.md)), and fans out a `DeliveryMessage` per channel.
 - **Consumes:** `notification.send` · **Produces:** `delivery.*`, `notification.events` (failures)
@@ -65,7 +65,7 @@ All services expose unauthenticated `GET /healthz` and `GET /readyz` probes.
 | `migrate` | `cmd/migrate` | Run golang-migrate against Postgres | `make migrate` |
 | `seed` | `cmd/seed` | Insert a dev API key | `make seed` |
 | `cleanup` | `cmd/cleanup` | Delete `notification_events` older than the retention window | `make cleanup` (k8s CronJob in prod) |
-| `loadseed` | `cmd/loadseed` | Generate the load-test dataset (tenants/users) | `make loadseed` |
+| `loadseed` | `cmd/loadseed` | Generate the load-test dataset (organizations/users) | `make loadseed` |
 | `openapi` | `cmd/openapi` | Emit OpenAPI 3.1 specs from the huma API definitions | `make openapi` |
 | `hermes` | `cmd/hermes` | Admin CLI + interactive inbox TUI | see [cli.md](cli.md) |
 

@@ -10,13 +10,13 @@ import (
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-// TenantRepository defines operations for managing tenants.
-type TenantRepository interface {
-	CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error)
-	GetTenantByID(ctx context.Context, id string) (*models.Tenant, error)
-	EnsureTenant(ctx context.Context, id string) (*models.Tenant, error)
-	ListTenants(ctx context.Context) ([]models.Tenant, error)
-	CountUsersByTenant(ctx context.Context) (map[string]int, error)
+// OrganizationRepository defines operations for managing organizations.
+type OrganizationRepository interface {
+	CreateOrganization(ctx context.Context, id, name string) (*models.Organization, error)
+	GetOrganizationByID(ctx context.Context, id string) (*models.Organization, error)
+	EnsureOrganization(ctx context.Context, id string) (*models.Organization, error)
+	ListOrganizations(ctx context.Context) ([]models.Organization, error)
+	CountUsersByOrganization(ctx context.Context) (map[string]int, error)
 }
 
 // SubscriptionCategoryRepository defines operations for managing subscription categories.
@@ -52,10 +52,10 @@ type TemplateRepository interface {
 
 // UserRepository defines operations for managing users.
 type UserRepository interface {
-	EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error)
+	EnsureUser(ctx context.Context, organizationID, externalID string) (*models.User, error)
 	GetUserByID(ctx context.Context, userID string) (*models.User, error)
 	UpdateUserContacts(ctx context.Context, userID string, email, phone *string) (*models.User, error)
-	ListUsers(ctx context.Context, tenantID string) ([]models.User, error)
+	ListUsers(ctx context.Context, organizationID string) ([]models.User, error)
 	GetUserContacts(ctx context.Context, userID string) (map[string]string, error)
 	SetUserContact(ctx context.Context, userID, addressKey, address string) error
 }
@@ -72,7 +72,7 @@ type UserSubscriptionRepository interface {
 type NotificationRepository interface {
 	CreateNotification(ctx context.Context, n *models.Notification) (*models.Notification, error)
 	GetNotificationByID(ctx context.Context, id string) (*models.Notification, error)
-	GetNotificationByIdempotencyKey(ctx context.Context, tenantID, key string) (*models.Notification, error)
+	GetNotificationByIdempotencyKey(ctx context.Context, organizationID, key string) (*models.Notification, error)
 	GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error)
 	ListRecentNotifications(ctx context.Context, limit int) ([]models.Notification, error)
 	UpdateNotificationChannels(ctx context.Context, notificationID string, channels []string) error
@@ -120,7 +120,7 @@ type AuthRepository interface {
 
 // Repository is the composite interface satisfied by any complete store backend.
 type Repository interface {
-	TenantRepository
+	OrganizationRepository
 	SubscriptionCategoryRepository
 	SubscriptionRepository
 	TemplateRepository

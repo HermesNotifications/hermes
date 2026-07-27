@@ -81,11 +81,11 @@ export const columns: ColumnDef<NotificationItem>[] = [
     },
   },
   {
-    accessorKey: "tenant_id",
-    header: "Tenant",
+    accessorKey: "organization_id",
+    header: "Organization",
     cell: ({ row }) => (
       <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-        {(row.getValue<string>("tenant_id") ?? "").slice(0, 8)}...
+        {(row.getValue<string>("organization_id") ?? "").slice(0, 8)}...
       </code>
     ),
   },

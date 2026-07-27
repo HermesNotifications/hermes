@@ -2,26 +2,26 @@
 // See LICENSE and NOTICE in the project root for full terms and restrictions.
 
 import { DataTable } from "@/components/data-table";
-import { listTenants } from "@/lib/actions/tenants";
+import { listOrganizations } from "@/lib/actions/organizations";
 import { columns } from "./columns";
 
-export default async function TenantsPage() {
-  const tenants = await listTenants();
+export default async function OrganizationsPage() {
+  const organizations = await listOrganizations();
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Tenants</h1>
+        <h1 className="text-2xl font-semibold">Organizations</h1>
         <p className="text-sm text-muted-foreground">
-          View all registered tenants and their user counts.
+          View all registered organizations and their user counts.
         </p>
       </div>
 
       <DataTable
         columns={columns}
-        data={tenants ?? []}
+        data={organizations ?? []}
         searchKey="name"
-        searchPlaceholder="Search tenants..."
+        searchPlaceholder="Search organizations..."
       />
     </div>
   );

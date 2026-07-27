@@ -17,9 +17,9 @@ type Content struct {
 }
 
 type Recipient struct {
-	TenantID string            `json:"tenant_id"`
-	UserID   string            `json:"user_id"`
-	Contacts map[string]string `json:"contacts,omitempty"`
+	OrganizationID string            `json:"organization_id"`
+	UserID         string            `json:"user_id"`
+	Contacts       map[string]string `json:"contacts,omitempty"`
 }
 
 type SendRequest struct {
@@ -35,9 +35,9 @@ type SendResponse struct {
 }
 
 type NotificationDetail struct {
-	ID          string   `json:"id"`
-	TenantID    string   `json:"tenant_id"`
-	UserID      string   `json:"user_id"`
+	ID             string   `json:"id"`
+	OrganizationID string   `json:"organization_id"`
+	UserID         string   `json:"user_id"`
 	CategoryID  string   `json:"category_id"`
 	Title       string   `json:"title"`
 	Body        string   `json:"body"`

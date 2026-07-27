@@ -65,7 +65,7 @@ Harness `Recommend` (smallest workers within 95% of peak) → **workers=16, pref
 Run: N=4000 msgs/drain (smaller than Postgres — DynamoDB Local is slower per
 message and its table is not cleared between cells, so a smaller N caps growth),
 5 reps + 1 warmup, in-memory DynamoDB Local on `:8002`, same Postgres for
-tenant/user ensure (the realistic hybrid: notifications → DynamoDB, users →
+organization/user ensure (the realistic hybrid: notifications → DynamoDB, users →
 Postgres). Raw: `dispatch-tuning-dynamo.csv` / `.md`.
 
 > Note: the first dynamo run hit a transient NATS+Postgres connection blip that

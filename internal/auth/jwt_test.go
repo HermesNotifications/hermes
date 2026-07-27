@@ -13,14 +13,14 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 )
 
-func makeJWT(t *testing.T, secret []byte, userID, tenantID string) string {
+func makeJWT(t *testing.T, secret []byte, userID, organizationID string) string {
 	t.Helper()
 	claims := auth.HermesClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		},
-		TenantID: tenantID,
+		OrganizationID: organizationID,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(secret)
@@ -34,11 +34,11 @@ func internalKeyProvider(secret []byte) auth.JWTKeyProvider {
 	return func() []auth.JWTSigningConfig {
 		return []auth.JWTSigningConfig{
 			{
-				Name:          "hermes-internal",
-				Secret:        secret,
-				Algorithm:     "HS256",
-				UserIDClaim:   "sub",
-				TenantIDClaim: "tenant_id",
+				Name:                "hermes-internal",
+				Secret:              secret,
+				Algorithm:           "HS256",
+				UserIDClaim:         "sub",
+				OrganizationIDClaim: "organization_id",
 			},
 		}
 	}
@@ -47,14 +47,14 @@ func internalKeyProvider(secret []byte) auth.JWTKeyProvider {
 func TestJWTMiddleware_ValidToken(t *testing.T) {
 	secret := []byte("test-secret")
 	userID := "user-123"
-	tenantID := "tenant-abc"
+	organizationID := "organization-abc"
 
-	tokenStr := makeJWT(t, secret, userID, tenantID)
+	tokenStr := makeJWT(t, secret, userID, organizationID)
 
-	var capturedUserID, capturedTenantID string
+	var capturedUserID, capturedOrganizationID string
 	handler := auth.JWTMiddleware(internalKeyProvider(secret))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedUserID = auth.UserIDFromContext(r.Context())
-		capturedTenantID = auth.TenantIDFromContext(r.Context())
+		capturedOrganizationID = auth.OrganizationIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -70,8 +70,8 @@ func TestJWTMiddleware_ValidToken(t *testing.T) {
 	if capturedUserID != userID {
 		t.Errorf("expected user_id %q, got %q", userID, capturedUserID)
 	}
-	if capturedTenantID != tenantID {
-		t.Errorf("expected tenant_id %q, got %q", tenantID, capturedTenantID)
+	if capturedOrganizationID != organizationID {
+		t.Errorf("expected organization_id %q, got %q", organizationID, capturedOrganizationID)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestJWTMiddleware_SkipsHealthChecks(t *testing.T) {
 
 func TestJWTMiddleware_WrongSecret(t *testing.T) {
 	secret := []byte("correct-secret")
-	tokenStr := makeJWT(t, []byte("wrong-secret"), "usr-1", "tenant-1")
+	tokenStr := makeJWT(t, []byte("wrong-secret"), "usr-1", "organization-1")
 
 	handler := auth.JWTMiddleware(internalKeyProvider(secret))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

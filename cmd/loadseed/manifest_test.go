@@ -14,7 +14,7 @@ func TestManifest_RoundTrip(t *testing.T) {
 		SeededAt:  "2026-04-17T00:00:00Z",
 		RunSeedID: "abc123",
 		APIKey:    "hms_dev_key_xxx_yyy",
-		Tenants: []Tenant{
+		Organizations: []Organization{
 			{
 				ID:    "t1",
 				Users: []string{"u1", "u2"},
@@ -36,7 +36,7 @@ func TestManifest_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if got.APIKey != m.APIKey || len(got.Tenants) != 1 || got.Tenants[0].Categories[0].Subscriptions[0].Templates[0].ID != "tmpl1" {
+	if got.APIKey != m.APIKey || len(got.Organizations) != 1 || got.Organizations[0].Categories[0].Subscriptions[0].Templates[0].ID != "tmpl1" {
 		t.Fatalf("mismatch: %+v", got)
 	}
 	if _, err := os.Stat(path); err != nil {

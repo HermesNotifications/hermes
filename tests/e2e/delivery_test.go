@@ -128,10 +128,10 @@ func TestDeliveryPipeline(t *testing.T) {
 	inboxWorker := delivery.NewWorker(natsClient, inboxProvider, "inbox", "inbox-worker", logger)
 
 	// ── Seed Data ───────────────────────────────────────────────────────
-	tenantID := uuid.New().String()
-	_, err = pool.Exec(ctx, "INSERT INTO tenants (id, name) VALUES ($1, $2)", tenantID, "Delivery Test Tenant")
+	organizationID := uuid.New().String()
+	_, err = pool.Exec(ctx, "INSERT INTO organizations (id, name) VALUES ($1, $2)", organizationID, "Delivery Test Organization")
 	if err != nil {
-		t.Fatalf("create tenant: %v", err)
+		t.Fatalf("create organization: %v", err)
 	}
 
 	// API key
@@ -205,7 +205,7 @@ func TestDeliveryPipeline(t *testing.T) {
 	// ── Send notification via Send service ──────────────────────────────
 	rec := doRequest("POST", "/v1/send", map[string]any{
 		"to": map[string]any{
-			"tenant_id": tenantID,
+			"organization_id": organizationID,
 			"user_id":   "delivery-user-" + runID,
 			"contacts":  map[string]any{"email": "delivery-user-" + runID + "@example.com"},
 		},

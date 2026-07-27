@@ -5,7 +5,7 @@
 
 import { getHermes } from "@/lib/hermes";
 
-export async function listUsers(tenantId?: string) {
+export async function listUsers(organizationId?: string) {
   const hermes = getHermes();
-  return hermes.users.list(tenantId);
+  return hermes.users.list(organizationId);
 }

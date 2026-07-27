@@ -16,7 +16,7 @@ import (
 
 func requestWithUser(r *http.Request, userID string) *http.Request {
 	ctx := context.WithValue(r.Context(), auth.ContextKeyUserID, userID)
-	ctx = context.WithValue(ctx, auth.ContextKeyTenantID, "tenant-1")
+	ctx = context.WithValue(ctx, auth.ContextKeyOrganizationID, "organization-1")
 	return r.WithContext(ctx)
 }
 

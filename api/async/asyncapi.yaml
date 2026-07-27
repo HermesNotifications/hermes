@@ -291,7 +291,7 @@ components:
       type: object
       required:
         - notification_id
-        - tenant_id
+        - organization_id
         - user_id
         - group_id
         - content
@@ -301,7 +301,7 @@ components:
         notification_id:
           type: string
           description: Crockford Base32 time-sortable ID
-        tenant_id:
+        organization_id:
           type: string
           format: uuid
         user_id:
@@ -335,7 +335,7 @@ components:
       type: object
       required:
         - notification_id
-        - tenant_id
+        - organization_id
         - user_id
         - channel
         - content
@@ -344,7 +344,7 @@ components:
       properties:
         notification_id:
           type: string
-        tenant_id:
+        organization_id:
           type: string
           format: uuid
         user_id:

@@ -39,7 +39,7 @@ func (m *mockRedis) SetJWTSigningKeys(_ context.Context, data []byte, ttl time.D
 
 func testKeys() []JWTSigningConfig {
 	return []JWTSigningConfig{
-		{Name: "key1", Secret: []byte("secret1"), Algorithm: "HS256", UserIDClaim: "sub", TenantIDClaim: "tenant_id"},
+		{Name: "key1", Secret: []byte("secret1"), Algorithm: "HS256", UserIDClaim: "sub", OrganizationIDClaim: "organization_id"},
 	}
 }
 

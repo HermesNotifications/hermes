@@ -18,9 +18,9 @@ export function centrifugoURL() {
 // connect opens a Centrifugo WS connection for the given user, subscribes to
 // their personal channel, and invokes onPush(notification_id) for each
 // incoming publication. Blocks until the socket is closed by setTimeout.
-export function connect(userID, tenantID, onPush) {
+export function connect(userID, organizationID, onPush) {
   const url = centrifugoURL();
-  const token = jwtFor(userID, tenantID);
+  const token = jwtFor(userID, organizationID);
 
   const start = Date.now();
   return ws.connect(url, {}, function (socket) {

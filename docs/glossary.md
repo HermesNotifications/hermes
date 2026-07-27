@@ -3,14 +3,21 @@
 Domain terms used throughout Hermes. See [data-model.md](data-model.md) for the underlying
 tables and [architecture.md](architecture.md) for how they flow through the pipeline.
 
-**Tenant** — The top-level isolation boundary; one customer/organization. Identified by a UUID.
-All other data is scoped to a tenant.
+**App** — The product that integrates Hermes, and the **isolation and trust boundary**. An API key
+authenticates the app, not any one organization. The app is not a table or a column: one Hermes
+installation (one database) serves exactly one app, and that separation is what isolates apps from
+each other. See [ADR 0003](adr/0003-rename-tenant-to-organization.md).
 
-**User** — A notification recipient within a tenant. Hermes stores its own user row keyed by your
-application's identifier (see *external ID*), holding contact info (email, phone) and locale.
+**Organization** — One customer of the app, on whose behalf notifications are sent. Identified by a
+UUID. An organization is a routing and data-partitioning label, **not** a security boundary: a single
+app sends for many organizations, and the same organization may be served by more than one app. API
+keys are deliberately not scoped to an organization.
+
+**User** — A notification recipient within an organization. Hermes stores its own user row keyed by
+your application's identifier (see *external ID*), holding contact info (email, phone) and locale.
 
 **External ID** — Your application's identifier for a user (`users.external_id`). Unique per
-tenant. You send notifications addressed by tenant + external ID; Hermes maps it to its internal
+organization. You send notifications addressed by organization + external ID; Hermes maps it to its internal
 user ID.
 
 **Internal user ID** — Hermes's own `usr_…` ID for a user. It is the `sub` claim of issued JWTs
@@ -43,7 +50,7 @@ status is derived from them by `worker-events`.
 SMS webhook, Centrifugo push) and emitting the resulting event.
 
 **Idempotency key** — A caller-supplied key that lets a send be retried safely; Hermes dedupes on
-`(tenant, idempotency_key)` so retries don't create duplicate notifications.
+`(organization, idempotency_key)` so retries don't create duplicate notifications.
 
 **API key** — A server-to-server credential (`hms_…`) for the Send and Admin APIs. Only an
 HMAC-SHA256 hash is stored.

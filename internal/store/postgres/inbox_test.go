@@ -18,18 +18,18 @@ import (
 
 func TestInbox(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notification_events", "notifications", "users", "notification_templates", "subscription_categories", "tenants")
+	cleanTable(t, pool, "notification_events", "notifications", "users", "notification_templates", "subscription_categories", "organizations")
 
 	ctx := context.Background()
 
-	// Setup: tenant, user, category
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Inbox Test Tenant")
+	// Setup: organization, user, category
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Inbox Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-inbox-1")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-inbox-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestInbox(t *testing.T) {
 		notifIDs[i] = id.Notification.New()
 		n := &models.Notification{
 			ID:         notifIDs[i],
-			TenantID:   tenantID,
+			OrganizationID:   organizationID,
 			UserID:     user.ID,
 			CategoryID: cat.ID,
 			Title:      fmt.Sprintf("Notification %d", i+1),

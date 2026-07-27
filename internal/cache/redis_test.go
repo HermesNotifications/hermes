@@ -39,7 +39,7 @@ func TestIdempotencyKey_SetNX(t *testing.T) {
 	defer c.Close()
 
 	ctx := context.Background()
-	key := "test-tenant:test-key-" + time.Now().Format(time.RFC3339Nano)
+	key := "test-organization:test-key-" + time.Now().Format(time.RFC3339Nano)
 
 	// First set should succeed
 	existing, err := c.SetIdempotencyKey(ctx, key, "notif-1", time.Hour)

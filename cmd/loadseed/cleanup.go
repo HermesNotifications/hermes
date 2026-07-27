@@ -11,20 +11,20 @@ import (
 )
 
 // runCleanup reads the manifest and deletes every seeded entity.
-// Order respects FK constraints: templates → subscriptions → categories → users → tenants → api_key.
-// The users table does not have ON DELETE CASCADE on tenant_id, so users must be
-// deleted explicitly before tenants.
+// Order respects FK constraints: templates → subscriptions → categories → users → organizations → api_key.
+// The users table does not have ON DELETE CASCADE on organization_id, so users must be
+// deleted explicitly before organizations.
 func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 	m, err := ReadManifest(cfg.OutputPath)
 	if err != nil {
 		return err
 	}
 
-	var allTmpl, allSub, allCat, allUsers, allTenants []string
-	for _, t := range m.Tenants {
-		allTenants = append(allTenants, t.ID)
-		allUsers = append(allUsers, t.Users...)
-		for _, c := range t.Categories {
+	var allTmpl, allSub, allCat, allUsers, allOrganizations []string
+	for _, o := range m.Organizations {
+		allOrganizations = append(allOrganizations, o.ID)
+		allUsers = append(allUsers, o.Users...)
+		for _, c := range o.Categories {
 			allCat = append(allCat, c.ID)
 			for _, s := range c.Subscriptions {
 				allSub = append(allSub, s.ID)
@@ -47,8 +47,8 @@ func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id = ANY($1)`, allUsers); err != nil {
 		return fmt.Errorf("delete users: %w", err)
 	}
-	if _, err := pool.Exec(ctx, `DELETE FROM tenants WHERE id = ANY($1)`, allTenants); err != nil {
-		return fmt.Errorf("delete tenants: %w", err)
+	if _, err := pool.Exec(ctx, `DELETE FROM organizations WHERE id = ANY($1)`, allOrganizations); err != nil {
+		return fmt.Errorf("delete organizations: %w", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM api_keys WHERE name = $1`, "loadtest-"+m.RunSeedID); err != nil {
 		return fmt.Errorf("delete api key: %w", err)

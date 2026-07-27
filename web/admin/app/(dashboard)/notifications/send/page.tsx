@@ -4,12 +4,12 @@
 import Link from "next/link";
 import { ChevronLeftIcon } from "lucide-react";
 import { SendNotificationForm } from "@/components/send-notification-form";
-import { listTenants } from "@/lib/actions/tenants";
+import { listOrganizations } from "@/lib/actions/organizations";
 import { listTemplates } from "@/lib/actions/templates";
 
 export default async function SendNotificationPage() {
-  const [tenants, templates] = await Promise.all([
-    listTenants(),
+  const [organizations, templates] = await Promise.all([
+    listOrganizations(),
     listTemplates(),
   ]);
 
@@ -29,7 +29,7 @@ export default async function SendNotificationPage() {
         </p>
       </div>
 
-      <SendNotificationForm tenants={tenants ?? []} templates={templates ?? []} />
+      <SendNotificationForm organizations={organizations ?? []} templates={templates ?? []} />
     </div>
   );
 }

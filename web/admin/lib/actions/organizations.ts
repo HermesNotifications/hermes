@@ -6,14 +6,14 @@
 import { getHermes } from "@/lib/hermes";
 import { revalidatePath } from "next/cache";
 
-export async function listTenants() {
+export async function listOrganizations() {
   const hermes = getHermes();
-  return hermes.tenants.list();
+  return hermes.organizations.list();
 }
 
-export async function createTenant(name: string) {
+export async function createOrganization(name: string) {
   const hermes = getHermes();
-  const result = await hermes.tenants.create({ name });
-  revalidatePath("/tenants");
+  const result = await hermes.organizations.create({ name });
+  revalidatePath("/organizations");
   return result;
 }

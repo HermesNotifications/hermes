@@ -100,15 +100,15 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	emailWorker := delivery.NewWorker(natsClient, adapter, "email", "worker-email-e2e", logger)
 
 	// ── Seed Data ───────────────────────────────────────────────────────
-	tenantID := uuid.New().String()
-	_, err = pool.Exec(ctx, "INSERT INTO tenants (id, name) VALUES ($1, $2)", tenantID, "Email E2E Tenant")
+	organizationID := uuid.New().String()
+	_, err = pool.Exec(ctx, "INSERT INTO organizations (id, name) VALUES ($1, $2)", organizationID, "Email E2E Organization")
 	if err != nil {
-		t.Fatalf("create tenant: %v", err)
+		t.Fatalf("create organization: %v", err)
 	}
 
 	// Create user with email address
 	userExternalID := "email-user-" + runID
-	user, err := st.EnsureUser(ctx, tenantID, userExternalID)
+	user, err := st.EnsureUser(ctx, organizationID, userExternalID)
 	if err != nil {
 		t.Fatalf("ensure user: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	// ── Send notification ───────────────────────────────────────────────
 	rec := doRequest("POST", "/v1/send", map[string]any{
 		"to": map[string]any{
-			"tenant_id": tenantID,
+			"organization_id": organizationID,
 			"user_id":   userExternalID,
 		},
 		"template": templateSlug,

@@ -33,7 +33,7 @@ func TestClassify(t *testing.T) {
 		{"transient first attempt", errors.New("boom"), 1, false, ""},
 		{"transient exhausted", errors.New("boom"), 10, true, hermenats.DeadLetterReasonMaxDeliveries},
 		{"transient past limit", errors.New("boom"), 11, true, hermenats.DeadLetterReasonMaxDeliveries},
-		{"permanent first attempt", &permErr{"invalid tenant uuid"}, 1, true, hermenats.DeadLetterReasonTerminated},
+		{"permanent first attempt", &permErr{"invalid organization uuid"}, 1, true, hermenats.DeadLetterReasonTerminated},
 		{"permanent on last attempt wins over exhaustion", &permErr{"bad"}, 10, true, hermenats.DeadLetterReasonTerminated},
 		{"wrapped permanent", fmt.Errorf("handle: %w", &permErr{"bad"}), 2, true, hermenats.DeadLetterReasonTerminated},
 		{"PermanentError reporting false is transient", notPermErr{}, 2, false, ""},

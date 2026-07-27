@@ -68,16 +68,16 @@ func cleanPGTables(t *testing.T, pool *pgxpool.Pool, tables ...string) {
 	}
 }
 
-// seedNotification creates the minimal Postgres records (tenant → user → category →
+// seedNotification creates the minimal Postgres records (organization → user → category →
 // notification) required by tests that exercise the Postgres delegation path.
 func seedNotification(t *testing.T, st *postgres.Store, notifID string) {
 	t.Helper()
 	ctx := context.Background()
-	tenantID := uuid.New().String()
-	if _, err := st.CreateTenant(ctx, tenantID, "dynamo-test-tenant"); err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+	organizationID := uuid.New().String()
+	if _, err := st.CreateOrganization(ctx, organizationID, "dynamo-test-organization"); err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
 	}
-	user, err := st.EnsureUser(ctx, tenantID, "dynamo-test-user-"+uuid.New().String())
+	user, err := st.EnsureUser(ctx, organizationID, "dynamo-test-user-"+uuid.New().String())
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
@@ -87,7 +87,7 @@ func seedNotification(t *testing.T, st *postgres.Store, notifID string) {
 	}
 	n := &models.Notification{
 		ID:         notifID,
-		TenantID:   tenantID,
+		OrganizationID:   organizationID,
 		UserID:     user.ID,
 		CategoryID: cat.ID,
 		Title:      "dynamo integration test",

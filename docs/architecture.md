@@ -36,7 +36,7 @@ Send ──▶ NATS: notification.send
 1. **Send** authenticates the caller's API key, applies idempotency, and publishes a
    `SendMessage` to `notification.send`. It does no template/channel resolution — it is a thin
    ingestion layer whose job is to get the request onto NATS quickly.
-2. **Dispatch** consumes `notification.send`. It ensures the tenant/user exist, persists the
+2. **Dispatch** consumes `notification.send`. It ensures the organization/user exist, persists the
    notification record (status `pending`), resolves the template and the channel set, and
    publishes a `DeliveryMessage` to one `delivery.<channel>` subject per resolved channel.
 3. **Workers** (`worker-email`, `worker-sms`, `worker-inbox`) each consume their channel's
@@ -58,7 +58,7 @@ Send ──▶ NATS: notification.send
 | Service | Port | Role | Auth |
 |---|---|---|---|
 | `send` | 8088 | Ingest `POST /v1/send`, idempotency, publish to NATS | API key |
-| `admin` | 8080 | Manage tenants, API keys, categories, subscriptions, templates; issue JWTs | API key |
+| `admin` | 8080 | Manage organizations, API keys, categories, subscriptions, templates; issue JWTs | API key |
 | `dispatch` | 8081 | Resolve template + channels, fan out to `delivery.*` | internal (NATS) |
 | `worker-email` | 8083 | Deliver email (SMTP / SES) | internal (NATS) |
 | `worker-sms` | 8084 | Deliver SMS (webhook) | internal (NATS) |
@@ -89,10 +89,10 @@ retention (7 days / 1 GiB) so dead letters survive inspection reads:
 The wire contracts are shared Go structs in `internal/nats/` (package `hermenats`,
 `internal/nats/messages.go`) and mirrored in the AsyncAPI spec at `api/async/asyncapi.yaml`:
 
-- **`SendMessage`** — notification ID, tenant, external user ID, optional direct `email`/`phone`,
+- **`SendMessage`** — notification ID, organization, external user ID, optional direct `email`/`phone`,
   optional `content`, `metadata.template`, `data` (template render context), `channels`,
   `idempotency_key`, `attempt`.
-- **`DeliveryMessage`** — notification ID, tenant, resolved `user_id`, the target `channel`,
+- **`DeliveryMessage`** — notification ID, organization, resolved `user_id`, the target `channel`,
   the resolved `content`, `metadata`, the resolved `recipient` (email/phone), `attempt`.
 - **`EventMessage`** — notification ID, `channel`, `event` (e.g. `email.sent`, `sms.failed`),
   `severity` (`info`/`warning`/`error`), and free-form `metadata`.
@@ -124,7 +124,7 @@ defines content for.
 Send and Admin. JWTs (HMAC-signed, multi-key) authenticate user-facing traffic to Inbox and
 User. `/healthz` and `/readyz` skip auth on every service.
 
-**Idempotency.** Send dedupes on an idempotency key (per tenant) so retried client requests don't
+**Idempotency.** Send dedupes on an idempotency key (per organization) so retried client requests don't
 produce duplicate notifications; the same key is also enforced by a unique partial index on
 `notifications` (see [data-model.md](data-model.md)).
 
@@ -134,6 +134,16 @@ idempotency dedup. Caches use short TTLs and fall back to Postgres on a miss.
 
 ## Authentication details
 
+**The isolation boundary is the app, not the organization.** An API key authenticates the
+*app* — the product integrating Hermes — and is deliberately **not** scoped to an
+organization: one app sends on behalf of many organizations, and the same organization may
+be served by more than one app, so a key scoped to one would break the core use case. There
+is no `app` entity in the schema; one installation (one database) serves exactly one app,
+and that deployment separation is the entire enforcement mechanism. Consequently the
+`organization_id` on a send request and the `organization_id` JWT claim are routing and
+partitioning labels, not authorization scopes. See
+[ADR 0003](adr/0003-rename-tenant-to-organization.md).
+
 **API keys** (`internal/auth/apikey.go`). Raw key format is
 `hms_[<env>_]key_<id>_<secret>` (env prefix `stg`/`dev`, omitted in production). Only an
 HMAC-SHA256 hash of the secret (keyed by `HERMES_API_KEY_HMAC_SECRET`) is stored, in
@@ -141,9 +151,9 @@ HMAC-SHA256 hash of the secret (keyed by `HERMES_API_KEY_HMAC_SECRET`) is stored
 
 **JWTs** (`internal/auth/jwt.go`). Tokens are Hermes-issued and HMAC-signed. The middleware
 accepts any of several active signing keys (`jwt_signing_keys`), so keys can be rotated without
-downtime; non-HMAC algorithms are rejected. The `sub` claim is the internal user ID and a
-`tenant_id` claim scopes the request. Backends obtain a token by exchanging a user identifier via
-the Admin auth endpoint (see [Integration Guide](integration-guide.md)).
+downtime; non-HMAC algorithms are rejected. The `sub` claim is the internal user ID and an
+`organization_id` claim accompanies the request. Backends obtain a token by exchanging a user
+identifier via the Admin auth endpoint (see [Integration Guide](integration-guide.md)).
 
 ## IDs
 
@@ -154,7 +164,7 @@ generators cover most entities:
   time-sortable.
 - **Prefixed IDs** — a type prefix plus random bits, e.g. `usr_…` (users), `key_…` (API keys).
 
-Tenants are the exception: they use UUIDs. (The older `internal/id` Crockford-Base32 package is
+Organizations are the exception: they use UUIDs. (The older `internal/id` Crockford-Base32 package is
 superseded by `internal/id/v2`.)
 
 ## Infrastructure

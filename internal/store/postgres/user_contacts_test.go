@@ -14,14 +14,14 @@ import (
 
 func TestUserContacts_DualWriteAndLoad(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "subscription_categories", "tenants")
+	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "subscription_categories", "organizations")
 	ctx := context.Background()
 
-	tenantID := uuid.New().String()
-	if _, err := s.CreateTenant(ctx, tenantID, "Contacts Tenant"); err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+	organizationID := uuid.New().String()
+	if _, err := s.CreateOrganization(ctx, organizationID, "Contacts Organization"); err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
 	}
-	u, err := s.EnsureUser(ctx, tenantID, "ext-contacts-dualwrite")
+	u, err := s.EnsureUser(ctx, organizationID, "ext-contacts-dualwrite")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}

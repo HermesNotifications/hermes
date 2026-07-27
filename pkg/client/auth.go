@@ -9,8 +9,8 @@ import (
 )
 
 type TokenRequest struct {
-	UserID   string `json:"user_id"`
-	TenantID string `json:"tenant_id"`
+	UserID         string `json:"user_id"`
+	OrganizationID string `json:"organization_id"`
 }
 
 type TokenResponse struct {

@@ -39,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tenants := cached.NewTenantRepository(pgStore, redisClient)
+	organizations := cached.NewOrganizationRepository(pgStore, redisClient)
 
 	var adminStore admin.AdminStore = pgStore
 	if cfg.DynamoEndpoint != "" {
@@ -52,13 +52,13 @@ func main() {
 		}
 	}
 
-	srv := admin.NewServer(adminStore, tenants, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
+	srv := admin.NewServer(adminStore, organizations, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }
 
 // adminStoreWithDynamoNotifs routes GetNotificationByID and GetNotificationEvents
-// to DynamoDB while delegating ListRecentNotifications (cross-tenant admin scan)
+// to DynamoDB while delegating ListRecentNotifications (cross-organization admin scan)
 // and all other AdminStore methods to the Postgres store.
 type adminStoreWithDynamoNotifs struct {
 	*postgres.Store

@@ -15,7 +15,7 @@ import (
 var loadseedPermissions = []string{
 	auth.PermNotificationsSend,
 	auth.PermTemplatesManage,
-	auth.PermTenantsManage,
+	auth.PermOrganizationsManage,
 }
 
 // insertAPIKey generates a new API key, writes it to api_keys with the HMAC hash,

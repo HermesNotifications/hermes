@@ -147,7 +147,7 @@ func newTestServer(t *testing.T) (*inbox.Server, *mockInboxStore) {
 		notifications: []models.Notification{
 			{
 				ID:         "notif-1",
-				TenantID:   "tenant-1",
+				OrganizationID:   "organization-1",
 				UserID:     testUserID,
 				CategoryID: "sct-1",
 				Title:      "Test Notification 1",
@@ -158,7 +158,7 @@ func newTestServer(t *testing.T) (*inbox.Server, *mockInboxStore) {
 			},
 			{
 				ID:         "notif-2",
-				TenantID:   "tenant-1",
+				OrganizationID:   "organization-1",
 				UserID:     testUserID,
 				CategoryID: "sct-1",
 				Title:      "Test Notification 2",

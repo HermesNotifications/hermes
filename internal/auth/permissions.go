@@ -13,20 +13,20 @@ const (
 	PermAPIKeysManage     = "apikeys:manage"
 	PermNotificationsSend = "notifications:send"
 	PermTemplatesManage   = "templates:manage"
-	PermTenantsManage     = "tenants:manage"
+	PermOrganizationsManage = "organizations:manage"
 )
 
 var AllPermissions = []string{
 	PermAPIKeysManage,
 	PermNotificationsSend,
 	PermTemplatesManage,
-	PermTenantsManage,
+	PermOrganizationsManage,
 }
 
 var DefaultPermissions = []string{
 	PermNotificationsSend,
 	PermTemplatesManage,
-	PermTenantsManage,
+	PermOrganizationsManage,
 }
 
 type ValidatedKey struct {

@@ -4,7 +4,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { adminHeaders } from '../lib/auth.js';
-import { pickTenant, pickUser, pickTemplate } from '../lib/seed.js';
+import { pickOrganization, pickUser, pickTemplate } from '../lib/seed.js';
 import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
 import { sendAckLatency, sendErrors } from '../lib/metrics.js';
 import { recordSent } from '../lib/shared.js';
@@ -46,7 +46,7 @@ export const options = {
 };
 
 export default function () {
-  const t = pickTenant();
+  const t = pickOrganization();
   const u = pickUser(t);
   const tpl = pickTemplate(t);
   const body = buildSendBody(t, u, tpl);

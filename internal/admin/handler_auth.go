@@ -17,9 +17,9 @@ import (
 
 type tokenInput struct {
 	Body struct {
-		UserID    string `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
-		TenantID  string `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
-		ExpiresIn *int   `json:"expires_in,omitempty" minimum:"3600" maximum:"604800" doc:"Requested token lifetime in seconds (min 3600 = 1h, max 604800 = 7d, default 14400 = 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes."`
+		UserID         string `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
+		OrganizationID string `json:"organization_id" required:"true" minLength:"1" doc:"Organization identifier"`
+		ExpiresIn      *int   `json:"expires_in,omitempty" minimum:"3600" maximum:"604800" doc:"Requested token lifetime in seconds (min 3600 = 1h, max 604800 = 7d, default 14400 = 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes."`
 	}
 }
 
@@ -38,13 +38,13 @@ func (s *Server) registerAuthRoutes() {
 		Summary:     "Exchange credentials for a user JWT token",
 		Tags:        []string{"Auth"},
 	}, func(ctx context.Context, input *tokenInput) (*tokenOutput, error) {
-		// Auto-create tenant on first sight
-		if _, err := s.tenants.EnsureTenant(ctx, input.Body.TenantID); err != nil {
+		// Auto-create organization on first sight
+		if _, err := s.organizations.EnsureOrganization(ctx, input.Body.OrganizationID); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
 
 		// Ensure user exists (auto-create on first token request)
-		user, err := s.store.EnsureUser(ctx, input.Body.TenantID, input.Body.UserID)
+		user, err := s.store.EnsureUser(ctx, input.Body.OrganizationID, input.Body.UserID)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
@@ -66,7 +66,7 @@ func (s *Server) registerAuthRoutes() {
 				ExpiresAt: jwt.NewNumericDate(exp),
 				IssuedAt:  jwt.NewNumericDate(time.Now()),
 			},
-			TenantID: input.Body.TenantID,
+			OrganizationID: input.Body.OrganizationID,
 		}
 
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

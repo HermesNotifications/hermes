@@ -287,7 +287,7 @@ func TestDeleteEventsOlderThan_Noop(t *testing.T) {
 func TestUpdateNotificationStatus_Delegation(t *testing.T) {
 	client := testClient(t)
 	pgSt, pool := testPGStore(t)
-	cleanPGTables(t, pool, "notification_events", "notifications", "users", "subscription_categories", "tenants")
+	cleanPGTables(t, pool, "notification_events", "notifications", "users", "subscription_categories", "organizations")
 
 	es := dynamo.NewEventStore(client, pgSt)
 	ctx := context.Background()
@@ -339,7 +339,7 @@ func TestUpdateNotificationStatus_Delegation(t *testing.T) {
 func TestBatchUpdateNotificationStatuses_Delegation(t *testing.T) {
 	client := testClient(t)
 	pgSt, pool := testPGStore(t)
-	cleanPGTables(t, pool, "notification_events", "notifications", "users", "subscription_categories", "tenants")
+	cleanPGTables(t, pool, "notification_events", "notifications", "users", "subscription_categories", "organizations")
 
 	es := dynamo.NewEventStore(client, pgSt)
 	ctx := context.Background()

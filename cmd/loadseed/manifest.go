@@ -10,13 +10,13 @@ import (
 )
 
 type Manifest struct {
-	SeededAt  string   `json:"seeded_at"`
-	RunSeedID string   `json:"run_seed_id"`
-	APIKey    string   `json:"api_key"`
-	Tenants   []Tenant `json:"tenants"`
+	SeededAt      string         `json:"seeded_at"`
+	RunSeedID     string         `json:"run_seed_id"`
+	APIKey        string         `json:"api_key"`
+	Organizations []Organization `json:"organizations"`
 }
 
-type Tenant struct {
+type Organization struct {
 	ID         string     `json:"id"`
 	Users      []string   `json:"users"`
 	Categories []Category `json:"categories"`

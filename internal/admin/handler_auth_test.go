@@ -18,7 +18,7 @@ import (
 func TestHandleAuthToken(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"user_id":"ext-user-1","tenant_id":"test-tenant-id"}`
+	body := `{"user_id":"ext-user-1","organization_id":"test-organization-id"}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -50,22 +50,22 @@ func TestHandleAuthToken(t *testing.T) {
 	if sub == "" {
 		t.Fatal("expected subject (user ID) in token")
 	}
-	if claims.TenantID != "test-tenant-id" {
-		t.Fatalf("expected tenant_id test-tenant-id, got %s", claims.TenantID)
+	if claims.OrganizationID != "test-organization-id" {
+		t.Fatalf("expected organization_id test-organization-id, got %s", claims.OrganizationID)
 	}
 }
 
-func TestHandleAuthToken_NewTenantAutoCreated(t *testing.T) {
+func TestHandleAuthToken_NewOrganizationAutoCreated(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"user_id":"ext-user-1","tenant_id":"brand-new-tenant"}`
+	body := `{"user_id":"ext-user-1","organization_id":"brand-new-organization"}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 (auto-create tenant), got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 200 (auto-create organization), got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var resp map[string]string
@@ -78,15 +78,15 @@ func TestHandleAuthToken_NewTenantAutoCreated(t *testing.T) {
 	if err != nil || !token.Valid {
 		t.Fatalf("token invalid: %v", err)
 	}
-	if claims.TenantID != "brand-new-tenant" {
-		t.Fatalf("expected tenant_id brand-new-tenant, got %s", claims.TenantID)
+	if claims.OrganizationID != "brand-new-organization" {
+		t.Fatalf("expected organization_id brand-new-organization, got %s", claims.OrganizationID)
 	}
 }
 
 func TestHandleAuthToken_CustomExpiry(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"user_id":"ext-user-1","tenant_id":"test-tenant-id","expires_in":86400}`
+	body := `{"user_id":"ext-user-1","organization_id":"test-organization-id","expires_in":86400}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -117,7 +117,7 @@ func TestHandleAuthToken_CustomExpiry(t *testing.T) {
 func TestHandleAuthToken_ExpiryTooShort(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"user_id":"ext-user-1","tenant_id":"test-tenant-id","expires_in":1800}`
+	body := `{"user_id":"ext-user-1","organization_id":"test-organization-id","expires_in":1800}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -131,7 +131,7 @@ func TestHandleAuthToken_ExpiryTooShort(t *testing.T) {
 func TestHandleAuthToken_ExpiryTooLong(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"user_id":"ext-user-1","tenant_id":"test-tenant-id","expires_in":700000}`
+	body := `{"user_id":"ext-user-1","organization_id":"test-organization-id","expires_in":700000}`
 	req := httptest.NewRequest("POST", "/v1/auth/token", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

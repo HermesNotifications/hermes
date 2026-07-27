@@ -14,7 +14,7 @@ LOADSEED_IMAGE="${LOADSEED_IMAGE:?LOADSEED_IMAGE required (e.g., ghcr.io/…/loa
 : "${SEND_RPS:=100}"
 : "${POLL_RPS:=20}"
 : "${DURATION:=10m}"
-: "${LT_TENANTS:=10}"
+: "${LT_ORGANIZATIONS:=10}"
 : "${LT_USERS:=10000}"
 : "${ADMIN_URL:=http://hermes-admin.hermes.svc.cluster.local:8080}"
 : "${SEND_URL:=http://hermes-send.hermes.svc.cluster.local:8088}"
@@ -22,7 +22,7 @@ LOADSEED_IMAGE="${LOADSEED_IMAGE:?LOADSEED_IMAGE required (e.g., ghcr.io/…/loa
 : "${CENTRIFUGO_URL:=ws://hermes-centrifugo.hermes.svc.cluster.local:8000/connection/websocket}"
 
 export SCENARIO PARALLELISM RUN_ID RUN_NAME LOADSEED_IMAGE \
-  TARGET_RPS VUS SEND_RPS POLL_RPS DURATION LT_TENANTS LT_USERS \
+  TARGET_RPS VUS SEND_RPS POLL_RPS DURATION LT_ORGANIZATIONS LT_USERS \
   ADMIN_URL SEND_URL INBOX_URL CENTRIFUGO_URL
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

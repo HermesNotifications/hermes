@@ -10,7 +10,7 @@
 // (IAM roles, environment variables, ~/.aws/credentials), connecting to real
 // DynamoDB on AWS.
 //
-// Table names are configurable to support multi-tenant or multi-stage deployments;
+// Table names are configurable to support multi-app or multi-stage deployments;
 // the defaults match the documented single-table design in docs/adr/0001-*.
 package dynamo
 

@@ -17,18 +17,18 @@ import (
 
 func TestEventInsertAndStatusRollup(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notification_events", "notifications", "users", "subscription_categories", "tenants")
+	cleanTable(t, pool, "notification_events", "notifications", "users", "subscription_categories", "organizations")
 
 	ctx := context.Background()
 
-	// 1. Create tenant, user, category, notification (status: pending)
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Event Rollup Tenant")
+	// 1. Create organization, user, category, notification (status: pending)
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Event Rollup Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-event-rollup-1")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-event-rollup-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestEventInsertAndStatusRollup(t *testing.T) {
 	notifID := id.Notification.New()
 	n := &models.Notification{
 		ID:         notifID,
-		TenantID:   tenantID,
+		OrganizationID:   organizationID,
 		UserID:     user.ID,
 		CategoryID: cat.ID,
 		Title:      "Test Notification",
@@ -146,18 +146,18 @@ func TestEventInsertAndStatusRollup(t *testing.T) {
 
 func TestDeleteEventsOlderThan(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notification_events", "notifications", "users", "subscription_categories", "tenants")
+	cleanTable(t, pool, "notification_events", "notifications", "users", "subscription_categories", "organizations")
 
 	ctx := context.Background()
 
-	// Setup: tenant, user, category, notification.
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Retention Test Tenant")
+	// Setup: organization, user, category, notification.
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Retention Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-retention-1")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-retention-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestDeleteEventsOlderThan(t *testing.T) {
 	notifID := id.Notification.New()
 	n := &models.Notification{
 		ID:         notifID,
-		TenantID:   tenantID,
+		OrganizationID:   organizationID,
 		UserID:     user.ID,
 		CategoryID: cat.ID,
 		Title:      "Retention Test",

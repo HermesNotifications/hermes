@@ -28,7 +28,7 @@ Your backend calls the Admin API to exchange a user identifier for a Hermes JWT.
 Your Backend                     Hermes Admin API
     |                                  |
     |  POST /v1/auth/token             |
-    |  { user_id, tenant_id }          |
+    |  { user_id, organization_id }          |
     |--------------------------------->|
     |                                  |
     |  { token, expires_at }           |
@@ -46,7 +46,7 @@ curl -X POST https://hermes.example.com/admin/v1/auth/token \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "user-ext-123",
-    "tenant_id": "tenant-abc"
+    "organization_id": "organization-abc"
   }'
 ```
 
@@ -59,7 +59,7 @@ curl -X POST https://hermes.example.com/admin/v1/auth/token \
 }
 ```
 
-The `user_id` you provide is the **external user ID** in your system. Hermes auto-creates an internal user record if one does not exist. The returned JWT contains the Hermes **internal** user ID as `sub` and the `tenant_id` claim.
+The `user_id` you provide is the **external user ID** in your system. Hermes auto-creates an internal user record if one does not exist. The returned JWT contains the Hermes **internal** user ID as `sub` and the `organization_id` claim.
 
 Tokens expire in approximately 1 hour (with jitter). Your backend should request a new token before expiry and pass it to the frontend.
 
@@ -73,12 +73,20 @@ The same JWT is used for:
 Hermes organizes preferences as **categories** → **subscriptions**, with reusable
 **templates** for content. (These were previously called "groups" and "types".)
 
-### 1. Create a Tenant
+### 1. Create an Organization
 
-Tenants represent isolated organizations in Hermes. Create one per customer (or one for your whole app if single-tenant). Tenant IDs are UUIDs assigned by Hermes.
+An organization is one of your customers, on whose behalf you send notifications. Create one per
+customer (or a single one if your app doesn't distinguish them). Organization IDs are UUIDs assigned
+by Hermes.
+
+> **Organizations are not a security boundary.** Your API key authenticates your *app*, and can act
+> on behalf of any organization in your installation — that is deliberate, since one app serves many
+> organizations and the same organization may be served by more than one app. The isolation boundary
+> is the app itself, enforced by running a separate Hermes installation per app. See
+> [ADR 0003](adr/0003-rename-tenant-to-organization.md).
 
 ```bash
-curl -X POST https://hermes.example.com/admin/v1/tenants \
+curl -X POST https://hermes.example.com/admin/v1/organizations \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "name": "My App" }'
@@ -90,7 +98,7 @@ curl -X POST https://hermes.example.com/admin/v1/tenants \
 { "id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30", "name": "My App", "created_at": "2026-03-21T10:00:00Z" }
 ```
 
-Use the returned `id` as `tenant_id` in subsequent calls.
+Use the returned `id` as `organization_id` in subsequent calls.
 
 ### 2. Create an API Key
 
@@ -152,7 +160,7 @@ Templates use Go `text/template` syntax. Variables are passed via the `data` fie
 
 ## Sending Notifications
 
-The recipient is always given under `to` (`tenant_id` + external `user_id`, plus optional
+The recipient is always given under `to` (`organization_id` + external `user_id`, plus optional
 `email`/`phone` overrides). Provide **either** a `template` slug **or** direct `content` --
 they are mutually exclusive. `POST /v1/send` is served by both the Admin service and the
 dedicated high-throughput Send service.
@@ -165,7 +173,7 @@ curl -X POST https://hermes.example.com/admin/v1/send \
   -H "Content-Type: application/json" \
   -d '{
     "to": {
-      "tenant_id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30",
+      "organization_id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30",
       "user_id": "ext-user-123"
     },
     "template": "welcome",
@@ -184,7 +192,7 @@ curl -X POST https://hermes.example.com/admin/v1/send \
   -H "Content-Type: application/json" \
   -d '{
     "to": {
-      "tenant_id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30",
+      "organization_id": "9b2e7c14-3f5a-4d61-8b0e-2a1c4f9d7e30",
       "user_id": "ext-user-123"
     },
     "content": {
@@ -217,7 +225,7 @@ curl -X POST https://hermes.example.com/admin/v1/send \
   -d '{ ... }'
 ```
 
-If the same tenant + idempotency key has been seen before, Hermes returns the existing notification ID with a `202 Accepted` status.
+If the same organization + idempotency key has been seen before, Hermes returns the existing notification ID with a `202 Accepted` status.
 
 ### Checking Notification Status
 
@@ -232,7 +240,7 @@ curl https://hermes.example.com/admin/v1/notifications/NOTIFICATION_ID \
 {
   "notification": {
     "id": "2qFh8Kd0Rb3Lm9Tx1Vn7Yc",
-    "tenant_id": "my-tenant",
+    "organization_id": "my-organization",
     "user_id": "usr-internal-id",
     "status": "delivered",
     "channels": ["email", "inbox"],
@@ -347,7 +355,7 @@ curl https://hermes.example.com/user/v1/users/me \
 ```json
 {
   "id": "usr-internal-id",
-  "tenant_id": "my-tenant",
+  "organization_id": "my-organization",
   "external_id": "ext-user-123",
   "email": "alice@example.com",
   "phone": "+1234567890",
@@ -480,8 +488,8 @@ This is the high-level map; the generated spec at `api/admin/openapi.yaml` is au
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/auth/token` | Exchange user ID + tenant ID for a Hermes JWT |
-| `POST` / `GET` | `/v1/tenants` | Create / list tenants |
+| `POST` | `/v1/auth/token` | Exchange user ID + organization ID for a Hermes JWT |
+| `POST` / `GET` | `/v1/organizations` | Create / list organizations |
 | `POST` / `GET` / `DELETE` | `/v1/apikeys` (`/:id`) | Create, list, revoke API keys |
 | `GET` / `POST` | `/v1/subscriptions/categories` | List / create subscription categories |
 | `GET` / `PUT` / `DELETE` | `/v1/subscriptions/categories/:id` | Get / update / delete a category |

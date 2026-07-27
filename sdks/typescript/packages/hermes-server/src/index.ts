@@ -9,7 +9,7 @@ export {
   NotificationsService,
   AuthService,
   APIKeysService,
-  TenantsService,
+  OrganizationsService,
   UsersService,
   HermesError,
   type HermesConfig,
@@ -22,6 +22,6 @@ export {
   type NotificationEvent,
   type APIKeyInfo,
   type APIKeyCreated,
-  type Tenant,
+  type Organization,
   type User,
 } from "./client.js";

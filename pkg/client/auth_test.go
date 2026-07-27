@@ -37,7 +37,7 @@ func TestAuthExchangeToken(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("failed to decode body: %v", err)
 		}
-		if body.TenantID != "tenant1" || body.UserID != "user1" {
+		if body.OrganizationID != "organization1" || body.UserID != "user1" {
 			t.Errorf("unexpected body: %+v", body)
 		}
 
@@ -49,8 +49,8 @@ func TestAuthExchangeToken(t *testing.T) {
 
 	c := client.New(srv.URL, "test-key")
 	result, err := c.Auth.ExchangeToken(context.Background(), client.TokenRequest{
-		TenantID: "tenant1",
-		UserID:   "user1",
+		OrganizationID: "organization1",
+		UserID:         "user1",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -11,7 +11,7 @@ import (
 // SendMessage is published to notification.send by the Send service.
 type SendMessage struct {
 	NotificationID string            `json:"notification_id"`
-	TenantID       string            `json:"tenant_id"`
+	OrganizationID string            `json:"organization_id"`
 	ExternalUserID string            `json:"external_user_id"`
 	Contacts       map[string]string `json:"contacts,omitempty"` // per-send address overrides: address key -> address
 	Content        *MessageContent   `json:"content,omitempty"`
@@ -41,7 +41,7 @@ type Recipient map[string]string
 // DeliveryMessage is published to delivery.{channel} by the Dispatch service.
 type DeliveryMessage struct {
 	NotificationID string          `json:"notification_id"`
-	TenantID       string          `json:"tenant_id"`
+	OrganizationID string          `json:"organization_id"`
 	UserID         string          `json:"user_id"`
 	Channel        string          `json:"channel"`
 	Content        MessageContent  `json:"content"`

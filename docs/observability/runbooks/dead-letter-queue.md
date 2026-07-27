@@ -29,7 +29,7 @@ nats stream info DLQ
   (SMTP relay, SMS webhook, Centrifugo, database) that outlasted the ~10-minute
   retry window. Check the consumer's error rate and the downstream dependency.
 - `reason=terminated` → the handler rejected the message as unprocessable
-  (malformed payload, invalid tenant UUID). This is a bug or bad input upstream;
+  (malformed payload, invalid organization UUID). This is a bug or bad input upstream;
   replaying without a fix will land it straight back on the DLQ.
 
 ## Inspect dead letters

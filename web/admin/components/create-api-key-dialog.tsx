@@ -27,13 +27,13 @@ const ALL_PERMISSIONS = [
   { value: "apikeys:manage", label: "apikeys:manage" },
   { value: "notifications:send", label: "notifications:send" },
   { value: "templates:manage", label: "templates:manage" },
-  { value: "tenants:manage", label: "tenants:manage" },
+  { value: "organizations:manage", label: "organizations:manage" },
 ];
 
 const DEFAULT_PERMISSIONS = [
   "notifications:send",
   "templates:manage",
-  "tenants:manage",
+  "organizations:manage",
 ];
 
 export function CreateAPIKeyDialog() {

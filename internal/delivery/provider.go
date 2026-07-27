@@ -7,7 +7,7 @@ import "context"
 
 type DeliveryRequest struct {
 	NotificationID string
-	TenantID       string
+	OrganizationID string
 	UserID         string
 	Channel        string
 	Title          string

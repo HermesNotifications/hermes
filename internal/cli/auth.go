@@ -17,12 +17,12 @@ func newAuthCmd() *cobra.Command {
 }
 
 func newAuthTokenCmd() *cobra.Command {
-	var tenantID, userID string
+	var organizationID, userID string
 	cmd := &cobra.Command{
 		Use: "token", Short: "Exchange API key for a user JWT",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := newClientFromCmd(cmd)
-			resp, err := c.Auth.ExchangeToken(cmd.Context(), client.TokenRequest{TenantID: tenantID, UserID: userID})
+			resp, err := c.Auth.ExchangeToken(cmd.Context(), client.TokenRequest{OrganizationID: organizationID, UserID: userID})
 			if err != nil {
 				return err
 			}
@@ -34,9 +34,9 @@ func newAuthTokenCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
+	cmd.Flags().StringVar(&organizationID, "organization-id", "", "Organization ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
-	cmd.MarkFlagRequired("tenant-id")
+	cmd.MarkFlagRequired("organization-id")
 	cmd.MarkFlagRequired("user-id")
 	return cmd
 }

@@ -79,9 +79,9 @@ func main() {
 	js, err := jetstream.New(nc)
 	must(err, "jetstream")
 
-	benchTenant := uuid.New().String() // tenants.id is a UUID column
-	userIDs := seedBench(ctx, pool, pgStore, redisClient, benchTenant, *users)
-	fmt.Fprintf(os.Stderr, "seeded tenant %s with %d users\n", benchTenant, len(userIDs))
+	benchOrganization := uuid.New().String() // organizations.id is a UUID column
+	userIDs := seedBench(ctx, pool, pgStore, redisClient, benchOrganization, *users)
+	fmt.Fprintf(os.Stderr, "seeded organization %s with %d users\n", benchOrganization, len(userIDs))
 
 	backends := strings.Split(*backendCSV, ",")
 	cells := dispatchbench.Cells(intList(*workersCSV), intList(*prefetchCSV), backends)
@@ -106,7 +106,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "skip %s cells: backend unavailable\n", cell.Backend)
 			continue
 		}
-		runner := newRunner(js, *natsURL, *n, benchTenant, userIDs, notifRepo, pgStore, redisClient, admin, pool, logger)
+		runner := newRunner(js, *natsURL, *n, benchOrganization, userIDs, notifRepo, pgStore, redisClient, admin, pool, logger)
 
 		drain := func() (float64, error) {
 			dctx, cancel := context.WithTimeout(ctx, *drainTO)

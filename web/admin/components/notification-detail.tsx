@@ -105,12 +105,12 @@ export function NotificationDetail({ notification }: { notification: Notificatio
           </span>
         </Field>
 
-        <Field label="Tenant ID">
+        <Field label="Organization ID">
           <span className="inline-flex items-center gap-1">
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-              {notification.tenant_id}
+              {notification.organization_id}
             </code>
-            <CopyButton value={notification.tenant_id} />
+            <CopyButton value={notification.organization_id} />
           </span>
         </Field>
 

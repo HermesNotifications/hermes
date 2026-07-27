@@ -99,12 +99,12 @@ Almost always one of:
 
 - Service isn't calling `observability.Init` yet (it's still on `tracing.Start` / dd-trace-go). Check `internal/tracing` imports.
 - Resource attr `service.name` is wrong — search Prometheus for the actual series: `group by (service) ({__name__!=""})`.
-- Collector's `attributes/metrics` processor stripped a label you needed. Check the processor config — it drops user_id/notification_id/tenant_id by design.
+- Collector's `attributes/metrics` processor stripped a label you needed. Check the processor config — it drops user_id/notification_id/organization_id by design.
 
 ### "Loki is slow / ingestion stalled"
 
 1. Check PV free space (`DiskPressure` alert fires at 80%).
-2. Check Loki pod logs for `rate limit exceeded` — means we're ingesting above the per-tenant limit. Tune `limits_config` in `deploy/observability/base/loki/values.yaml`.
+2. Check Loki pod logs for `rate limit exceeded` — means we're ingesting above the per-organization limit. Tune `limits_config` in `deploy/observability/base/loki/values.yaml`.
 3. Check Alloy DaemonSet — if it's busy shipping all of `/var/log/containers` including noisy pods, add a drop rule in the Alloy config.
 
 ### "Collector is back-pressuring / OOM"

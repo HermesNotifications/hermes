@@ -10,7 +10,7 @@ export type NotificationTemplate = components["schemas"]["NotificationTemplate"]
 export type Notification = components["schemas"]["Notification"];
 export type NotificationEvent = components["schemas"]["NotificationEvent"];
 export type NotificationItem = components["schemas"]["NotificationItem"];
-export type Tenant = components["schemas"]["TenantItem"];
+export type Organization = components["schemas"]["OrganizationItem"];
 export type User = components["schemas"]["UserItem"];
 
 export interface HermesConfig {
@@ -218,7 +218,7 @@ export class TemplatesService {
 
 export interface SendOptions {
   to: {
-    tenantId: string;
+    organizationId: string;
     userId: string;
     contacts?: Record<string, string>;
   };
@@ -246,7 +246,7 @@ export class NotificationsService {
       },
       body: {
         to: {
-          tenant_id: options.to.tenantId,
+          organization_id: options.to.organizationId,
           user_id: options.to.userId,
           contacts: options.to.contacts,
         },
@@ -331,12 +331,12 @@ export class AuthService {
 
   async exchangeToken(options: {
     userId: string;
-    tenantId: string;
+    organizationId: string;
   }): Promise<{ token: string; expiresAt: string }> {
     const result = await this.client.POST("/v1/auth/token", {
       body: {
         user_id: options.userId,
-        tenant_id: options.tenantId,
+        organization_id: options.organizationId,
       },
     });
     const data = unwrap(result);
@@ -344,16 +344,16 @@ export class AuthService {
   }
 }
 
-export class TenantsService {
+export class OrganizationsService {
   constructor(private client: ReturnType<typeof createApiClient>) {}
 
-  async list(): Promise<Tenant[]> {
-    const result = await this.client.GET("/v1/tenants");
+  async list(): Promise<Organization[]> {
+    const result = await this.client.GET("/v1/organizations");
     return unwrap(result) ?? [];
   }
 
-  async create(body: { name: string }): Promise<Tenant> {
-    const result = await this.client.POST("/v1/tenants", {
+  async create(body: { name: string }): Promise<Organization> {
+    const result = await this.client.POST("/v1/organizations", {
       body: { name: body.name },
     });
     return unwrap(result);
@@ -363,9 +363,9 @@ export class TenantsService {
 export class UsersService {
   constructor(private client: ReturnType<typeof createApiClient>) {}
 
-  async list(tenantId?: string): Promise<User[]> {
+  async list(organizationId?: string): Promise<User[]> {
     const result = await this.client.GET("/v1/users", {
-      params: { query: tenantId ? { tenant_id: tenantId } : {} },
+      params: { query: organizationId ? { organization_id: organizationId } : {} },
     });
     return unwrap(result) ?? [];
   }
@@ -378,7 +378,7 @@ export class Hermes {
   readonly notifications: NotificationsService;
   readonly auth: AuthService;
   readonly apiKeys: APIKeysService;
-  readonly tenants: TenantsService;
+  readonly organizations: OrganizationsService;
   readonly users: UsersService;
 
   constructor(config: HermesConfig) {
@@ -389,7 +389,7 @@ export class Hermes {
     this.notifications = new NotificationsService(client);
     this.auth = new AuthService(client);
     this.apiKeys = new APIKeysService(client);
-    this.tenants = new TenantsService(client);
+    this.organizations = new OrganizationsService(client);
     this.users = new UsersService(client);
   }
 }

@@ -17,18 +17,18 @@ func TestHandleGetNotification(t *testing.T) {
 	// Seed a notification directly via the mock store
 	notificationID := "ntf-test-123"
 	store := &mockStore{
-		tenants: []models.Tenant{
-			{ID: "test-tenant-id", Name: "Test Tenant", CreatedAt: time.Now()},
+		organizations: []models.Organization{
+			{ID: "test-organization-id", Name: "Test Organization", CreatedAt: time.Now()},
 		},
 		notifications: []models.Notification{
 			{
-				ID:       notificationID,
-				TenantID: "test-tenant-id",
-				UserID:   "usr-1",
-				Title:    "Test Alert",
-				Body:     "This is a test.",
-				Channels: []string{"inbox"},
-				Status:   models.StatusPending,
+				ID:             notificationID,
+				OrganizationID: "test-organization-id",
+				UserID:         "usr-1",
+				Title:          "Test Alert",
+				Body:           "This is a test.",
+				Channels:       []string{"inbox"},
+				Status:         models.StatusPending,
 			},
 		},
 	}
@@ -57,13 +57,13 @@ func TestHandleGetNotification(t *testing.T) {
 
 func TestListNotifications(t *testing.T) {
 	store := &mockStore{
-		tenants: []models.Tenant{
-			{ID: "tenant-1", Name: "Test", CreatedAt: time.Now()},
+		organizations: []models.Organization{
+			{ID: "organization-1", Name: "Test", CreatedAt: time.Now()},
 		},
 		notifications: []models.Notification{
-			{ID: "notif-1", TenantID: "tenant-1", UserID: "usr-1", Title: "Hello", Status: "sent", CreatedAt: time.Now()},
-			{ID: "notif-2", TenantID: "tenant-1", UserID: "usr-2", Title: "World", Status: "pending", CreatedAt: time.Now()},
-			{ID: "notif-3", TenantID: "tenant-1", UserID: "usr-1", Title: "Test", Status: "delivered", CreatedAt: time.Now()},
+			{ID: "notif-1", OrganizationID: "organization-1", UserID: "usr-1", Title: "Hello", Status: "sent", CreatedAt: time.Now()},
+			{ID: "notif-2", OrganizationID: "organization-1", UserID: "usr-2", Title: "World", Status: "pending", CreatedAt: time.Now()},
+			{ID: "notif-3", OrganizationID: "organization-1", UserID: "usr-1", Title: "Test", Status: "delivered", CreatedAt: time.Now()},
 		},
 	}
 	srv := newTestServerWithStore(t, store)
@@ -87,13 +87,13 @@ func TestListNotifications(t *testing.T) {
 
 func TestListNotifications_WithLimit(t *testing.T) {
 	store := &mockStore{
-		tenants: []models.Tenant{
-			{ID: "tenant-1", Name: "Test", CreatedAt: time.Now()},
+		organizations: []models.Organization{
+			{ID: "organization-1", Name: "Test", CreatedAt: time.Now()},
 		},
 		notifications: []models.Notification{
-			{ID: "notif-1", TenantID: "tenant-1", UserID: "usr-1", Title: "A", Status: "sent", CreatedAt: time.Now()},
-			{ID: "notif-2", TenantID: "tenant-1", UserID: "usr-2", Title: "B", Status: "sent", CreatedAt: time.Now()},
-			{ID: "notif-3", TenantID: "tenant-1", UserID: "usr-1", Title: "C", Status: "sent", CreatedAt: time.Now()},
+			{ID: "notif-1", OrganizationID: "organization-1", UserID: "usr-1", Title: "A", Status: "sent", CreatedAt: time.Now()},
+			{ID: "notif-2", OrganizationID: "organization-1", UserID: "usr-2", Title: "B", Status: "sent", CreatedAt: time.Now()},
+			{ID: "notif-3", OrganizationID: "organization-1", UserID: "usr-1", Title: "C", Status: "sent", CreatedAt: time.Now()},
 		},
 	}
 	srv := newTestServerWithStore(t, store)

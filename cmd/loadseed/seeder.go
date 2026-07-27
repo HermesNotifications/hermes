@@ -24,29 +24,29 @@ func runSeed(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 	}
 	m.APIKey = rawKey
 
-	tenantIDs, err := insertTenants(ctx, pool, cfg.Tenants, rid)
+	organizationIDs, err := insertOrganizations(ctx, pool, cfg.Organizations, rid)
 	if err != nil {
-		return fmt.Errorf("tenants: %w", err)
+		return fmt.Errorf("organizations: %w", err)
 	}
 
-	m.Tenants = make([]Tenant, cfg.Tenants)
-	for i, tid := range tenantIDs {
-		userIDs, err := insertUsers(ctx, pool, tid, cfg.UsersPerTenant, rid, i)
+	m.Organizations = make([]Organization, cfg.Organizations)
+	for i, tid := range organizationIDs {
+		userIDs, err := insertUsers(ctx, pool, tid, cfg.UsersPerOrganization, rid, i)
 		if err != nil {
 			return fmt.Errorf("users[%d]: %w", i, err)
 		}
 		cats, err := insertSubscriptionTree(ctx, pool, rid, i,
-			cfg.CategoriesPerTenant, cfg.SubscriptionsPerCategory, cfg.TemplatesPerSubscription)
+			cfg.CategoriesPerOrganization, cfg.SubscriptionsPerCategory, cfg.TemplatesPerSubscription)
 		if err != nil {
 			return fmt.Errorf("tree[%d]: %w", i, err)
 		}
-		m.Tenants[i] = Tenant{ID: tid, Users: userIDs, Categories: cats}
+		m.Organizations[i] = Organization{ID: tid, Users: userIDs, Categories: cats}
 	}
 
 	if err := m.Write(cfg.OutputPath); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
-	fmt.Printf("load-test seed complete: %d tenants, %d users, run_seed_id=%s\n  manifest=%s\n  api_key=%s\n",
-		cfg.Tenants, cfg.Tenants*cfg.UsersPerTenant, rid, cfg.OutputPath, rawKey)
+	fmt.Printf("load-test seed complete: %d organizations, %d users, run_seed_id=%s\n  manifest=%s\n  api_key=%s\n",
+		cfg.Organizations, cfg.Organizations*cfg.UsersPerOrganization, rid, cfg.OutputPath, rawKey)
 	return nil
 }

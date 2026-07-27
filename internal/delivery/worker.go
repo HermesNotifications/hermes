@@ -44,7 +44,7 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte) error {
 
 	req := DeliveryRequest{
 		NotificationID: msg.NotificationID,
-		TenantID:       msg.TenantID,
+		OrganizationID: msg.OrganizationID,
 		UserID:         msg.UserID,
 		Channel:        w.channel,
 		Title:          msg.Content.Title,

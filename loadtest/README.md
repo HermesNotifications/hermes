@@ -9,7 +9,7 @@ End-to-end load-testing system for the Hermes notification platform. Scales from
 Requires `make infra-up` plus Hermes services running (admin, inbox, send, Centrifugo).
 
 ```bash
-make loadseed                              # seed default dataset (10 tenants × 10k users)
+make loadseed                              # seed default dataset (10 organizations × 10k users)
 make loadtest-local SCENARIO=send TARGET_RPS=100 DURATION=30s
 # → artifacts/<run_id>/summary.json
 # → Grafana at http://localhost:3001

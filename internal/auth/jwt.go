@@ -15,23 +15,23 @@ import (
 type contextKey string
 
 const (
-	ContextKeyUserID   contextKey = "user_id"
-	ContextKeyTenantID contextKey = "tenant_id"
+	ContextKeyUserID         contextKey = "user_id"
+	ContextKeyOrganizationID contextKey = "organization_id"
 )
 
 // HermesClaims is the JWT claims structure for Hermes-issued tokens.
 type HermesClaims struct {
 	jwt.RegisteredClaims
-	TenantID string `json:"tenant_id"`
+	OrganizationID string `json:"organization_id"`
 }
 
 // JWTSigningConfig represents one accepted signing key configuration.
 type JWTSigningConfig struct {
-	Name          string
-	Secret        []byte
-	Algorithm     string
-	UserIDClaim   string
-	TenantIDClaim string
+	Name                string
+	Secret              []byte
+	Algorithm           string
+	UserIDClaim         string
+	OrganizationIDClaim string
 }
 
 // JWTKeyProvider returns all active signing configs. Called on each request.
@@ -86,23 +86,23 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Extract user ID and tenant ID from claims
+			// Extract user ID and organization ID from claims
 			userIDRaw, ok := validClaims[matchedCfg.UserIDClaim]
 			if !ok {
 				userIDRaw = validClaims["sub"]
 			}
-			tenantIDRaw, tok := validClaims[matchedCfg.TenantIDClaim]
+			organizationIDRaw, tok := validClaims[matchedCfg.OrganizationIDClaim]
 
 			userID, _ := claimToString(userIDRaw)
-			tenantID, _ := claimToString(tenantIDRaw)
+			organizationID, _ := claimToString(organizationIDRaw)
 
-			if userID == "" || (!tok && tenantID == "") {
+			if userID == "" || (!tok && organizationID == "") {
 				http.Error(w, `{"error":"missing claims"}`, http.StatusUnauthorized)
 				return
 			}
 
 			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)
-			ctx = context.WithValue(ctx, ContextKeyTenantID, tenantID)
+			ctx = context.WithValue(ctx, ContextKeyOrganizationID, organizationID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -125,7 +125,7 @@ func UserIDFromContext(ctx context.Context) string {
 	return v
 }
 
-func TenantIDFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(ContextKeyTenantID).(string)
+func OrganizationIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ContextKeyOrganizationID).(string)
 	return v
 }

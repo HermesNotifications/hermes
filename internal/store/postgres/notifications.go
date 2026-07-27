@@ -17,10 +17,10 @@ func (s *Store) CreateNotification(ctx context.Context, n *models.Notification) 
 	}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO notifications
-			(id, tenant_id, user_id, template_id, category_id, title, body, action_url, action_label, idempotency_key, channels, status)
+			(id, organization_id, user_id, template_id, category_id, title, body, action_url, action_label, idempotency_key, channels, status)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 RETURNING created_at`,
-		n.ID, n.TenantID, n.UserID, n.TemplateID, categoryID,
+		n.ID, n.OrganizationID, n.UserID, n.TemplateID, categoryID,
 		n.Title, n.Body, n.ActionURL, n.ActionLabel,
 		n.IdempotencyKey, n.Channels, n.Status,
 	).Scan(&n.CreatedAt)
@@ -33,7 +33,7 @@ func (s *Store) CreateNotification(ctx context.Context, n *models.Notification) 
 func scanNotification(scan func(dest ...any) error, n *models.Notification) error {
 	var categoryID *string
 	err := scan(
-		&n.ID, &n.TenantID, &n.UserID, &n.TemplateID, &categoryID,
+		&n.ID, &n.OrganizationID, &n.UserID, &n.TemplateID, &categoryID,
 		&n.Title, &n.Body, &n.ActionURL, &n.ActionLabel,
 		&n.IdempotencyKey, &n.Channels, &n.Status,
 		&n.CreatedAt, &n.SentAt, &n.DeliveredAt, &n.ReadAt, &n.ArchivedAt, &n.DeletedAt,
@@ -47,7 +47,7 @@ func scanNotification(scan func(dest ...any) error, n *models.Notification) erro
 func (s *Store) GetNotificationByID(ctx context.Context, notifID string) (*models.Notification, error) {
 	n := &models.Notification{}
 	row := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, user_id, template_id, category_id, title, body,
+		`SELECT id, organization_id, user_id, template_id, category_id, title, body,
 		        action_url, action_label, idempotency_key, channels, status,
 		        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 		 FROM notifications WHERE id = $1`, notifID,
@@ -58,16 +58,16 @@ func (s *Store) GetNotificationByID(ctx context.Context, notifID string) (*model
 	return n, nil
 }
 
-func (s *Store) GetNotificationByIdempotencyKey(ctx context.Context, tenantID, key string) (*models.Notification, error) {
+func (s *Store) GetNotificationByIdempotencyKey(ctx context.Context, organizationID, key string) (*models.Notification, error) {
 	n := &models.Notification{}
 	row := s.pool.QueryRow(ctx,
-		`SELECT id, tenant_id, user_id, template_id, category_id, title, body,
+		`SELECT id, organization_id, user_id, template_id, category_id, title, body,
 		        action_url, action_label, idempotency_key, channels, status,
 		        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 		 FROM notifications
-		 WHERE tenant_id = $1 AND idempotency_key = $2
+		 WHERE organization_id = $1 AND idempotency_key = $2
 		   AND created_at > NOW() - INTERVAL '24 hours'`,
-		tenantID, key,
+		organizationID, key,
 	)
 	if err := scanNotification(row.Scan, n); err != nil {
 		return nil, fmt.Errorf("get notification by idempotency key: %w", err)
@@ -80,7 +80,7 @@ func (s *Store) ListRecentNotifications(ctx context.Context, limit int) ([]model
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, tenant_id, user_id, template_id, category_id, title, body,
+		`SELECT id, organization_id, user_id, template_id, category_id, title, body,
 		        action_url, action_label, idempotency_key, channels, status,
 		        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 		 FROM notifications ORDER BY created_at DESC LIMIT $1`, limit,

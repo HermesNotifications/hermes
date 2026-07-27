@@ -167,7 +167,7 @@ services:
 
 | Service | Key | Default Port | Description |
 |---------|-----|------|-------------|
-| Admin API | `services.admin` | 8080 | Tenant management, notification sending |
+| Admin API | `services.admin` | 8080 | Organization management, notification sending |
 | Send | `services.send` | 8088 | Lightweight ingestion layer |
 | Dispatch | `services.dispatch` | 8081 | Template resolution, channel fan-out |
 | Event Writer | `services.workerEvents` | 8082 | Batch event persistence |

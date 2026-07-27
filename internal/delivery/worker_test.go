@@ -58,7 +58,7 @@ func TestWorker_HandleMessage_Success(t *testing.T) {
 	actionLabel := "Open"
 	msg := hermenats.DeliveryMessage{
 		NotificationID: "notif-abc",
-		TenantID:       "tenant-1",
+		OrganizationID: "org-1",
 		UserID:         "user-1",
 		Channel:        "email",
 		Content: hermenats.MessageContent{

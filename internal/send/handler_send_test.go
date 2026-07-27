@@ -16,7 +16,7 @@ func TestSendHandler_TemplateSend_Success(t *testing.T) {
 	pub := &mockPublisher{}
 	srv := newTestServerWithPublisher(t, pub)
 
-	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome","data":{"name":"Alice"}}`
+	body := `{"to":{"organization_id":"t1","user_id":"u1"},"template":"welcome","data":{"name":"Alice"}}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -49,7 +49,7 @@ func TestSendHandler_DirectSend_Success(t *testing.T) {
 	pub := &mockPublisher{}
 	srv := newTestServerWithPublisher(t, pub)
 
-	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"content":{"title":"Hi","body":"Hello"},"channels":["inbox"]}`
+	body := `{"to":{"organization_id":"t1","user_id":"u1"},"content":{"title":"Hi","body":"Hello"},"channels":["inbox"]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -69,7 +69,7 @@ func TestSendHandler_NATSPublishError(t *testing.T) {
 	pub := &mockPublisher{err: fmt.Errorf("connection refused")}
 	srv := newTestServerWithPublisher(t, pub)
 
-	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome"}`
+	body := `{"to":{"organization_id":"t1","user_id":"u1"},"template":"welcome"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -85,7 +85,7 @@ func TestSendHandler_NATSNil(t *testing.T) {
 	// Without a publisher, the handler returns 503
 	srv := newTestServer(t)
 
-	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome"}`
+	body := `{"to":{"organization_id":"t1","user_id":"u1"},"template":"welcome"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -105,8 +105,8 @@ func TestSendHandler_ExactlyOneRequired(t *testing.T) {
 		name string
 		body string
 	}{
-		{"neither", `{"to":{"tenant_id":"t1","user_id":"u1"}}`},
-		{"both", `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome","content":{"title":"Hi","body":"Hello"}}`},
+		{"neither", `{"to":{"organization_id":"t1","user_id":"u1"}}`},
+		{"both", `{"to":{"organization_id":"t1","user_id":"u1"},"template":"welcome","content":{"title":"Hi","body":"Hello"}}`},
 	}
 
 	for _, tt := range tests {
@@ -128,7 +128,7 @@ func TestSendHandler_DirectSendWithoutChannels(t *testing.T) {
 	pub := &mockPublisher{}
 	srv := newTestServerWithPublisher(t, pub)
 
-	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"content":{"title":"Hi","body":"Hello"}}`
+	body := `{"to":{"organization_id":"t1","user_id":"u1"},"content":{"title":"Hi","body":"Hello"}}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -160,7 +160,7 @@ func TestSendHandler_ResponseContainsNotificationID(t *testing.T) {
 	pub := &mockPublisher{}
 	srv := newTestServerWithPublisher(t, pub)
 
-	body := `{"to":{"tenant_id":"t1","user_id":"u1"},"template":"welcome"}`
+	body := `{"to":{"organization_id":"t1","user_id":"u1"},"template":"welcome"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

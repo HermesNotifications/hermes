@@ -12,7 +12,7 @@ managed with [golang-migrate](https://github.com/golang-migrate/migrate): number
 ## Entities
 
 ```
-tenants ──< users ──< user_subscriptions >── subscriptions >── subscription_categories
+organizations ──< users ──< user_subscriptions >── subscriptions >── subscription_categories
    │                                              │                      │
    └──< notifications >── notification_templates ─┘                      │
               │           (template_id, nullable)                        │
@@ -25,15 +25,15 @@ api_keys          (standalone)
 jwt_signing_keys  (standalone)
 ```
 
-### `tenants`
+### `organizations`
 The isolation boundary. **UUID** primary key (the one entity not using a base62 ID).
 Columns: `id`, `name`, `default_locale` (default `en`), `settings` (JSONB), `created_at`.
 
 ### `users`
-A recipient within a tenant. `id` (base62, `usr_…`), `tenant_id` → `tenants`, `external_id`
+A recipient within an organization. `id` (base62, `usr_…`), `organization_id` → `organizations`, `external_id`
 (your application's user identifier), `email`, `phone`, `locale`, `created_at`.
-Unique on `(tenant_id, external_id)` — each external user maps to exactly one Hermes user
-per tenant.
+Unique on `(organization_id, external_id)` — each external user maps to exactly one Hermes user
+per organization.
 
 ### `subscription_categories`
 Top-level grouping of notification preferences (e.g. *Account*, *General*, *Marketing*).
@@ -54,7 +54,7 @@ A user's opt-in/out for a subscription. Composite PK `(user_id, subscription_id)
 `opted_in` (bool) and `created_at`. Absence means "fall back to the category default state."
 
 ### `notifications`
-One notification to one user. `id` (base62, time-sortable), `tenant_id` → `tenants`,
+One notification to one user. `id` (base62, time-sortable), `organization_id` → `organizations`,
 `user_id` → `users`, `template_id` → `notification_templates` (nullable, for direct-content
 sends), `category_id` → `subscription_categories` (nullable), `title`, `body`, `action_url`,
 `action_label`, `idempotency_key`, `channels` (text[]), `status` (default `pending`), and the
@@ -62,7 +62,7 @@ lifecycle timestamps `created_at`, `sent_at`, `delivered_at`, `read_at`, `archiv
 `deleted_at`.
 - **Inbox index:** `(user_id, created_at DESC)` partial, `WHERE archived_at IS NULL AND
   deleted_at IS NULL` — backs the cursor-paginated inbox.
-- **Idempotency index:** unique `(tenant_id, idempotency_key)` partial,
+- **Idempotency index:** unique `(organization_id, idempotency_key)` partial,
   `WHERE idempotency_key IS NOT NULL` — enforces dedup at the database.
 
 ### `notification_events`
@@ -78,8 +78,8 @@ Indexed by `(notification_id, created_at)` to render a timeline. (The FK back to
 
 ### `jwt_signing_keys`
 Accepted JWT signing keys (multiple may be active for rotation). `id`, `name`, `algorithm`
-(default `HS256`), `secret`, `user_id_claim` (default `sub`), `tenant_id_claim` (default
-`tenant_id`), `active`, `created_at`.
+(default `HS256`), `secret`, `user_id_claim` (default `sub`), `organization_id_claim` (default
+`organization_id`), `active`, `created_at`.
 
 > Migration `000012` also creates Better Auth tables used by the [admin portal](../web/admin/README.md).
 

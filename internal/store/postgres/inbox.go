@@ -51,7 +51,7 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 	}
 
 	// Build the query
-	query := fmt.Sprintf(`SELECT id, tenant_id, user_id, template_id, category_id, title, body,
+	query := fmt.Sprintf(`SELECT id, organization_id, user_id, template_id, category_id, title, body,
 	        action_url, action_label, idempotency_key, channels, status,
 	        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 	 FROM notifications

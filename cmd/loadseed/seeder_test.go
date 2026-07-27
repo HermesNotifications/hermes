@@ -24,9 +24,9 @@ func TestSeeder_EndToEnd(t *testing.T) {
 
 	out := filepath.Join(t.TempDir(), "manifest.json")
 	cfg := Config{
-		Tenants:                  2,
-		UsersPerTenant:           50,
-		CategoriesPerTenant:      2,
+		Organizations:                  2,
+		UsersPerOrganization:           50,
+		CategoriesPerOrganization:      2,
 		SubscriptionsPerCategory: 2,
 		TemplatesPerSubscription: 2,
 		DatabaseURL:              envOr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"),
@@ -43,11 +43,11 @@ func TestSeeder_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
-	if len(m.Tenants) != 2 {
-		t.Fatalf("want 2 tenants, got %d", len(m.Tenants))
+	if len(m.Organizations) != 2 {
+		t.Fatalf("want 2 organizations, got %d", len(m.Organizations))
 	}
-	if len(m.Tenants[0].Users) != 50 {
-		t.Fatalf("want 50 users, got %d", len(m.Tenants[0].Users))
+	if len(m.Organizations[0].Users) != 50 {
+		t.Fatalf("want 50 users, got %d", len(m.Organizations[0].Users))
 	}
 	if m.APIKey == "" {
 		t.Fatalf("api key not set")

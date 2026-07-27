@@ -11,11 +11,11 @@ func SigningConfigsFromKeys(keys []models.JWTSigningKey) []JWTSigningConfig {
 	configs := make([]JWTSigningConfig, len(keys))
 	for i, k := range keys {
 		configs[i] = JWTSigningConfig{
-			Name:          k.Name,
-			Secret:        []byte(k.Secret),
-			Algorithm:     k.Algorithm,
-			UserIDClaim:   k.UserIDClaim,
-			TenantIDClaim: k.TenantIDClaim,
+			Name:                k.Name,
+			Secret:              []byte(k.Secret),
+			Algorithm:           k.Algorithm,
+			UserIDClaim:         k.UserIDClaim,
+			OrganizationIDClaim: k.OrganizationIDClaim,
 		}
 	}
 	return configs

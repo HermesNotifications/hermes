@@ -6,11 +6,11 @@ import { uuidv4 } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
 // buildSendBody constructs a POST /v1/send request body.
 // Channel selection is weighted by the env var CHANNEL_WEIGHTS (e.g., "inbox:70,email:30").
 // Inline content path: pass opts.inline = true to bypass template lookup.
-export function buildSendBody(tenant, userID, template, opts) {
+export function buildSendBody(organization, userID, template, opts) {
   const channel = pickChannel(template.channels);
   if (opts && opts.inline) {
     return {
-      to: { tenant_id: tenant.id, user_id: userID },
+      to: { organization_id: organization.id, user_id: userID },
       channels: [channel],
       content: {
         inbox: channel === 'inbox' ? { title: 'Load test', body: 'Inline body ' + uuidv4() } : undefined,
@@ -19,7 +19,7 @@ export function buildSendBody(tenant, userID, template, opts) {
     };
   }
   return {
-    to: { tenant_id: tenant.id, user_id: userID },
+    to: { organization_id: organization.id, user_id: userID },
     channels: [channel],
     template: template.slug,
     data: { subject: 'Load test ' + uuidv4().slice(0, 8), name: userID },

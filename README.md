@@ -25,7 +25,7 @@ API Client ──> Send ──> NATS ──> Dispatch ──> NATS ──> Worke
                                                   (WebSocket)
 ```
 
-**Write path (API key auth):** The Send service authenticates the request and publishes it to NATS (a thin ingestion layer). Dispatch persists the notification, resolves templates and channels, and fans out to delivery workers. Workers deliver via webhooks (email/SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status. The Admin service is the separate management API (tenants, keys, categories, templates, JWT issuance).
+**Write path (API key auth):** The Send service authenticates the request and publishes it to NATS (a thin ingestion layer). Dispatch persists the notification, resolves templates and channels, and fans out to delivery workers. Workers deliver via webhooks (email/SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status. The Admin service is the separate management API (organizations, keys, categories, templates, JWT issuance).
 
 **Read path (JWT auth):** Inbox Service serves paginated inbox. User Service manages profiles and notification preferences. Centrifugo provides real-time WebSocket push.
 
@@ -34,7 +34,7 @@ API Client ──> Send ──> NATS ──> Dispatch ──> NATS ──> Worke
 | Service | Port | Description |
 |---------|------|-------------|
 | Send | 8088 | Thin ingestion API — authenticates and publishes `POST /v1/send` to NATS |
-| Admin | 8080 | Server-to-server management API — tenants, categories, templates, API keys, JWT issuance |
+| Admin | 8080 | Server-to-server management API — organizations, categories, templates, API keys, JWT issuance |
 | Dispatch | 8081 | Resolves channels and templates, fans out to workers |
 | Event Writer | 8082 | Batch-inserts delivery events, updates notification status |
 | Email Worker | 8083 | Delivers email notifications via webhook |
@@ -116,10 +116,10 @@ export HERMES_API_KEY=<your-api-key>
 # Manage resources
 hermes categories list
 hermes templates list
-hermes notifications send --tenant-id <uuid> --user-id user123 --template welcome --data '{"name":"Alice"}'
+hermes notifications send --organization-id <uuid> --user-id user123 --template welcome --data '{"name":"Alice"}'
 
 # Interactive inbox (TUI with real-time updates)
-hermes inbox open --tenant-id <uuid> --user-id user123
+hermes inbox open --organization-id <uuid> --user-id user123
 ```
 
 See [docs/cli.md](docs/cli.md) for the full CLI reference.
@@ -140,7 +140,7 @@ curl -X POST http://localhost:8888/v1/send \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "to": {"tenant_id": "<uuid>", "user_id": "user123"},
+    "to": {"organization_id": "<uuid>", "user_id": "user123"},
     "template": "welcome",
     "data": {"name": "Alice"}
   }'

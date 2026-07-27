@@ -50,7 +50,7 @@ data:
             action: delete
           - key: notification_id
             action: delete
-          - key: tenant_id
+          - key: organization_id
             action: delete
 
     exporters:

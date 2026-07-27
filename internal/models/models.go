@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type Tenant struct {
+type Organization struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	DefaultLocale string    `json:"default_locale,omitempty"`
@@ -25,12 +25,12 @@ type APIKey struct {
 }
 
 type User struct {
-	ID         string            `json:"id"`
-	TenantID   string            `json:"tenant_id"`
-	ExternalID string            `json:"external_id"`
-	Contacts   map[string]string `json:"contacts,omitempty"`
-	Locale     *string           `json:"locale,omitempty"`
-	CreatedAt  time.Time         `json:"created_at"`
+	ID             string            `json:"id"`
+	OrganizationID string            `json:"organization_id"`
+	ExternalID     string            `json:"external_id"`
+	Contacts       map[string]string `json:"contacts,omitempty"`
+	Locale         *string           `json:"locale,omitempty"`
+	CreatedAt      time.Time         `json:"created_at"`
 }
 
 type SubscriptionCategory struct {
@@ -64,7 +64,7 @@ type NotificationTemplate struct {
 
 type Notification struct {
 	ID             string             `json:"id"`
-	TenantID       string             `json:"tenant_id"`
+	OrganizationID string             `json:"organization_id"`
 	UserID         string             `json:"user_id"`
 	TemplateID     *string            `json:"template_id,omitempty"`
 	CategoryID     string             `json:"category_id"`
@@ -101,12 +101,12 @@ type UserSubscription struct {
 }
 
 type JWTSigningKey struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Algorithm     string    `json:"algorithm"`
-	Secret        string    `json:"-"`
-	UserIDClaim   string    `json:"user_id_claim"`
-	TenantIDClaim string    `json:"tenant_id_claim"`
-	Active        bool      `json:"active"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID                  string    `json:"id"`
+	Name                string    `json:"name"`
+	Algorithm           string    `json:"algorithm"`
+	Secret              string    `json:"-"`
+	UserIDClaim         string    `json:"user_id_claim"`
+	OrganizationIDClaim string    `json:"organization_id_claim"`
+	Active              bool      `json:"active"`
+	CreatedAt           time.Time `json:"created_at"`
 }

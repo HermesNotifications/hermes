@@ -116,7 +116,7 @@ func TestSendContactsMapping(t *testing.T) {
 	cmd.SetArgs([]string{
 		"--url", srv.URL, "--api-key", "test",
 		"notifications", "send",
-		"--tenant-id", "ten-1",
+		"--organization-id", "ten-1",
 		"--user-id", "usr-1",
 		"--template", "welcome",
 		"--email", "alice@example.com",
@@ -154,7 +154,7 @@ func TestSendContactsOmittedWhenEmpty(t *testing.T) {
 	cmd.SetArgs([]string{
 		"--url", srv.URL, "--api-key", "test",
 		"notifications", "send",
-		"--tenant-id", "ten-1",
+		"--organization-id", "ten-1",
 		"--user-id", "usr-1",
 		"--template", "welcome",
 		// intentionally no --email or --phone

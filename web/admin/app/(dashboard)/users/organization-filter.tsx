@@ -4,7 +4,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { Tenant } from "@hermes-notifications/server";
+import type { Organization } from "@hermes-notifications/server";
 import {
   Select,
   SelectContent,
@@ -13,32 +13,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface TenantFilterProps {
-  tenants: Tenant[];
-  currentTenantId?: string;
+interface OrganizationFilterProps {
+  organizations: Organization[];
+  currentOrganizationId?: string;
 }
 
-export function TenantFilter({ tenants, currentTenantId }: TenantFilterProps) {
+export function OrganizationFilter({ organizations, currentOrganizationId }: OrganizationFilterProps) {
   const router = useRouter();
 
   function handleChange(value: string | null) {
     if (!value || value === "all") {
       router.push("/users");
     } else {
-      router.push(`/users?tenant_id=${value}`);
+      router.push(`/users?organization_id=${value}`);
     }
   }
 
   return (
-    <Select value={currentTenantId ?? "all"} onValueChange={handleChange}>
+    <Select value={currentOrganizationId ?? "all"} onValueChange={handleChange}>
       <SelectTrigger className="w-[220px]">
-        <SelectValue placeholder="All tenants" />
+        <SelectValue placeholder="All organizations" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">All tenants</SelectItem>
-        {tenants.map((tenant) => (
-          <SelectItem key={tenant.id} value={tenant.id}>
-            {tenant.name}
+        <SelectItem value="all">All organizations</SelectItem>
+        {organizations.map((organization) => (
+          <SelectItem key={organization.id} value={organization.id}>
+            {organization.name}
           </SelectItem>
         ))}
       </SelectContent>

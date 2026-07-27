@@ -24,18 +24,18 @@ type Dispatch struct {
 	nats             *messaging.Client
 	store            store.NotificationRepository
 	users            store.UserRepository
-	tenants          store.TenantRepository
+	organizations    store.OrganizationRepository
 	templateResolver *TemplateResolver
 	channelResolver  *ChannelResolver
 	logger           *slog.Logger
 }
 
-func NewDispatch(nats *messaging.Client, store store.NotificationRepository, users store.UserRepository, tenants store.TenantRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
+func NewDispatch(nats *messaging.Client, store store.NotificationRepository, users store.UserRepository, organizations store.OrganizationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
 	return &Dispatch{
 		nats:             nats,
 		store:            store,
 		users:            users,
-		tenants:          tenants,
+		organizations:    organizations,
 		templateResolver: templateResolver,
 		channelResolver:  channelResolver,
 		logger:           logger,
@@ -78,19 +78,19 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 
 	log := d.logger.With("notification_id", msg.NotificationID, "attempt", info.Attempt)
 
-	// --- Phase 1: Ensure tenant + user, create notification record early ---
+	// --- Phase 1: Ensure organization + user, create notification record early ---
 	// This guarantees a DB record exists for troubleshooting even if later steps fail.
 	// Failures here are transient (DB down) and retryable, but we give up on last attempt.
 
-	if _, err := d.tenants.EnsureTenant(ctx, msg.TenantID); err != nil {
-		log.Error("ensure tenant", "error", err, "tenant_id", msg.TenantID)
+	if _, err := d.organizations.EnsureOrganization(ctx, msg.OrganizationID); err != nil {
+		log.Error("ensure organization", "error", err, "organization_id", msg.OrganizationID)
 		if isPermanentDBError(err) {
-			return permanent(fmt.Errorf("ensure tenant: %w", err))
+			return permanent(fmt.Errorf("ensure organization: %w", err))
 		}
-		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure tenant: %w", err))
+		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure organization: %w", err))
 	}
 
-	user, err := d.users.EnsureUser(ctx, msg.TenantID, msg.ExternalUserID)
+	user, err := d.users.EnsureUser(ctx, msg.OrganizationID, msg.ExternalUserID)
 	if err != nil {
 		log.Error("ensure user", "error", err)
 		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure user: %w", err))
@@ -102,11 +102,11 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 		channels = []string{}
 	}
 	n := &models.Notification{
-		ID:       msg.NotificationID,
-		TenantID: msg.TenantID,
-		UserID:   user.ID,
-		Channels: channels,
-		Status:   models.StatusPending,
+		ID:             msg.NotificationID,
+		OrganizationID: msg.OrganizationID,
+		UserID:         user.ID,
+		Channels:       channels,
+		Status:         models.StatusPending,
 	}
 	if msg.Content != nil {
 		n.Title = msg.Content.Title
@@ -311,7 +311,7 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 
 		dm := &hermenats.DeliveryMessage{
 			NotificationID: msg.NotificationID,
-			TenantID:       msg.TenantID,
+			OrganizationID: msg.OrganizationID,
 			UserID:         user.ID,
 			Channel:        ch,
 			Content:        deliveryContent,

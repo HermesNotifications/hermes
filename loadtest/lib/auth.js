@@ -10,19 +10,19 @@ import { apiKey } from './seed.js';
 //
 // Claim names confirmed from internal/auth/jwt_test.go and internal/auth/cached_keys_test.go:
 //   UserIDClaim   = "sub"
-//   TenantIDClaim = "tenant_id"
+//   OrganizationIDClaim = "organization_id"
 function base64UrlEncode(s) {
   return encoding.b64encode(s, 'rawstd').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-export function jwtFor(userID, tenantID, opts) {
+export function jwtFor(userID, organizationID, opts) {
   const secret = __ENV.HERMES_JWT_SECRET || 'dev-jwt-secret';
   const now = Math.floor(Date.now() / 1000);
   const exp = now + (opts && opts.ttlSeconds ? opts.ttlSeconds : 3600);
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
     sub: userID,
-    tenant_id: tenantID,
+    organization_id: organizationID,
     iat: now,
     exp: exp,
   };
@@ -44,9 +44,9 @@ export function adminHeaders(extra) {
   return h;
 }
 
-export function userHeaders(userID, tenantID, extra) {
+export function userHeaders(userID, organizationID, extra) {
   const h = {
-    'Authorization': `Bearer ${jwtFor(userID, tenantID)}`,
+    'Authorization': `Bearer ${jwtFor(userID, organizationID)}`,
     'Content-Type': 'application/json',
     'X-Load-Test-Run-Id': __ENV.RUN_ID || 'local',
   };

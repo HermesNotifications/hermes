@@ -202,11 +202,11 @@ components:
           type: string
         locale:
           type: string
-        tenant_id:
+        organization_id:
           type: string
       required:
         - id
-        - tenant_id
+        - organization_id
         - external_id
         - created_at
       type: object

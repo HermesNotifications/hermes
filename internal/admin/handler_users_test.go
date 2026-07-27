@@ -15,13 +15,13 @@ import (
 
 func TestListUsers(t *testing.T) {
 	store := &mockStore{
-		tenants: []models.Tenant{
-			{ID: "tenant-1", Name: "Acme Corp", CreatedAt: time.Now()},
-			{ID: "tenant-2", Name: "Globex", CreatedAt: time.Now()},
+		organizations: []models.Organization{
+			{ID: "organization-1", Name: "Acme Corp", CreatedAt: time.Now()},
+			{ID: "organization-2", Name: "Globex", CreatedAt: time.Now()},
 		},
 		users: []models.User{
-			{ID: "usr-1", TenantID: "tenant-1", ExternalID: "ext-1", CreatedAt: time.Now()},
-			{ID: "usr-2", TenantID: "tenant-2", ExternalID: "ext-2", CreatedAt: time.Now()},
+			{ID: "usr-1", OrganizationID: "organization-1", ExternalID: "ext-1", CreatedAt: time.Now()},
+			{ID: "usr-2", OrganizationID: "organization-2", ExternalID: "ext-2", CreatedAt: time.Now()},
 		},
 	}
 	srv := newTestServerWithStore(t, store)
@@ -35,10 +35,10 @@ func TestListUsers(t *testing.T) {
 	}
 
 	var resp []struct {
-		ID         string `json:"id"`
-		TenantID   string `json:"tenant_id"`
-		TenantName string `json:"tenant_name"`
-		ExternalID string `json:"external_id"`
+		ID               string `json:"id"`
+		OrganizationID   string `json:"organization_id"`
+		OrganizationName string `json:"organization_name"`
+		ExternalID       string `json:"external_id"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
@@ -48,36 +48,36 @@ func TestListUsers(t *testing.T) {
 		t.Fatalf("expected 2 users, got %d", len(resp))
 	}
 
-	// Check tenant name resolution
+	// Check organization name resolution
 	for _, u := range resp {
 		switch u.ID {
 		case "usr-1":
-			if u.TenantName != "Acme Corp" {
-				t.Errorf("expected tenant_name Acme Corp, got %s", u.TenantName)
+			if u.OrganizationName != "Acme Corp" {
+				t.Errorf("expected organization_name Acme Corp, got %s", u.OrganizationName)
 			}
 		case "usr-2":
-			if u.TenantName != "Globex" {
-				t.Errorf("expected tenant_name Globex, got %s", u.TenantName)
+			if u.OrganizationName != "Globex" {
+				t.Errorf("expected organization_name Globex, got %s", u.OrganizationName)
 			}
 		}
 	}
 }
 
-func TestListUsers_FilterByTenant(t *testing.T) {
+func TestListUsers_FilterByOrganization(t *testing.T) {
 	store := &mockStore{
-		tenants: []models.Tenant{
-			{ID: "tenant-1", Name: "Acme Corp", CreatedAt: time.Now()},
-			{ID: "tenant-2", Name: "Globex", CreatedAt: time.Now()},
+		organizations: []models.Organization{
+			{ID: "organization-1", Name: "Acme Corp", CreatedAt: time.Now()},
+			{ID: "organization-2", Name: "Globex", CreatedAt: time.Now()},
 		},
 		users: []models.User{
-			{ID: "usr-1", TenantID: "tenant-1", ExternalID: "ext-1", CreatedAt: time.Now()},
-			{ID: "usr-2", TenantID: "tenant-1", ExternalID: "ext-2", CreatedAt: time.Now()},
-			{ID: "usr-3", TenantID: "tenant-2", ExternalID: "ext-3", CreatedAt: time.Now()},
+			{ID: "usr-1", OrganizationID: "organization-1", ExternalID: "ext-1", CreatedAt: time.Now()},
+			{ID: "usr-2", OrganizationID: "organization-1", ExternalID: "ext-2", CreatedAt: time.Now()},
+			{ID: "usr-3", OrganizationID: "organization-2", ExternalID: "ext-3", CreatedAt: time.Now()},
 		},
 	}
 	srv := newTestServerWithStore(t, store)
 
-	req := httptest.NewRequest("GET", "/v1/users?tenant_id=tenant-1", nil)
+	req := httptest.NewRequest("GET", "/v1/users?organization_id=organization-1", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -86,19 +86,19 @@ func TestListUsers_FilterByTenant(t *testing.T) {
 	}
 
 	var resp []struct {
-		ID       string `json:"id"`
-		TenantID string `json:"tenant_id"`
+		ID             string `json:"id"`
+		OrganizationID string `json:"organization_id"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
 	if len(resp) != 2 {
-		t.Fatalf("expected 2 users for tenant-1, got %d", len(resp))
+		t.Fatalf("expected 2 users for organization-1, got %d", len(resp))
 	}
 	for _, u := range resp {
-		if u.TenantID != "tenant-1" {
-			t.Errorf("expected tenant_id tenant-1, got %s", u.TenantID)
+		if u.OrganizationID != "organization-1" {
+			t.Errorf("expected organization_id organization-1, got %s", u.OrganizationID)
 		}
 	}
 }

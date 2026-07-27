@@ -27,7 +27,7 @@ import (
 
 const testJWTSecret = "test-inbox-jwt-secret-for-integration"
 
-func makeJWT(t *testing.T, userID, tenantID string) string {
+func makeJWT(t *testing.T, userID, organizationID string) string {
 	t.Helper()
 	claims := &auth.HermesClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -35,7 +35,7 @@ func makeJWT(t *testing.T, userID, tenantID string) string {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
-		TenantID: tenantID,
+		OrganizationID: organizationID,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(testJWTSecret))
@@ -65,16 +65,16 @@ func TestInbox_ReadPath(t *testing.T) {
 	st := postgres.New(pool)
 
 	// ── Seed Data ───────────────────────────────────────────────────────
-	tenantID := uuid.New().String()
-	_, err = pool.Exec(ctx, "INSERT INTO tenants (id, name) VALUES ($1, $2)", tenantID, "Inbox Test Tenant "+runID)
+	organizationID := uuid.New().String()
+	_, err = pool.Exec(ctx, "INSERT INTO organizations (id, name) VALUES ($1, $2)", organizationID, "Inbox Test Organization "+runID)
 	if err != nil {
-		t.Fatalf("create tenant: %v", err)
+		t.Fatalf("create organization: %v", err)
 	}
 
 	userID := "inbox-user-" + runID
 	_, err = pool.Exec(ctx,
-		"INSERT INTO users (id, tenant_id, external_id) VALUES ($1, $2, $3)",
-		userID, tenantID, userID,
+		"INSERT INTO users (id, organization_id, external_id) VALUES ($1, $2, $3)",
+		userID, organizationID, userID,
 	)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
@@ -95,7 +95,7 @@ func TestInbox_ReadPath(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		n := &models.Notification{
 			ID:         uuid.New().String(),
-			TenantID:   tenantID,
+			OrganizationID:   organizationID,
 			UserID:     userID,
 			CategoryID: categoryID,
 			Title:      fmt.Sprintf("Notification %d (%s)", i+1, runID),
@@ -114,13 +114,13 @@ func TestInbox_ReadPath(t *testing.T) {
 	// ── Inbox Service ───────────────────────────────────────────────────
 	keyProvider := auth.JWTKeyProvider(func() []auth.JWTSigningConfig {
 		return []auth.JWTSigningConfig{
-			{Name: "test", Secret: []byte(testJWTSecret), Algorithm: "HS256", UserIDClaim: "sub", TenantIDClaim: "tenant_id"},
+			{Name: "test", Secret: []byte(testJWTSecret), Algorithm: "HS256", UserIDClaim: "sub", OrganizationIDClaim: "organization_id"},
 		}
 	})
 	srv := inbox.NewServer(st, nil, nil, nil, keyProvider, logger)
 	handler := srv.Handler()
 
-	jwtToken := makeJWT(t, userID, tenantID)
+	jwtToken := makeJWT(t, userID, organizationID)
 
 	doRequest := func(method, path string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, nil)
@@ -253,7 +253,7 @@ func TestInbox_ReadPath(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			n := &models.Notification{
 				ID:         uuid.New().String(),
-				TenantID:   tenantID,
+				OrganizationID:   organizationID,
 				UserID:     userID,
 				CategoryID: categoryID,
 				Title:      fmt.Sprintf("Paginated %d (%s)", i+1, runID),

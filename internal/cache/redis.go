@@ -185,22 +185,22 @@ func (c *Client) DeleteUnreadCount(ctx context.Context, userID string) error {
 	return c.rdb.Del(ctx, "unread:"+userID).Err()
 }
 
-// TenantExists checks whether a tenant ID is cached as known.
+// OrganizationExists checks whether an organization ID is cached as known.
 // Returns true on hit, false on miss.
-func (c *Client) TenantExists(ctx context.Context, id string) (bool, error) {
-	err := c.rdb.Get(ctx, "tenant:"+id).Err()
+func (c *Client) OrganizationExists(ctx context.Context, id string) (bool, error) {
+	err := c.rdb.Get(ctx, "organization:"+id).Err()
 	if errors.Is(err, redis.Nil) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("get tenant: %w", err)
+		return false, fmt.Errorf("get organization: %w", err)
 	}
 	return true, nil
 }
 
-// SetTenantExists marks a tenant ID as known in the cache.
-func (c *Client) SetTenantExists(ctx context.Context, id string, ttl time.Duration) error {
-	return c.rdb.Set(ctx, "tenant:"+id, "1", ttl).Err()
+// SetOrganizationExists marks an organization ID as known in the cache.
+func (c *Client) SetOrganizationExists(ctx context.Context, id string, ttl time.Duration) error {
+	return c.rdb.Set(ctx, "organization:"+id, "1", ttl).Err()
 }
 
 // GetAPIKey returns the cached API key data (JSON bytes) for the given key ID.

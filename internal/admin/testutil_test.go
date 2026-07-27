@@ -17,7 +17,7 @@ import (
 
 // mockStore implements admin.AdminStore with in-memory storage.
 type mockStore struct {
-	tenants       []models.Tenant
+	organizations []models.Organization
 	categories    []models.SubscriptionCategory
 	subscriptions []models.Subscription
 	templates     []models.NotificationTemplate
@@ -39,34 +39,34 @@ func (m *mockStore) shouldError(method string) error {
 	return nil
 }
 
-// --- Tenants ---
+// --- Organizations ---
 
-func (m *mockStore) CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error) {
-	if err := m.shouldError("CreateTenant"); err != nil {
+func (m *mockStore) CreateOrganization(ctx context.Context, id, name string) (*models.Organization, error) {
+	if err := m.shouldError("CreateOrganization"); err != nil {
 		return nil, err
 	}
-	t := models.Tenant{ID: id, Name: name, CreatedAt: time.Now()}
-	m.tenants = append(m.tenants, t)
+	t := models.Organization{ID: id, Name: name, CreatedAt: time.Now()}
+	m.organizations = append(m.organizations, t)
 	return &t, nil
 }
 
-func (m *mockStore) GetTenantByID(ctx context.Context, id string) (*models.Tenant, error) {
-	for _, t := range m.tenants {
+func (m *mockStore) GetOrganizationByID(ctx context.Context, id string) (*models.Organization, error) {
+	for _, t := range m.organizations {
 		if t.ID == id {
 			return &t, nil
 		}
 	}
-	return nil, fmt.Errorf("tenant not found: %s", id)
+	return nil, fmt.Errorf("organization not found: %s", id)
 }
 
-func (m *mockStore) EnsureTenant(ctx context.Context, id string) (*models.Tenant, error) {
-	for _, t := range m.tenants {
+func (m *mockStore) EnsureOrganization(ctx context.Context, id string) (*models.Organization, error) {
+	for _, t := range m.organizations {
 		if t.ID == id {
 			return &t, nil
 		}
 	}
-	t := models.Tenant{ID: id, Name: id, CreatedAt: time.Now()}
-	m.tenants = append(m.tenants, t)
+	t := models.Organization{ID: id, Name: id, CreatedAt: time.Now()}
+	m.organizations = append(m.organizations, t)
 	return &t, nil
 }
 
@@ -239,29 +239,29 @@ func (m *mockStore) DeleteTemplate(ctx context.Context, id string) error {
 	return fmt.Errorf("template not found: %s", id)
 }
 
-// --- Tenants (additional) ---
+// --- Organizations (additional) ---
 
-func (m *mockStore) ListTenants(ctx context.Context) ([]models.Tenant, error) {
-	return m.tenants, nil
+func (m *mockStore) ListOrganizations(ctx context.Context) ([]models.Organization, error) {
+	return m.organizations, nil
 }
 
-func (m *mockStore) CountUsersByTenant(ctx context.Context) (map[string]int, error) {
+func (m *mockStore) CountUsersByOrganization(ctx context.Context) (map[string]int, error) {
 	counts := make(map[string]int)
 	for _, u := range m.users {
-		counts[u.TenantID]++
+		counts[u.OrganizationID]++
 	}
 	return counts, nil
 }
 
 // --- Users ---
 
-func (m *mockStore) ListUsers(ctx context.Context, tenantID string) ([]models.User, error) {
-	if tenantID == "" {
+func (m *mockStore) ListUsers(ctx context.Context, organizationID string) ([]models.User, error) {
+	if organizationID == "" {
 		return m.users, nil
 	}
 	var result []models.User
 	for _, u := range m.users {
-		if u.TenantID == tenantID {
+		if u.OrganizationID == organizationID {
 			result = append(result, u)
 		}
 	}
@@ -277,17 +277,17 @@ func (m *mockStore) GetUserByID(ctx context.Context, userID string) (*models.Use
 	return nil, fmt.Errorf("user not found: %s", userID)
 }
 
-func (m *mockStore) EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error) {
+func (m *mockStore) EnsureUser(ctx context.Context, organizationID, externalID string) (*models.User, error) {
 	for _, u := range m.users {
-		if u.TenantID == tenantID && u.ExternalID == externalID {
+		if u.OrganizationID == organizationID && u.ExternalID == externalID {
 			return &u, nil
 		}
 	}
 	u := models.User{
-		ID:         fmt.Sprintf("usr-%d", len(m.users)+1),
-		TenantID:   tenantID,
-		ExternalID: externalID,
-		CreatedAt:  time.Now(),
+		ID:             fmt.Sprintf("usr-%d", len(m.users)+1),
+		OrganizationID: organizationID,
+		ExternalID:     externalID,
+		CreatedAt:      time.Now(),
 	}
 	m.users = append(m.users, u)
 	return &u, nil
@@ -370,12 +370,12 @@ func newTestServer(t *testing.T) *admin.Server {
 	t.Helper()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	store := &mockStore{
-		tenants: []models.Tenant{
-			{ID: "test-tenant-id", Name: "Test Tenant", CreatedAt: time.Now()},
+		organizations: []models.Organization{
+			{ID: "test-organization-id", Name: "Test Organization", CreatedAt: time.Now()},
 		},
 	}
 	// Pass nil for cache, pool — most handlers don't need them.
-	// Pass store as tenants (mockStore implements EnsureTenant).
+	// Pass store as organizations (mockStore implements EnsureOrganization).
 	srv := admin.NewServer(store, store, nil, nil, []byte("test-jwt-secret"), "test-hmac-secret", logger)
 	srv.SetSkipAuth(true)
 	return srv

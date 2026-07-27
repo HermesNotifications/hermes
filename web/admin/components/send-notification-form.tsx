@@ -27,8 +27,8 @@ import {
   type SendNotificationFormData,
 } from "@/lib/schemas/send-notification";
 import { sendNotification } from "@/lib/actions/notifications";
-import { createTenant } from "@/lib/actions/tenants";
-import type { NotificationTemplate, Tenant } from "@hermes-notifications/server";
+import { createOrganization } from "@/lib/actions/organizations";
+import type { NotificationTemplate, Organization } from "@hermes-notifications/server";
 
 const CHANNELS = [
   { id: "email", label: "Email" },
@@ -52,20 +52,20 @@ function extractTemplateVariables(template: NotificationTemplate): string[] {
 }
 
 interface SendNotificationFormProps {
-  tenants: Tenant[];
+  organizations: Organization[];
   templates: NotificationTemplate[];
 }
 
 export function SendNotificationForm({
-  tenants: initialTenants,
+  organizations: initialOrganizations,
   templates,
 }: SendNotificationFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [tenants, setTenants] = useState(initialTenants);
-  const [creatingTenant, setCreatingTenant] = useState(false);
-  const [newTenantName, setNewTenantName] = useState("");
-  const [isCreatingTenant, setIsCreatingTenant] = useState(false);
+  const [organizations, setOrganizations] = useState(initialOrganizations);
+  const [creatingOrganization, setCreatingOrganization] = useState(false);
+  const [newOrganizationName, setNewOrganizationName] = useState("");
+  const [isCreatingOrganization, setIsCreatingOrganization] = useState(false);
 
   const {
     register,
@@ -78,7 +78,7 @@ export function SendNotificationForm({
     resolver: zodResolver(sendNotificationSchema),
     defaultValues: {
       mode: "template",
-      tenantId: "",
+      organizationId: "",
       userId: "",
       email: "",
       phone: "",
@@ -116,31 +116,31 @@ export function SendNotificationForm({
     }
   }
 
-  async function handleCreateTenant() {
-    if (!newTenantName.trim()) return;
-    setIsCreatingTenant(true);
+  async function handleCreateOrganization() {
+    if (!newOrganizationName.trim()) return;
+    setIsCreatingOrganization(true);
     try {
-      const tenant = await createTenant(newTenantName.trim());
-      setTenants((prev) => [...prev, tenant]);
-      setValue("tenantId", tenant.id);
-      setCreatingTenant(false);
-      setNewTenantName("");
-      toast.success(`Tenant "${tenant.name}" created`);
+      const organization = await createOrganization(newOrganizationName.trim());
+      setOrganizations((prev) => [...prev, organization]);
+      setValue("organizationId", organization.id);
+      setCreatingOrganization(false);
+      setNewOrganizationName("");
+      toast.success(`Organization "${organization.name}" created`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create tenant";
+      const message = err instanceof Error ? err.message : "Failed to create organization";
       toast.error(message);
     } finally {
-      setIsCreatingTenant(false);
+      setIsCreatingOrganization(false);
     }
   }
 
   function handleFormSubmit(formData: SendNotificationFormData) {
     startTransition(async () => {
       try {
-        const tenantId = formData.tenantId;
+        const organizationId = formData.organizationId;
 
-        if (!tenantId) {
-          toast.error("Please select or create a tenant");
+        if (!organizationId) {
+          toast.error("Please select or create an organization");
           return;
         }
 
@@ -160,7 +160,7 @@ export function SendNotificationForm({
 
         const result = await sendNotification({
           to: {
-            tenantId,
+            organizationId,
             userId: formData.userId,
             contacts: Object.keys(contacts).length > 0 ? contacts : undefined,
           },
@@ -196,55 +196,55 @@ export function SendNotificationForm({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 max-w-2xl">
-      {/* Tenant */}
+      {/* Organization */}
       <div className="space-y-1.5">
-        <Label>Tenant</Label>
-        {creatingTenant ? (
+        <Label>Organization</Label>
+        {creatingOrganization ? (
           <div className="rounded-lg border border-primary/50 bg-primary/5 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-primary">New Tenant</span>
+              <span className="text-sm font-medium text-primary">New Organization</span>
               <button
                 type="button"
                 className="text-sm text-muted-foreground underline"
-                onClick={() => setCreatingTenant(false)}
+                onClick={() => setCreatingOrganization(false)}
               >
                 Cancel
               </button>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="newTenantName">Name</Label>
+              <Label htmlFor="newOrganizationName">Name</Label>
               <div className="flex gap-2">
                 <Input
-                  id="newTenantName"
+                  id="newOrganizationName"
                   placeholder="Acme Corp"
-                  value={newTenantName}
-                  onChange={(e) => setNewTenantName(e.target.value)}
+                  value={newOrganizationName}
+                  onChange={(e) => setNewOrganizationName(e.target.value)}
                 />
                 <Button
                   type="button"
                   size="sm"
-                  onClick={handleCreateTenant}
-                  disabled={isCreatingTenant || !newTenantName.trim()}
+                  onClick={handleCreateOrganization}
+                  disabled={isCreatingOrganization || !newOrganizationName.trim()}
                 >
-                  {isCreatingTenant ? "Creating..." : "Create"}
+                  {isCreatingOrganization ? "Creating..." : "Create"}
                 </Button>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              A tenant ID (UUIDv4) will be generated automatically.
+              An organization ID (UUIDv4) will be generated automatically.
             </p>
           </div>
         ) : (
           <Controller
-            name="tenantId"
+            name="organizationId"
             control={control}
             render={({ field }) => (
               <Select value={field.value ?? ""} onValueChange={field.onChange}>
                 <SelectTrigger className="w-80">
-                  <SelectValue placeholder="Select tenant..." />
+                  <SelectValue placeholder="Select organization..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {tenants.map((t) => (
+                  {organizations.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
                     </SelectItem>
@@ -254,19 +254,19 @@ export function SendNotificationForm({
                     className="relative flex w-full cursor-pointer items-center gap-1.5 border-t px-2 py-1.5 text-sm text-primary outline-none hover:bg-accent"
                     onClick={(e) => {
                       e.preventDefault();
-                      setCreatingTenant(true);
+                      setCreatingOrganization(true);
                     }}
                   >
                     <Plus className="size-3.5" />
-                    Create new tenant...
+                    Create new organization...
                   </button>
                 </SelectContent>
               </Select>
             )}
           />
         )}
-        {errors.tenantId && (
-          <p className="text-sm text-destructive">{errors.tenantId.message}</p>
+        {errors.organizationId && (
+          <p className="text-sm text-destructive">{errors.organizationId.message}</p>
         )}
       </div>
 

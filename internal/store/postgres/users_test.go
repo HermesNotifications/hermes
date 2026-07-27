@@ -14,44 +14,44 @@ import (
 
 func TestEnsureUser_CreatesOnFirstCall(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-123")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-123")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
 	if user.ExternalID != "ext-123" {
 		t.Fatalf("expected external_id ext-123, got %s", user.ExternalID)
 	}
-	if user.TenantID != tenantID {
-		t.Fatalf("expected tenant_id %s, got %s", tenantID, user.TenantID)
+	if user.OrganizationID != organizationID {
+		t.Fatalf("expected organization_id %s, got %s", organizationID, user.OrganizationID)
 	}
 }
 
 func TestEnsureUser_ReturnsSameOnSecondCall(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "tenants")
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Test Tenant")
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	first, err := s.EnsureUser(ctx, tenantID, "ext-456")
+	first, err := s.EnsureUser(ctx, organizationID, "ext-456")
 	if err != nil {
 		t.Fatalf("EnsureUser first: %v", err)
 	}
 
-	second, err := s.EnsureUser(ctx, tenantID, "ext-456")
+	second, err := s.EnsureUser(ctx, organizationID, "ext-456")
 	if err != nil {
 		t.Fatalf("EnsureUser second: %v", err)
 	}
@@ -63,16 +63,16 @@ func TestEnsureUser_ReturnsSameOnSecondCall(t *testing.T) {
 
 func TestUpdateUserContacts(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "notification_templates", "subscription_categories", "tenants")
+	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "notification_templates", "subscription_categories", "organizations")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Contacts Test Tenant")
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Contacts Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-contacts-1")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-contacts-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}
@@ -120,16 +120,16 @@ func TestUpdateUserContacts(t *testing.T) {
 
 func TestGetUserSubscriptions(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "notification_templates", "subscription_categories", "tenants")
+	cleanTable(t, pool, "user_subscriptions", "notifications", "users", "notification_templates", "subscription_categories", "organizations")
 
 	ctx := context.Background()
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Subs List Tenant")
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Subs List Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
-	user, err := s.EnsureUser(ctx, tenantID, "ext-subs-list-1")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-subs-list-1")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}

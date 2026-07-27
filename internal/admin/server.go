@@ -47,14 +47,14 @@ type AdminStore interface {
 	UpdateTemplate(ctx context.Context, input *models.NotificationTemplate) (*models.NotificationTemplate, error)
 	DeleteTemplate(ctx context.Context, id string) error
 
-	// Tenants
-	CreateTenant(ctx context.Context, id, name string) (*models.Tenant, error)
-	ListTenants(ctx context.Context) ([]models.Tenant, error)
-	CountUsersByTenant(ctx context.Context) (map[string]int, error)
+	// Organizations
+	CreateOrganization(ctx context.Context, id, name string) (*models.Organization, error)
+	ListOrganizations(ctx context.Context) ([]models.Organization, error)
+	CountUsersByOrganization(ctx context.Context) (map[string]int, error)
 
 	// Users
-	EnsureUser(ctx context.Context, tenantID, externalID string) (*models.User, error)
-	ListUsers(ctx context.Context, tenantID string) ([]models.User, error)
+	EnsureUser(ctx context.Context, organizationID, externalID string) (*models.User, error)
+	ListUsers(ctx context.Context, organizationID string) ([]models.User, error)
 	GetUserByID(ctx context.Context, userID string) (*models.User, error)
 
 	// Notifications
@@ -73,16 +73,16 @@ type AdminStore interface {
 }
 
 type Server struct {
-	store      AdminStore
-	tenants    store.TenantRepository
-	cache      *cache.Client
-	pool       *pgxpool.Pool
-	logger     *slog.Logger
-	router     chi.Router
-	api        huma.API
-	skipAuth   bool
-	jwtSecret  []byte
-	hmacSecret string
+	store         AdminStore
+	organizations store.OrganizationRepository
+	cache         *cache.Client
+	pool          *pgxpool.Pool
+	logger        *slog.Logger
+	router        chi.Router
+	api           huma.API
+	skipAuth      bool
+	jwtSecret     []byte
+	hmacSecret    string
 }
 
 // SetSkipAuth disables API key authentication. Intended for use in tests only.
@@ -90,16 +90,16 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store AdminStore, tenants store.TenantRepository, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
+func NewServer(store AdminStore, organizations store.OrganizationRepository, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
 	s := &Server{
-		store:      store,
-		tenants:    tenants,
-		cache:      cache,
-		pool:       pool,
-		jwtSecret:  jwtSecret,
-		hmacSecret: hmacSecret,
-		logger:     logger,
-		router:     chi.NewRouter(),
+		store:         store,
+		organizations: organizations,
+		cache:         cache,
+		pool:          pool,
+		jwtSecret:     jwtSecret,
+		hmacSecret:    hmacSecret,
+		logger:        logger,
+		router:        chi.NewRouter(),
 	}
 
 	config := huma.DefaultConfig("Hermes Admin API", "1.0.0")
@@ -126,7 +126,7 @@ func (s *Server) routes() {
 	s.registerNotificationRoutes()
 	s.registerAuthRoutes()
 	s.registerAPIKeyRoutes()
-	s.registerTenantRoutes()
+	s.registerOrganizationRoutes()
 	s.registerUserRoutes()
 }
 

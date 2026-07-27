@@ -32,7 +32,7 @@ SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch
 ## Using Hermes (integrators)
 
 - **[Integration Guide](integration-guide.md)** — end-to-end walkthrough: auth/token exchange,
-  creating tenants and API keys, sending notifications, the inbox and user APIs, and real-time push.
+  creating organizations and API keys, sending notifications, the inbox and user APIs, and real-time push.
 - **[API Reference](api/README.md)** — auth modes, the generated OpenAPI/AsyncAPI specs, and how
   to regenerate them.
 - **[CLI Reference](cli.md)** — the `hermes` command-line tool for managing resources and an
@@ -52,7 +52,7 @@ SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch
 - **[Testing](testing.md)** — the unit / integration / e2e split and the mock-store pattern.
 - **[Data Model](data-model.md)** — the Postgres schema, entities, and the notification status model.
 - **[Configuration](configuration.md)** — the `HERMES_*` environment variables the services read.
-- **[Glossary](glossary.md)** — domain terms (tenant, category, subscription, template, channel…).
+- **[Glossary](glossary.md)** — domain terms (organization, category, subscription, template, channel…).
 - **[Admin Portal](../web/admin/README.md)** — the Next.js admin UI.
 
 ## Operating Hermes

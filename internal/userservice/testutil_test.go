@@ -120,7 +120,7 @@ func newTestServer(t *testing.T) (*userservice.Server, *mockUserStore) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	store := &mockUserStore{
 		users: []models.User{
-			{ID: testUserID, TenantID: "tenant-1", ExternalID: "ext-1", Contacts: map[string]string{"email": "user@example.com"}, CreatedAt: time.Now()},
+			{ID: testUserID, OrganizationID: "organization-1", ExternalID: "ext-1", Contacts: map[string]string{"email": "user@example.com"}, CreatedAt: time.Now()},
 		},
 		categories: []models.SubscriptionCategory{
 			{ID: "sct-1", Slug: "general", Name: "General", DefaultChannels: []string{"email", "inbox"}, DefaultState: "on"},

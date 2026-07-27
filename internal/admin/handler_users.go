@@ -12,17 +12,17 @@ import (
 )
 
 type listUsersInput struct {
-	TenantID string `query:"tenant_id" doc:"Filter by tenant ID"`
+	OrganizationID string `query:"organization_id" doc:"Filter by organization ID"`
 }
 
 type userItem struct {
-	ID         string            `json:"id"`
-	TenantID   string            `json:"tenant_id"`
-	ExternalID string            `json:"external_id"`
-	Contacts   map[string]string `json:"contacts,omitempty"`
-	Locale     *string           `json:"locale"`
-	TenantName string            `json:"tenant_name"`
-	CreatedAt  time.Time         `json:"created_at"`
+	ID               string            `json:"id"`
+	OrganizationID   string            `json:"organization_id"`
+	ExternalID       string            `json:"external_id"`
+	Contacts         map[string]string `json:"contacts,omitempty"`
+	Locale           *string           `json:"locale"`
+	OrganizationName string            `json:"organization_name"`
+	CreatedAt        time.Time         `json:"created_at"`
 }
 
 type userListOutput struct {
@@ -37,33 +37,33 @@ func (s *Server) registerUserRoutes() {
 		Summary:     "List users",
 		Tags:        []string{"Users"},
 	}, func(ctx context.Context, input *listUsersInput) (*userListOutput, error) {
-		users, err := s.store.ListUsers(ctx, input.TenantID)
+		users, err := s.store.ListUsers(ctx, input.OrganizationID)
 		if err != nil {
 			s.logger.Error("failed to list users", "error", err)
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
 
-		// Build tenant name lookup
-		tenants, err := s.store.ListTenants(ctx)
+		// Build organization name lookup
+		organizations, err := s.store.ListOrganizations(ctx)
 		if err != nil {
-			s.logger.Error("failed to list tenants for name lookup", "error", err)
+			s.logger.Error("failed to list organizations for name lookup", "error", err)
 			return nil, huma.Error500InternalServerError("internal server error")
 		}
-		tenantNames := make(map[string]string, len(tenants))
-		for _, t := range tenants {
-			tenantNames[t.ID] = t.Name
+		organizationNames := make(map[string]string, len(organizations))
+		for _, t := range organizations {
+			organizationNames[t.ID] = t.Name
 		}
 
 		items := make([]userItem, len(users))
 		for i, u := range users {
 			items[i] = userItem{
-				ID:         u.ID,
-				TenantID:   u.TenantID,
-				ExternalID: u.ExternalID,
-				Contacts:   u.Contacts,
-				Locale:     u.Locale,
-				TenantName: tenantNames[u.TenantID],
-				CreatedAt:  u.CreatedAt,
+				ID:               u.ID,
+				OrganizationID:   u.OrganizationID,
+				ExternalID:       u.ExternalID,
+				Contacts:         u.Contacts,
+				Locale:           u.Locale,
+				OrganizationName: organizationNames[u.OrganizationID],
+				CreatedAt:        u.CreatedAt,
 			}
 		}
 		return &userListOutput{Body: items}, nil

@@ -70,7 +70,7 @@ export function useHermesInbox(
         status: "delivered",
         channels: ["inbox"],
         created_at: e.createdAt,
-        tenant_id: "",
+        organization_id: "",
         user_id: "",
         group_id: "",
       };

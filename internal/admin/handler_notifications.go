@@ -18,7 +18,7 @@ type listNotificationsInput struct {
 
 type notificationItem struct {
 	ID             string                    `json:"id"`
-	TenantID       string                    `json:"tenant_id"`
+	OrganizationID string                    `json:"organization_id"`
 	UserID         string                    `json:"user_id"`
 	TemplateID     *string                   `json:"template_id,omitempty"`
 	TemplateSlug   string                    `json:"template_slug,omitempty"`
@@ -77,16 +77,16 @@ func (s *Server) registerNotificationRoutes() {
 		items := make([]notificationItem, len(notifications))
 		for i, n := range notifications {
 			items[i] = notificationItem{
-				ID:         n.ID,
-				TenantID:   n.TenantID,
-				UserID:     n.UserID,
-				TemplateID: n.TemplateID,
-				CategoryID: n.CategoryID,
-				Title:      n.Title,
-				Body:       n.Body,
-				Channels:   n.Channels,
-				Status:     n.Status,
-				CreatedAt:  n.CreatedAt,
+				ID:             n.ID,
+				OrganizationID: n.OrganizationID,
+				UserID:         n.UserID,
+				TemplateID:     n.TemplateID,
+				CategoryID:     n.CategoryID,
+				Title:          n.Title,
+				Body:           n.Body,
+				Channels:       n.Channels,
+				Status:         n.Status,
+				CreatedAt:      n.CreatedAt,
 			}
 			if n.TemplateID != nil {
 				items[i].TemplateSlug = templateSlugs[*n.TemplateID]

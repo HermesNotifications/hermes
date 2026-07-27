@@ -20,7 +20,7 @@ func newNotificationsCmd() *cobra.Command {
 }
 
 func newNotifSendCmd() *cobra.Command {
-	var tenantID, userID, email, phone, template, data, title, body, actionURL, actionLabel, idempotencyKey string
+	var organizationID, userID, email, phone, template, data, title, body, actionURL, actionLabel, idempotencyKey string
 	var channels []string
 
 	cmd := &cobra.Command{
@@ -36,7 +36,7 @@ func newNotifSendCmd() *cobra.Command {
 			}
 			req := client.SendRequest{
 				To: client.Recipient{
-					TenantID: tenantID,
+					OrganizationID: organizationID,
 					UserID:   userID,
 					Contacts: contacts,
 				},
@@ -82,7 +82,7 @@ func newNotifSendCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
+	cmd.Flags().StringVar(&organizationID, "organization-id", "", "Organization ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
 	cmd.Flags().StringVar(&email, "email", "", "Email address override for this notification")
 	cmd.Flags().StringVar(&phone, "phone", "", "Phone number override for this notification")
@@ -94,7 +94,7 @@ func newNotifSendCmd() *cobra.Command {
 	cmd.Flags().StringVar(&actionURL, "action-url", "", "Content action URL")
 	cmd.Flags().StringVar(&actionLabel, "action-label", "", "Content action label")
 	cmd.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "Idempotency key for deduplication")
-	cmd.MarkFlagRequired("tenant-id")
+	cmd.MarkFlagRequired("organization-id")
 	cmd.MarkFlagRequired("user-id")
 	return cmd
 }

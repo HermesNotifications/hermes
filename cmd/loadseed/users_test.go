@@ -21,13 +21,13 @@ func TestInsertUsers_Copy(t *testing.T) {
 	defer pool.Close()
 
 	rid := runID()
-	tenantIDs, err := insertTenants(ctx, pool, 1, rid)
+	organizationIDs, err := insertOrganizations(ctx, pool, 1, rid)
 	if err != nil {
-		t.Fatalf("tenants: %v", err)
+		t.Fatalf("organizations: %v", err)
 	}
-	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM tenants WHERE id = ANY($1)`, tenantIDs) }()
+	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM organizations WHERE id = ANY($1)`, organizationIDs) }()
 
-	ids, err := insertUsers(ctx, pool, tenantIDs[0], 500, rid, 0)
+	ids, err := insertUsers(ctx, pool, organizationIDs[0], 500, rid, 0)
 	if err != nil {
 		t.Fatalf("users: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestInsertUsers_Copy(t *testing.T) {
 	}
 
 	var count int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE tenant_id = $1`, tenantIDs[0]).Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE organization_id = $1`, organizationIDs[0]).Scan(&count); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 500 {

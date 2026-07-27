@@ -14,9 +14,9 @@ import (
 )
 
 type sendRecipient struct {
-	TenantID string            `json:"tenant_id" required:"true" minLength:"1" doc:"Tenant identifier"`
-	UserID   string            `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
-	Contacts map[string]string `json:"contacts,omitempty" doc:"Per-channel address overrides: address key (\"email\",\"phone\") -> address"`
+	OrganizationID string            `json:"organization_id" required:"true" minLength:"1" doc:"Organization identifier"`
+	UserID         string            `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
+	Contacts       map[string]string `json:"contacts,omitempty" doc:"Per-channel address overrides: address key (\"email\",\"phone\") -> address"`
 }
 
 type sendContent struct {
@@ -70,7 +70,7 @@ func (s *Server) registerSendRoutes() {
 		// Idempotency check via Redis SET NX
 		idemKey := input.IdempotencyKey
 		if idemKey != "" && s.cache != nil {
-			existing, err := s.cache.SetIdempotencyKey(ctx, req.To.TenantID+":"+idemKey, notifID, time.Hour)
+			existing, err := s.cache.SetIdempotencyKey(ctx, req.To.OrganizationID+":"+idemKey, notifID, time.Hour)
 			if err == nil && existing != "" {
 				resp := &sendOutput{}
 				resp.Body.NotificationID = existing
@@ -81,7 +81,7 @@ func (s *Server) registerSendRoutes() {
 		// Build SendMessage
 		msg := &hermenats.SendMessage{
 			NotificationID: notifID,
-			TenantID:       req.To.TenantID,
+			OrganizationID: req.To.OrganizationID,
 			ExternalUserID: req.To.UserID,
 			Contacts:       req.To.Contacts,
 			Metadata: hermenats.MessageMetadata{

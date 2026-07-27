@@ -15,9 +15,9 @@ import (
 )
 
 type Config struct {
-	Tenants                  int
-	UsersPerTenant           int
-	CategoriesPerTenant      int
+	Organizations                  int
+	UsersPerOrganization           int
+	CategoriesPerOrganization      int
 	SubscriptionsPerCategory int
 	TemplatesPerSubscription int
 	DatabaseURL              string
@@ -52,9 +52,9 @@ func main() {
 
 func parseFlags() Config {
 	var cfg Config
-	flag.IntVar(&cfg.Tenants, "tenants", 10, "number of tenants")
-	flag.IntVar(&cfg.UsersPerTenant, "users-per-tenant", 10000, "users per tenant")
-	flag.IntVar(&cfg.CategoriesPerTenant, "categories-per-tenant", 3, "subscription categories per tenant")
+	flag.IntVar(&cfg.Organizations, "organizations", 10, "number of organizations")
+	flag.IntVar(&cfg.UsersPerOrganization, "users-per-organization", 10000, "users per organization")
+	flag.IntVar(&cfg.CategoriesPerOrganization, "categories-per-organization", 3, "subscription categories per organization")
 	flag.IntVar(&cfg.SubscriptionsPerCategory, "subscriptions-per-category", 2, "subscriptions per category")
 	flag.IntVar(&cfg.TemplatesPerSubscription, "templates-per-subscription", 2, "templates per subscription")
 	flag.StringVar(&cfg.DatabaseURL, "database-url", os.Getenv("HERMES_DATABASE_URL"), "Postgres URL")

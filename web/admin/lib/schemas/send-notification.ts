@@ -25,16 +25,16 @@ const contentModeSchema = z.object({
 
 export const sendNotificationSchema = z
   .object({
-    tenantId: z.string().optional(),
-    newTenantName: z.string().optional(),
+    organizationId: z.string().optional(),
+    newOrganizationName: z.string().optional(),
     userId: z.string().min(1, "User ID is required"),
     email: z.string().email("Invalid email").optional().or(z.literal("")),
     phone: z.string().optional(),
   })
   .and(z.discriminatedUnion("mode", [templateModeSchema, contentModeSchema]))
-  .refine((data) => data.tenantId || data.newTenantName, {
-    message: "Select a tenant or create a new one",
-    path: ["tenantId"],
+  .refine((data) => data.organizationId || data.newOrganizationName, {
+    message: "Select an organization or create a new one",
+    path: ["organizationId"],
   });
 
 export type SendNotificationFormData = z.infer<typeof sendNotificationSchema>;

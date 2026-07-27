@@ -16,19 +16,19 @@ import (
 
 func TestUserSubscriptions_SetGetDeleteLifecycle(t *testing.T) {
 	s, pool := testStore(t)
-	cleanTable(t, pool, "user_subscriptions", "subscriptions", "subscription_categories", "users", "tenants")
+	cleanTable(t, pool, "user_subscriptions", "subscriptions", "subscription_categories", "users", "organizations")
 
 	ctx := context.Background()
 
-	// Create tenant
-	tenantID := uuid.New().String()
-	_, err := s.CreateTenant(ctx, tenantID, "Sub Test Tenant")
+	// Create organization
+	organizationID := uuid.New().String()
+	_, err := s.CreateOrganization(ctx, organizationID, "Sub Test Organization")
 	if err != nil {
-		t.Fatalf("CreateTenant: %v", err)
+		t.Fatalf("CreateOrganization: %v", err)
 	}
 
 	// Create user
-	user, err := s.EnsureUser(ctx, tenantID, "ext-sub-001")
+	user, err := s.EnsureUser(ctx, organizationID, "ext-sub-001")
 	if err != nil {
 		t.Fatalf("EnsureUser: %v", err)
 	}

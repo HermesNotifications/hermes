@@ -22,7 +22,7 @@ export async function getNotificationStatus(id: string) {
 
 export async function sendNotification(options: {
   to: {
-    tenantId: string;
+    organizationId: string;
     userId: string;
     contacts?: Record<string, string>;
   };

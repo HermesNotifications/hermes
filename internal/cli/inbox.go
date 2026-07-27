@@ -28,7 +28,7 @@ func newInboxCmd() *cobra.Command {
 
 func newInboxOpenCmd() *cobra.Command {
 	var (
-		tenantID      string
+		organizationID      string
 		userID        string
 		inboxURL      string
 		wsURL string
@@ -49,7 +49,7 @@ func newInboxOpenCmd() *cobra.Command {
 			// Exchange API key for JWT
 			c := newClientFromCmd(cmd)
 			tokenResp, err := c.Auth.ExchangeToken(ctx, client.TokenRequest{
-				TenantID: tenantID, UserID: userID,
+				OrganizationID: organizationID, UserID: userID,
 			})
 			if err != nil {
 				return fmt.Errorf("token exchange failed: %w", err)
@@ -83,18 +83,18 @@ func newInboxOpenCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
+	cmd.Flags().StringVar(&organizationID, "organization-id", "", "Organization ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
 	cmd.Flags().StringVar(&inboxURL, "inbox-url", os.Getenv("HERMES_INBOX_URL"), "Inbox service URL override (env: HERMES_INBOX_URL)")
 	cmd.Flags().StringVar(&wsURL, "ws-url", os.Getenv("HERMES_WS_URL"), "WebSocket URL override (env: HERMES_WS_URL)")
-	cmd.MarkFlagRequired("tenant-id")
+	cmd.MarkFlagRequired("organization-id")
 	cmd.MarkFlagRequired("user-id")
 	return cmd
 }
 
 func newInboxListenCmd() *cobra.Command {
 	var (
-		tenantID string
+		organizationID string
 		userID   string
 		wsURL    string
 	)
@@ -113,7 +113,7 @@ func newInboxListenCmd() *cobra.Command {
 			// Step 1: Get unified JWT
 			c := newClientFromCmd(cmd)
 			tokenResp, err := c.Auth.ExchangeToken(ctx, client.TokenRequest{
-				TenantID: tenantID, UserID: userID,
+				OrganizationID: organizationID, UserID: userID,
 			})
 			if err != nil {
 				return fmt.Errorf("token exchange failed: %w", err)
@@ -191,10 +191,10 @@ func newInboxListenCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant ID (required)")
+	cmd.Flags().StringVar(&organizationID, "organization-id", "", "Organization ID (required)")
 	cmd.Flags().StringVar(&userID, "user-id", "", "User ID (required)")
 	cmd.Flags().StringVar(&wsURL, "ws-url", os.Getenv("HERMES_WS_URL"), "WebSocket URL override (env: HERMES_WS_URL)")
-	cmd.MarkFlagRequired("tenant-id")
+	cmd.MarkFlagRequired("organization-id")
 	cmd.MarkFlagRequired("user-id")
 	return cmd
 }

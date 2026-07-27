@@ -26,7 +26,7 @@ These kill Prometheus. **Never** put them on metrics. They belong on spans (as a
 
 - `user_id`
 - `notification_id`
-- `tenant_id`
+- `organization_id`
 - `trace_id`, `span_id` (these are separate, carried as exemplars)
 - `request_id`
 - `template_id` (unless we're sure set size stays <100)
@@ -34,7 +34,7 @@ These kill Prometheus. **Never** put them on metrics. They belong on spans (as a
 - IP addresses, hostnames (unless a fixed small set like infra nodes)
 - Free-form user input of any kind
 
-The OTel Collector's `attributes/metrics` processor strips the most common offenders (`user_id`, `notification_id`, `tenant_id`) as a backstop, but don't rely on it — flag these in review.
+The OTel Collector's `attributes/metrics` processor strips the most common offenders (`user_id`, `notification_id`, `organization_id`) as a backstop, but don't rely on it — flag these in review.
 
 ## Span names
 

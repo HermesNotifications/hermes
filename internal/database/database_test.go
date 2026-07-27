@@ -53,7 +53,7 @@ func TestRunMigrations(t *testing.T) {
 	}
 	defer pool.Close()
 
-	tables := []string{"tenants", "api_keys", "users", "subscription_categories",
+	tables := []string{"organizations", "api_keys", "users", "subscription_categories",
 		"subscriptions", "notification_templates", "notifications", "notification_events", "user_subscriptions"}
 
 	for _, table := range tables {

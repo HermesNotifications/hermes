@@ -41,16 +41,16 @@ func must(err error, what string) {
 	}
 }
 
-// seedBench inserts a bench tenant and nUsers users (with emails so channel
-// resolution is realistic), warms the Redis tenant cache, and returns the users'
+// seedBench inserts a bench organization and nUsers users (with emails so channel
+// resolution is realistic), warms the Redis organization cache, and returns the users'
 // external IDs (the send message addresses users by external ID).
-func seedBench(ctx context.Context, pool *pgxpool.Pool, pgStore *postgres.Store, redisClient *cache.Client, tenant string, nUsers int) []string {
-	_, err := pool.Exec(ctx, "INSERT INTO tenants (id, name) VALUES ($1,$2) ON CONFLICT DO NOTHING", tenant, "dispatchbench")
-	must(err, "insert bench tenant")
+func seedBench(ctx context.Context, pool *pgxpool.Pool, pgStore *postgres.Store, redisClient *cache.Client, organization string, nUsers int) []string {
+	_, err := pool.Exec(ctx, "INSERT INTO organizations (id, name) VALUES ($1,$2) ON CONFLICT DO NOTHING", organization, "dispatchbench")
+	must(err, "insert bench organization")
 
 	externalIDs := make([]string, 0, nUsers)
 	for i := 0; i < nUsers; i++ {
-		u, err := pgStore.EnsureUser(ctx, tenant, fmt.Sprintf("u%d", i))
+		u, err := pgStore.EnsureUser(ctx, organization, fmt.Sprintf("u%d", i))
 		must(err, "ensure bench user")
 		email := fmt.Sprintf("u%d@bench.local", i)
 		if _, err := pgStore.UpdateUserContacts(ctx, u.ID, &email, nil); err != nil {
@@ -59,10 +59,10 @@ func seedBench(ctx context.Context, pool *pgxpool.Pool, pgStore *postgres.Store,
 		externalIDs = append(externalIDs, u.ExternalID)
 	}
 
-	// Warm the Redis tenant cache so dispatch's EnsureTenant is a cache hit.
-	tenants := cached.NewTenantRepository(pgStore, redisClient)
-	if _, err := tenants.EnsureTenant(ctx, tenant); err != nil {
-		must(err, "warm tenant cache")
+	// Warm the Redis organization cache so dispatch's EnsureOrganization is a cache hit.
+	organizations := cached.NewOrganizationRepository(pgStore, redisClient)
+	if _, err := organizations.EnsureOrganization(ctx, organization); err != nil {
+		must(err, "warm organization cache")
 	}
 	return externalIDs
 }
@@ -99,7 +99,7 @@ func newRunner(
 	js jetstream.JetStream,
 	natsURL string,
 	n int,
-	tenant string,
+	organization string,
 	userIDs []string,
 	notifRepo store.NotificationRepository,
 	pgStore *postgres.Store,
@@ -112,7 +112,7 @@ func newRunner(
 		for i := 0; i < n; i++ {
 			msg := &hermenats.SendMessage{
 				NotificationID: id.Notification.New(),
-				TenantID:       tenant,
+				OrganizationID:       organization,
 				ExternalUserID: userIDs[i%len(userIDs)],
 				Content:        &hermenats.MessageContent{Title: "bench", Body: "bench"},
 				Channels:       []string{"inbox"},
@@ -135,8 +135,8 @@ func newRunner(
 		}
 		templateResolver := dispatch.NewTemplateResolver(pgStore, redisClient)
 		channelResolver := dispatch.NewChannelResolver(pgStore, redisClient)
-		tenants := cached.NewTenantRepository(pgStore, redisClient)
-		d := dispatch.NewDispatch(client, notifRepo, pgStore, tenants, templateResolver, channelResolver, logger)
+		organizations := cached.NewOrganizationRepository(pgStore, redisClient)
+		d := dispatch.NewDispatch(client, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger)
 		if err := d.Start(workers, prefetch); err != nil {
 			client.Close()
 			return nil, err
@@ -155,11 +155,11 @@ func newRunner(
 		// Best-effort: consumer may not exist yet on the first repetition.
 		_ = js.DeleteConsumer(ctx, "NOTIFICATIONS", "dispatch")
 		if _, err := pool.Exec(ctx,
-			"DELETE FROM notification_events WHERE notification_id IN (SELECT id FROM notifications WHERE tenant_id=$1)",
-			tenant); err != nil {
+			"DELETE FROM notification_events WHERE notification_id IN (SELECT id FROM notifications WHERE organization_id=$1)",
+			organization); err != nil {
 			return err
 		}
-		if _, err := pool.Exec(ctx, "DELETE FROM notifications WHERE tenant_id=$1", tenant); err != nil {
+		if _, err := pool.Exec(ctx, "DELETE FROM notifications WHERE organization_id=$1", organization); err != nil {
 			return err
 		}
 		return nil

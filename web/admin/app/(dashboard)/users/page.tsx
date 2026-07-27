@@ -3,19 +3,19 @@
 
 import { DataTable } from "@/components/data-table";
 import { listUsers } from "@/lib/actions/users";
-import { listTenants } from "@/lib/actions/tenants";
+import { listOrganizations } from "@/lib/actions/organizations";
 import { columns } from "./columns";
-import { TenantFilter } from "./tenant-filter";
+import { OrganizationFilter } from "./organization-filter";
 
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant_id?: string }>;
+  searchParams: Promise<{ organization_id?: string }>;
 }) {
-  const { tenant_id } = await searchParams;
-  const [users, tenants] = await Promise.all([
-    listUsers(tenant_id),
-    listTenants(),
+  const { organization_id } = await searchParams;
+  const [users, organizations] = await Promise.all([
+    listUsers(organization_id),
+    listOrganizations(),
   ]);
 
   return (
@@ -24,10 +24,10 @@ export default async function UsersPage({
         <div>
           <h1 className="text-2xl font-semibold">Users</h1>
           <p className="text-sm text-muted-foreground">
-            View all registered users across tenants.
+            View all registered users across organizations.
           </p>
         </div>
-        <TenantFilter tenants={tenants ?? []} currentTenantId={tenant_id} />
+        <OrganizationFilter organizations={organizations ?? []} currentOrganizationId={organization_id} />
       </div>
 
       <DataTable

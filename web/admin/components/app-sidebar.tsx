@@ -41,7 +41,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "Platform",
     items: [
-      { title: "Tenants", href: "/tenants", icon: Building2 },
+      { title: "Organizations", href: "/organizations", icon: Building2 },
       { title: "Users", href: "/users", icon: Users },
     ],
   },

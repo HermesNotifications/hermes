@@ -16,21 +16,21 @@ import (
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
-func TestListTenants(t *testing.T) {
+func TestListOrganizations(t *testing.T) {
 	store := &mockStore{
-		tenants: []models.Tenant{
-			{ID: "tenant-1", Name: "Acme Corp", DefaultLocale: "en", CreatedAt: time.Now()},
-			{ID: "tenant-2", Name: "Globex", DefaultLocale: "fr", CreatedAt: time.Now()},
+		organizations: []models.Organization{
+			{ID: "organization-1", Name: "Acme Corp", DefaultLocale: "en", CreatedAt: time.Now()},
+			{ID: "organization-2", Name: "Globex", DefaultLocale: "fr", CreatedAt: time.Now()},
 		},
 		users: []models.User{
-			{ID: "usr-1", TenantID: "tenant-1", ExternalID: "ext-1", CreatedAt: time.Now()},
-			{ID: "usr-2", TenantID: "tenant-1", ExternalID: "ext-2", CreatedAt: time.Now()},
-			{ID: "usr-3", TenantID: "tenant-2", ExternalID: "ext-3", CreatedAt: time.Now()},
+			{ID: "usr-1", OrganizationID: "organization-1", ExternalID: "ext-1", CreatedAt: time.Now()},
+			{ID: "usr-2", OrganizationID: "organization-1", ExternalID: "ext-2", CreatedAt: time.Now()},
+			{ID: "usr-3", OrganizationID: "organization-2", ExternalID: "ext-3", CreatedAt: time.Now()},
 		},
 	}
 	srv := newTestServerWithStore(t, store)
 
-	req := httptest.NewRequest("GET", "/v1/tenants", nil)
+	req := httptest.NewRequest("GET", "/v1/organizations", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -49,31 +49,31 @@ func TestListTenants(t *testing.T) {
 	}
 
 	if len(resp) != 2 {
-		t.Fatalf("expected 2 tenants, got %d", len(resp))
+		t.Fatalf("expected 2 organizations, got %d", len(resp))
 	}
 
-	// Find tenant-1 and check user count
-	for _, tenant := range resp {
-		switch tenant.ID {
-		case "tenant-1":
-			if tenant.UserCount != 2 {
-				t.Errorf("expected tenant-1 user_count=2, got %d", tenant.UserCount)
+	// Find organization-1 and check user count
+	for _, organization := range resp {
+		switch organization.ID {
+		case "organization-1":
+			if organization.UserCount != 2 {
+				t.Errorf("expected organization-1 user_count=2, got %d", organization.UserCount)
 			}
-			if tenant.Name != "Acme Corp" {
-				t.Errorf("expected name Acme Corp, got %s", tenant.Name)
+			if organization.Name != "Acme Corp" {
+				t.Errorf("expected name Acme Corp, got %s", organization.Name)
 			}
-		case "tenant-2":
-			if tenant.UserCount != 1 {
-				t.Errorf("expected tenant-2 user_count=1, got %d", tenant.UserCount)
+		case "organization-2":
+			if organization.UserCount != 1 {
+				t.Errorf("expected organization-2 user_count=1, got %d", organization.UserCount)
 			}
 		}
 	}
 }
 
-func TestListTenants_Empty(t *testing.T) {
+func TestListOrganizations_Empty(t *testing.T) {
 	srv := newTestServerWithStore(t, &mockStore{})
 
-	req := httptest.NewRequest("GET", "/v1/tenants", nil)
+	req := httptest.NewRequest("GET", "/v1/organizations", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -82,11 +82,11 @@ func TestListTenants_Empty(t *testing.T) {
 	}
 }
 
-func TestCreateTenant(t *testing.T) {
+func TestCreateOrganization(t *testing.T) {
 	srv := newTestServerWithStore(t, &mockStore{})
 
-	body := bytes.NewBufferString(`{"name":"New Tenant"}`)
-	req := httptest.NewRequest("POST", "/v1/tenants", body)
+	body := bytes.NewBufferString(`{"name":"New Organization"}`)
+	req := httptest.NewRequest("POST", "/v1/organizations", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -106,16 +106,16 @@ func TestCreateTenant(t *testing.T) {
 	if resp.ID == "" {
 		t.Error("expected non-empty id in response")
 	}
-	if resp.Name != "New Tenant" {
-		t.Errorf("expected name %q, got %q", "New Tenant", resp.Name)
+	if resp.Name != "New Organization" {
+		t.Errorf("expected name %q, got %q", "New Organization", resp.Name)
 	}
 }
 
-func TestCreateTenant_MissingName(t *testing.T) {
+func TestCreateOrganization_MissingName(t *testing.T) {
 	srv := newTestServerWithStore(t, &mockStore{})
 
 	body := bytes.NewBufferString(`{}`)
-	req := httptest.NewRequest("POST", "/v1/tenants", body)
+	req := httptest.NewRequest("POST", "/v1/organizations", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -130,16 +130,16 @@ func TestCreateTenant_MissingName(t *testing.T) {
 	}
 }
 
-func TestCreateTenant_StoreError(t *testing.T) {
+func TestCreateOrganization_StoreError(t *testing.T) {
 	store := &mockStore{
 		errors: map[string]error{
-			"CreateTenant": fmt.Errorf("db connection failed"),
+			"CreateOrganization": fmt.Errorf("db connection failed"),
 		},
 	}
 	srv := newTestServerWithStore(t, store)
 
-	body := bytes.NewBufferString(`{"name":"New Tenant"}`)
-	req := httptest.NewRequest("POST", "/v1/tenants", body)
+	body := bytes.NewBufferString(`{"name":"New Organization"}`)
+	req := httptest.NewRequest("POST", "/v1/organizations", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

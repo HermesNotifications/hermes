@@ -48,12 +48,12 @@ inbox title/body).
 ```bash
 # Send a templated notification
 hermes notifications send \
-  --tenant-id <uuid> --user-id <external-id> \
+  --organization-id <uuid> --user-id <external-id> \
   --template welcome --data '{"name":"Alice"}'
 
 # Send direct content (no template)
 hermes notifications send \
-  --tenant-id <uuid> --user-id <external-id> \
+  --organization-id <uuid> --user-id <external-id> \
   --title "Hello" --body "Your order shipped" \
   --channels email,inbox
 
@@ -61,10 +61,10 @@ hermes notifications send \
 hermes notifications status --id <notification-id>
 ```
 Other flags: `--email`/`--phone` (recipient overrides), `--action-url`, `--action-label`,
-`--idempotency-key`. `--tenant-id` and `--user-id` are required.
+`--idempotency-key`. `--organization-id` and `--user-id` are required.
 
 ### `hermes auth` — token exchange
-Exchange a tenant + user identifier for a Hermes JWT (the same flow your backend uses for the
+Exchange an organization + user identifier for a Hermes JWT (the same flow your backend uses for the
 read-path APIs and Centrifugo).
 
 ### `hermes apikeys` — API key management
@@ -72,9 +72,9 @@ Create, list, and revoke API keys. A newly created key's raw secret is shown **o
 immediately.
 
 ### `hermes inbox` — real-time inbox
-- `hermes inbox listen --tenant-id <uuid> --user-id <id>` — stream live notifications to the
+- `hermes inbox listen --organization-id <uuid> --user-id <id>` — stream live notifications to the
   terminal (exchanges a JWT, subscribes to the user's Centrifugo channel `user#<internal-id>`).
-- `hermes inbox open --tenant-id <uuid> --user-id <id>` — full interactive TUI (Bubble Tea) with
+- `hermes inbox open --organization-id <uuid> --user-id <id>` — full interactive TUI (Bubble Tea) with
   live updates.
 
 Both default the WebSocket URL to `<base-url>/realtime/connection/websocket`; override with

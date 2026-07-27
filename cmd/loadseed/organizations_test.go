@@ -12,7 +12,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/database"
 )
 
-func TestInsertTenants(t *testing.T) {
+func TestInsertOrganizations(t *testing.T) {
 	ctx := context.Background()
 	pool, err := database.NewPool(ctx, envOr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"))
 	if err != nil {
@@ -21,18 +21,18 @@ func TestInsertTenants(t *testing.T) {
 	defer pool.Close()
 
 	rid := runID()
-	ids, err := insertTenants(ctx, pool, 3, rid)
+	ids, err := insertOrganizations(ctx, pool, 3, rid)
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM tenants WHERE id = ANY($1)`, ids) }()
+	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM organizations WHERE id = ANY($1)`, ids) }()
 
 	if len(ids) != 3 {
 		t.Fatalf("got %d ids, want 3", len(ids))
 	}
 
 	var count int
-	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM tenants WHERE id = ANY($1)`, ids).Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM organizations WHERE id = ANY($1)`, ids).Scan(&count); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 3 {

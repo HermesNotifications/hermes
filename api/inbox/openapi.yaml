@@ -138,6 +138,8 @@ components:
           type: string
         idempotency_key:
           type: string
+        organization_id:
+          type: string
         read_at:
           format: date-time
           type: string
@@ -148,15 +150,13 @@ components:
           type: string
         template_id:
           type: string
-        tenant_id:
-          type: string
         title:
           type: string
         user_id:
           type: string
       required:
         - id
-        - tenant_id
+        - organization_id
         - user_id
         - category_id
         - title

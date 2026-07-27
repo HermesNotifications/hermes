@@ -5,10 +5,10 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import type { Tenant } from "@hermes-notifications/server";
+import type { Organization } from "@hermes-notifications/server";
 import { Badge } from "@/components/ui/badge";
 
-export const columns: ColumnDef<Tenant>[] = [
+export const columns: ColumnDef<Organization>[] = [
   {
     accessorKey: "name",
     header: "Name",
@@ -38,7 +38,7 @@ export const columns: ColumnDef<Tenant>[] = [
       const count = row.getValue<number>("user_count");
       return (
         <Link
-          href={`/users?tenant_id=${row.original.id}`}
+          href={`/users?organization_id=${row.original.id}`}
           className="hover:underline"
         >
           <Badge variant="secondary">{count}</Badge>
