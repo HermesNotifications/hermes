@@ -1,0 +1,468 @@
+# Architecture Review — 2026-07-27
+
+Findings from a full review of the architecture documentation, the code it describes, and
+the deployment/infrastructure configuration.
+
+**Reviewed at:** `68f0996` (main)  
+**Scope:** `docs/` (all), `internal/`, `cmd/`, `migrations/`, `deploy/`, `infra/`,
+`charts/`, `.github/workflows/`  
+**Method:** every claim below was verified against source, migrations, or manifests — not
+inferred from documentation. File and line references are from that commit and will drift.
+
+## How to read this
+
+| Priority | Meaning |
+|---|---|
+| **P0** | Production-blocking, exploitable, or already broken in a deployed environment |
+| **P1** | Serious security hardening, or documentation that actively breaks users |
+| **P2** | Accuracy drift and operational gaps |
+
+Findings marked **[code]** are cases where the documentation correctly describes the
+intended behaviour and the implementation does not deliver it — the fix belongs in code,
+not prose. Findings marked **[docs]** are the reverse.
+
+Finding numbers are stable. Withdrawn findings keep their number rather than being
+renumbered, so earlier references stay valid.
+
+---
+
+## P0 — Security, critical
+
+**1. NATS is completely unauthenticated and unencrypted.** `internal/messaging/nats.go:40`
+is a bare `nats.Connect(url)` — no token, NKey, credentials, or TLS, and no config field
+exists to supply one. The deployment starts NATS with no auth either
+(`deploy/k8s/base/infra/nats.yaml:23-30`), and monitoring port 8222 is reachable from every
+pod in the namespace (`overlays/*/network-policies/allow-nats.yaml:32-36` uses
+`podSelector: {}`). Anyone with network reach can publish to `notification.send` to forge
+notifications, or subscribe to `delivery.*` to read every recipient address and rendered
+body in flight. This is the trust boundary of the entire pipeline.
+
+**2. ~~API keys are not scoped to a tenant.~~ WITHDRAWN — this is the intended design.**
+The app, not the organization, is the isolation boundary; an app legitimately sends on
+behalf of many organizations, and organizations span apps. Scoping keys to an organization
+would break the core use case. See [ADR 0003](../adr/0003-rename-tenant-to-organization.md).
+The real defect is the vocabulary that produced this false positive — see finding 42.
+
+**3. The permission system is essentially unenforced.** `auth.RequirePermission`
+(`internal/auth/permissions.go:48`) is defined and unit-tested but has **zero** production
+call sites. The only enforcement anywhere is three inline `HasPermission` checks in
+`internal/admin/handler_apikeys.go:55,90,139` — and those are **fail-open**
+(`if key != nil && !auth.HasPermission(...)` passes when the key is nil). Nothing checks
+`notifications:send` on the send path, or the template/tenant permissions on their
+handlers. Within one app, a key issued narrowly for sending has full access to everything
+except API-key management. The existence of the `permissions` column says differential
+privilege is intended.
+
+**4. Insecure secret defaults, with a silent overwrite path.** `internal/config/config.go`
+defaults `HERMES_JWT_SECRET` to `hermes-jwt-secret` (:57), `HERMES_API_KEY_HMAC_SECRET` to
+`hermes-dev-hmac-secret` (:71), `HERMES_CENTRIFUGO_API_KEY` to `centrifugo-api-key` (:59),
+and the database URL to `sslmode=disable` (:54) — with no environment gate and no startup
+warning, so a service with no env vars comes up fully functional and trivially forgeable.
+Worst of the four: `EnsureHermesSigningKey` (`internal/store/postgres/auth.go:90-101`)
+upserts the JWT secret with `ON CONFLICT DO UPDATE SET secret`, so one service starting
+without the variable silently overwrites a properly rotated signing key.
+
+**5. The EKS API server is public to the entire internet.**
+`infra/terraform/modules/eks/main.tf:42-44` sets `endpoint_public_access = true` with
+`public_access_cidrs` defaulting to `["0.0.0.0/0"]` (`modules/eks/variables.tf:47-51`), and
+the root module never overrides it — both environments. Compounded by no control-plane
+audit logging (no `enabled_cluster_log_types`) and no KMS envelope encryption for etcd
+secrets (no `encryption_config`).
+
+**6. The Crossplane IAM role is account-wide admin over data services.**
+`infra/terraform/modules/eks/main.tf:335-347` grants `rds:*`, `elasticache:*`,
+`secretsmanager:*`, and `ssm:*` on `Resource = "*"`. `secretsmanager:*` on `*` means the
+in-cluster provider can read or overwrite every secret in the account. Compare ESO, which
+does far less and is correctly scoped to `secret:hermes/*` (same file, line 178).
+
+**7. Production Crossplane authenticates as staging.**
+`infra/crossplane/provider/runtime-config.yaml:11` hardcodes
+`arn:aws:iam::471524413120:role/hermes-staging-crossplane`, and that one file is applied to
+every cluster. Relatedly, `infra/scripts/bootstrap-cluster.sh:14` *requires* a
+`CROSSPLANE_ROLE_ARN` argument that the script then never uses — the value
+`deployment-guide.md:164` tells operators to pass is silently discarded.
+
+## P0 — Reliability, critical
+
+**8. `hermes-send` is unreachable in staging and production.** Default-deny covers all pods
+(`network-policies/default-deny.yaml:7`), and `allow-ingress.yaml:12-16` lists only
+`hermes-admin`, `hermes-inbox`, `hermes-user`, and `centrifugo` on ports 8080/8086/8087/8000
+— no `hermes-send`, no port 8088. The ingress routes `/v1/send` to it
+(`base/ingress.yaml:13-19`), so the platform's primary write path is blocked by
+NetworkPolicy in both environments. `hermes-send` is also absent from the replicas patch,
+resources patch, HPA set, PDB set, anti-affinity patch, and the Kargo health check — so it
+also stays at `replicas: 1` in production.
+
+**9. [code] Delivery failures are acked, never retried or dead-lettered.**
+`internal/delivery/worker.go:62-67` logs the provider error, publishes a `<channel>.failed`
+event, and returns `nil`, which the messaging layer treats as success and acks
+(`internal/messaging/nats.go:260`). The retry/backoff and DLQ machinery in
+`internal/messaging` is therefore dead code for all three delivery workers, and a transient
+SMTP or webhook blip permanently drops the notification. Same pattern for unmarshal errors
+at :41-43. This directly contradicts the documented DLQ behaviour.
+
+**10. All OpenTelemetry egress is blocked.** Services target
+`otel-collector-…observability.svc:4317` (`base/kustomization.yaml:27`), but the egress
+rules permit only DNS, NATS 4222, Centrifugo 8000, 5432/6379 into `10.0.0.0/8`, and 443 to
+public IPs. Port 4317 to the `observability` namespace is denied, so traces and metrics
+never leave the pods. No policy allows Prometheus in `observability` to scrape Hermes
+either, so the ServiceMonitors do not work.
+
+**11. The migration Job cannot re-run, and will break every Kargo promotion.** The ArgoCD
+hook annotations in `deploy/k8s/base/migration-job.yaml:5-8` are commented out behind a
+`TODO: re-enable once Crossplane has provisioned the database`, so the Job is a plain
+resource that runs once at first sync and never again — `deployment-guide.md:472`'s claim
+that migrations run on every sync is false. Worse, Kargo rewrites the `hermes-migrate` image
+tag on each promotion (`kargo/stages/production.yaml:63-65`) but `Job.spec.template` is
+immutable, so ArgoCD sync fails with a field-immutable error instead.
+
+**12. The secrets bundle composition is a no-op.** `compositions/aws/secrets.yaml` creates
+an *empty* Secrets Manager secret plus two SSM parameters and emits no `connectionDetails`,
+though the XRD declares seven keys including `database_url` and `redis_url`
+(`xrds/hermes-secrets.yaml:13-20`) and the required `databaseSecretRef`/`cacheSecretRef`
+inputs are never referenced. The secret ESO reads is never populated, so every
+ExternalSecret key fails to resolve until someone fills it in by hand — a manual step absent
+from the guide, which instead claims the composition assembles connection details
+(`deployment-guide.md:438`).
+
+## P1 — Security, high and medium
+
+**13. SMTP silently disables TLS when credentials are absent.**
+`internal/email/smtp.go:28-36` sets `mail.WithTLSPolicy(mail.NoTLS)` in the no-credentials
+branch rather than falling back to opportunistic STARTTLS. Defaults target a local MailHog,
+but any deployment pointing `HERMES_EMAIL_SMTP_HOST` at a real relay without credentials
+sends notification bodies in cleartext.
+
+**14. No TLS configuration for any datastore.** Postgres depends entirely on the URL
+(defaulting to `sslmode=disable`), Redis likewise, and NATS not at all. No config surface
+exists to enable it.
+
+**15. GitHub Actions OIDC trust is scoped to the whole repository.**
+`infra/terraform/modules/cicd/main.tf:36-38` uses `StringLike` on
+`repo:${org}/${repo}:*`, so any workflow on any branch or tag can assume
+`hermes-github-actions` and push to ECR — and Kargo promotes whatever lands in ECR. Scope to
+`refs/heads/main` plus the release tag pattern, or use a GitHub Environment claim.
+
+**16. No Action pinned to a commit SHA, and no image signing.** `.github/workflows/ci.yml`
+and `cd.yml` use mutable tags (`actions/checkout@v6`, `docker/setup-buildx-action@v4`,
+`aws-actions/configure-aws-credentials@v6`, `golangci/golangci-lint-action@v9`) in workflows
+holding `id-token: write` and ECR push rights. No cosign signing, no SLSA provenance, and no
+admission-time verification, so nothing downstream can prove an image came from CD.
+
+**17. Placeholder Centrifugo secrets committed.**
+`deploy/k8s/base/infra/centrifugo.yaml:12-13` ships
+`"token_hmac_secret_key": "CHANGE-ME-must-match-HERMES_JWT_SECRET"` and
+`"api_key": "CHANGE-ME-centrifugo-api-key"`. Staging and production overlays do patch these,
+so real environments are not exposed — but any deployment of `base` without the patch uses
+known constants, allowing forged Centrifugo JWTs and subscription to any `user#<id>` channel.
+
+**18. ArgoCD runs with TLS disabled and no project isolation.**
+`infra/scripts/bootstrap-cluster.sh:76` passes `server.extraArgs={--insecure}`, and both
+Applications use `project: default` (`deploy/argocd/production.yaml:17`), permitting any
+destination cluster, namespace, and resource kind. The script also echoes the ArgoCD and
+Kargo admin passwords to stdout (lines 78, 91), landing them in shell history and CI logs.
+
+**19. NATS and Centrifugo pods have no securityContext.** Every application Deployment sets
+`runAsNonRoot`, `runAsUser: 65534`, `seccompProfile: RuntimeDefault`,
+`readOnlyRootFilesystem`, and `drop: ["ALL"]` (e.g. `base/services/admin.yaml:21-27,53-57`).
+Neither infra manifest has any of it, so both run as root with default capabilities. The
+`hermes` namespace also carries no Pod Security Admission labels (`base/namespace.yaml`).
+
+**20. Two JWT validation hardening gaps.** The per-key `Algorithm` field reaches
+`JWTSigningConfig` (`internal/auth/signing_config.go:17`) but is never enforced during
+validation — only the HMAC family is checked (`internal/auth/jwt.go:72-74`) — so a key
+registered HS512 accepts an HS256 token signed with the same secret. Separately, the
+missing-claims check at `jwt.go:99` is `if userID == "" || (!tok && tenantID == "")`; when
+the tenant claim key is present but not a string, `tok` is true while the conversion yields
+`""`, and the request proceeds with an empty organization ID in context.
+
+**21. Lower-severity security items.** Raw API keys used as in-memory rate-limiter map keys
+(`internal/send/server.go:91-93`); `automountServiceAccountToken` not disabled
+(`base/serviceaccount.yaml`) though no service needs K8s API access; `force_delete = true`
+on production ECR repositories (`modules/ecr/main.tf:24`); staging secrets bundle
+`recoveryWindowDays: 0` (`claims/staging/secrets.yaml:11`, and the XRD default at
+`xrds/hermes-secrets.yaml:40`) making a deleted secret unrecoverable; Datadog ClusterRole
+grants `nodes/proxy` (`base/datadog/rbac.yaml:12`) = kubelet API access on every node; no VPC
+flow logs (`modules/vpc/main.tf`); a personal email committed as the ACME contact
+(`bootstrap-cluster.sh:49`); ESO policy grants `GetSecretValue` but not `DescribeSecret`,
+which ESO also calls.
+
+## P1 — Documentation that actively breaks users
+
+**22. [docs] `self-hosting/configuration.md` documents a Helm schema the chart rejects.**
+Four keys are wrong, verified against `charts/hermes/values.yaml`: `services.admin` (:138-164)
+vs. top-level (`values.yaml:79`); `replicaCount` (:140) vs. `replicas` (`values.yaml:81`);
+`networkPolicies` (:278) vs. `networkPolicy` (`values.yaml:339`); and `ingress.host` (:186),
+which does not exist in the chart at all — the ingress reads `global.domain`
+(`templates/ingress.yaml:18`). `self-hosting/production.md` is correct on all four. Since
+`configuration.md` is the doc titled "Configuration Reference" and linked from
+`docs/README.md:59`, it is the more damaging error, and following it produces an install
+that fails validation.
+
+**23. [docs] Webhook email delivery does not exist but is documented in three places.**
+`self-hosting/configuration.md:52-76` presents `provider: webhook` with a
+`hermes.email.webhook.url` block as the way to use both SES and SendGrid. The code supports
+only `smtp` and `ses` (`internal/email/email.go:40-49`, which errors "unknown email
+provider"), and the chart's own schema rejects `webhook` (`values.schema.json:66`) — so the
+example fails at install time. SES is natively supported via `provider: ses`, which that doc
+never mentions. `deployment-guide.md:251-256` has the mirror-image problem, instructing
+operators to create an `email_webhook_url` SSM parameter no Go code reads (the plumbing at
+`deploy/k8s/overlays/*/external-secrets.yaml:63` is dead config). The adjacent
+`sms_webhook_url` at :258-259 is correct — SMS genuinely is webhook-based.
+
+**24. [docs] `integration-guide.md` API shapes and URL prefixes are stale.** Migration
+`000016` dropped the flat template content columns and `users.email`/`users.phone`:
+- Templates now take nested `content: {"email": {"subject": …, "body": …}}`
+  (`internal/admin/handler_templates.go:20`, `api/admin/openapi.yaml:126-142`), not the flat
+  `email_subject`/`inbox_body` fields shown at :144-148. A repo-wide grep for those JSON
+  tags returns zero hits. Same stale model in `data-model.md:47-50`, `glossary.md:25`,
+  `cli.md:44`.
+- User profiles expose `contacts map[string]string` (`internal/models/models.go:27-34`,
+  `api/user/openapi.yaml:182-209`), not the flat `email`/`phone` at :352-354.
+- Send recipient overrides are `contacts`, not `email`/`phone`
+  (`internal/send/handler_send.go:16-20`, `internal/nats/messages.go:16`) — also stale at
+  `architecture.md:93`.
+- `:158` claims `POST /v1/send` is "served by both the Admin service and the dedicated Send
+  service." `internal/admin/server.go:123-130` does not register it. The confusion
+  originates in `cmd/openapi/main.go:30-54`, which deliberately merges the send service's
+  paths into the admin spec for a combined SDK, so `api/admin/openapi.yaml:972` advertises
+  an endpoint the admin binary does not serve.
+- Every curl example uses an `/admin/v1/…` prefix; all four services serve at bare `/v1/…`.
+
+**25. [docs] The dual-store reality is documented only inside ADR 0001.** A complete
+DynamoDB implementation (~1,500 lines in `internal/store/dynamo/`, with integration tests)
+is wired into five services — dispatch, admin, inbox, user, worker-events — gated on
+`HERMES_DYNAMO_ENDPOINT`, with `aws-sdk-go-v2/service/dynamodb` a **direct** dependency
+(`go.mod:17`). Yet `architecture.md:33,162`, `data-model.md:3`, `services.md:76`, and
+`deployment-guide.md:66-88` all describe Postgres as the only store, and
+`configuration.md` omits both `HERMES_DYNAMO_ENDPOINT` and `HERMES_DYNAMO_REGION`
+(`internal/config/config.go:75-76`). Note Postgres remains required even in Dynamo mode:
+`dynamo.NewEventStore` takes the Postgres store as a delegate, and every service still calls
+`MustConnectDB` unconditionally.
+
+## P2 — Documentation accuracy and drift
+
+**26. Service and repository counts contradict each other.** `deployment-guide.md:58,328`
+say 8 services; `:74,137,312` say 9. Reality: **9 services** (`base/services/kustomization.yaml`),
+**10** ECR repositories and 10 CD images — `migrate` is included (`modules/ecr/main.tf:5-16`,
+`cd.yml:31-41`; `warehouse.yaml:1` also says "all 9" while subscribing to 10). Line 328 is
+the worst instance because it is an operator verification step, teaching people to accept a
+missing pod as healthy.
+
+**27. JWT rotation — `architecture.md:143-145` is the incorrect one.** "Rotated without
+downtime" is misleading. Verification is genuinely multi-key from `jwt_signing_keys`, but
+`EnsureHermesSigningKey` (`internal/store/postgres/auth.go:90-101`) upserts the
+`hermes-internal` row with `ON CONFLICT DO UPDATE SET secret`, so changing
+`HERMES_JWT_SECRET` replaces the key rather than adding alongside it — as `configuration.md:47`
+and `deployment-guide.md:466` correctly state. Multi-key rotation only helps for manually
+inserted third-party keys, and `integration-guide.md:473` requires Centrifugo's
+`token_hmac_secret_key` to equal `HERMES_JWT_SECRET`, so Centrifugo cannot validate those
+extra keys anyway.
+
+**28. The documented DB password rotation will be reverted by Crossplane.**
+`compositions/aws/database.yaml:119-122` sets `autoGeneratePassword: true` with a
+`masterPasswordSecretRef`, so the guide's out-of-band `aws rds modify-db-cluster`
+(`deployment-guide.md:444-457`) creates drift that the next reconcile resets — breaking the
+connection string just written to Secrets Manager. Correct rotation is to rotate the
+Crossplane-managed secret and let it propagate. Same trap for webhook URLs:
+`compositions/aws/secrets.yaml:62,77` set `insecureValue: "https://REPLACE_ME/email"`, so
+the `aws ssm put-parameter` commands at guide lines 254-259 revert on next reconcile.
+
+**29. `data-model.md` omits two shipped tables.** `template_channel_content` and
+`user_contact_points` (both migration `000015`) are absent from the text and from the entity
+diagram at :14-26, and `:33` still lists `email`/`phone` as columns on `users`. The
+`verified` column on `user_contact_points` is written by no code and exposed by no API. The
+retention section at :102-106 also does not note that `cmd/cleanup` no-ops entirely under
+DynamoDB (`cmd/cleanup/main.go:27-30`), where native TTL handles expiry.
+
+**30. Neither `architecture.md` nor `services.md` reflects ADR 0002.** The shared-packages
+table at `services.md:76-91` lists neither `internal/provider` (the channel/provider registry
+that shipped with ADR 0002 Phase 1) nor `internal/store/dynamo`. `glossary.md:28` still
+defines a channel as "`email`, `sms`, or `inbox`" with no entry for *provider*, which ADR
+0002 establishes as a distinct first-class concept, and no human-facing doc explains the
+channel/provider distinction. For accuracy: the stream table *is* still correct — the
+registry is compile-time only (`internal/provider/builtins.go:10`) and per-provider
+`delivery.<channel>.<provider>` subjects do not exist yet.
+
+**31. Assorted stale claims.** `docs/api/README.md:33` says "the three JetStream streams"
+(there are four, and its own AsyncAPI documents the DLQ at
+`api/async/asyncapi.yaml:107-126`). `self-hosting/upgrading.md:49` says migrations "cannot be
+rolled back automatically" though every migration ships a `.down.sql`. The rollback recipe
+at `deployment-guide.md:480-485` invokes `/migrate` inside the admin image, which has
+entrypoint `/service` and no such binary, and names the job `hermes-migration` rather than
+`hermes-migrate`. `deployment-guide.md:500` warns about upgrading 1.31 → 1.32 while the
+default `eks_cluster_version` is 1.35. Staging nodes are `t4g.large`
+(`environments/staging.tfvars:3`), not `t4g.medium` (:136). "Production services use HPA"
+(:420) covers 4 of 9. The `OWNER` repoURL placeholders (:236-243), ACME email (:264), and
+staging domain (:207) are already filled in — staging is `staging.hermes.dgr.io`, though
+production is still the `hermes.example.com` placeholder. The hardcoded account ID appears
+in 5 files, not the 1 claimed at :223. `testing.md:33` and `CLAUDE.md` both cite
+`TestCreateGroup`, which no longer exists (renamed in the group→category migration; the
+current equivalent is `TestCreateCategory_And_GetBySlug` in
+`internal/store/postgres/categories_test.go:13`) and omit `-tags=integration`, so the command
+silently matches nothing. `dispatchbench` (`Makefile:248`) is missing from `services.md:61-70`,
+`cli.md:88-94`, and `development.md:92-93`. `adr/0001:245` references a "namespace" concept
+that exists only as a plan doc. `docs/loadtest/dispatch-tuning-dynamo.md:28` recommends
+`workers=16` against a shipped default of 8 with no cross-reference to the superseding
+`dispatch-tuning-2026-06.md:136`. Repo identity is inconsistent across `cli.md:10`
+(`hermes-notifications`, matching `go.mod:1`), `upgrading.md:5` (`hermesnotifications`), and
+`adr/0001:311` (`darylrobbins`).
+
+**32. Channel resolution is documented incorrectly.** The documented "explicit → user
+preference → category defaults" is not what `internal/dispatch/channels.go:82-134`
+implements. A standalone template resolves explicit → `template.DefaultChannels` → error. A
+category with `default_state = "required"` resolves explicit → category defaults, bypassing
+user preference entirely. Otherwise the list is the category defaults, overridden *wholesale*
+by explicit channels, after which the user's subscription acts purely as a **binary
+opt-in/opt-out gate** (:119-125). `models.UserSubscription` has only `OptedIn bool`
+(`internal/models/models.go:96-101`) — there is no per-channel user preference in the data
+model at all, so preferences can suppress a notification but never select channels.
+Narrowing to template-defined channels does happen, but separately and afterwards
+(`dispatch.go:269`), followed by contact-availability filtering (:288). Relatedly,
+`internal/nats/messages.go` no longer has discrete `email`/`phone` fields (now `Contacts` and
+`Recipient` maps), and the docs omit that all four streams carry a 7-day `MaxAge`
+(`nats.go:59`) — so "stream retention is 7 days" is the accurate claim.
+
+## P2 — Operational gaps
+
+**33. The cleanup CronJob references an image nobody builds.**
+`base/cleanup-cronjob.yaml:23` uses `image: hermes-cleanup`. `cmd/cleanup` exists, but there
+is no `hermes-cleanup` ECR repository, it is not in the CD matrix, and Kargo does not set its
+tag — so the overlays leave the bare string and it will `ImagePullBackOff` nightly at 03:00
+UTC. It also has no resource requests or limits.
+
+**34. ArgoCD `selfHeal` fights the HPAs.** Both Applications enable `selfHeal: true` while
+the production overlay commits explicit `replicas` values *and* HPAs for the same four
+Deployments, with no `ignoreDifferences` on `/spec/replicas` — so ArgoCD keeps reverting
+whatever the HPA scaled to.
+
+**35. The Kargo health check almost certainly cannot pass.**
+`kargo/analysis/health-check.yaml` runs `bitnami/kubectl:latest` (unpinned, on a registry
+being retired) as a Job in the `hermes` namespace. No Role or RoleBinding granting
+`deployments`/`statefulsets`/`pods` read access exists anywhere in the repo, and default-deny
+egress blocks the pod from reaching the API server. It also omits `hermes-send`. Production
+has no `verification` block at all, so nothing verifies a production promotion.
+
+**36. NATS has a PDB but no anti-affinity.** `pdb/nats-pdb.yaml` sets `minAvailable: 2` for
+the 3-replica StatefulSet, but `patches/anti-affinity.yaml` covers only admin, dispatch,
+inbox, and user. All three NATS pods can land on one node, so a single node loss takes
+JetStream below quorum *and* simultaneously wedges every voluntary eviction. Centrifugo and
+the four workers have no spread constraints; PDBs are missing for send, user, and all
+workers.
+
+**37. The ECR lifecycle policy never matches anything.** `modules/ecr/main.tf:65` expires
+tagged images with `tagPrefixList = ["v", "sha-"]`, but CD tags with a bare 40-character git
+SHA and, for releases, a version with the `v` already stripped (`cd.yml:85`). Neither prefix
+matches, so the "keep only 20 tagged images" rule is inert and tagged images accumulate
+indefinitely.
+
+**38. Both environments use the same VPC CIDR.** `vpc_cidr` defaults to `10.0.0.0/16` and
+neither tfvars file overrides it, so the staging and production VPCs overlap and can never be
+peered.
+
+**39. Rate limiting is undocumented and not configurable.** `internal/middleware/ratelimit.go`
+is live on all four HTTP services with hardcoded limits — send 5000 burst / 2000 per second
+keyed on the `Authorization` header (`internal/send/server.go:91-93`), admin 1000/500, inbox
+and user 50/20 per user — returning HTTP 429. Nothing in `docs/` mentions rate limits, 429, or
+these numbers, so integrators get no documented retry contract. Two properties matter
+especially and appear nowhere: the limiter is **in-process with no Redis backing**, so the
+effective cluster limit multiplies by replica count (silently interacting with the HPA
+guidance at `deployment-guide.md:420-422`), and **no env var tunes it**.
+
+**40. Missing documentation coverage.** PII and retention — only `notification_events`
+retention is documented (`data-model.md:102-106`), with no guidance on deleting a user's
+data, purging `user_contact_points` (which holds all PII after `000015`), or the fact that
+soft-deleted notifications are never hard-deleted, and no right-to-erasure discussion.
+Backup and restore for self-hosting — `self-hosting/production.md` has no backup section at
+all, the only guidance is a single `pg_dump` line at `upgrading.md:10` with no restore
+procedure, and self-hosters are never pointed at the solid AWS DR section at
+`deployment-guide.md:541-565`; nothing covers backing up the DynamoDB-model store on either
+path. Store-backend migration — ADR 0001:225-233 records that Postgres-format inbox cursors
+are not forward-compatible and clients get an "invalid cursor" error after a store switch,
+but that client-visible breakage appears nowhere an integrator would look. Chart requirements
+— no doc mentions that `global.domain`, `hermes.jwt.secret`, and `hermes.apiKey.hmacSecret`
+are hard-required (`values.schema.json:9,31`), or that sub-charts default to `enabled: true`
+so a default install is self-contained rather than BYO-infra; the schema enum also accepts
+`sendgrid` (:66) though no template handles it, so it validates and silently emits no
+provider config.
+
+**41. Assorted infrastructure gaps.** `hermes-config-params` (the SSM webhook URLs) is
+created by ESO in both overlays but referenced by no Deployment, so
+`HERMES_SMS_WEBHOOK_URL` never reaches the worker. Centrifugo's
+`HERMES_CENTRIFUGO_REDIS_PASSWORD` is synced (`overlays/production/external-secrets.yaml:39-42`)
+but never wired into the pod env by `patches/centrifugo-env.yaml`, so it cannot authenticate
+to Valkey given `autoGenerateAuthToken: true` (`compositions/aws/cache.yaml:108`). The
+ElastiCache composition sets `automaticFailoverEnabled` but never `multiAzEnabled`, so
+production Valkey is not actually multi-AZ. The Aurora composition exports no CloudWatch
+logs. The Helm chart's own NetworkPolicy (`charts/hermes/templates/networkpolicy.yaml`)
+specifies `ports` with no `to:` selector on egress and no `from:` on ingress, making its
+"default deny" far more permissive than the Kustomize equivalent — it allows egress to any
+destination and ingress from any pod in any namespace on those ports.
+
+## P1 — Vocabulary (added after review)
+
+**42. The docs assert an isolation model that does not exist, and it produced a false
+positive.** `glossary.md:6` calls the tenant "the top-level isolation boundary" and
+`integration-guide.md:78` says tenants "represent isolated organizations." Both are false:
+the app is the boundary, organizations deliberately span apps, and API keys are
+intentionally unscoped. Read against the schema, those two sentences describe a
+vulnerability that isn't one — which is exactly the error finding 2 made. The inverse risk
+is worse: someone assuming the isolation exists and building on it, or "fixing" the
+non-issue by scoping keys and breaking cross-organization sends. Corroborating evidence that
+the name is the only thing wrong: only `users` and `notifications` carry `tenant_id` at all;
+the entire config plane (`subscription_categories`, `subscriptions`,
+`notification_templates`, `jwt_signing_keys`) is app-global. Decision recorded in
+[ADR 0003](../adr/0003-rename-tenant-to-organization.md).
+
+**Remediation is not a documentation edit.** ADR 0003 decides a clean rename of `tenant` →
+`organization` with no compatibility aliases, plus naming the app as the boundary. That
+spans roughly 130 files:
+
+| Area | Work |
+|---|---|
+| Schema | Migration renaming `tenants` → `organizations`, `users.tenant_id` and `notifications.tenant_id` → `organization_id`, and the two indexes. Precedent: `migrations/000011` |
+| JWT | `jwt_signing_keys.tenant_id_claim` → `organization_id_claim`, default `tenant_id` → `organization_id` |
+| Wire contracts | `SendMessage.TenantID` / `DeliveryMessage` → `OrganizationID` (`internal/nats/messages.go`), `api/async/asyncapi.yaml` regenerated |
+| DynamoDB | `TENANT#<id>#IDEM#<key>` → `ORG#…` (`internal/store/dynamo/notifications.go:107,144`); safe because entries expire in the 24h dedup window |
+| REST + SDKs | `tenant_id` → `organization_id` in the send body; `/v1/tenants` → `/v1/organizations` (`internal/admin/handler_tenants.go:41,73`); `Tenant*` → `Organization*` across the Java, Python, .NET, and TypeScript SDKs; major version bump |
+| Docs | The false claims above, a new *app* glossary entry, and the missing isolation-model section from finding 40 |
+| Observability | Four overlay files reference tenant as a **metric label** — renaming silently breaks saved queries, dashboards, and any alert rule grouping by it. Needs a coordinated dashboard update, not a find-replace. Ship as a separate reviewable commit |
+| Other | `cmd/loadseed` fixtures and manifests, `web/admin` |
+
+**Sequencing constraint — this has a deadline, not just a priority.** ADR 0003 argues the
+rename must land *before* two planned changes, after which the cost rises sharply: ADR 0001
+Phase 2 would bake `TENANT#<id>` into DynamoDB GSI **partition** keys (converting a spec
+regeneration into a stored-key migration), and ADR 0002's subject-contract freeze would make
+the old name part of a public versioned surface that third-party provider authors depend on.
+Schedule it ahead of both regardless of its P1 ranking.
+
+---
+
+## Suggested remediation order
+
+1. **Immediately** — findings 8 and 10, which are broken in both deployed environments right
+   now, then the security workstream 1, 3, 4, 5, 6, 7, then 9, 11, 12.
+2. **Next** — the P1 security hardening batch (13–21), then the three documentation
+   findings that break users (22, 23, 24) and the dual-store gap (25).
+3. **The rename (42) is schedule-driven, not priority-driven.** It must land before ADR 0001
+   Phase 2 and ADR 0002's subject freeze, so slot it against those two rather than against
+   this list. Doing it early also avoids re-reviewing the documentation findings above,
+   several of which touch the same files.
+4. **Then** — accuracy drift (26–32) and operational gaps (33–41), including the new
+   documentation sections in 40.
+
+## Follow-ups
+
+- [ADR 0003](../adr/0003-rename-tenant-to-organization.md) — proposed, not yet implemented;
+  flip to Accepted in the PR that lands the rename.
+- ADR 0002 committed to a follow-up ADR for the normalized content/contact model; PR #43
+  shipped that phase without one. Still owed.
+
+## Note on what went well
+
+The observability documentation is the best-maintained set in the tree and is worth copying
+as the model. `observability/README.md:23` and `architecture.md:12,40-41,65,78` correctly
+cover the optional SigNoz fan-out from commit `55430f8`, and
+`observability/adr/001-lgtm-over-signoz.md:4` was properly amended (dated 2026-06-13) *ahead
+of* the code landing rather than silently rewritten — exactly the amend-versus-supersede
+discipline `adr/README.md:56-69` prescribes and the rest of the tree is missing.

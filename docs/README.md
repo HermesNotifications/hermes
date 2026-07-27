@@ -45,6 +45,8 @@ SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch
   core design patterns.
 - **[Architecture Decision Records](adr/README.md)** — the significant architectural decisions and
   their rationale, plus when and how to write a new one.
+- **[Reviews](reviews/2026-07-27-architecture-review.md)** — findings from periodic architecture
+  and security reviews, kept as a remediation backlog.
 - **[Development](development.md)** — local dev with Tilt + k3d (and the lighter Docker Compose
   path for tests), project layout, and live reload.
 - **[Testing](testing.md)** — the unit / integration / e2e split and the mock-store pattern.
