@@ -27,6 +27,22 @@ test-e2e:          ## Run E2E tests only (requires make infra-up)
 lint:              ## Run golangci-lint
 	golangci-lint run
 
+# --- Verify ---
+# The completion gate for parallel agent work (.claude/ownership.json). Everything
+# here must run without cluster or cloud credentials, so it proves manifests and
+# compositions are well-formed -- not that they are correct against a live API.
+.PHONY: verify verify-manifests
+verify:            ## Full local verification gate (no infra needed)
+	go build ./...
+	go test ./... -count=1
+	golangci-lint run
+	$(MAKE) verify-manifests
+verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
+	kubectl kustomize deploy/k8s/overlays/local > /dev/null
+	kubectl kustomize deploy/k8s/overlays/staging > /dev/null
+	kubectl kustomize deploy/k8s/overlays/production > /dev/null
+	python3 -c "import yaml, glob; [list(yaml.safe_load_all(open(p))) for p in glob.glob('infra/crossplane/**/*.yaml', recursive=True) + glob.glob('deploy/kargo/**/*.yaml', recursive=True) + glob.glob('.github/workflows/*.yml')]"
+
 # --- Helm ---
 .PHONY: helm-lint
 helm-lint:         ## Lint the Helm chart
