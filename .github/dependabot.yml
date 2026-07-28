@@ -24,8 +24,12 @@ updates:
           - minor
           - patch
 
+  # Must be the repo root, not /web/admin: this is a pnpm workspace, so there is a
+  # single pnpm-lock.yaml at the root covering web/admin and sdks/typescript/packages/*.
+  # Pointed at /web/admin, Dependabot found no lockfile and opened no update PRs, which
+  # is how 53 npm alerts accumulated untouched.
   - package-ecosystem: npm
-    directory: "/web/admin"
+    directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -36,6 +40,13 @@ updates:
         update-types:
           - minor
           - patch
+      npm-major:
+        # Majors grouped but separate: sharp, hono and @hono/node-server all need
+        # major bumps to clear their advisories, and those want reviewing together.
+        patterns:
+          - "*"
+        update-types:
+          - major
 
   - package-ecosystem: docker
     directories:
