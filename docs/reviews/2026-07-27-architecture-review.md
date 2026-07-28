@@ -4,6 +4,8 @@ Findings from a full review of the architecture documentation, the code it descr
 the deployment/infrastructure configuration.
 
 **Reviewed at:** `68f0996` (main)  
+**Last updated:** 2026-07-28, after the organization rename landed at `a5f0874` and the SDKs
+were regenerated  
 **Scope:** `docs/` (all), `internal/`, `cmd/`, `migrations/`, `deploy/`, `infra/`,
 `charts/`, `.github/workflows/`  
 **Method:** every claim below was verified against source, migrations, or manifests — not
@@ -13,16 +15,28 @@ inferred from documentation. File and line references are from that commit and w
 
 | Priority | Meaning |
 |---|---|
-| **P0** | Production-blocking, exploitable, or already broken in a deployed environment |
+| **P0** | Deployment-blocking, exploitable, or already broken in a deployed environment |
 | **P1** | Serious security hardening, or documentation that actively breaks users |
 | **P2** | Accuracy drift and operational gaps |
+
+**Severity is deployment-readiness, not live breakage.** The staging and production
+environments exist and are reconciled by ArgoCD, but neither carries real users, real
+traffic, or real data, and there are no external SDK consumers — the same premise ADR 0003
+relies on to justify a clean break with no compatibility window. So "P0" here means *this
+will fail, or is already failing, the moment the environment carries load*, not *customers
+are affected right now*. Nothing below is downgraded on that basis: pre-production is the
+cheap time to fix all of it, and the absence of traffic is why several of these have gone
+unnoticed rather than a reason to defer them.
 
 Findings marked **[code]** are cases where the documentation correctly describes the
 intended behaviour and the implementation does not deliver it — the fix belongs in code,
 not prose. Findings marked **[docs]** are the reverse.
 
-Finding numbers are stable. Withdrawn findings keep their number rather than being
-renumbered, so earlier references stay valid.
+**This is a living document.** Finding numbers are stable and are never reused or
+renumbered, so earlier references stay valid. As findings are withdrawn or fixed they are
+marked in place — **WITHDRAWN** for a false positive, **RESOLVED** for a landed fix, with
+the resolving commit — rather than deleted. A resolved finding that leaves residue spawns a
+new numbered finding rather than quietly widening its own scope.
 
 ---
 
@@ -401,8 +415,32 @@ destination and ingress from any pod in any namespace on those ports.
 
 ## P1 — Vocabulary (added after review)
 
-**42. The docs assert an isolation model that does not exist, and it produced a false
-positive.** `glossary.md:6` calls the tenant "the top-level isolation boundary" and
+**42. ~~The docs assert an isolation model that does not exist, and it produced a false
+positive.~~ RESOLVED at `a5f0874`.** Migration `000017` renames `tenants` →
+`organizations`, both `tenant_id` columns, the two indexes, the two FK constraints, and
+`jwt_signing_keys.tenant_id_claim` → `organization_id_claim` (backfilling existing rows and
+moving the column default to `organization_id`). `internal/nats/messages.go:14,44` carry
+`OrganizationID`, the Dynamo idempotency prefix is `ORG#`
+(`internal/store/dynamo/notifications.go:107,144`), `handler_tenants.go` became
+`handler_organizations.go`, the admin spec serves `/v1/organizations`
+(`api/admin/openapi.yaml:972`), and `web/admin` and the k6 fixtures are clean. The two false
+isolation claims were corrected, an *app* glossary entry added, and the app-scoped API key
+model written up in the architecture auth section — discharging the Docs row of the table
+below, including the isolation-model section it owed. `docs/adr`, `docs/reviews`,
+`docs/superpowers`, and migrations `000001`–`000016` were deliberately excluded as
+append-only records.
+
+Three residues remain, none of which reopens the finding:
+
+- The four generated SDKs were not regenerated — **finding 43**.
+- The metric-label rename shipped inside the same commit rather than separately — **finding 44**.
+- ADR 0003 is still `Status: Proposed` in both the ADR and `docs/adr/README.md:15`. The
+  review's own follow-up said to flip it to `Accepted` in the PR that lands the rename; that
+  PR landed and it was not flipped.
+
+The original finding is preserved below as the record of why the rename happened.
+
+**Original finding.** `glossary.md:6` calls the tenant "the top-level isolation boundary" and
 `integration-guide.md:78` says tenants "represent isolated organizations." Both are false:
 the app is the boundary, organizations deliberately span apps, and API keys are
 intentionally unscoped. Read against the schema, those two sentences describe a
@@ -416,7 +454,7 @@ the entire config plane (`subscription_categories`, `subscriptions`,
 
 **Remediation is not a documentation edit.** ADR 0003 decides a clean rename of `tenant` →
 `organization` with no compatibility aliases, plus naming the app as the boundary. That
-spans roughly 130 files:
+spans roughly 130 files (the commit touched 148):
 
 | Area | Work |
 |---|---|
@@ -436,6 +474,115 @@ regeneration into a stored-key migration), and ADR 0002's subject-contract freez
 the old name part of a public versioned surface that third-party provider authors depend on.
 Schedule it ahead of both regardless of its P1 ranking.
 
+*Constraint met.* The rename landed ahead of both, so neither escalation occurred. The
+`ORG#` prefix is in place before Phase 2 promotes it to a GSI partition key, and the
+`delivery.*` subject family carries the new name before the ADR 0002 freeze.
+
+## Added 2026-07-27 — residue from the rename
+
+Both findings below are consequences of `a5f0874`. They did not exist at `68f0996`.
+
+**43. ~~[P1] [docs] All four SDKs still describe the pre-rename API, including an endpoint the
+server no longer serves.~~ RESOLVED 2026-07-28.** All four SDKs regenerated from the current
+specs; `grep -ri tenant sdks/` now returns zero hits. Across the three generated SDKs it was
+a 1:1 replacement — 27 `Tenant*` files removed, 27 `Organization*` files added, 84 modified.
+`admin-api.d.ts:93` declares `/v1/organizations`, and the client SDKs type
+`organization_id`. Verified green: `tsc --noEmit` on both TypeScript packages, `mvn test` on
+Java, `dotnet test` on .NET (240 passed / 0 failed / 28 skipped), and a syntax parse over
+every generated Python module.
+
+Two things worth recording for the next regeneration:
+
+- **The generator never deletes.** It only writes, so the orphaned `Tenant*` sources, docs,
+  and tests survived regeneration and had to be removed by hand. Worse, it logs `Test files
+  never overwrite an existing file of the same name` and skips every existing test stub — so
+  21 stubs still said `tenantId` after a clean regeneration. They had to be deleted and the
+  generators re-run. Budget for this on any future rename: regeneration alone is not
+  sufficient.
+- **The stubs were two changes stale, not one.** The regenerated
+  `test_send_recipient.py` picked up `contacts` alongside `organization_id` — the old stub
+  still listed `email`/`phone`, which migration `000016` replaced. They had been frozen since
+  before the rename, which is why the .NET count moved 242 → 240.
+
+The mechanism that let this drift is now its own finding — see **45**. The remaining ADR
+0003 obligation is the major version bump, which is a release decision rather than a code
+change. Original finding follows.
+
+**Original finding.** `make openapi` regenerated the specs in the rename commit, but
+the SDKs generated *from* those specs were not. The result is worse than stale naming — the
+generated clients are now wrong about the live API:
+`sdks/typescript/packages/hermes-server/src/generated/admin-api.d.ts:218` still declares the
+`/v1/tenants` path with `list-tenants`/`create-tenant` operations, while
+`internal/admin/server.go` registers only the organizations routes and
+`api/admin/openapi.yaml:972` documents `/v1/organizations`. Any consumer of the generated
+client calls a path that now 404s.
+`sdks/typescript/packages/hermes-client/src/generated/user-api.d.ts:201` and
+`inbox-api.d.ts:197` still type the field as `tenant_id`, which no longer appears in any
+response. Java, Python, and .NET are worse off still, carrying whole `Tenant*` types and API
+classes — `TenantsApi`, `TenantItem`, `CreateTenantInputBody` and their tests (32, 33, and
+32 files respectively; TypeScript, 3).
+
+The commit message excluded them deliberately, on the stated grounds that "the generated
+Java/Python/.NET/TypeScript SDK artifacts are regenerated from the specs rather than
+hand-edited" — correct as a method, but the regeneration step itself never ran, so the
+exclusion silently became a gap. ADR 0003 commits to regenerating all four and taking a
+major version bump. Nothing is published to a registry yet, so the fix is to run the
+generators and bump; the cost of leaving it is that the checked-in SDKs are an actively
+misleading reference for the exact audience the rename was meant to protect.
+
+**44. [P2] The metric-label rename shipped in the bulk commit, and out-of-repo dashboards
+were not updated.** `tenant_id` → `organization_id` at
+`deploy/observability/base/otel-collector/values.yaml:92` and the four SigNoz exporter
+overlay patches. No `tenant_id` remains anywhere in `deploy/`, `charts/`, or `infra/`, so the
+in-repo side is complete and consistent — but ADR 0003 specifically called this out as the
+one part of the rename carrying real risk, and asked for it as **a separate reviewable
+commit with a coordinated dashboard update**. It shipped inside the 148-file mechanical pass
+instead, where a reviewer is least likely to weigh it, and the coordinated update did not
+happen.
+
+Grafana dashboards, saved queries, and any alert rule that groups by the old label live
+outside this repo and still reference `tenant_id`. They do not error; they silently return
+no series. Alert rules are the sharp edge — one grouping by `tenant_id` stops firing rather
+than starts failing, and the pre-production quiet makes that indistinguishable from healthy.
+Audit the LGTM dashboards and alert rules for the old label, and treat this as the worked
+example for the next rename that touches a metric label.
+
+## Added 2026-07-28 — found while fixing 43
+
+**45. [P1] Nothing verifies the SDKs against the specs, and the generation toolchain is
+neither documented nor pinned.** Finding 43 was not a one-off slip; it is what the current
+setup permits by default.
+
+*No CI gate.* Neither `.github/workflows/ci.yml` nor `cd.yml` runs `openapi-check` or any
+`sdk-*` target. The specs and the SDKs generated from them can diverge arbitrarily far —
+here, a full rename plus an endpoint path — and every check stays green. `make openapi`
+followed by `git diff --exit-code api/` confirms the specs were current the whole time, so a
+`make sdk-generate && git diff --exit-code sdks/` gate would have caught this on the rename
+PR itself.
+
+*Undocumented toolchain.* `CONTRIBUTING.md:10` lists prerequisites as "Go, Docker; for the
+k8s dev loop: k3d, tilt, kubectl; pnpm for the portal." Nothing mentions that
+`sdk-python`, `sdk-java`, and `sdk-dotnet` all require a **JVM** — `openapitools.json:5`
+pins `@openapitools/openapi-generator-cli` 7.20.0, a Node wrapper around a Java JAR. A
+contributor with the documented prerequisites installed cannot run two thirds of the SDK
+targets, and the failure gives no hint that Java is the missing piece. Building or testing
+the output additionally needs Maven and the .NET 8 SDK, also undocumented.
+
+*`make sdk-ts-generate` is broken on current pnpm.* Under pnpm 11.17 it fails with
+`ERR_PNPM_IGNORED_BUILDS` on `sharp`, `protobufjs`, and `unrs-resolver` — all `web/admin`
+dependencies, none of which type generation touches. pnpm 11 re-runs `install` before every
+script and treats unapproved build scripts as fatal; the nested install inherits neither
+`--config.strictDepBuilds=false` nor `npm_config_verify_deps_before_run=false`, so the
+Makefile target cannot be coaxed into working. The TypeScript SDK was regenerated by
+invoking `openapi-typescript` directly. Root cause is that no pnpm version is pinned
+anywhere — no `packageManager` field in any `package.json`, and `pnpm-workspace.yaml`
+declares no `onlyBuiltDependencies` allowlist.
+
+Remediation is three small changes plus one CI job: declare `onlyBuiltDependencies` in
+`pnpm-workspace.yaml`, add a `packageManager` pin, list the JVM/Maven/.NET prerequisites in
+`CONTRIBUTING.md`, and add the spec-and-SDK drift gate. The gate is the one that matters —
+the others only make it runnable.
+
 ---
 
 ## Suggested remediation order
@@ -444,17 +591,27 @@ Schedule it ahead of both regardless of its P1 ranking.
    now, then the security workstream 1, 3, 4, 5, 6, 7, then 9, 11, 12.
 2. **Next** — the P1 security hardening batch (13–21), then the three documentation
    findings that break users (22, 23, 24) and the dual-store gap (25).
-3. **The rename (42) is schedule-driven, not priority-driven.** It must land before ADR 0001
-   Phase 2 and ADR 0002's subject freeze, so slot it against those two rather than against
-   this list. Doing it early also avoids re-reviewing the documentation findings above,
-   several of which touch the same files.
-4. **Then** — accuracy drift (26–32) and operational gaps (33–41), including the new
-   documentation sections in 40.
+3. ~~**The rename (42) is schedule-driven, not priority-driven.**~~ **Done** — landed at
+   `a5f0874`, ahead of both ADR 0001 Phase 2 and ADR 0002's subject freeze. What remains is
+   its residue: **43** is now resolved too, leaving only the major version bump as a release
+   decision; **44** (audit dashboards and alert rules for the old metric label) belongs in
+   step 4; **45** (spec-to-SDK CI gate and toolchain pinning) belongs in step 2, because it
+   is what allowed 43 and will allow the next one.
+4. **Then** — accuracy drift (26–32) and operational gaps (33–41, 44), including the new
+   documentation sections in 40. Note that several of these findings cite line numbers in
+   files the rename rewrote, so expect drift when working through them; the claims were
+   re-verified, the coordinates were not.
 
 ## Follow-ups
 
-- [ADR 0003](../adr/0003-rename-tenant-to-organization.md) — proposed, not yet implemented;
-  flip to Accepted in the PR that lands the rename.
+- [ADR 0003](../adr/0003-rename-tenant-to-organization.md) — **implemented at `a5f0874`, but
+  still `Status: Proposed`** in the ADR and in `docs/adr/README.md:15`. Flip both to
+  `Accepted`. Per `adr/README.md:56-69` this is a clarification, so amend in place with a
+  date rather than superseding.
+- ~~Regenerate the four SDKs~~ done 2026-07-28; **the major version bump ADR 0003 commits to
+  is still owed** — finding 43.
+- Audit out-of-repo Grafana dashboards and alert rules for the `tenant_id` label — finding 44.
+- Add the spec-to-SDK drift gate to CI and pin the generation toolchain — finding 45.
 - ADR 0002 committed to a follow-up ADR for the normalized content/contact model; PR #43
   shipped that phase without one. Still owed.
 
