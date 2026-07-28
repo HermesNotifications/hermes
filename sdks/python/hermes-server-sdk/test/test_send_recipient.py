@@ -35,14 +35,15 @@ class TestSendRecipient(unittest.TestCase):
         model = SendRecipient()
         if include_optional:
             return SendRecipient(
-                email = '',
-                phone = '',
-                tenant_id = '0',
+                contacts = {
+                    'key' : ''
+                    },
+                organization_id = '0',
                 user_id = '0'
             )
         else:
             return SendRecipient(
-                tenant_id = '0',
+                organization_id = '0',
                 user_id = '0',
         )
         """

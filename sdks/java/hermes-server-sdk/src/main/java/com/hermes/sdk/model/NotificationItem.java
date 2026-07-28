@@ -51,7 +51,7 @@ import com.hermes.sdk.JSON;
 /**
  * NotificationItem
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
 public class NotificationItem {
   public static final String SERIALIZED_NAME_BODY = "body";
   @SerializedName(SERIALIZED_NAME_BODY)
@@ -78,6 +78,11 @@ public class NotificationItem {
   @javax.annotation.Nonnull
   private String id;
 
+  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
+  @javax.annotation.Nonnull
+  private String organizationId;
+
   public static final String SERIALIZED_NAME_STATUS = "status";
   @SerializedName(SERIALIZED_NAME_STATUS)
   @javax.annotation.Nonnull
@@ -92,11 +97,6 @@ public class NotificationItem {
   @SerializedName(SERIALIZED_NAME_TEMPLATE_SLUG)
   @javax.annotation.Nullable
   private String templateSlug;
-
-  public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
-  @SerializedName(SERIALIZED_NAME_TENANT_ID)
-  @javax.annotation.Nonnull
-  private String tenantId;
 
   public static final String SERIALIZED_NAME_TITLE = "title";
   @SerializedName(SERIALIZED_NAME_TITLE)
@@ -214,6 +214,25 @@ public class NotificationItem {
   }
 
 
+  public NotificationItem organizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
+    return this;
+  }
+
+  /**
+   * Get organizationId
+   * @return organizationId
+   */
+  @javax.annotation.Nonnull
+  public String getOrganizationId() {
+    return organizationId;
+  }
+
+  public void setOrganizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
+  }
+
+
   public NotificationItem status(@javax.annotation.Nonnull String status) {
     this.status = status;
     return this;
@@ -271,25 +290,6 @@ public class NotificationItem {
   }
 
 
-  public NotificationItem tenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
-    return this;
-  }
-
-  /**
-   * Get tenantId
-   * @return tenantId
-   */
-  @javax.annotation.Nonnull
-  public String getTenantId() {
-    return tenantId;
-  }
-
-  public void setTenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
-  }
-
-
   public NotificationItem title(@javax.annotation.Nonnull String title) {
     this.title = title;
     return this;
@@ -343,17 +343,17 @@ public class NotificationItem {
         Objects.equals(this.channels, notificationItem.channels) &&
         Objects.equals(this.createdAt, notificationItem.createdAt) &&
         Objects.equals(this.id, notificationItem.id) &&
+        Objects.equals(this.organizationId, notificationItem.organizationId) &&
         Objects.equals(this.status, notificationItem.status) &&
         Objects.equals(this.templateId, notificationItem.templateId) &&
         Objects.equals(this.templateSlug, notificationItem.templateSlug) &&
-        Objects.equals(this.tenantId, notificationItem.tenantId) &&
         Objects.equals(this.title, notificationItem.title) &&
         Objects.equals(this.userId, notificationItem.userId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(body, categoryId, channels, createdAt, id, status, templateId, templateSlug, tenantId, title, userId);
+    return Objects.hash(body, categoryId, channels, createdAt, id, organizationId, status, templateId, templateSlug, title, userId);
   }
 
   @Override
@@ -365,10 +365,10 @@ public class NotificationItem {
     sb.append("    channels: ").append(toIndentedString(channels)).append("\n");
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    templateId: ").append(toIndentedString(templateId)).append("\n");
     sb.append("    templateSlug: ").append(toIndentedString(templateSlug)).append("\n");
-    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
     sb.append("    title: ").append(toIndentedString(title)).append("\n");
     sb.append("    userId: ").append(toIndentedString(userId)).append("\n");
     sb.append("}");
@@ -392,10 +392,10 @@ public class NotificationItem {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("body", "category_id", "channels", "created_at", "id", "status", "template_id", "template_slug", "tenant_id", "title", "user_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("body", "category_id", "channels", "created_at", "id", "organization_id", "status", "template_id", "template_slug", "title", "user_id"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("body", "category_id", "channels", "created_at", "id", "status", "tenant_id", "title", "user_id"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("body", "category_id", "channels", "created_at", "id", "organization_id", "status", "title", "user_id"));
   }
 
   /**
@@ -441,6 +441,9 @@ public class NotificationItem {
       if (!jsonObj.get("id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("id").toString()));
       }
+      if (!jsonObj.get("organization_id").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
+      }
       if (!jsonObj.get("status").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `status` to be a primitive type in the JSON string but got `%s`", jsonObj.get("status").toString()));
       }
@@ -449,9 +452,6 @@ public class NotificationItem {
       }
       if ((jsonObj.get("template_slug") != null && !jsonObj.get("template_slug").isJsonNull()) && !jsonObj.get("template_slug").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `template_slug` to be a primitive type in the JSON string but got `%s`", jsonObj.get("template_slug").toString()));
-      }
-      if (!jsonObj.get("tenant_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_id").toString()));
       }
       if (!jsonObj.get("title").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `title` to be a primitive type in the JSON string but got `%s`", jsonObj.get("title").toString()));

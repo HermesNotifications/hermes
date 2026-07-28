@@ -75,7 +75,7 @@ public class UsersApi {
 
     /**
      * Build call for listUsers
-     * @param tenantId Filter by tenant ID (optional)
+     * @param organizationId Filter by organization ID (optional)
      * @param _callback Callback for upload/download progress
      * @return Call to execute
      * @throws ApiException If fail to serialize the request body object
@@ -87,7 +87,7 @@ public class UsersApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public okhttp3.Call listUsersCall(@javax.annotation.Nullable String tenantId, final ApiCallback _callback) throws ApiException {
+    public okhttp3.Call listUsersCall(@javax.annotation.Nullable String organizationId, final ApiCallback _callback) throws ApiException {
         String basePath = null;
         // Operation Servers
         String[] localBasePaths = new String[] {  };
@@ -112,8 +112,8 @@ public class UsersApi {
         Map<String, String> localVarCookieParams = new HashMap<String, String>();
         Map<String, Object> localVarFormParams = new HashMap<String, Object>();
 
-        if (tenantId != null) {
-            localVarQueryParams.addAll(localVarApiClient.parameterToPair("tenant_id", tenantId));
+        if (organizationId != null) {
+            localVarQueryParams.addAll(localVarApiClient.parameterToPair("organization_id", organizationId));
         }
 
         final String[] localVarAccepts = {
@@ -137,15 +137,15 @@ public class UsersApi {
     }
 
     @SuppressWarnings("rawtypes")
-    private okhttp3.Call listUsersValidateBeforeCall(@javax.annotation.Nullable String tenantId, final ApiCallback _callback) throws ApiException {
-        return listUsersCall(tenantId, _callback);
+    private okhttp3.Call listUsersValidateBeforeCall(@javax.annotation.Nullable String organizationId, final ApiCallback _callback) throws ApiException {
+        return listUsersCall(organizationId, _callback);
 
     }
 
     /**
      * List users
      * 
-     * @param tenantId Filter by tenant ID (optional)
+     * @param organizationId Filter by organization ID (optional)
      * @return List&lt;UserItem&gt;
      * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
      * @http.response.details
@@ -156,15 +156,15 @@ public class UsersApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public List<UserItem> listUsers(@javax.annotation.Nullable String tenantId) throws ApiException {
-        ApiResponse<List<UserItem>> localVarResp = listUsersWithHttpInfo(tenantId);
+    public List<UserItem> listUsers(@javax.annotation.Nullable String organizationId) throws ApiException {
+        ApiResponse<List<UserItem>> localVarResp = listUsersWithHttpInfo(organizationId);
         return localVarResp.getData();
     }
 
     /**
      * List users
      * 
-     * @param tenantId Filter by tenant ID (optional)
+     * @param organizationId Filter by organization ID (optional)
      * @return ApiResponse&lt;List&lt;UserItem&gt;&gt;
      * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
      * @http.response.details
@@ -175,8 +175,8 @@ public class UsersApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public ApiResponse<List<UserItem>> listUsersWithHttpInfo(@javax.annotation.Nullable String tenantId) throws ApiException {
-        okhttp3.Call localVarCall = listUsersValidateBeforeCall(tenantId, null);
+    public ApiResponse<List<UserItem>> listUsersWithHttpInfo(@javax.annotation.Nullable String organizationId) throws ApiException {
+        okhttp3.Call localVarCall = listUsersValidateBeforeCall(organizationId, null);
         Type localVarReturnType = new TypeToken<List<UserItem>>(){}.getType();
         return localVarApiClient.execute(localVarCall, localVarReturnType);
     }
@@ -184,7 +184,7 @@ public class UsersApi {
     /**
      * List users (asynchronously)
      * 
-     * @param tenantId Filter by tenant ID (optional)
+     * @param organizationId Filter by organization ID (optional)
      * @param _callback The callback to be executed when the API call finishes
      * @return The request call
      * @throws ApiException If fail to process the API call, e.g. serializing the request body object
@@ -196,9 +196,9 @@ public class UsersApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public okhttp3.Call listUsersAsync(@javax.annotation.Nullable String tenantId, final ApiCallback<List<UserItem>> _callback) throws ApiException {
+    public okhttp3.Call listUsersAsync(@javax.annotation.Nullable String organizationId, final ApiCallback<List<UserItem>> _callback) throws ApiException {
 
-        okhttp3.Call localVarCall = listUsersValidateBeforeCall(tenantId, _callback);
+        okhttp3.Call localVarCall = listUsersValidateBeforeCall(organizationId, _callback);
         Type localVarReturnType = new TypeToken<List<UserItem>>(){}.getType();
         localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
         return localVarCall;

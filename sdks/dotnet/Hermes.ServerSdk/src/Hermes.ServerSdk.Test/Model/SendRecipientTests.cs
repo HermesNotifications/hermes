@@ -54,12 +54,12 @@ namespace Hermes.ServerSdk.Test.Model
         }
 
         /// <summary>
-        /// Test the property 'TenantId'
+        /// Test the property 'OrganizationId'
         /// </summary>
         [Fact]
-        public void TenantIdTest()
+        public void OrganizationIdTest()
         {
-            // TODO unit test for the property 'TenantId'
+            // TODO unit test for the property 'OrganizationId'
         }
 
         /// <summary>
@@ -72,21 +72,12 @@ namespace Hermes.ServerSdk.Test.Model
         }
 
         /// <summary>
-        /// Test the property 'Email'
+        /// Test the property 'Contacts'
         /// </summary>
         [Fact]
-        public void EmailTest()
+        public void ContactsTest()
         {
-            // TODO unit test for the property 'Email'
-        }
-
-        /// <summary>
-        /// Test the property 'Phone'
-        /// </summary>
-        [Fact]
-        public void PhoneTest()
-        {
-            // TODO unit test for the property 'Phone'
+            // TODO unit test for the property 'Contacts'
         }
     }
 }

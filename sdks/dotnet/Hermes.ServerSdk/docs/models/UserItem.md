@@ -7,8 +7,8 @@ Name | Type | Description | Notes
 **CreatedAt** | **DateTime** |  | 
 **ExternalId** | **string** |  | 
 **Id** | **string** |  | 
-**TenantId** | **string** |  | 
-**TenantName** | **string** |  | 
+**OrganizationId** | **string** |  | 
+**OrganizationName** | **string** |  | 
 **Contacts** | **Dictionary&lt;string, string&gt;** |  | [optional] 
 **Locale** | **string** |  | 
 

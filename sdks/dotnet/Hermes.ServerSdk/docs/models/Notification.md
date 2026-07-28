@@ -8,8 +8,8 @@ Name | Type | Description | Notes
 **CategoryId** | **string** |  | 
 **CreatedAt** | **DateTime** |  | 
 **Id** | **string** |  | 
+**OrganizationId** | **string** |  | 
 **Status** | **string** |  | 
-**TenantId** | **string** |  | 
 **Title** | **string** |  | 
 **UserId** | **string** |  | 
 **ActionLabel** | **string** |  | [optional] 

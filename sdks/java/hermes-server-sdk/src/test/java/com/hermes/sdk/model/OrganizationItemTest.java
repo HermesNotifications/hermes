@@ -26,17 +26,17 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
- * Model tests for TenantItem
+ * Model tests for OrganizationItem
  */
-public class TenantItemTest {
-    private final TenantItem model = new TenantItem();
+public class OrganizationItemTest {
+    private final OrganizationItem model = new OrganizationItem();
 
     /**
-     * Model tests for TenantItem
+     * Model tests for OrganizationItem
      */
     @Test
-    public void testTenantItem() {
-        // TODO: test TenantItem
+    public void testOrganizationItem() {
+        // TODO: test OrganizationItem
     }
 
     /**

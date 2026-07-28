@@ -198,7 +198,7 @@ export interface components {
             external_id: string;
             id: string;
             locale?: string;
-            tenant_id: string;
+            organization_id: string;
         };
     };
     responses: never;

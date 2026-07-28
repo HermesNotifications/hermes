@@ -39,8 +39,8 @@ public class UsersApiTest {
      */
     @Test
     public void listUsersTest() throws ApiException {
-        String tenantId = null;
-        List<UserItem> response = api.listUsers(tenantId);
+        String organizationId = null;
+        List<UserItem> response = api.listUsers(organizationId);
         // TODO: test validations
     }
 

@@ -99,9 +99,9 @@ public class JSON {
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.ApiKeyCreatedOutputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateAPIKeyInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateCategoryInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateOrganizationInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateSubscriptionInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateTemplateInputBody.CustomTypeAdapterFactory());
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.CreateTenantInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.ErrorDetail.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.ErrorModel.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.Item.CustomTypeAdapterFactory());
@@ -110,13 +110,13 @@ public class JSON {
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationItem.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationStatusOutputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationTemplate.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.OrganizationItem.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendContent.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendOutputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendRecipient.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.Subscription.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SubscriptionCategory.CustomTypeAdapterFactory());
-        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.TenantItem.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.TokenInputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.TokenOutputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.UpdateCategoryInputBody.CustomTypeAdapterFactory());

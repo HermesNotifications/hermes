@@ -37,8 +37,8 @@ namespace Hermes.ServerSdk.Model
         /// <param name="categoryId">categoryId</param>
         /// <param name="createdAt">createdAt</param>
         /// <param name="id">id</param>
+        /// <param name="organizationId">organizationId</param>
         /// <param name="status">status</param>
-        /// <param name="tenantId">tenantId</param>
         /// <param name="title">title</param>
         /// <param name="userId">userId</param>
         /// <param name="actionLabel">actionLabel</param>
@@ -52,14 +52,14 @@ namespace Hermes.ServerSdk.Model
         /// <param name="sentAt">sentAt</param>
         /// <param name="templateId">templateId</param>
         [JsonConstructor]
-        public Notification(string body, string categoryId, DateTime createdAt, string id, string status, string tenantId, string title, string userId, Option<string?> actionLabel = default, Option<string?> actionUrl = default, Option<DateTime?> archivedAt = default, List<string>? channels = default, Option<DateTime?> deletedAt = default, Option<DateTime?> deliveredAt = default, Option<string?> idempotencyKey = default, Option<DateTime?> readAt = default, Option<DateTime?> sentAt = default, Option<string?> templateId = default)
+        public Notification(string body, string categoryId, DateTime createdAt, string id, string organizationId, string status, string title, string userId, Option<string?> actionLabel = default, Option<string?> actionUrl = default, Option<DateTime?> archivedAt = default, List<string>? channels = default, Option<DateTime?> deletedAt = default, Option<DateTime?> deliveredAt = default, Option<string?> idempotencyKey = default, Option<DateTime?> readAt = default, Option<DateTime?> sentAt = default, Option<string?> templateId = default)
         {
             Body = body;
             CategoryId = categoryId;
             CreatedAt = createdAt;
             Id = id;
+            OrganizationId = organizationId;
             Status = status;
-            TenantId = tenantId;
             Title = title;
             UserId = userId;
             ActionLabelOption = actionLabel;
@@ -102,16 +102,16 @@ namespace Hermes.ServerSdk.Model
         public string Id { get; set; }
 
         /// <summary>
+        /// Gets or Sets OrganizationId
+        /// </summary>
+        [JsonPropertyName("organization_id")]
+        public string OrganizationId { get; set; }
+
+        /// <summary>
         /// Gets or Sets Status
         /// </summary>
         [JsonPropertyName("status")]
         public string Status { get; set; }
-
-        /// <summary>
-        /// Gets or Sets TenantId
-        /// </summary>
-        [JsonPropertyName("tenant_id")]
-        public string TenantId { get; set; }
 
         /// <summary>
         /// Gets or Sets Title
@@ -260,8 +260,8 @@ namespace Hermes.ServerSdk.Model
             sb.Append("  CategoryId: ").Append(CategoryId).Append("\n");
             sb.Append("  CreatedAt: ").Append(CreatedAt).Append("\n");
             sb.Append("  Id: ").Append(Id).Append("\n");
+            sb.Append("  OrganizationId: ").Append(OrganizationId).Append("\n");
             sb.Append("  Status: ").Append(Status).Append("\n");
-            sb.Append("  TenantId: ").Append(TenantId).Append("\n");
             sb.Append("  Title: ").Append(Title).Append("\n");
             sb.Append("  UserId: ").Append(UserId).Append("\n");
             sb.Append("  ActionLabel: ").Append(ActionLabel).Append("\n");
@@ -345,8 +345,8 @@ namespace Hermes.ServerSdk.Model
             Option<string?> categoryId = default;
             Option<DateTime?> createdAt = default;
             Option<string?> id = default;
+            Option<string?> organizationId = default;
             Option<string?> status = default;
-            Option<string?> tenantId = default;
             Option<string?> title = default;
             Option<string?> userId = default;
             Option<string?> actionLabel = default;
@@ -387,11 +387,11 @@ namespace Hermes.ServerSdk.Model
                         case "id":
                             id = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
+                        case "organization_id":
+                            organizationId = new Option<string?>(utf8JsonReader.GetString()!);
+                            break;
                         case "status":
                             status = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
-                        case "tenant_id":
-                            tenantId = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
                         case "title":
                             title = new Option<string?>(utf8JsonReader.GetString()!);
@@ -447,11 +447,11 @@ namespace Hermes.ServerSdk.Model
             if (!id.IsSet)
                 throw new ArgumentException("Property is required for class Notification.", nameof(id));
 
+            if (!organizationId.IsSet)
+                throw new ArgumentException("Property is required for class Notification.", nameof(organizationId));
+
             if (!status.IsSet)
                 throw new ArgumentException("Property is required for class Notification.", nameof(status));
-
-            if (!tenantId.IsSet)
-                throw new ArgumentException("Property is required for class Notification.", nameof(tenantId));
 
             if (!title.IsSet)
                 throw new ArgumentException("Property is required for class Notification.", nameof(title));
@@ -474,11 +474,11 @@ namespace Hermes.ServerSdk.Model
             if (id.IsSet && id.Value == null)
                 throw new ArgumentNullException(nameof(id), "Property is not nullable for class Notification.");
 
+            if (organizationId.IsSet && organizationId.Value == null)
+                throw new ArgumentNullException(nameof(organizationId), "Property is not nullable for class Notification.");
+
             if (status.IsSet && status.Value == null)
                 throw new ArgumentNullException(nameof(status), "Property is not nullable for class Notification.");
-
-            if (tenantId.IsSet && tenantId.Value == null)
-                throw new ArgumentNullException(nameof(tenantId), "Property is not nullable for class Notification.");
 
             if (title.IsSet && title.Value == null)
                 throw new ArgumentNullException(nameof(title), "Property is not nullable for class Notification.");
@@ -513,7 +513,7 @@ namespace Hermes.ServerSdk.Model
             if (templateId.IsSet && templateId.Value == null)
                 throw new ArgumentNullException(nameof(templateId), "Property is not nullable for class Notification.");
 
-            return new Notification(body.Value!, categoryId.Value!, createdAt.Value!.Value!, id.Value!, status.Value!, tenantId.Value!, title.Value!, userId.Value!, actionLabel, actionUrl, archivedAt, channels.Value!, deletedAt, deliveredAt, idempotencyKey, readAt, sentAt, templateId);
+            return new Notification(body.Value!, categoryId.Value!, createdAt.Value!.Value!, id.Value!, organizationId.Value!, status.Value!, title.Value!, userId.Value!, actionLabel, actionUrl, archivedAt, channels.Value!, deletedAt, deliveredAt, idempotencyKey, readAt, sentAt, templateId);
         }
 
         /// <summary>
@@ -549,11 +549,11 @@ namespace Hermes.ServerSdk.Model
             if (notification.Id == null)
                 throw new ArgumentNullException(nameof(notification.Id), "Property is required for class Notification.");
 
+            if (notification.OrganizationId == null)
+                throw new ArgumentNullException(nameof(notification.OrganizationId), "Property is required for class Notification.");
+
             if (notification.Status == null)
                 throw new ArgumentNullException(nameof(notification.Status), "Property is required for class Notification.");
-
-            if (notification.TenantId == null)
-                throw new ArgumentNullException(nameof(notification.TenantId), "Property is required for class Notification.");
 
             if (notification.Title == null)
                 throw new ArgumentNullException(nameof(notification.Title), "Property is required for class Notification.");
@@ -581,9 +581,9 @@ namespace Hermes.ServerSdk.Model
 
             writer.WriteString("id", notification.Id);
 
-            writer.WriteString("status", notification.Status);
+            writer.WriteString("organization_id", notification.OrganizationId);
 
-            writer.WriteString("tenant_id", notification.TenantId);
+            writer.WriteString("status", notification.Status);
 
             writer.WriteString("title", notification.Title);
 

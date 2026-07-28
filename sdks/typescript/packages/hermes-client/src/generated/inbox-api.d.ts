@@ -188,13 +188,13 @@ export interface components {
             delivered_at?: string;
             id: string;
             idempotency_key?: string;
+            organization_id: string;
             /** Format: date-time */
             read_at?: string;
             /** Format: date-time */
             sent_at?: string;
             status: string;
             template_id?: string;
-            tenant_id: string;
             title: string;
             user_id: string;
         };

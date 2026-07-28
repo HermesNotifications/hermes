@@ -8,7 +8,7 @@ All URIs are relative to *http://localhost*
 
 <a id="listusers"></a>
 # **ListUsers**
-> List&lt;UserItem&gt; ListUsers (string tenantId = null)
+> List&lt;UserItem&gt; ListUsers (string organizationId = null)
 
 List users
 
@@ -17,7 +17,7 @@ List users
 
 | Name | Type | Description | Notes |
 |------|------|-------------|-------|
-| **tenantId** | **string** | Filter by tenant ID | [optional]  |
+| **organizationId** | **string** | Filter by organization ID | [optional]  |
 
 ### Return type
 

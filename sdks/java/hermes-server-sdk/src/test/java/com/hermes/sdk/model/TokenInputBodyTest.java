@@ -1,6 +1,6 @@
 /*
  * Hermes Admin API
- * Server-to-server API for managing notification groups, types, and sending notifications.
+ * Server-to-server API for managing subscription categories, templates, and notifications.
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -47,11 +47,19 @@ public class TokenInputBodyTest {
     }
 
     /**
-     * Test the property 'tenantId'
+     * Test the property 'expiresIn'
      */
     @Test
-    public void tenantIdTest() {
-        // TODO: test tenantId
+    public void expiresInTest() {
+        // TODO: test expiresIn
+    }
+
+    /**
+     * Test the property 'organizationId'
+     */
+    @Test
+    public void organizationIdTest() {
+        // TODO: test organizationId
     }
 
     /**

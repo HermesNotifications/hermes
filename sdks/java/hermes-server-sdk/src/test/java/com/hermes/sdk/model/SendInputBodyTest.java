@@ -1,6 +1,6 @@
 /*
  * Hermes Admin API
- * Server-to-server API for managing notification groups, types, and sending notifications.
+ * Server-to-server API for managing subscription categories, templates, and notifications.
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.hermes.sdk.model.SendContent;
+import com.hermes.sdk.model.SendRecipient;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -77,35 +78,19 @@ public class SendInputBodyTest {
     }
 
     /**
-     * Test the property 'group'
+     * Test the property 'template'
      */
     @Test
-    public void groupTest() {
-        // TODO: test group
+    public void templateTest() {
+        // TODO: test template
     }
 
     /**
-     * Test the property 'tenantId'
+     * Test the property 'to'
      */
     @Test
-    public void tenantIdTest() {
-        // TODO: test tenantId
-    }
-
-    /**
-     * Test the property 'type'
-     */
-    @Test
-    public void typeTest() {
-        // TODO: test type
-    }
-
-    /**
-     * Test the property 'userId'
-     */
-    @Test
-    public void userIdTest() {
-        // TODO: test userId
+    public void toTest() {
+        // TODO: test to
     }
 
 }

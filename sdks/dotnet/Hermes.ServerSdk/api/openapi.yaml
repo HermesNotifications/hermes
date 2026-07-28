@@ -167,6 +167,52 @@ paths:
       summary: Get notification status and events
       tags:
       - Notifications
+  /v1/organizations:
+    get:
+      operationId: list-organizations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/OrganizationItem"
+                nullable: true
+                type: array
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List organizations
+      tags:
+      - Organizations
+    post:
+      operationId: create-organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationItem"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create an organization
+      tags:
+      - Organizations
   /v1/send:
     post:
       operationId: send-notification
@@ -537,63 +583,17 @@ paths:
       summary: Update a notification template
       tags:
       - Templates
-  /v1/tenants:
-    get:
-      operationId: list-tenants
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/TenantItem"
-                nullable: true
-                type: array
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ErrorModel"
-          description: Error
-      summary: List tenants
-      tags:
-      - Tenants
-    post:
-      operationId: create-tenant
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateTenantInputBody"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TenantItem"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ErrorModel"
-          description: Error
-      summary: Create a tenant
-      tags:
-      - Tenants
   /v1/users:
     get:
       operationId: list-users
       parameters:
-      - description: Filter by tenant ID
+      - description: Filter by organization ID
         explode: false
         in: query
-        name: tenant_id
+        name: organization_id
         required: false
         schema:
-          description: Filter by tenant ID
+          description: Filter by organization ID
           type: string
         style: form
       responses:
@@ -726,6 +726,23 @@ components:
       - default_state
       - name
       - slug
+    CreateOrganizationInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        name: name
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: Organization name
+          minLength: 1
+          type: string
+      required:
+      - name
     CreateSubscriptionInputBody:
       additionalProperties: false
       example:
@@ -799,23 +816,6 @@ components:
       required:
       - name
       - slug
-    CreateTenantInputBody:
-      additionalProperties: false
-      example:
-        $schema: https://openapi-generator.tech
-        name: name
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          format: uri
-          readOnly: true
-          type: string
-        name:
-          description: Tenant name
-          minLength: 1
-          type: string
-      required:
-      - name
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -921,6 +921,8 @@ components:
           type: string
         idempotency_key:
           type: string
+        organization_id:
+          type: string
         read_at:
           format: date-time
           type: string
@@ -930,8 +932,6 @@ components:
         status:
           type: string
         template_id:
-          type: string
-        tenant_id:
           type: string
         title:
           type: string
@@ -943,8 +943,8 @@ components:
       - channels
       - created_at
       - id
+      - organization_id
       - status
-      - tenant_id
       - title
       - user_id
     NotificationEvent:
@@ -982,13 +982,13 @@ components:
     NotificationItem:
       additionalProperties: false
       example:
-        tenant_id: tenant_id
         category_id: category_id
         channels:
         - channels
         - channels
         template_slug: template_slug
         user_id: user_id
+        organization_id: organization_id
         created_at: 2000-01-23T04:56:07.000+00:00
         template_id: template_id
         id: id
@@ -1010,13 +1010,13 @@ components:
           type: string
         id:
           type: string
+        organization_id:
+          type: string
         status:
           type: string
         template_id:
           type: string
         template_slug:
-          type: string
-        tenant_id:
           type: string
         title:
           type: string
@@ -1028,8 +1028,8 @@ components:
       - channels
       - created_at
       - id
+      - organization_id
       - status
-      - tenant_id
       - title
       - user_id
     NotificationStatusOutputBody:
@@ -1118,6 +1118,39 @@ components:
       - id
       - name
       - slug
+    OrganizationItem:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        user_count: 0
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        default_locale: default_locale
+        id: id
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        default_locale:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        user_count:
+          format: int64
+          type: integer
+      required:
+      - created_at
+      - default_locale
+      - id
+      - name
+      - user_count
     SendContent:
       additionalProperties: false
       properties:
@@ -1200,8 +1233,8 @@ components:
             type: string
           description: "Per-channel address overrides: address key (\"email\",\"phone\"\
             ) -> address"
-        tenant_id:
-          description: Tenant identifier
+        organization_id:
+          description: Organization identifier
           minLength: 1
           type: string
         user_id:
@@ -1209,7 +1242,7 @@ components:
           minLength: 1
           type: string
       required:
-      - tenant_id
+      - organization_id
       - user_id
     Subscription:
       additionalProperties: false
@@ -1294,45 +1327,12 @@ components:
       - name
       - slug
       - sort_order
-    TenantItem:
-      additionalProperties: false
-      example:
-        $schema: https://openapi-generator.tech
-        user_count: 0
-        name: name
-        created_at: 2000-01-23T04:56:07.000+00:00
-        default_locale: default_locale
-        id: id
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          format: uri
-          readOnly: true
-          type: string
-        created_at:
-          format: date-time
-          type: string
-        default_locale:
-          type: string
-        id:
-          type: string
-        name:
-          type: string
-        user_count:
-          format: int64
-          type: integer
-      required:
-      - created_at
-      - default_locale
-      - id
-      - name
-      - user_count
     TokenInputBody:
       additionalProperties: false
       example:
-        tenant_id: tenant_id
         $schema: https://openapi-generator.tech
         user_id: user_id
+        organization_id: organization_id
         expires_in: 51745
       properties:
         $schema:
@@ -1348,8 +1348,8 @@ components:
           maximum: 604800
           minimum: 3600
           type: integer
-        tenant_id:
-          description: Tenant identifier
+        organization_id:
+          description: Organization identifier
           minLength: 1
           type: string
         user_id:
@@ -1357,7 +1357,7 @@ components:
           minLength: 1
           type: string
       required:
-      - tenant_id
+      - organization_id
       - user_id
     TokenOutputBody:
       additionalProperties: false
@@ -1484,11 +1484,11 @@ components:
     UserItem:
       additionalProperties: false
       example:
-        tenant_id: tenant_id
-        tenant_name: tenant_name
+        organization_id: organization_id
         created_at: 2000-01-23T04:56:07.000+00:00
         external_id: external_id
         id: id
+        organization_name: organization_name
         locale: locale
         contacts:
           key: contacts
@@ -1506,15 +1506,15 @@ components:
         locale:
           nullable: true
           type: string
-        tenant_id:
+        organization_id:
           type: string
-        tenant_name:
+        organization_name:
           type: string
       required:
       - created_at
       - external_id
       - id
       - locale
-      - tenant_id
-      - tenant_name
+      - organization_id
+      - organization_name
 

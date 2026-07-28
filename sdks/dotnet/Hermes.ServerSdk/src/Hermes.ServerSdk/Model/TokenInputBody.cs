@@ -33,14 +33,14 @@ namespace Hermes.ServerSdk.Model
         /// <summary>
         /// Initializes a new instance of the <see cref="TokenInputBody" /> class.
         /// </summary>
-        /// <param name="tenantId">Tenant identifier</param>
+        /// <param name="organizationId">Organization identifier</param>
         /// <param name="userId">External user identifier</param>
         /// <param name="schema">A URL to the JSON Schema for this object.</param>
         /// <param name="expiresIn">Requested token lifetime in seconds (min 3600 &#x3D; 1h, max 604800 &#x3D; 7d, default 14400 &#x3D; 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes.</param>
         [JsonConstructor]
-        public TokenInputBody(string tenantId, string userId, Option<string?> schema = default, Option<long?> expiresIn = default)
+        public TokenInputBody(string organizationId, string userId, Option<string?> schema = default, Option<long?> expiresIn = default)
         {
-            TenantId = tenantId;
+            OrganizationId = organizationId;
             UserId = userId;
             SchemaOption = schema;
             ExpiresInOption = expiresIn;
@@ -50,11 +50,11 @@ namespace Hermes.ServerSdk.Model
         partial void OnCreated();
 
         /// <summary>
-        /// Tenant identifier
+        /// Organization identifier
         /// </summary>
-        /// <value>Tenant identifier</value>
-        [JsonPropertyName("tenant_id")]
-        public string TenantId { get; set; }
+        /// <value>Organization identifier</value>
+        [JsonPropertyName("organization_id")]
+        public string OrganizationId { get; set; }
 
         /// <summary>
         /// External user identifier
@@ -99,7 +99,7 @@ namespace Hermes.ServerSdk.Model
         {
             StringBuilder sb = new StringBuilder();
             sb.Append("class TokenInputBody {\n");
-            sb.Append("  TenantId: ").Append(TenantId).Append("\n");
+            sb.Append("  OrganizationId: ").Append(OrganizationId).Append("\n");
             sb.Append("  UserId: ").Append(UserId).Append("\n");
             sb.Append("  Schema: ").Append(Schema).Append("\n");
             sb.Append("  ExpiresIn: ").Append(ExpiresIn).Append("\n");
@@ -114,10 +114,10 @@ namespace Hermes.ServerSdk.Model
         /// <returns>Validation Result</returns>
         IEnumerable<ValidationResult> IValidatableObject.Validate(ValidationContext validationContext)
         {
-            // TenantId (string) minLength
-            if (this.TenantId != null && this.TenantId.Length < 1)
+            // OrganizationId (string) minLength
+            if (this.OrganizationId != null && this.OrganizationId.Length < 1)
             {
-                yield return new ValidationResult("Invalid value for TenantId, length must be greater than 1.", new [] { "TenantId" });
+                yield return new ValidationResult("Invalid value for OrganizationId, length must be greater than 1.", new [] { "OrganizationId" });
             }
 
             // UserId (string) minLength
@@ -164,7 +164,7 @@ namespace Hermes.ServerSdk.Model
 
             JsonTokenType startingTokenType = utf8JsonReader.TokenType;
 
-            Option<string?> tenantId = default;
+            Option<string?> organizationId = default;
             Option<string?> userId = default;
             Option<string?> schema = default;
             Option<long?> expiresIn = default;
@@ -184,8 +184,8 @@ namespace Hermes.ServerSdk.Model
 
                     switch (localVarJsonPropertyName)
                     {
-                        case "tenant_id":
-                            tenantId = new Option<string?>(utf8JsonReader.GetString()!);
+                        case "organization_id":
+                            organizationId = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
                         case "user_id":
                             userId = new Option<string?>(utf8JsonReader.GetString()!);
@@ -202,14 +202,14 @@ namespace Hermes.ServerSdk.Model
                 }
             }
 
-            if (!tenantId.IsSet)
-                throw new ArgumentException("Property is required for class TokenInputBody.", nameof(tenantId));
+            if (!organizationId.IsSet)
+                throw new ArgumentException("Property is required for class TokenInputBody.", nameof(organizationId));
 
             if (!userId.IsSet)
                 throw new ArgumentException("Property is required for class TokenInputBody.", nameof(userId));
 
-            if (tenantId.IsSet && tenantId.Value == null)
-                throw new ArgumentNullException(nameof(tenantId), "Property is not nullable for class TokenInputBody.");
+            if (organizationId.IsSet && organizationId.Value == null)
+                throw new ArgumentNullException(nameof(organizationId), "Property is not nullable for class TokenInputBody.");
 
             if (userId.IsSet && userId.Value == null)
                 throw new ArgumentNullException(nameof(userId), "Property is not nullable for class TokenInputBody.");
@@ -220,7 +220,7 @@ namespace Hermes.ServerSdk.Model
             if (expiresIn.IsSet && expiresIn.Value == null)
                 throw new ArgumentNullException(nameof(expiresIn), "Property is not nullable for class TokenInputBody.");
 
-            return new TokenInputBody(tenantId.Value!, userId.Value!, schema, expiresIn);
+            return new TokenInputBody(organizationId.Value!, userId.Value!, schema, expiresIn);
         }
 
         /// <summary>
@@ -247,8 +247,8 @@ namespace Hermes.ServerSdk.Model
         /// <exception cref="NotImplementedException"></exception>
         public void WriteProperties(Utf8JsonWriter writer, TokenInputBody tokenInputBody, JsonSerializerOptions jsonSerializerOptions)
         {
-            if (tokenInputBody.TenantId == null)
-                throw new ArgumentNullException(nameof(tokenInputBody.TenantId), "Property is required for class TokenInputBody.");
+            if (tokenInputBody.OrganizationId == null)
+                throw new ArgumentNullException(nameof(tokenInputBody.OrganizationId), "Property is required for class TokenInputBody.");
 
             if (tokenInputBody.UserId == null)
                 throw new ArgumentNullException(nameof(tokenInputBody.UserId), "Property is required for class TokenInputBody.");
@@ -256,7 +256,7 @@ namespace Hermes.ServerSdk.Model
             if (tokenInputBody.SchemaOption.IsSet && tokenInputBody.Schema == null)
                 throw new ArgumentNullException(nameof(tokenInputBody.Schema), "Property is required for class TokenInputBody.");
 
-            writer.WriteString("tenant_id", tokenInputBody.TenantId);
+            writer.WriteString("organization_id", tokenInputBody.OrganizationId);
 
             writer.WriteString("user_id", tokenInputBody.UserId);
 

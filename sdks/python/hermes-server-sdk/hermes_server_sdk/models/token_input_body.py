@@ -29,9 +29,9 @@ class TokenInputBody(BaseModel):
     """ # noqa: E501
     var_schema: Optional[StrictStr] = Field(default=None, description="A URL to the JSON Schema for this object.", alias="$schema")
     expires_in: Optional[Annotated[int, Field(le=604800, strict=True, ge=3600)]] = Field(default=None, description="Requested token lifetime in seconds (min 3600 = 1h, max 604800 = 7d, default 14400 = 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes.")
-    tenant_id: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Tenant identifier")
+    organization_id: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Organization identifier")
     user_id: Annotated[str, Field(min_length=1, strict=True)] = Field(description="External user identifier")
-    __properties: ClassVar[List[str]] = ["$schema", "expires_in", "tenant_id", "user_id"]
+    __properties: ClassVar[List[str]] = ["$schema", "expires_in", "organization_id", "user_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -88,7 +88,7 @@ class TokenInputBody(BaseModel):
         _obj = cls.model_validate({
             "$schema": obj.get("$schema"),
             "expires_in": obj.get("expires_in"),
-            "tenant_id": obj.get("tenant_id"),
+            "organization_id": obj.get("organization_id"),
             "user_id": obj.get("user_id")
         })
         return _obj

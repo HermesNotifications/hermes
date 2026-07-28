@@ -14,9 +14,9 @@
 package com.hermes.sdk.api;
 
 import com.hermes.sdk.ApiException;
-import com.hermes.sdk.model.CreateTenantInputBody;
+import com.hermes.sdk.model.CreateOrganizationInputBody;
 import com.hermes.sdk.model.ErrorModel;
-import com.hermes.sdk.model.TenantItem;
+import com.hermes.sdk.model.OrganizationItem;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
@@ -26,33 +26,33 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * API tests for TenantsApi
+ * API tests for OrganizationsApi
  */
 @Disabled
-public class TenantsApiTest {
+public class OrganizationsApiTest {
 
-    private final TenantsApi api = new TenantsApi();
+    private final OrganizationsApi api = new OrganizationsApi();
 
     /**
-     * Create a tenant
+     * Create an organization
      *
      * @throws ApiException if the Api call fails
      */
     @Test
-    public void createTenantTest() throws ApiException {
-        CreateTenantInputBody createTenantInputBody = null;
-        TenantItem response = api.createTenant(createTenantInputBody);
+    public void createOrganizationTest() throws ApiException {
+        CreateOrganizationInputBody createOrganizationInputBody = null;
+        OrganizationItem response = api.createOrganization(createOrganizationInputBody);
         // TODO: test validations
     }
 
     /**
-     * List tenants
+     * List organizations
      *
      * @throws ApiException if the Api call fails
      */
     @Test
-    public void listTenantsTest() throws ApiException {
-        List<TenantItem> response = api.listTenants();
+    public void listOrganizationsTest() throws ApiException {
+        List<OrganizationItem> response = api.listOrganizations();
         // TODO: test validations
     }
 

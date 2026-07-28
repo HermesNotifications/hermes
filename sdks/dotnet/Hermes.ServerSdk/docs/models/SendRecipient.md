@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**TenantId** | **string** | Tenant identifier | 
+**OrganizationId** | **string** | Organization identifier | 
 **UserId** | **string** | External user identifier | 
 **Contacts** | **Dictionary&lt;string, string&gt;** | Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address | [optional] 
 

@@ -75,14 +75,14 @@ namespace Hermes.ServerSdk.Test.Api
             var notificationsApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<INotificationsApi>();
             Assert.True(notificationsApi.HttpClient.BaseAddress != null);
 
+            var organizationsApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<IOrganizationsApi>();
+            Assert.True(organizationsApi.HttpClient.BaseAddress != null);
+
             var subscriptionsApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<ISubscriptionsApi>();
             Assert.True(subscriptionsApi.HttpClient.BaseAddress != null);
 
             var templatesApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
-
-            var tenantsApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<ITenantsApi>();
-            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
 
             var usersApi = _hostUsingConfigureWithAClient.Services.GetRequiredService<IUsersApi>();
             Assert.True(usersApi.HttpClient.BaseAddress != null);
@@ -103,14 +103,14 @@ namespace Hermes.ServerSdk.Test.Api
             var notificationsApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<INotificationsApi>();
             Assert.True(notificationsApi.HttpClient.BaseAddress != null);
 
+            var organizationsApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<IOrganizationsApi>();
+            Assert.True(organizationsApi.HttpClient.BaseAddress != null);
+
             var subscriptionsApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<ISubscriptionsApi>();
             Assert.True(subscriptionsApi.HttpClient.BaseAddress != null);
 
             var templatesApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
-
-            var tenantsApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<ITenantsApi>();
-            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
 
             var usersApi = _hostUsingConfigureWithoutAClient.Services.GetRequiredService<IUsersApi>();
             Assert.True(usersApi.HttpClient.BaseAddress != null);
@@ -131,14 +131,14 @@ namespace Hermes.ServerSdk.Test.Api
             var notificationsApi = _hostUsingAddWithAClient.Services.GetRequiredService<INotificationsApi>();
             Assert.True(notificationsApi.HttpClient.BaseAddress != null);
             
+            var organizationsApi = _hostUsingAddWithAClient.Services.GetRequiredService<IOrganizationsApi>();
+            Assert.True(organizationsApi.HttpClient.BaseAddress != null);
+            
             var subscriptionsApi = _hostUsingAddWithAClient.Services.GetRequiredService<ISubscriptionsApi>();
             Assert.True(subscriptionsApi.HttpClient.BaseAddress != null);
             
             var templatesApi = _hostUsingAddWithAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
-            
-            var tenantsApi = _hostUsingAddWithAClient.Services.GetRequiredService<ITenantsApi>();
-            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
             
             var usersApi = _hostUsingAddWithAClient.Services.GetRequiredService<IUsersApi>();
             Assert.True(usersApi.HttpClient.BaseAddress != null);
@@ -159,14 +159,14 @@ namespace Hermes.ServerSdk.Test.Api
             var notificationsApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<INotificationsApi>();
             Assert.True(notificationsApi.HttpClient.BaseAddress != null);
 
+            var organizationsApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<IOrganizationsApi>();
+            Assert.True(organizationsApi.HttpClient.BaseAddress != null);
+
             var subscriptionsApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<ISubscriptionsApi>();
             Assert.True(subscriptionsApi.HttpClient.BaseAddress != null);
 
             var templatesApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<ITemplatesApi>();
             Assert.True(templatesApi.HttpClient.BaseAddress != null);
-
-            var tenantsApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<ITenantsApi>();
-            Assert.True(tenantsApi.HttpClient.BaseAddress != null);
 
             var usersApi = _hostUsingAddWithoutAClient.Services.GetRequiredService<IUsersApi>();
             Assert.True(usersApi.HttpClient.BaseAddress != null);

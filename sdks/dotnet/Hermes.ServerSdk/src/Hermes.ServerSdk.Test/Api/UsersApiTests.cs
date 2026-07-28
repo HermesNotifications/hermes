@@ -56,8 +56,8 @@ namespace Hermes.ServerSdk.Test.Api
         [Fact (Skip = "not implemented")]
         public async Task ListUsersAsyncTest()
         {
-            Client.Option<string> tenantId = default!;
-            var response = await _instance.ListUsersAsync(tenantId);
+            Client.Option<string> organizationId = default!;
+            var response = await _instance.ListUsersAsync(organizationId);
             var model = response.Ok();
             Assert.IsType<List<UserItem>>(model);
         }

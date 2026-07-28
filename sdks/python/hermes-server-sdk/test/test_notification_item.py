@@ -42,10 +42,10 @@ class TestNotificationItem(unittest.TestCase):
                     ],
                 created_at = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 id = '',
+                organization_id = '',
                 status = '',
                 template_id = '',
                 template_slug = '',
-                tenant_id = '',
                 title = '',
                 user_id = ''
             )
@@ -58,8 +58,8 @@ class TestNotificationItem(unittest.TestCase):
                     ],
                 created_at = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 id = '',
+                organization_id = '',
                 status = '',
-                tenant_id = '',
                 title = '',
                 user_id = '',
         )

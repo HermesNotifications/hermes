@@ -44,10 +44,10 @@ namespace Hermes.ServerSdk.Api
         /// 
         /// </remarks>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
-        /// <param name="tenantId">Filter by tenant ID (optional)</param>
+        /// <param name="organizationId">Filter by organization ID (optional)</param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
         /// <returns><see cref="Task"/>&lt;<see cref="IListUsersApiResponse"/>&gt;</returns>
-        Task<IListUsersApiResponse> ListUsersAsync(Option<string> tenantId = default, System.Threading.CancellationToken cancellationToken = default);
+        Task<IListUsersApiResponse> ListUsersAsync(Option<string> organizationId = default, System.Threading.CancellationToken cancellationToken = default);
 
         /// <summary>
         /// List users
@@ -55,10 +55,10 @@ namespace Hermes.ServerSdk.Api
         /// <remarks>
         /// 
         /// </remarks>
-        /// <param name="tenantId">Filter by tenant ID (optional)</param>
+        /// <param name="organizationId">Filter by organization ID (optional)</param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
         /// <returns><see cref="Task"/>&lt;<see cref="IListUsersApiResponse"/>?&gt;</returns>
-        Task<IListUsersApiResponse?> ListUsersOrDefaultAsync(Option<string> tenantId = default, System.Threading.CancellationToken cancellationToken = default);
+        Task<IListUsersApiResponse?> ListUsersOrDefaultAsync(Option<string> organizationId = default, System.Threading.CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -145,28 +145,28 @@ namespace Hermes.ServerSdk.Api
             Events = usersApiEvents;
         }
 
-        partial void FormatListUsers(ref Option<string> tenantId);
+        partial void FormatListUsers(ref Option<string> organizationId);
 
         /// <summary>
         /// Validates the request parameters
         /// </summary>
-        /// <param name="tenantId"></param>
+        /// <param name="organizationId"></param>
         /// <returns></returns>
-        private void ValidateListUsers(Option<string> tenantId)
+        private void ValidateListUsers(Option<string> organizationId)
         {
-            if (tenantId.IsSet && tenantId.Value == null)
-                throw new ArgumentNullException(nameof(tenantId));
+            if (organizationId.IsSet && organizationId.Value == null)
+                throw new ArgumentNullException(nameof(organizationId));
         }
 
         /// <summary>
         /// Processes the server response
         /// </summary>
         /// <param name="apiResponseLocalVar"></param>
-        /// <param name="tenantId"></param>
-        private void AfterListUsersDefaultImplementation(IListUsersApiResponse apiResponseLocalVar, Option<string> tenantId)
+        /// <param name="organizationId"></param>
+        private void AfterListUsersDefaultImplementation(IListUsersApiResponse apiResponseLocalVar, Option<string> organizationId)
         {
             bool suppressDefaultLog = false;
-            AfterListUsers(ref suppressDefaultLog, apiResponseLocalVar, tenantId);
+            AfterListUsers(ref suppressDefaultLog, apiResponseLocalVar, organizationId);
             if (!suppressDefaultLog)
                 Logger.LogInformation("{0,-9} | {1} | {2}", (apiResponseLocalVar.DownloadedAt - apiResponseLocalVar.RequestedAt).TotalSeconds, apiResponseLocalVar.StatusCode, apiResponseLocalVar.Path);
         }
@@ -176,8 +176,8 @@ namespace Hermes.ServerSdk.Api
         /// </summary>
         /// <param name="suppressDefaultLog"></param>
         /// <param name="apiResponseLocalVar"></param>
-        /// <param name="tenantId"></param>
-        partial void AfterListUsers(ref bool suppressDefaultLog, IListUsersApiResponse apiResponseLocalVar, Option<string> tenantId);
+        /// <param name="organizationId"></param>
+        partial void AfterListUsers(ref bool suppressDefaultLog, IListUsersApiResponse apiResponseLocalVar, Option<string> organizationId);
 
         /// <summary>
         /// Logs exceptions that occur while retrieving the server response
@@ -185,11 +185,11 @@ namespace Hermes.ServerSdk.Api
         /// <param name="exceptionLocalVar"></param>
         /// <param name="pathFormatLocalVar"></param>
         /// <param name="pathLocalVar"></param>
-        /// <param name="tenantId"></param>
-        private void OnErrorListUsersDefaultImplementation(Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, Option<string> tenantId)
+        /// <param name="organizationId"></param>
+        private void OnErrorListUsersDefaultImplementation(Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, Option<string> organizationId)
         {
             bool suppressDefaultLogLocalVar = false;
-            OnErrorListUsers(ref suppressDefaultLogLocalVar, exceptionLocalVar, pathFormatLocalVar, pathLocalVar, tenantId);
+            OnErrorListUsers(ref suppressDefaultLogLocalVar, exceptionLocalVar, pathFormatLocalVar, pathLocalVar, organizationId);
             if (!suppressDefaultLogLocalVar)
                 Logger.LogError(exceptionLocalVar, "An error occurred while sending the request to the server.");
         }
@@ -201,20 +201,20 @@ namespace Hermes.ServerSdk.Api
         /// <param name="exceptionLocalVar"></param>
         /// <param name="pathFormatLocalVar"></param>
         /// <param name="pathLocalVar"></param>
-        /// <param name="tenantId"></param>
-        partial void OnErrorListUsers(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, Option<string> tenantId);
+        /// <param name="organizationId"></param>
+        partial void OnErrorListUsers(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, Option<string> organizationId);
 
         /// <summary>
         /// List users 
         /// </summary>
-        /// <param name="tenantId">Filter by tenant ID (optional)</param>
+        /// <param name="organizationId">Filter by organization ID (optional)</param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
         /// <returns><see cref="Task"/>&lt;<see cref="IListUsersApiResponse"/>&gt;</returns>
-        public async Task<IListUsersApiResponse?> ListUsersOrDefaultAsync(Option<string> tenantId = default, System.Threading.CancellationToken cancellationToken = default)
+        public async Task<IListUsersApiResponse?> ListUsersOrDefaultAsync(Option<string> organizationId = default, System.Threading.CancellationToken cancellationToken = default)
         {
             try
             {
-                return await ListUsersAsync(tenantId, cancellationToken).ConfigureAwait(false);
+                return await ListUsersAsync(organizationId, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -226,18 +226,18 @@ namespace Hermes.ServerSdk.Api
         /// List users 
         /// </summary>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
-        /// <param name="tenantId">Filter by tenant ID (optional)</param>
+        /// <param name="organizationId">Filter by organization ID (optional)</param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
         /// <returns><see cref="Task"/>&lt;<see cref="IListUsersApiResponse"/>&gt;</returns>
-        public async Task<IListUsersApiResponse> ListUsersAsync(Option<string> tenantId = default, System.Threading.CancellationToken cancellationToken = default)
+        public async Task<IListUsersApiResponse> ListUsersAsync(Option<string> organizationId = default, System.Threading.CancellationToken cancellationToken = default)
         {
             UriBuilder uriBuilderLocalVar = new UriBuilder();
 
             try
             {
-                ValidateListUsers(tenantId);
+                ValidateListUsers(organizationId);
 
-                FormatListUsers(ref tenantId);
+                FormatListUsers(ref organizationId);
 
                 using (HttpRequestMessage httpRequestMessageLocalVar = new HttpRequestMessage())
                 {
@@ -250,8 +250,8 @@ namespace Hermes.ServerSdk.Api
 
                     System.Collections.Specialized.NameValueCollection parseQueryStringLocalVar = System.Web.HttpUtility.ParseQueryString(string.Empty);
 
-                    if (tenantId.IsSet)
-                        parseQueryStringLocalVar["tenant_id"] = ClientUtils.ParameterToString(tenantId.Value);
+                    if (organizationId.IsSet)
+                        parseQueryStringLocalVar["organization_id"] = ClientUtils.ParameterToString(organizationId.Value);
 
                     uriBuilderLocalVar.Query = parseQueryStringLocalVar.ToString();
 
@@ -285,7 +285,7 @@ namespace Hermes.ServerSdk.Api
                             }
                         }
 
-                        AfterListUsersDefaultImplementation(apiResponseLocalVar, tenantId);
+                        AfterListUsersDefaultImplementation(apiResponseLocalVar, organizationId);
 
                         Events.ExecuteOnListUsers(apiResponseLocalVar);
 
@@ -295,7 +295,7 @@ namespace Hermes.ServerSdk.Api
             }
             catch(Exception e)
             {
-                OnErrorListUsersDefaultImplementation(e, "/v1/users", uriBuilderLocalVar.Path, tenantId);
+                OnErrorListUsersDefaultImplementation(e, "/v1/users", uriBuilderLocalVar.Path, organizationId);
                 Events.ExecuteOnErrorListUsers(e);
                 throw;
             }

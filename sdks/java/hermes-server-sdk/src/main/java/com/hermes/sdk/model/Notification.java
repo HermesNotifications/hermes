@@ -51,7 +51,7 @@ import com.hermes.sdk.JSON;
 /**
  * Notification
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
 public class Notification {
   public static final String SERIALIZED_NAME_ACTION_LABEL = "action_label";
   @SerializedName(SERIALIZED_NAME_ACTION_LABEL)
@@ -108,6 +108,11 @@ public class Notification {
   @javax.annotation.Nullable
   private String idempotencyKey;
 
+  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
+  @javax.annotation.Nonnull
+  private String organizationId;
+
   public static final String SERIALIZED_NAME_READ_AT = "read_at";
   @SerializedName(SERIALIZED_NAME_READ_AT)
   @javax.annotation.Nullable
@@ -127,11 +132,6 @@ public class Notification {
   @SerializedName(SERIALIZED_NAME_TEMPLATE_ID)
   @javax.annotation.Nullable
   private String templateId;
-
-  public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
-  @SerializedName(SERIALIZED_NAME_TENANT_ID)
-  @javax.annotation.Nonnull
-  private String tenantId;
 
   public static final String SERIALIZED_NAME_TITLE = "title";
   @SerializedName(SERIALIZED_NAME_TITLE)
@@ -363,6 +363,25 @@ public class Notification {
   }
 
 
+  public Notification organizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
+    return this;
+  }
+
+  /**
+   * Get organizationId
+   * @return organizationId
+   */
+  @javax.annotation.Nonnull
+  public String getOrganizationId() {
+    return organizationId;
+  }
+
+  public void setOrganizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
+  }
+
+
   public Notification readAt(@javax.annotation.Nullable OffsetDateTime readAt) {
     this.readAt = readAt;
     return this;
@@ -439,25 +458,6 @@ public class Notification {
   }
 
 
-  public Notification tenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
-    return this;
-  }
-
-  /**
-   * Get tenantId
-   * @return tenantId
-   */
-  @javax.annotation.Nonnull
-  public String getTenantId() {
-    return tenantId;
-  }
-
-  public void setTenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
-  }
-
-
   public Notification title(@javax.annotation.Nonnull String title) {
     this.title = title;
     return this;
@@ -517,18 +517,18 @@ public class Notification {
         Objects.equals(this.deliveredAt, notification.deliveredAt) &&
         Objects.equals(this.id, notification.id) &&
         Objects.equals(this.idempotencyKey, notification.idempotencyKey) &&
+        Objects.equals(this.organizationId, notification.organizationId) &&
         Objects.equals(this.readAt, notification.readAt) &&
         Objects.equals(this.sentAt, notification.sentAt) &&
         Objects.equals(this.status, notification.status) &&
         Objects.equals(this.templateId, notification.templateId) &&
-        Objects.equals(this.tenantId, notification.tenantId) &&
         Objects.equals(this.title, notification.title) &&
         Objects.equals(this.userId, notification.userId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(actionLabel, actionUrl, archivedAt, body, categoryId, channels, createdAt, deletedAt, deliveredAt, id, idempotencyKey, readAt, sentAt, status, templateId, tenantId, title, userId);
+    return Objects.hash(actionLabel, actionUrl, archivedAt, body, categoryId, channels, createdAt, deletedAt, deliveredAt, id, idempotencyKey, organizationId, readAt, sentAt, status, templateId, title, userId);
   }
 
   @Override
@@ -546,11 +546,11 @@ public class Notification {
     sb.append("    deliveredAt: ").append(toIndentedString(deliveredAt)).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    idempotencyKey: ").append(toIndentedString(idempotencyKey)).append("\n");
+    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
     sb.append("    readAt: ").append(toIndentedString(readAt)).append("\n");
     sb.append("    sentAt: ").append(toIndentedString(sentAt)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    templateId: ").append(toIndentedString(templateId)).append("\n");
-    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
     sb.append("    title: ").append(toIndentedString(title)).append("\n");
     sb.append("    userId: ").append(toIndentedString(userId)).append("\n");
     sb.append("}");
@@ -574,10 +574,10 @@ public class Notification {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("action_label", "action_url", "archived_at", "body", "category_id", "channels", "created_at", "deleted_at", "delivered_at", "id", "idempotency_key", "read_at", "sent_at", "status", "template_id", "tenant_id", "title", "user_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("action_label", "action_url", "archived_at", "body", "category_id", "channels", "created_at", "deleted_at", "delivered_at", "id", "idempotency_key", "organization_id", "read_at", "sent_at", "status", "template_id", "title", "user_id"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("body", "category_id", "channels", "created_at", "id", "status", "tenant_id", "title", "user_id"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("body", "category_id", "channels", "created_at", "id", "organization_id", "status", "title", "user_id"));
   }
 
   /**
@@ -632,14 +632,14 @@ public class Notification {
       if ((jsonObj.get("idempotency_key") != null && !jsonObj.get("idempotency_key").isJsonNull()) && !jsonObj.get("idempotency_key").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `idempotency_key` to be a primitive type in the JSON string but got `%s`", jsonObj.get("idempotency_key").toString()));
       }
+      if (!jsonObj.get("organization_id").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
+      }
       if (!jsonObj.get("status").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `status` to be a primitive type in the JSON string but got `%s`", jsonObj.get("status").toString()));
       }
       if ((jsonObj.get("template_id") != null && !jsonObj.get("template_id").isJsonNull()) && !jsonObj.get("template_id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `template_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("template_id").toString()));
-      }
-      if (!jsonObj.get("tenant_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_id").toString()));
       }
       if (!jsonObj.get("title").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `title` to be a primitive type in the JSON string but got `%s`", jsonObj.get("title").toString()));

@@ -39,38 +39,38 @@ using Hermes.ServerSdk.Model;
 namespace Hermes.ServerSdk.Test.Api
 {
     /// <summary>
-    ///  Class for testing TenantsApi
+    ///  Class for testing OrganizationsApi
     /// </summary>
-    public sealed class TenantsApiTests : ApiTestsBase
+    public sealed class OrganizationsApiTests : ApiTestsBase
     {
-        private readonly ITenantsApi _instance;
+        private readonly IOrganizationsApi _instance;
 
-        public TenantsApiTests(): base(Array.Empty<string>())
+        public OrganizationsApiTests(): base(Array.Empty<string>())
         {
-            _instance = _host.Services.GetRequiredService<ITenantsApi>();
+            _instance = _host.Services.GetRequiredService<IOrganizationsApi>();
         }
 
         /// <summary>
-        /// Test CreateTenant
+        /// Test CreateOrganization
         /// </summary>
         [Fact (Skip = "not implemented")]
-        public async Task CreateTenantAsyncTest()
+        public async Task CreateOrganizationAsyncTest()
         {
-            CreateTenantInputBody createTenantInputBody = default!;
-            var response = await _instance.CreateTenantAsync(createTenantInputBody);
+            CreateOrganizationInputBody createOrganizationInputBody = default!;
+            var response = await _instance.CreateOrganizationAsync(createOrganizationInputBody);
             var model = response.Created();
-            Assert.IsType<TenantItem>(model);
+            Assert.IsType<OrganizationItem>(model);
         }
 
         /// <summary>
-        /// Test ListTenants
+        /// Test ListOrganizations
         /// </summary>
         [Fact (Skip = "not implemented")]
-        public async Task ListTenantsAsyncTest()
+        public async Task ListOrganizationsAsyncTest()
         {
-            var response = await _instance.ListTenantsAsync();
+            var response = await _instance.ListOrganizationsAsync();
             var model = response.Ok();
-            Assert.IsType<List<TenantItem>>(model);
+            Assert.IsType<List<OrganizationItem>>(model);
         }
     }
 }

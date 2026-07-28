@@ -81,6 +81,14 @@ public class NotificationItemTest {
     }
 
     /**
+     * Test the property 'organizationId'
+     */
+    @Test
+    public void organizationIdTest() {
+        // TODO: test organizationId
+    }
+
+    /**
      * Test the property 'status'
      */
     @Test
@@ -102,14 +110,6 @@ public class NotificationItemTest {
     @Test
     public void templateSlugTest() {
         // TODO: test templateSlug
-    }
-
-    /**
-     * Test the property 'tenantId'
-     */
-    @Test
-    public void tenantIdTest() {
-        // TODO: test tenantId
     }
 
     /**

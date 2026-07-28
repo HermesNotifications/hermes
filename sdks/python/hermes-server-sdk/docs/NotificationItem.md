@@ -10,10 +10,10 @@ Name | Type | Description | Notes
 **channels** | **List[str]** |  | 
 **created_at** | **datetime** |  | 
 **id** | **str** |  | 
+**organization_id** | **str** |  | 
 **status** | **str** |  | 
 **template_id** | **str** |  | [optional] 
 **template_slug** | **str** |  | [optional] 
-**tenant_id** | **str** |  | 
 **title** | **str** |  | 
 **user_id** | **str** |  | 
 

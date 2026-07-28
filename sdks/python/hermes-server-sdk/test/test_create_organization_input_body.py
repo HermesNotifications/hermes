@@ -14,10 +14,10 @@
 
 import unittest
 
-from hermes_server_sdk.models.create_tenant_input_body import CreateTenantInputBody
+from hermes_server_sdk.models.create_organization_input_body import CreateOrganizationInputBody
 
-class TestCreateTenantInputBody(unittest.TestCase):
-    """CreateTenantInputBody unit test stubs"""
+class TestCreateOrganizationInputBody(unittest.TestCase):
+    """CreateOrganizationInputBody unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,27 +25,27 @@ class TestCreateTenantInputBody(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> CreateTenantInputBody:
-        """Test CreateTenantInputBody
+    def make_instance(self, include_optional) -> CreateOrganizationInputBody:
+        """Test CreateOrganizationInputBody
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `CreateTenantInputBody`
+        # uncomment below to create an instance of `CreateOrganizationInputBody`
         """
-        model = CreateTenantInputBody()
+        model = CreateOrganizationInputBody()
         if include_optional:
-            return CreateTenantInputBody(
+            return CreateOrganizationInputBody(
                 var_schema = '',
                 name = '0'
             )
         else:
-            return CreateTenantInputBody(
+            return CreateOrganizationInputBody(
                 name = '0',
         )
         """
 
-    def testCreateTenantInputBody(self):
-        """Test CreateTenantInputBody"""
+    def testCreateOrganizationInputBody(self):
+        """Test CreateOrganizationInputBody"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

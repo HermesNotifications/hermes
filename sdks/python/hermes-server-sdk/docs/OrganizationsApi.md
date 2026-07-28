@@ -1,25 +1,25 @@
-# hermes_server_sdk.TenantsApi
+# hermes_server_sdk.OrganizationsApi
 
 All URIs are relative to *http://localhost*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**create_tenant**](TenantsApi.md#create_tenant) | **POST** /v1/tenants | Create a tenant
-[**list_tenants**](TenantsApi.md#list_tenants) | **GET** /v1/tenants | List tenants
+[**create_organization**](OrganizationsApi.md#create_organization) | **POST** /v1/organizations | Create an organization
+[**list_organizations**](OrganizationsApi.md#list_organizations) | **GET** /v1/organizations | List organizations
 
 
-# **create_tenant**
-> TenantItem create_tenant(create_tenant_input_body)
+# **create_organization**
+> OrganizationItem create_organization(create_organization_input_body)
 
-Create a tenant
+Create an organization
 
 ### Example
 
 
 ```python
 import hermes_server_sdk
-from hermes_server_sdk.models.create_tenant_input_body import CreateTenantInputBody
-from hermes_server_sdk.models.tenant_item import TenantItem
+from hermes_server_sdk.models.create_organization_input_body import CreateOrganizationInputBody
+from hermes_server_sdk.models.organization_item import OrganizationItem
 from hermes_server_sdk.rest import ApiException
 from pprint import pprint
 
@@ -33,16 +33,16 @@ configuration = hermes_server_sdk.Configuration(
 # Enter a context with an instance of the API client
 with hermes_server_sdk.ApiClient(configuration) as api_client:
     # Create an instance of the API class
-    api_instance = hermes_server_sdk.TenantsApi(api_client)
-    create_tenant_input_body = hermes_server_sdk.CreateTenantInputBody() # CreateTenantInputBody | 
+    api_instance = hermes_server_sdk.OrganizationsApi(api_client)
+    create_organization_input_body = hermes_server_sdk.CreateOrganizationInputBody() # CreateOrganizationInputBody | 
 
     try:
-        # Create a tenant
-        api_response = api_instance.create_tenant(create_tenant_input_body)
-        print("The response of TenantsApi->create_tenant:\n")
+        # Create an organization
+        api_response = api_instance.create_organization(create_organization_input_body)
+        print("The response of OrganizationsApi->create_organization:\n")
         pprint(api_response)
     except Exception as e:
-        print("Exception when calling TenantsApi->create_tenant: %s\n" % e)
+        print("Exception when calling OrganizationsApi->create_organization: %s\n" % e)
 ```
 
 
@@ -52,11 +52,11 @@ with hermes_server_sdk.ApiClient(configuration) as api_client:
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **create_tenant_input_body** | [**CreateTenantInputBody**](CreateTenantInputBody.md)|  | 
+ **create_organization_input_body** | [**CreateOrganizationInputBody**](CreateOrganizationInputBody.md)|  | 
 
 ### Return type
 
-[**TenantItem**](TenantItem.md)
+[**OrganizationItem**](OrganizationItem.md)
 
 ### Authorization
 
@@ -76,17 +76,17 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
-# **list_tenants**
-> List[TenantItem] list_tenants()
+# **list_organizations**
+> List[OrganizationItem] list_organizations()
 
-List tenants
+List organizations
 
 ### Example
 
 
 ```python
 import hermes_server_sdk
-from hermes_server_sdk.models.tenant_item import TenantItem
+from hermes_server_sdk.models.organization_item import OrganizationItem
 from hermes_server_sdk.rest import ApiException
 from pprint import pprint
 
@@ -100,15 +100,15 @@ configuration = hermes_server_sdk.Configuration(
 # Enter a context with an instance of the API client
 with hermes_server_sdk.ApiClient(configuration) as api_client:
     # Create an instance of the API class
-    api_instance = hermes_server_sdk.TenantsApi(api_client)
+    api_instance = hermes_server_sdk.OrganizationsApi(api_client)
 
     try:
-        # List tenants
-        api_response = api_instance.list_tenants()
-        print("The response of TenantsApi->list_tenants:\n")
+        # List organizations
+        api_response = api_instance.list_organizations()
+        print("The response of OrganizationsApi->list_organizations:\n")
         pprint(api_response)
     except Exception as e:
-        print("Exception when calling TenantsApi->list_tenants: %s\n" % e)
+        print("Exception when calling OrganizationsApi->list_organizations: %s\n" % e)
 ```
 
 
@@ -119,7 +119,7 @@ This endpoint does not need any parameter.
 
 ### Return type
 
-[**List[TenantItem]**](TenantItem.md)
+[**List[OrganizationItem]**](OrganizationItem.md)
 
 ### Authorization
 

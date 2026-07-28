@@ -25,17 +25,17 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
- * Model tests for CreateTenantInputBody
+ * Model tests for CreateOrganizationInputBody
  */
-public class CreateTenantInputBodyTest {
-    private final CreateTenantInputBody model = new CreateTenantInputBody();
+public class CreateOrganizationInputBodyTest {
+    private final CreateOrganizationInputBody model = new CreateOrganizationInputBody();
 
     /**
-     * Model tests for CreateTenantInputBody
+     * Model tests for CreateOrganizationInputBody
      */
     @Test
-    public void testCreateTenantInputBody() {
-        // TODO: test CreateTenantInputBody
+    public void testCreateOrganizationInputBody() {
+        // TODO: test CreateOrganizationInputBody
     }
 
     /**

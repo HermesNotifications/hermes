@@ -50,17 +50,17 @@ import com.hermes.sdk.JSON;
 /**
  * SendRecipient
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
 public class SendRecipient {
   public static final String SERIALIZED_NAME_CONTACTS = "contacts";
   @SerializedName(SERIALIZED_NAME_CONTACTS)
   @javax.annotation.Nullable
   private Map<String, String> contacts = new HashMap<>();
 
-  public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
-  @SerializedName(SERIALIZED_NAME_TENANT_ID)
+  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
   @javax.annotation.Nonnull
-  private String tenantId;
+  private String organizationId;
 
   public static final String SERIALIZED_NAME_USER_ID = "user_id";
   @SerializedName(SERIALIZED_NAME_USER_ID)
@@ -97,22 +97,22 @@ public class SendRecipient {
   }
 
 
-  public SendRecipient tenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
+  public SendRecipient organizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
     return this;
   }
 
   /**
-   * Tenant identifier
-   * @return tenantId
+   * Organization identifier
+   * @return organizationId
    */
   @javax.annotation.Nonnull
-  public String getTenantId() {
-    return tenantId;
+  public String getOrganizationId() {
+    return organizationId;
   }
 
-  public void setTenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
+  public void setOrganizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
   }
 
 
@@ -146,13 +146,13 @@ public class SendRecipient {
     }
     SendRecipient sendRecipient = (SendRecipient) o;
     return Objects.equals(this.contacts, sendRecipient.contacts) &&
-        Objects.equals(this.tenantId, sendRecipient.tenantId) &&
+        Objects.equals(this.organizationId, sendRecipient.organizationId) &&
         Objects.equals(this.userId, sendRecipient.userId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(contacts, tenantId, userId);
+    return Objects.hash(contacts, organizationId, userId);
   }
 
   @Override
@@ -160,7 +160,7 @@ public class SendRecipient {
     StringBuilder sb = new StringBuilder();
     sb.append("class SendRecipient {\n");
     sb.append("    contacts: ").append(toIndentedString(contacts)).append("\n");
-    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
     sb.append("    userId: ").append(toIndentedString(userId)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -183,10 +183,10 @@ public class SendRecipient {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("contacts", "tenant_id", "user_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("contacts", "organization_id", "user_id"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("tenant_id", "user_id"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("organization_id", "user_id"));
   }
 
   /**
@@ -217,8 +217,8 @@ public class SendRecipient {
         }
       }
         JsonObject jsonObj = jsonElement.getAsJsonObject();
-      if (!jsonObj.get("tenant_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_id").toString()));
+      if (!jsonObj.get("organization_id").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
       }
       if (!jsonObj.get("user_id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `user_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("user_id").toString()));

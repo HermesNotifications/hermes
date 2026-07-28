@@ -20,6 +20,8 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
@@ -38,27 +40,19 @@ public class SendRecipientTest {
     }
 
     /**
-     * Test the property 'email'
+     * Test the property 'contacts'
      */
     @Test
-    public void emailTest() {
-        // TODO: test email
+    public void contactsTest() {
+        // TODO: test contacts
     }
 
     /**
-     * Test the property 'phone'
+     * Test the property 'organizationId'
      */
     @Test
-    public void phoneTest() {
-        // TODO: test phone
-    }
-
-    /**
-     * Test the property 'tenantId'
-     */
-    @Test
-    public void tenantIdTest() {
-        // TODO: test tenantId
+    public void organizationIdTest() {
+        // TODO: test organizationId
     }
 
     /**

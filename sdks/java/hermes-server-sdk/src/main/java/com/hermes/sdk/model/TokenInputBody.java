@@ -49,7 +49,7 @@ import com.hermes.sdk.JSON;
 /**
  * TokenInputBody
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
 public class TokenInputBody {
   public static final String SERIALIZED_NAME_$_SCHEMA = "$schema";
   @SerializedName(SERIALIZED_NAME_$_SCHEMA)
@@ -61,10 +61,10 @@ public class TokenInputBody {
   @javax.annotation.Nullable
   private Long expiresIn;
 
-  public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
-  @SerializedName(SERIALIZED_NAME_TENANT_ID)
+  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
   @javax.annotation.Nonnull
-  private String tenantId;
+  private String organizationId;
 
   public static final String SERIALIZED_NAME_USER_ID = "user_id";
   @SerializedName(SERIALIZED_NAME_USER_ID)
@@ -113,22 +113,22 @@ public class TokenInputBody {
   }
 
 
-  public TokenInputBody tenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
+  public TokenInputBody organizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
     return this;
   }
 
   /**
-   * Tenant identifier
-   * @return tenantId
+   * Organization identifier
+   * @return organizationId
    */
   @javax.annotation.Nonnull
-  public String getTenantId() {
-    return tenantId;
+  public String getOrganizationId() {
+    return organizationId;
   }
 
-  public void setTenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
+  public void setOrganizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
   }
 
 
@@ -163,13 +163,13 @@ public class TokenInputBody {
     TokenInputBody tokenInputBody = (TokenInputBody) o;
     return Objects.equals(this.$schema, tokenInputBody.$schema) &&
         Objects.equals(this.expiresIn, tokenInputBody.expiresIn) &&
-        Objects.equals(this.tenantId, tokenInputBody.tenantId) &&
+        Objects.equals(this.organizationId, tokenInputBody.organizationId) &&
         Objects.equals(this.userId, tokenInputBody.userId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, expiresIn, tenantId, userId);
+    return Objects.hash($schema, expiresIn, organizationId, userId);
   }
 
   @Override
@@ -178,7 +178,7 @@ public class TokenInputBody {
     sb.append("class TokenInputBody {\n");
     sb.append("    $schema: ").append(toIndentedString($schema)).append("\n");
     sb.append("    expiresIn: ").append(toIndentedString(expiresIn)).append("\n");
-    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
     sb.append("    userId: ").append(toIndentedString(userId)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -201,10 +201,10 @@ public class TokenInputBody {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "expires_in", "tenant_id", "user_id"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "expires_in", "organization_id", "user_id"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("tenant_id", "user_id"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("organization_id", "user_id"));
   }
 
   /**
@@ -238,8 +238,8 @@ public class TokenInputBody {
       if ((jsonObj.get("$schema") != null && !jsonObj.get("$schema").isJsonNull()) && !jsonObj.get("$schema").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `$schema` to be a primitive type in the JSON string but got `%s`", jsonObj.get("$schema").toString()));
       }
-      if (!jsonObj.get("tenant_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_id").toString()));
+      if (!jsonObj.get("organization_id").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
       }
       if (!jsonObj.get("user_id").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `user_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("user_id").toString()));

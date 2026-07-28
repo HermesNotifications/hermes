@@ -48,10 +48,10 @@ import java.util.Set;
 import com.hermes.sdk.JSON;
 
 /**
- * TenantItem
+ * OrganizationItem
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
-public class TenantItem {
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
+public class OrganizationItem {
   public static final String SERIALIZED_NAME_$_SCHEMA = "$schema";
   @SerializedName(SERIALIZED_NAME_$_SCHEMA)
   @javax.annotation.Nullable
@@ -82,10 +82,10 @@ public class TenantItem {
   @javax.annotation.Nonnull
   private Long userCount;
 
-  public TenantItem() {
+  public OrganizationItem() {
   }
 
-  public TenantItem(
+  public OrganizationItem(
      URI $schema
   ) {
     this();
@@ -103,7 +103,7 @@ public class TenantItem {
 
 
 
-  public TenantItem createdAt(@javax.annotation.Nonnull OffsetDateTime createdAt) {
+  public OrganizationItem createdAt(@javax.annotation.Nonnull OffsetDateTime createdAt) {
     this.createdAt = createdAt;
     return this;
   }
@@ -122,7 +122,7 @@ public class TenantItem {
   }
 
 
-  public TenantItem defaultLocale(@javax.annotation.Nonnull String defaultLocale) {
+  public OrganizationItem defaultLocale(@javax.annotation.Nonnull String defaultLocale) {
     this.defaultLocale = defaultLocale;
     return this;
   }
@@ -141,7 +141,7 @@ public class TenantItem {
   }
 
 
-  public TenantItem id(@javax.annotation.Nonnull String id) {
+  public OrganizationItem id(@javax.annotation.Nonnull String id) {
     this.id = id;
     return this;
   }
@@ -160,7 +160,7 @@ public class TenantItem {
   }
 
 
-  public TenantItem name(@javax.annotation.Nonnull String name) {
+  public OrganizationItem name(@javax.annotation.Nonnull String name) {
     this.name = name;
     return this;
   }
@@ -179,7 +179,7 @@ public class TenantItem {
   }
 
 
-  public TenantItem userCount(@javax.annotation.Nonnull Long userCount) {
+  public OrganizationItem userCount(@javax.annotation.Nonnull Long userCount) {
     this.userCount = userCount;
     return this;
   }
@@ -207,13 +207,13 @@ public class TenantItem {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    TenantItem tenantItem = (TenantItem) o;
-    return Objects.equals(this.$schema, tenantItem.$schema) &&
-        Objects.equals(this.createdAt, tenantItem.createdAt) &&
-        Objects.equals(this.defaultLocale, tenantItem.defaultLocale) &&
-        Objects.equals(this.id, tenantItem.id) &&
-        Objects.equals(this.name, tenantItem.name) &&
-        Objects.equals(this.userCount, tenantItem.userCount);
+    OrganizationItem organizationItem = (OrganizationItem) o;
+    return Objects.equals(this.$schema, organizationItem.$schema) &&
+        Objects.equals(this.createdAt, organizationItem.createdAt) &&
+        Objects.equals(this.defaultLocale, organizationItem.defaultLocale) &&
+        Objects.equals(this.id, organizationItem.id) &&
+        Objects.equals(this.name, organizationItem.name) &&
+        Objects.equals(this.userCount, organizationItem.userCount);
   }
 
   @Override
@@ -224,7 +224,7 @@ public class TenantItem {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("class TenantItem {\n");
+    sb.append("class OrganizationItem {\n");
     sb.append("    $schema: ").append(toIndentedString($schema)).append("\n");
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
     sb.append("    defaultLocale: ").append(toIndentedString(defaultLocale)).append("\n");
@@ -262,25 +262,25 @@ public class TenantItem {
    * Validates the JSON Element and throws an exception if issues found
    *
    * @param jsonElement JSON Element
-   * @throws IOException if the JSON Element is invalid with respect to TenantItem
+   * @throws IOException if the JSON Element is invalid with respect to OrganizationItem
    */
   public static void validateJsonElement(JsonElement jsonElement) throws IOException {
       if (jsonElement == null) {
-        if (!TenantItem.openapiRequiredFields.isEmpty()) { // has required fields but JSON element is null
-          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The required field(s) %s in TenantItem is not found in the empty JSON string", TenantItem.openapiRequiredFields.toString()));
+        if (!OrganizationItem.openapiRequiredFields.isEmpty()) { // has required fields but JSON element is null
+          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The required field(s) %s in OrganizationItem is not found in the empty JSON string", OrganizationItem.openapiRequiredFields.toString()));
         }
       }
 
       Set<Map.Entry<String, JsonElement>> entries = jsonElement.getAsJsonObject().entrySet();
       // check to see if the JSON string contains additional fields
       for (Map.Entry<String, JsonElement> entry : entries) {
-        if (!TenantItem.openapiFields.contains(entry.getKey())) {
-          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The field `%s` in the JSON string is not defined in the `TenantItem` properties. JSON: %s", entry.getKey(), jsonElement.toString()));
+        if (!OrganizationItem.openapiFields.contains(entry.getKey())) {
+          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The field `%s` in the JSON string is not defined in the `OrganizationItem` properties. JSON: %s", entry.getKey(), jsonElement.toString()));
         }
       }
 
       // check to make sure all required properties/fields are present in the JSON string
-      for (String requiredField : TenantItem.openapiRequiredFields) {
+      for (String requiredField : OrganizationItem.openapiRequiredFields) {
         if (jsonElement.getAsJsonObject().get(requiredField) == null) {
           throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The required field `%s` is not found in the JSON string: %s", requiredField, jsonElement.toString()));
         }
@@ -304,22 +304,22 @@ public class TenantItem {
     @SuppressWarnings("unchecked")
     @Override
     public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
-       if (!TenantItem.class.isAssignableFrom(type.getRawType())) {
-         return null; // this class only serializes 'TenantItem' and its subtypes
+       if (!OrganizationItem.class.isAssignableFrom(type.getRawType())) {
+         return null; // this class only serializes 'OrganizationItem' and its subtypes
        }
        final TypeAdapter<JsonElement> elementAdapter = gson.getAdapter(JsonElement.class);
-       final TypeAdapter<TenantItem> thisAdapter
-                        = gson.getDelegateAdapter(this, TypeToken.get(TenantItem.class));
+       final TypeAdapter<OrganizationItem> thisAdapter
+                        = gson.getDelegateAdapter(this, TypeToken.get(OrganizationItem.class));
 
-       return (TypeAdapter<T>) new TypeAdapter<TenantItem>() {
+       return (TypeAdapter<T>) new TypeAdapter<OrganizationItem>() {
            @Override
-           public void write(JsonWriter out, TenantItem value) throws IOException {
+           public void write(JsonWriter out, OrganizationItem value) throws IOException {
              JsonObject obj = thisAdapter.toJsonTree(value).getAsJsonObject();
              elementAdapter.write(out, obj);
            }
 
            @Override
-           public TenantItem read(JsonReader in) throws IOException {
+           public OrganizationItem read(JsonReader in) throws IOException {
              JsonElement jsonElement = elementAdapter.read(in);
              validateJsonElement(jsonElement);
              return thisAdapter.fromJsonTree(jsonElement);
@@ -330,18 +330,18 @@ public class TenantItem {
   }
 
   /**
-   * Create an instance of TenantItem given an JSON string
+   * Create an instance of OrganizationItem given an JSON string
    *
    * @param jsonString JSON string
-   * @return An instance of TenantItem
-   * @throws IOException if the JSON string is invalid with respect to TenantItem
+   * @return An instance of OrganizationItem
+   * @throws IOException if the JSON string is invalid with respect to OrganizationItem
    */
-  public static TenantItem fromJson(String jsonString) throws IOException {
-    return JSON.getGson().fromJson(jsonString, TenantItem.class);
+  public static OrganizationItem fromJson(String jsonString) throws IOException {
+    return JSON.getGson().fromJson(jsonString, OrganizationItem.class);
   }
 
   /**
-   * Convert an instance of TenantItem to an JSON string
+   * Convert an instance of OrganizationItem to an JSON string
    *
    * @return JSON string
    */

@@ -27,9 +27,9 @@ import com.google.gson.reflect.TypeToken;
 import java.io.IOException;
 
 
-import com.hermes.sdk.model.CreateTenantInputBody;
+import com.hermes.sdk.model.CreateOrganizationInputBody;
 import com.hermes.sdk.model.ErrorModel;
-import com.hermes.sdk.model.TenantItem;
+import com.hermes.sdk.model.OrganizationItem;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -37,16 +37,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class TenantsApi {
+public class OrganizationsApi {
     private ApiClient localVarApiClient;
     private int localHostIndex;
     private String localCustomBaseUrl;
 
-    public TenantsApi() {
+    public OrganizationsApi() {
         this(Configuration.getDefaultApiClient());
     }
 
-    public TenantsApi(ApiClient apiClient) {
+    public OrganizationsApi(ApiClient apiClient) {
         this.localVarApiClient = apiClient;
     }
 
@@ -75,8 +75,8 @@ public class TenantsApi {
     }
 
     /**
-     * Build call for createTenant
-     * @param createTenantInputBody  (required)
+     * Build call for createOrganization
+     * @param createOrganizationInputBody  (required)
      * @param _callback Callback for upload/download progress
      * @return Call to execute
      * @throws ApiException If fail to serialize the request body object
@@ -88,7 +88,7 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public okhttp3.Call createTenantCall(@javax.annotation.Nonnull CreateTenantInputBody createTenantInputBody, final ApiCallback _callback) throws ApiException {
+    public okhttp3.Call createOrganizationCall(@javax.annotation.Nonnull CreateOrganizationInputBody createOrganizationInputBody, final ApiCallback _callback) throws ApiException {
         String basePath = null;
         // Operation Servers
         String[] localBasePaths = new String[] {  };
@@ -102,10 +102,10 @@ public class TenantsApi {
             basePath = null;
         }
 
-        Object localVarPostBody = createTenantInputBody;
+        Object localVarPostBody = createOrganizationInputBody;
 
         // create path and map variables
-        String localVarPath = "/v1/tenants";
+        String localVarPath = "/v1/organizations";
 
         List<Pair> localVarQueryParams = new ArrayList<Pair>();
         List<Pair> localVarCollectionQueryParams = new ArrayList<Pair>();
@@ -135,21 +135,21 @@ public class TenantsApi {
     }
 
     @SuppressWarnings("rawtypes")
-    private okhttp3.Call createTenantValidateBeforeCall(@javax.annotation.Nonnull CreateTenantInputBody createTenantInputBody, final ApiCallback _callback) throws ApiException {
-        // verify the required parameter 'createTenantInputBody' is set
-        if (createTenantInputBody == null) {
-            throw new ApiException("Missing the required parameter 'createTenantInputBody' when calling createTenant(Async)");
+    private okhttp3.Call createOrganizationValidateBeforeCall(@javax.annotation.Nonnull CreateOrganizationInputBody createOrganizationInputBody, final ApiCallback _callback) throws ApiException {
+        // verify the required parameter 'createOrganizationInputBody' is set
+        if (createOrganizationInputBody == null) {
+            throw new ApiException("Missing the required parameter 'createOrganizationInputBody' when calling createOrganization(Async)");
         }
 
-        return createTenantCall(createTenantInputBody, _callback);
+        return createOrganizationCall(createOrganizationInputBody, _callback);
 
     }
 
     /**
-     * Create a tenant
+     * Create an organization
      * 
-     * @param createTenantInputBody  (required)
-     * @return TenantItem
+     * @param createOrganizationInputBody  (required)
+     * @return OrganizationItem
      * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
      * @http.response.details
      <table border="1">
@@ -159,16 +159,16 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public TenantItem createTenant(@javax.annotation.Nonnull CreateTenantInputBody createTenantInputBody) throws ApiException {
-        ApiResponse<TenantItem> localVarResp = createTenantWithHttpInfo(createTenantInputBody);
+    public OrganizationItem createOrganization(@javax.annotation.Nonnull CreateOrganizationInputBody createOrganizationInputBody) throws ApiException {
+        ApiResponse<OrganizationItem> localVarResp = createOrganizationWithHttpInfo(createOrganizationInputBody);
         return localVarResp.getData();
     }
 
     /**
-     * Create a tenant
+     * Create an organization
      * 
-     * @param createTenantInputBody  (required)
-     * @return ApiResponse&lt;TenantItem&gt;
+     * @param createOrganizationInputBody  (required)
+     * @return ApiResponse&lt;OrganizationItem&gt;
      * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
      * @http.response.details
      <table border="1">
@@ -178,16 +178,16 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public ApiResponse<TenantItem> createTenantWithHttpInfo(@javax.annotation.Nonnull CreateTenantInputBody createTenantInputBody) throws ApiException {
-        okhttp3.Call localVarCall = createTenantValidateBeforeCall(createTenantInputBody, null);
-        Type localVarReturnType = new TypeToken<TenantItem>(){}.getType();
+    public ApiResponse<OrganizationItem> createOrganizationWithHttpInfo(@javax.annotation.Nonnull CreateOrganizationInputBody createOrganizationInputBody) throws ApiException {
+        okhttp3.Call localVarCall = createOrganizationValidateBeforeCall(createOrganizationInputBody, null);
+        Type localVarReturnType = new TypeToken<OrganizationItem>(){}.getType();
         return localVarApiClient.execute(localVarCall, localVarReturnType);
     }
 
     /**
-     * Create a tenant (asynchronously)
+     * Create an organization (asynchronously)
      * 
-     * @param createTenantInputBody  (required)
+     * @param createOrganizationInputBody  (required)
      * @param _callback The callback to be executed when the API call finishes
      * @return The request call
      * @throws ApiException If fail to process the API call, e.g. serializing the request body object
@@ -199,15 +199,15 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public okhttp3.Call createTenantAsync(@javax.annotation.Nonnull CreateTenantInputBody createTenantInputBody, final ApiCallback<TenantItem> _callback) throws ApiException {
+    public okhttp3.Call createOrganizationAsync(@javax.annotation.Nonnull CreateOrganizationInputBody createOrganizationInputBody, final ApiCallback<OrganizationItem> _callback) throws ApiException {
 
-        okhttp3.Call localVarCall = createTenantValidateBeforeCall(createTenantInputBody, _callback);
-        Type localVarReturnType = new TypeToken<TenantItem>(){}.getType();
+        okhttp3.Call localVarCall = createOrganizationValidateBeforeCall(createOrganizationInputBody, _callback);
+        Type localVarReturnType = new TypeToken<OrganizationItem>(){}.getType();
         localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
         return localVarCall;
     }
     /**
-     * Build call for listTenants
+     * Build call for listOrganizations
      * @param _callback Callback for upload/download progress
      * @return Call to execute
      * @throws ApiException If fail to serialize the request body object
@@ -219,7 +219,7 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public okhttp3.Call listTenantsCall(final ApiCallback _callback) throws ApiException {
+    public okhttp3.Call listOrganizationsCall(final ApiCallback _callback) throws ApiException {
         String basePath = null;
         // Operation Servers
         String[] localBasePaths = new String[] {  };
@@ -236,7 +236,7 @@ public class TenantsApi {
         Object localVarPostBody = null;
 
         // create path and map variables
-        String localVarPath = "/v1/tenants";
+        String localVarPath = "/v1/organizations";
 
         List<Pair> localVarQueryParams = new ArrayList<Pair>();
         List<Pair> localVarCollectionQueryParams = new ArrayList<Pair>();
@@ -265,15 +265,15 @@ public class TenantsApi {
     }
 
     @SuppressWarnings("rawtypes")
-    private okhttp3.Call listTenantsValidateBeforeCall(final ApiCallback _callback) throws ApiException {
-        return listTenantsCall(_callback);
+    private okhttp3.Call listOrganizationsValidateBeforeCall(final ApiCallback _callback) throws ApiException {
+        return listOrganizationsCall(_callback);
 
     }
 
     /**
-     * List tenants
+     * List organizations
      * 
-     * @return List&lt;TenantItem&gt;
+     * @return List&lt;OrganizationItem&gt;
      * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
      * @http.response.details
      <table border="1">
@@ -283,15 +283,15 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public List<TenantItem> listTenants() throws ApiException {
-        ApiResponse<List<TenantItem>> localVarResp = listTenantsWithHttpInfo();
+    public List<OrganizationItem> listOrganizations() throws ApiException {
+        ApiResponse<List<OrganizationItem>> localVarResp = listOrganizationsWithHttpInfo();
         return localVarResp.getData();
     }
 
     /**
-     * List tenants
+     * List organizations
      * 
-     * @return ApiResponse&lt;List&lt;TenantItem&gt;&gt;
+     * @return ApiResponse&lt;List&lt;OrganizationItem&gt;&gt;
      * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
      * @http.response.details
      <table border="1">
@@ -301,14 +301,14 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public ApiResponse<List<TenantItem>> listTenantsWithHttpInfo() throws ApiException {
-        okhttp3.Call localVarCall = listTenantsValidateBeforeCall(null);
-        Type localVarReturnType = new TypeToken<List<TenantItem>>(){}.getType();
+    public ApiResponse<List<OrganizationItem>> listOrganizationsWithHttpInfo() throws ApiException {
+        okhttp3.Call localVarCall = listOrganizationsValidateBeforeCall(null);
+        Type localVarReturnType = new TypeToken<List<OrganizationItem>>(){}.getType();
         return localVarApiClient.execute(localVarCall, localVarReturnType);
     }
 
     /**
-     * List tenants (asynchronously)
+     * List organizations (asynchronously)
      * 
      * @param _callback The callback to be executed when the API call finishes
      * @return The request call
@@ -321,10 +321,10 @@ public class TenantsApi {
         <tr><td> 0 </td><td> Error </td><td>  -  </td></tr>
      </table>
      */
-    public okhttp3.Call listTenantsAsync(final ApiCallback<List<TenantItem>> _callback) throws ApiException {
+    public okhttp3.Call listOrganizationsAsync(final ApiCallback<List<OrganizationItem>> _callback) throws ApiException {
 
-        okhttp3.Call localVarCall = listTenantsValidateBeforeCall(_callback);
-        Type localVarReturnType = new TypeToken<List<TenantItem>>(){}.getType();
+        okhttp3.Call localVarCall = listOrganizationsValidateBeforeCall(_callback);
+        Type localVarReturnType = new TypeToken<List<OrganizationItem>>(){}.getType();
         localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
         return localVarCall;
     }

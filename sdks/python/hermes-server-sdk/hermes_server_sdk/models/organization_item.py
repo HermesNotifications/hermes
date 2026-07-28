@@ -17,19 +17,23 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 
-class CreateTenantInputBody(BaseModel):
+class OrganizationItem(BaseModel):
     """
-    CreateTenantInputBody
+    OrganizationItem
     """ # noqa: E501
     var_schema: Optional[StrictStr] = Field(default=None, description="A URL to the JSON Schema for this object.", alias="$schema")
-    name: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Tenant name")
-    __properties: ClassVar[List[str]] = ["$schema", "name"]
+    created_at: datetime
+    default_locale: StrictStr
+    id: StrictStr
+    name: StrictStr
+    user_count: StrictInt
+    __properties: ClassVar[List[str]] = ["$schema", "created_at", "default_locale", "id", "name", "user_count"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -49,7 +53,7 @@ class CreateTenantInputBody(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of CreateTenantInputBody from a JSON string"""
+        """Create an instance of OrganizationItem from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,7 +80,7 @@ class CreateTenantInputBody(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of CreateTenantInputBody from a dict"""
+        """Create an instance of OrganizationItem from a dict"""
         if obj is None:
             return None
 
@@ -85,7 +89,11 @@ class CreateTenantInputBody(BaseModel):
 
         _obj = cls.model_validate({
             "$schema": obj.get("$schema"),
-            "name": obj.get("name")
+            "created_at": obj.get("created_at"),
+            "default_locale": obj.get("default_locale"),
+            "id": obj.get("id"),
+            "name": obj.get("name"),
+            "user_count": obj.get("user_count")
         })
         return _obj
 

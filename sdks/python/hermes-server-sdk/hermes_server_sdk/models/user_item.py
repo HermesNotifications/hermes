@@ -32,9 +32,9 @@ class UserItem(BaseModel):
     external_id: StrictStr
     id: StrictStr
     locale: Optional[StrictStr]
-    tenant_id: StrictStr
-    tenant_name: StrictStr
-    __properties: ClassVar[List[str]] = ["contacts", "created_at", "external_id", "id", "locale", "tenant_id", "tenant_name"]
+    organization_id: StrictStr
+    organization_name: StrictStr
+    __properties: ClassVar[List[str]] = ["contacts", "created_at", "external_id", "id", "locale", "organization_id", "organization_name"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -97,8 +97,8 @@ class UserItem(BaseModel):
             "external_id": obj.get("external_id"),
             "id": obj.get("id"),
             "locale": obj.get("locale"),
-            "tenant_id": obj.get("tenant_id"),
-            "tenant_name": obj.get("tenant_name")
+            "organization_id": obj.get("organization_id"),
+            "organization_name": obj.get("organization_name")
         })
         return _obj
 

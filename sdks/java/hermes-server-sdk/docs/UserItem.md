@@ -12,8 +12,8 @@
 |**externalId** | **String** |  |  |
 |**id** | **String** |  |  |
 |**locale** | **String** |  |  |
-|**tenantId** | **String** |  |  |
-|**tenantName** | **String** |  |  |
+|**organizationId** | **String** |  |  |
+|**organizationName** | **String** |  |  |
 
 
 

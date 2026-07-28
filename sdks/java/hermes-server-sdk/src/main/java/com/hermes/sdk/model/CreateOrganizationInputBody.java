@@ -47,10 +47,10 @@ import java.util.Set;
 import com.hermes.sdk.JSON;
 
 /**
- * CreateTenantInputBody
+ * CreateOrganizationInputBody
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
-public class CreateTenantInputBody {
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
+public class CreateOrganizationInputBody {
   public static final String SERIALIZED_NAME_$_SCHEMA = "$schema";
   @SerializedName(SERIALIZED_NAME_$_SCHEMA)
   @javax.annotation.Nullable
@@ -61,10 +61,10 @@ public class CreateTenantInputBody {
   @javax.annotation.Nonnull
   private String name;
 
-  public CreateTenantInputBody() {
+  public CreateOrganizationInputBody() {
   }
 
-  public CreateTenantInputBody(
+  public CreateOrganizationInputBody(
      URI $schema
   ) {
     this();
@@ -82,13 +82,13 @@ public class CreateTenantInputBody {
 
 
 
-  public CreateTenantInputBody name(@javax.annotation.Nonnull String name) {
+  public CreateOrganizationInputBody name(@javax.annotation.Nonnull String name) {
     this.name = name;
     return this;
   }
 
   /**
-   * Tenant name
+   * Organization name
    * @return name
    */
   @javax.annotation.Nonnull
@@ -110,9 +110,9 @@ public class CreateTenantInputBody {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    CreateTenantInputBody createTenantInputBody = (CreateTenantInputBody) o;
-    return Objects.equals(this.$schema, createTenantInputBody.$schema) &&
-        Objects.equals(this.name, createTenantInputBody.name);
+    CreateOrganizationInputBody createOrganizationInputBody = (CreateOrganizationInputBody) o;
+    return Objects.equals(this.$schema, createOrganizationInputBody.$schema) &&
+        Objects.equals(this.name, createOrganizationInputBody.name);
   }
 
   @Override
@@ -123,7 +123,7 @@ public class CreateTenantInputBody {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("class CreateTenantInputBody {\n");
+    sb.append("class CreateOrganizationInputBody {\n");
     sb.append("    $schema: ").append(toIndentedString($schema)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("}");
@@ -157,25 +157,25 @@ public class CreateTenantInputBody {
    * Validates the JSON Element and throws an exception if issues found
    *
    * @param jsonElement JSON Element
-   * @throws IOException if the JSON Element is invalid with respect to CreateTenantInputBody
+   * @throws IOException if the JSON Element is invalid with respect to CreateOrganizationInputBody
    */
   public static void validateJsonElement(JsonElement jsonElement) throws IOException {
       if (jsonElement == null) {
-        if (!CreateTenantInputBody.openapiRequiredFields.isEmpty()) { // has required fields but JSON element is null
-          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The required field(s) %s in CreateTenantInputBody is not found in the empty JSON string", CreateTenantInputBody.openapiRequiredFields.toString()));
+        if (!CreateOrganizationInputBody.openapiRequiredFields.isEmpty()) { // has required fields but JSON element is null
+          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The required field(s) %s in CreateOrganizationInputBody is not found in the empty JSON string", CreateOrganizationInputBody.openapiRequiredFields.toString()));
         }
       }
 
       Set<Map.Entry<String, JsonElement>> entries = jsonElement.getAsJsonObject().entrySet();
       // check to see if the JSON string contains additional fields
       for (Map.Entry<String, JsonElement> entry : entries) {
-        if (!CreateTenantInputBody.openapiFields.contains(entry.getKey())) {
-          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The field `%s` in the JSON string is not defined in the `CreateTenantInputBody` properties. JSON: %s", entry.getKey(), jsonElement.toString()));
+        if (!CreateOrganizationInputBody.openapiFields.contains(entry.getKey())) {
+          throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The field `%s` in the JSON string is not defined in the `CreateOrganizationInputBody` properties. JSON: %s", entry.getKey(), jsonElement.toString()));
         }
       }
 
       // check to make sure all required properties/fields are present in the JSON string
-      for (String requiredField : CreateTenantInputBody.openapiRequiredFields) {
+      for (String requiredField : CreateOrganizationInputBody.openapiRequiredFields) {
         if (jsonElement.getAsJsonObject().get(requiredField) == null) {
           throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "The required field `%s` is not found in the JSON string: %s", requiredField, jsonElement.toString()));
         }
@@ -193,22 +193,22 @@ public class CreateTenantInputBody {
     @SuppressWarnings("unchecked")
     @Override
     public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
-       if (!CreateTenantInputBody.class.isAssignableFrom(type.getRawType())) {
-         return null; // this class only serializes 'CreateTenantInputBody' and its subtypes
+       if (!CreateOrganizationInputBody.class.isAssignableFrom(type.getRawType())) {
+         return null; // this class only serializes 'CreateOrganizationInputBody' and its subtypes
        }
        final TypeAdapter<JsonElement> elementAdapter = gson.getAdapter(JsonElement.class);
-       final TypeAdapter<CreateTenantInputBody> thisAdapter
-                        = gson.getDelegateAdapter(this, TypeToken.get(CreateTenantInputBody.class));
+       final TypeAdapter<CreateOrganizationInputBody> thisAdapter
+                        = gson.getDelegateAdapter(this, TypeToken.get(CreateOrganizationInputBody.class));
 
-       return (TypeAdapter<T>) new TypeAdapter<CreateTenantInputBody>() {
+       return (TypeAdapter<T>) new TypeAdapter<CreateOrganizationInputBody>() {
            @Override
-           public void write(JsonWriter out, CreateTenantInputBody value) throws IOException {
+           public void write(JsonWriter out, CreateOrganizationInputBody value) throws IOException {
              JsonObject obj = thisAdapter.toJsonTree(value).getAsJsonObject();
              elementAdapter.write(out, obj);
            }
 
            @Override
-           public CreateTenantInputBody read(JsonReader in) throws IOException {
+           public CreateOrganizationInputBody read(JsonReader in) throws IOException {
              JsonElement jsonElement = elementAdapter.read(in);
              validateJsonElement(jsonElement);
              return thisAdapter.fromJsonTree(jsonElement);
@@ -219,18 +219,18 @@ public class CreateTenantInputBody {
   }
 
   /**
-   * Create an instance of CreateTenantInputBody given an JSON string
+   * Create an instance of CreateOrganizationInputBody given an JSON string
    *
    * @param jsonString JSON string
-   * @return An instance of CreateTenantInputBody
-   * @throws IOException if the JSON string is invalid with respect to CreateTenantInputBody
+   * @return An instance of CreateOrganizationInputBody
+   * @throws IOException if the JSON string is invalid with respect to CreateOrganizationInputBody
    */
-  public static CreateTenantInputBody fromJson(String jsonString) throws IOException {
-    return JSON.getGson().fromJson(jsonString, CreateTenantInputBody.class);
+  public static CreateOrganizationInputBody fromJson(String jsonString) throws IOException {
+    return JSON.getGson().fromJson(jsonString, CreateOrganizationInputBody.class);
   }
 
   /**
-   * Convert an instance of CreateTenantInputBody to an JSON string
+   * Convert an instance of CreateOrganizationInputBody to an JSON string
    *
    * @return JSON string
    */

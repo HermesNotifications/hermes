@@ -26,17 +26,17 @@ using Hermes.ServerSdk.Client;
 namespace Hermes.ServerSdk.Model
 {
     /// <summary>
-    /// CreateTenantInputBody
+    /// CreateOrganizationInputBody
     /// </summary>
-    public partial class CreateTenantInputBody : IValidatableObject
+    public partial class CreateOrganizationInputBody : IValidatableObject
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="CreateTenantInputBody" /> class.
+        /// Initializes a new instance of the <see cref="CreateOrganizationInputBody" /> class.
         /// </summary>
-        /// <param name="name">Tenant name</param>
+        /// <param name="name">Organization name</param>
         /// <param name="schema">A URL to the JSON Schema for this object.</param>
         [JsonConstructor]
-        public CreateTenantInputBody(string name, Option<string?> schema = default)
+        public CreateOrganizationInputBody(string name, Option<string?> schema = default)
         {
             Name = name;
             SchemaOption = schema;
@@ -46,9 +46,9 @@ namespace Hermes.ServerSdk.Model
         partial void OnCreated();
 
         /// <summary>
-        /// Tenant name
+        /// Organization name
         /// </summary>
-        /// <value>Tenant name</value>
+        /// <value>Organization name</value>
         [JsonPropertyName("name")]
         public string Name { get; set; }
 
@@ -73,7 +73,7 @@ namespace Hermes.ServerSdk.Model
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class CreateTenantInputBody {\n");
+            sb.Append("class CreateOrganizationInputBody {\n");
             sb.Append("  Name: ").Append(Name).Append("\n");
             sb.Append("  Schema: ").Append(Schema).Append("\n");
             sb.Append("}\n");
@@ -98,19 +98,19 @@ namespace Hermes.ServerSdk.Model
     }
 
     /// <summary>
-    /// A Json converter for type <see cref="CreateTenantInputBody" />
+    /// A Json converter for type <see cref="CreateOrganizationInputBody" />
     /// </summary>
-    public class CreateTenantInputBodyJsonConverter : JsonConverter<CreateTenantInputBody>
+    public class CreateOrganizationInputBodyJsonConverter : JsonConverter<CreateOrganizationInputBody>
     {
         /// <summary>
-        /// Deserializes json to <see cref="CreateTenantInputBody" />
+        /// Deserializes json to <see cref="CreateOrganizationInputBody" />
         /// </summary>
         /// <param name="utf8JsonReader"></param>
         /// <param name="typeToConvert"></param>
         /// <param name="jsonSerializerOptions"></param>
         /// <returns></returns>
         /// <exception cref="JsonException"></exception>
-        public override CreateTenantInputBody Read(ref Utf8JsonReader utf8JsonReader, Type typeToConvert, JsonSerializerOptions jsonSerializerOptions)
+        public override CreateOrganizationInputBody Read(ref Utf8JsonReader utf8JsonReader, Type typeToConvert, JsonSerializerOptions jsonSerializerOptions)
         {
             int currentDepth = utf8JsonReader.CurrentDepth;
 
@@ -150,51 +150,51 @@ namespace Hermes.ServerSdk.Model
             }
 
             if (!name.IsSet)
-                throw new ArgumentException("Property is required for class CreateTenantInputBody.", nameof(name));
+                throw new ArgumentException("Property is required for class CreateOrganizationInputBody.", nameof(name));
 
             if (name.IsSet && name.Value == null)
-                throw new ArgumentNullException(nameof(name), "Property is not nullable for class CreateTenantInputBody.");
+                throw new ArgumentNullException(nameof(name), "Property is not nullable for class CreateOrganizationInputBody.");
 
             if (schema.IsSet && schema.Value == null)
-                throw new ArgumentNullException(nameof(schema), "Property is not nullable for class CreateTenantInputBody.");
+                throw new ArgumentNullException(nameof(schema), "Property is not nullable for class CreateOrganizationInputBody.");
 
-            return new CreateTenantInputBody(name.Value!, schema);
+            return new CreateOrganizationInputBody(name.Value!, schema);
         }
 
         /// <summary>
-        /// Serializes a <see cref="CreateTenantInputBody" />
+        /// Serializes a <see cref="CreateOrganizationInputBody" />
         /// </summary>
         /// <param name="writer"></param>
-        /// <param name="createTenantInputBody"></param>
+        /// <param name="createOrganizationInputBody"></param>
         /// <param name="jsonSerializerOptions"></param>
         /// <exception cref="NotImplementedException"></exception>
-        public override void Write(Utf8JsonWriter writer, CreateTenantInputBody createTenantInputBody, JsonSerializerOptions jsonSerializerOptions)
+        public override void Write(Utf8JsonWriter writer, CreateOrganizationInputBody createOrganizationInputBody, JsonSerializerOptions jsonSerializerOptions)
         {
             writer.WriteStartObject();
 
-            WriteProperties(writer, createTenantInputBody, jsonSerializerOptions);
+            WriteProperties(writer, createOrganizationInputBody, jsonSerializerOptions);
             writer.WriteEndObject();
         }
 
         /// <summary>
-        /// Serializes the properties of <see cref="CreateTenantInputBody" />
+        /// Serializes the properties of <see cref="CreateOrganizationInputBody" />
         /// </summary>
         /// <param name="writer"></param>
-        /// <param name="createTenantInputBody"></param>
+        /// <param name="createOrganizationInputBody"></param>
         /// <param name="jsonSerializerOptions"></param>
         /// <exception cref="NotImplementedException"></exception>
-        public void WriteProperties(Utf8JsonWriter writer, CreateTenantInputBody createTenantInputBody, JsonSerializerOptions jsonSerializerOptions)
+        public void WriteProperties(Utf8JsonWriter writer, CreateOrganizationInputBody createOrganizationInputBody, JsonSerializerOptions jsonSerializerOptions)
         {
-            if (createTenantInputBody.Name == null)
-                throw new ArgumentNullException(nameof(createTenantInputBody.Name), "Property is required for class CreateTenantInputBody.");
+            if (createOrganizationInputBody.Name == null)
+                throw new ArgumentNullException(nameof(createOrganizationInputBody.Name), "Property is required for class CreateOrganizationInputBody.");
 
-            if (createTenantInputBody.SchemaOption.IsSet && createTenantInputBody.Schema == null)
-                throw new ArgumentNullException(nameof(createTenantInputBody.Schema), "Property is required for class CreateTenantInputBody.");
+            if (createOrganizationInputBody.SchemaOption.IsSet && createOrganizationInputBody.Schema == null)
+                throw new ArgumentNullException(nameof(createOrganizationInputBody.Schema), "Property is required for class CreateOrganizationInputBody.");
 
-            writer.WriteString("name", createTenantInputBody.Name);
+            writer.WriteString("name", createOrganizationInputBody.Name);
 
-            if (createTenantInputBody.SchemaOption.IsSet)
-                writer.WriteString("$schema", createTenantInputBody.Schema);
+            if (createOrganizationInputBody.SchemaOption.IsSet)
+                writer.WriteString("$schema", createOrganizationInputBody.Schema);
         }
     }
 }

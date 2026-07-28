@@ -36,18 +36,18 @@ namespace Hermes.ServerSdk.Model
         /// <param name="createdAt">createdAt</param>
         /// <param name="externalId">externalId</param>
         /// <param name="id">id</param>
-        /// <param name="tenantId">tenantId</param>
-        /// <param name="tenantName">tenantName</param>
+        /// <param name="organizationId">organizationId</param>
+        /// <param name="organizationName">organizationName</param>
         /// <param name="contacts">contacts</param>
         /// <param name="locale">locale</param>
         [JsonConstructor]
-        public UserItem(DateTime createdAt, string externalId, string id, string tenantId, string tenantName, Option<Dictionary<string, string>?> contacts = default, string? locale = default)
+        public UserItem(DateTime createdAt, string externalId, string id, string organizationId, string organizationName, Option<Dictionary<string, string>?> contacts = default, string? locale = default)
         {
             CreatedAt = createdAt;
             ExternalId = externalId;
             Id = id;
-            TenantId = tenantId;
-            TenantName = tenantName;
+            OrganizationId = organizationId;
+            OrganizationName = organizationName;
             ContactsOption = contacts;
             Locale = locale;
             OnCreated();
@@ -74,16 +74,16 @@ namespace Hermes.ServerSdk.Model
         public string Id { get; set; }
 
         /// <summary>
-        /// Gets or Sets TenantId
+        /// Gets or Sets OrganizationId
         /// </summary>
-        [JsonPropertyName("tenant_id")]
-        public string TenantId { get; set; }
+        [JsonPropertyName("organization_id")]
+        public string OrganizationId { get; set; }
 
         /// <summary>
-        /// Gets or Sets TenantName
+        /// Gets or Sets OrganizationName
         /// </summary>
-        [JsonPropertyName("tenant_name")]
-        public string TenantName { get; set; }
+        [JsonPropertyName("organization_name")]
+        public string OrganizationName { get; set; }
 
         /// <summary>
         /// Used to track the state of Contacts
@@ -115,8 +115,8 @@ namespace Hermes.ServerSdk.Model
             sb.Append("  CreatedAt: ").Append(CreatedAt).Append("\n");
             sb.Append("  ExternalId: ").Append(ExternalId).Append("\n");
             sb.Append("  Id: ").Append(Id).Append("\n");
-            sb.Append("  TenantId: ").Append(TenantId).Append("\n");
-            sb.Append("  TenantName: ").Append(TenantName).Append("\n");
+            sb.Append("  OrganizationId: ").Append(OrganizationId).Append("\n");
+            sb.Append("  OrganizationName: ").Append(OrganizationName).Append("\n");
             sb.Append("  Contacts: ").Append(Contacts).Append("\n");
             sb.Append("  Locale: ").Append(Locale).Append("\n");
             sb.Append("}\n");
@@ -164,8 +164,8 @@ namespace Hermes.ServerSdk.Model
             Option<DateTime?> createdAt = default;
             Option<string?> externalId = default;
             Option<string?> id = default;
-            Option<string?> tenantId = default;
-            Option<string?> tenantName = default;
+            Option<string?> organizationId = default;
+            Option<string?> organizationName = default;
             Option<Dictionary<string, string>?> contacts = default;
             Option<string?> locale = default;
 
@@ -193,11 +193,11 @@ namespace Hermes.ServerSdk.Model
                         case "id":
                             id = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
-                        case "tenant_id":
-                            tenantId = new Option<string?>(utf8JsonReader.GetString()!);
+                        case "organization_id":
+                            organizationId = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
-                        case "tenant_name":
-                            tenantName = new Option<string?>(utf8JsonReader.GetString()!);
+                        case "organization_name":
+                            organizationName = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
                         case "contacts":
                             contacts = new Option<Dictionary<string, string>?>(JsonSerializer.Deserialize<Dictionary<string, string>>(ref utf8JsonReader, jsonSerializerOptions)!);
@@ -220,11 +220,11 @@ namespace Hermes.ServerSdk.Model
             if (!id.IsSet)
                 throw new ArgumentException("Property is required for class UserItem.", nameof(id));
 
-            if (!tenantId.IsSet)
-                throw new ArgumentException("Property is required for class UserItem.", nameof(tenantId));
+            if (!organizationId.IsSet)
+                throw new ArgumentException("Property is required for class UserItem.", nameof(organizationId));
 
-            if (!tenantName.IsSet)
-                throw new ArgumentException("Property is required for class UserItem.", nameof(tenantName));
+            if (!organizationName.IsSet)
+                throw new ArgumentException("Property is required for class UserItem.", nameof(organizationName));
 
             if (!locale.IsSet)
                 throw new ArgumentException("Property is required for class UserItem.", nameof(locale));
@@ -238,16 +238,16 @@ namespace Hermes.ServerSdk.Model
             if (id.IsSet && id.Value == null)
                 throw new ArgumentNullException(nameof(id), "Property is not nullable for class UserItem.");
 
-            if (tenantId.IsSet && tenantId.Value == null)
-                throw new ArgumentNullException(nameof(tenantId), "Property is not nullable for class UserItem.");
+            if (organizationId.IsSet && organizationId.Value == null)
+                throw new ArgumentNullException(nameof(organizationId), "Property is not nullable for class UserItem.");
 
-            if (tenantName.IsSet && tenantName.Value == null)
-                throw new ArgumentNullException(nameof(tenantName), "Property is not nullable for class UserItem.");
+            if (organizationName.IsSet && organizationName.Value == null)
+                throw new ArgumentNullException(nameof(organizationName), "Property is not nullable for class UserItem.");
 
             if (contacts.IsSet && contacts.Value == null)
                 throw new ArgumentNullException(nameof(contacts), "Property is not nullable for class UserItem.");
 
-            return new UserItem(createdAt.Value!.Value!, externalId.Value!, id.Value!, tenantId.Value!, tenantName.Value!, contacts, locale.Value!);
+            return new UserItem(createdAt.Value!.Value!, externalId.Value!, id.Value!, organizationId.Value!, organizationName.Value!, contacts, locale.Value!);
         }
 
         /// <summary>
@@ -280,11 +280,11 @@ namespace Hermes.ServerSdk.Model
             if (userItem.Id == null)
                 throw new ArgumentNullException(nameof(userItem.Id), "Property is required for class UserItem.");
 
-            if (userItem.TenantId == null)
-                throw new ArgumentNullException(nameof(userItem.TenantId), "Property is required for class UserItem.");
+            if (userItem.OrganizationId == null)
+                throw new ArgumentNullException(nameof(userItem.OrganizationId), "Property is required for class UserItem.");
 
-            if (userItem.TenantName == null)
-                throw new ArgumentNullException(nameof(userItem.TenantName), "Property is required for class UserItem.");
+            if (userItem.OrganizationName == null)
+                throw new ArgumentNullException(nameof(userItem.OrganizationName), "Property is required for class UserItem.");
 
             if (userItem.ContactsOption.IsSet && userItem.Contacts == null)
                 throw new ArgumentNullException(nameof(userItem.Contacts), "Property is required for class UserItem.");
@@ -295,9 +295,9 @@ namespace Hermes.ServerSdk.Model
 
             writer.WriteString("id", userItem.Id);
 
-            writer.WriteString("tenant_id", userItem.TenantId);
+            writer.WriteString("organization_id", userItem.OrganizationId);
 
-            writer.WriteString("tenant_name", userItem.TenantName);
+            writer.WriteString("organization_name", userItem.OrganizationName);
 
             if (userItem.ContactsOption.IsSet)
             {

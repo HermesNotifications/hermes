@@ -18,11 +18,11 @@
 |**deliveredAt** | **OffsetDateTime** |  |  [optional] |
 |**id** | **String** |  |  |
 |**idempotencyKey** | **String** |  |  [optional] |
+|**organizationId** | **String** |  |  |
 |**readAt** | **OffsetDateTime** |  |  [optional] |
 |**sentAt** | **OffsetDateTime** |  |  [optional] |
 |**status** | **String** |  |  |
 |**templateId** | **String** |  |  [optional] |
-|**tenantId** | **String** |  |  |
 |**title** | **String** |  |  |
 |**userId** | **String** |  |  |
 

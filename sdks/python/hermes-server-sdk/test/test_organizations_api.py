@@ -14,29 +14,29 @@
 
 import unittest
 
-from hermes_server_sdk.api.tenants_api import TenantsApi
+from hermes_server_sdk.api.organizations_api import OrganizationsApi
 
 
-class TestTenantsApi(unittest.TestCase):
-    """TenantsApi unit test stubs"""
+class TestOrganizationsApi(unittest.TestCase):
+    """OrganizationsApi unit test stubs"""
 
     def setUp(self) -> None:
-        self.api = TenantsApi()
+        self.api = OrganizationsApi()
 
     def tearDown(self) -> None:
         pass
 
-    def test_create_tenant(self) -> None:
-        """Test case for create_tenant
+    def test_create_organization(self) -> None:
+        """Test case for create_organization
 
-        Create a tenant
+        Create an organization
         """
         pass
 
-    def test_list_tenants(self) -> None:
-        """Test case for list_tenants
+    def test_list_organizations(self) -> None:
+        """Test case for list_organizations
 
-        List tenants
+        List organizations
         """
         pass
 

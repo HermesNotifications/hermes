@@ -16,11 +16,11 @@ Name | Type | Description | Notes
 **delivered_at** | **datetime** |  | [optional] 
 **id** | **str** |  | 
 **idempotency_key** | **str** |  | [optional] 
+**organization_id** | **str** |  | 
 **read_at** | **datetime** |  | [optional] 
 **sent_at** | **datetime** |  | [optional] 
 **status** | **str** |  | 
 **template_id** | **str** |  | [optional] 
-**tenant_id** | **str** |  | 
 **title** | **str** |  | 
 **user_id** | **str** |  | 
 

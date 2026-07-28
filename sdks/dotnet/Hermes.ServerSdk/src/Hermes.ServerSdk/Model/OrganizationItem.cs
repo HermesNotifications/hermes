@@ -26,12 +26,12 @@ using Hermes.ServerSdk.Client;
 namespace Hermes.ServerSdk.Model
 {
     /// <summary>
-    /// TenantItem
+    /// OrganizationItem
     /// </summary>
-    public partial class TenantItem : IValidatableObject
+    public partial class OrganizationItem : IValidatableObject
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="TenantItem" /> class.
+        /// Initializes a new instance of the <see cref="OrganizationItem" /> class.
         /// </summary>
         /// <param name="createdAt">createdAt</param>
         /// <param name="defaultLocale">defaultLocale</param>
@@ -40,7 +40,7 @@ namespace Hermes.ServerSdk.Model
         /// <param name="userCount">userCount</param>
         /// <param name="schema">A URL to the JSON Schema for this object.</param>
         [JsonConstructor]
-        public TenantItem(DateTime createdAt, string defaultLocale, string id, string name, long userCount, Option<string?> schema = default)
+        public OrganizationItem(DateTime createdAt, string defaultLocale, string id, string name, long userCount, Option<string?> schema = default)
         {
             CreatedAt = createdAt;
             DefaultLocale = defaultLocale;
@@ -104,7 +104,7 @@ namespace Hermes.ServerSdk.Model
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            sb.Append("class TenantItem {\n");
+            sb.Append("class OrganizationItem {\n");
             sb.Append("  CreatedAt: ").Append(CreatedAt).Append("\n");
             sb.Append("  DefaultLocale: ").Append(DefaultLocale).Append("\n");
             sb.Append("  Id: ").Append(Id).Append("\n");
@@ -127,9 +127,9 @@ namespace Hermes.ServerSdk.Model
     }
 
     /// <summary>
-    /// A Json converter for type <see cref="TenantItem" />
+    /// A Json converter for type <see cref="OrganizationItem" />
     /// </summary>
-    public class TenantItemJsonConverter : JsonConverter<TenantItem>
+    public class OrganizationItemJsonConverter : JsonConverter<OrganizationItem>
     {
         /// <summary>
         /// The format to use to serialize CreatedAt
@@ -137,14 +137,14 @@ namespace Hermes.ServerSdk.Model
         public static string CreatedAtFormat { get; set; } = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffffffK";
 
         /// <summary>
-        /// Deserializes json to <see cref="TenantItem" />
+        /// Deserializes json to <see cref="OrganizationItem" />
         /// </summary>
         /// <param name="utf8JsonReader"></param>
         /// <param name="typeToConvert"></param>
         /// <param name="jsonSerializerOptions"></param>
         /// <returns></returns>
         /// <exception cref="JsonException"></exception>
-        public override TenantItem Read(ref Utf8JsonReader utf8JsonReader, Type typeToConvert, JsonSerializerOptions jsonSerializerOptions)
+        public override OrganizationItem Read(ref Utf8JsonReader utf8JsonReader, Type typeToConvert, JsonSerializerOptions jsonSerializerOptions)
         {
             int currentDepth = utf8JsonReader.CurrentDepth;
 
@@ -200,89 +200,89 @@ namespace Hermes.ServerSdk.Model
             }
 
             if (!createdAt.IsSet)
-                throw new ArgumentException("Property is required for class TenantItem.", nameof(createdAt));
+                throw new ArgumentException("Property is required for class OrganizationItem.", nameof(createdAt));
 
             if (!defaultLocale.IsSet)
-                throw new ArgumentException("Property is required for class TenantItem.", nameof(defaultLocale));
+                throw new ArgumentException("Property is required for class OrganizationItem.", nameof(defaultLocale));
 
             if (!id.IsSet)
-                throw new ArgumentException("Property is required for class TenantItem.", nameof(id));
+                throw new ArgumentException("Property is required for class OrganizationItem.", nameof(id));
 
             if (!name.IsSet)
-                throw new ArgumentException("Property is required for class TenantItem.", nameof(name));
+                throw new ArgumentException("Property is required for class OrganizationItem.", nameof(name));
 
             if (!userCount.IsSet)
-                throw new ArgumentException("Property is required for class TenantItem.", nameof(userCount));
+                throw new ArgumentException("Property is required for class OrganizationItem.", nameof(userCount));
 
             if (createdAt.IsSet && createdAt.Value == null)
-                throw new ArgumentNullException(nameof(createdAt), "Property is not nullable for class TenantItem.");
+                throw new ArgumentNullException(nameof(createdAt), "Property is not nullable for class OrganizationItem.");
 
             if (defaultLocale.IsSet && defaultLocale.Value == null)
-                throw new ArgumentNullException(nameof(defaultLocale), "Property is not nullable for class TenantItem.");
+                throw new ArgumentNullException(nameof(defaultLocale), "Property is not nullable for class OrganizationItem.");
 
             if (id.IsSet && id.Value == null)
-                throw new ArgumentNullException(nameof(id), "Property is not nullable for class TenantItem.");
+                throw new ArgumentNullException(nameof(id), "Property is not nullable for class OrganizationItem.");
 
             if (name.IsSet && name.Value == null)
-                throw new ArgumentNullException(nameof(name), "Property is not nullable for class TenantItem.");
+                throw new ArgumentNullException(nameof(name), "Property is not nullable for class OrganizationItem.");
 
             if (userCount.IsSet && userCount.Value == null)
-                throw new ArgumentNullException(nameof(userCount), "Property is not nullable for class TenantItem.");
+                throw new ArgumentNullException(nameof(userCount), "Property is not nullable for class OrganizationItem.");
 
             if (schema.IsSet && schema.Value == null)
-                throw new ArgumentNullException(nameof(schema), "Property is not nullable for class TenantItem.");
+                throw new ArgumentNullException(nameof(schema), "Property is not nullable for class OrganizationItem.");
 
-            return new TenantItem(createdAt.Value!.Value!, defaultLocale.Value!, id.Value!, name.Value!, userCount.Value!.Value!, schema);
+            return new OrganizationItem(createdAt.Value!.Value!, defaultLocale.Value!, id.Value!, name.Value!, userCount.Value!.Value!, schema);
         }
 
         /// <summary>
-        /// Serializes a <see cref="TenantItem" />
+        /// Serializes a <see cref="OrganizationItem" />
         /// </summary>
         /// <param name="writer"></param>
-        /// <param name="tenantItem"></param>
+        /// <param name="organizationItem"></param>
         /// <param name="jsonSerializerOptions"></param>
         /// <exception cref="NotImplementedException"></exception>
-        public override void Write(Utf8JsonWriter writer, TenantItem tenantItem, JsonSerializerOptions jsonSerializerOptions)
+        public override void Write(Utf8JsonWriter writer, OrganizationItem organizationItem, JsonSerializerOptions jsonSerializerOptions)
         {
             writer.WriteStartObject();
 
-            WriteProperties(writer, tenantItem, jsonSerializerOptions);
+            WriteProperties(writer, organizationItem, jsonSerializerOptions);
             writer.WriteEndObject();
         }
 
         /// <summary>
-        /// Serializes the properties of <see cref="TenantItem" />
+        /// Serializes the properties of <see cref="OrganizationItem" />
         /// </summary>
         /// <param name="writer"></param>
-        /// <param name="tenantItem"></param>
+        /// <param name="organizationItem"></param>
         /// <param name="jsonSerializerOptions"></param>
         /// <exception cref="NotImplementedException"></exception>
-        public void WriteProperties(Utf8JsonWriter writer, TenantItem tenantItem, JsonSerializerOptions jsonSerializerOptions)
+        public void WriteProperties(Utf8JsonWriter writer, OrganizationItem organizationItem, JsonSerializerOptions jsonSerializerOptions)
         {
-            if (tenantItem.DefaultLocale == null)
-                throw new ArgumentNullException(nameof(tenantItem.DefaultLocale), "Property is required for class TenantItem.");
+            if (organizationItem.DefaultLocale == null)
+                throw new ArgumentNullException(nameof(organizationItem.DefaultLocale), "Property is required for class OrganizationItem.");
 
-            if (tenantItem.Id == null)
-                throw new ArgumentNullException(nameof(tenantItem.Id), "Property is required for class TenantItem.");
+            if (organizationItem.Id == null)
+                throw new ArgumentNullException(nameof(organizationItem.Id), "Property is required for class OrganizationItem.");
 
-            if (tenantItem.Name == null)
-                throw new ArgumentNullException(nameof(tenantItem.Name), "Property is required for class TenantItem.");
+            if (organizationItem.Name == null)
+                throw new ArgumentNullException(nameof(organizationItem.Name), "Property is required for class OrganizationItem.");
 
-            if (tenantItem.SchemaOption.IsSet && tenantItem.Schema == null)
-                throw new ArgumentNullException(nameof(tenantItem.Schema), "Property is required for class TenantItem.");
+            if (organizationItem.SchemaOption.IsSet && organizationItem.Schema == null)
+                throw new ArgumentNullException(nameof(organizationItem.Schema), "Property is required for class OrganizationItem.");
 
-            writer.WriteString("created_at", tenantItem.CreatedAt.ToString(CreatedAtFormat));
+            writer.WriteString("created_at", organizationItem.CreatedAt.ToString(CreatedAtFormat));
 
-            writer.WriteString("default_locale", tenantItem.DefaultLocale);
+            writer.WriteString("default_locale", organizationItem.DefaultLocale);
 
-            writer.WriteString("id", tenantItem.Id);
+            writer.WriteString("id", organizationItem.Id);
 
-            writer.WriteString("name", tenantItem.Name);
+            writer.WriteString("name", organizationItem.Name);
 
-            writer.WriteNumber("user_count", tenantItem.UserCount);
+            writer.WriteNumber("user_count", organizationItem.UserCount);
 
-            if (tenantItem.SchemaOption.IsSet)
-                writer.WriteString("$schema", tenantItem.Schema);
+            if (organizationItem.SchemaOption.IsSet)
+                writer.WriteString("$schema", organizationItem.Schema);
         }
     }
 }

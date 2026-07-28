@@ -1,6 +1,6 @@
 /*
  * Hermes Admin API
- * Server-to-server API for managing notification groups, types, and sending notifications.
+ * Server-to-server API for managing subscription categories, templates, and notifications.
  *
  * The version of the OpenAPI document: 1.0.0
  * 
@@ -73,6 +73,14 @@ public class NotificationTest {
     }
 
     /**
+     * Test the property 'categoryId'
+     */
+    @Test
+    public void categoryIdTest() {
+        // TODO: test categoryId
+    }
+
+    /**
      * Test the property 'channels'
      */
     @Test
@@ -105,14 +113,6 @@ public class NotificationTest {
     }
 
     /**
-     * Test the property 'groupId'
-     */
-    @Test
-    public void groupIdTest() {
-        // TODO: test groupId
-    }
-
-    /**
      * Test the property 'id'
      */
     @Test
@@ -126,6 +126,14 @@ public class NotificationTest {
     @Test
     public void idempotencyKeyTest() {
         // TODO: test idempotencyKey
+    }
+
+    /**
+     * Test the property 'organizationId'
+     */
+    @Test
+    public void organizationIdTest() {
+        // TODO: test organizationId
     }
 
     /**
@@ -153,11 +161,11 @@ public class NotificationTest {
     }
 
     /**
-     * Test the property 'tenantId'
+     * Test the property 'templateId'
      */
     @Test
-    public void tenantIdTest() {
-        // TODO: test tenantId
+    public void templateIdTest() {
+        // TODO: test templateId
     }
 
     /**
@@ -166,14 +174,6 @@ public class NotificationTest {
     @Test
     public void titleTest() {
         // TODO: test title
-    }
-
-    /**
-     * Test the property 'typeId'
-     */
-    @Test
-    public void typeIdTest() {
-        // TODO: test typeId
     }
 
     /**

@@ -42,8 +42,8 @@ class TestUserItem(unittest.TestCase):
                 external_id = '',
                 id = '',
                 locale = '',
-                tenant_id = '',
-                tenant_name = ''
+                organization_id = '',
+                organization_name = ''
             )
         else:
             return UserItem(
@@ -51,8 +51,8 @@ class TestUserItem(unittest.TestCase):
                 external_id = '',
                 id = '',
                 locale = '',
-                tenant_id = '',
-                tenant_name = '',
+                organization_id = '',
+                organization_name = '',
         )
         """
 

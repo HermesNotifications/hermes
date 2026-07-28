@@ -8,7 +8,7 @@ Method | HTTP request | Description
 
 
 # **list_users**
-> List[UserItem] list_users(tenant_id=tenant_id)
+> List[UserItem] list_users(organization_id=organization_id)
 
 List users
 
@@ -32,11 +32,11 @@ configuration = hermes_server_sdk.Configuration(
 with hermes_server_sdk.ApiClient(configuration) as api_client:
     # Create an instance of the API class
     api_instance = hermes_server_sdk.UsersApi(api_client)
-    tenant_id = 'tenant_id_example' # str | Filter by tenant ID (optional)
+    organization_id = 'organization_id_example' # str | Filter by organization ID (optional)
 
     try:
         # List users
-        api_response = api_instance.list_users(tenant_id=tenant_id)
+        api_response = api_instance.list_users(organization_id=organization_id)
         print("The response of UsersApi->list_users:\n")
         pprint(api_response)
     except Exception as e:
@@ -50,7 +50,7 @@ with hermes_server_sdk.ApiClient(configuration) as api_client:
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **tenant_id** | **str**| Filter by tenant ID | [optional] 
+ **organization_id** | **str**| Filter by organization ID | [optional] 
 
 ### Return type
 

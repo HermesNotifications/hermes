@@ -14,10 +14,10 @@
 
 import unittest
 
-from hermes_server_sdk.models.tenant_item import TenantItem
+from hermes_server_sdk.models.organization_item import OrganizationItem
 
-class TestTenantItem(unittest.TestCase):
-    """TenantItem unit test stubs"""
+class TestOrganizationItem(unittest.TestCase):
+    """OrganizationItem unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,16 +25,16 @@ class TestTenantItem(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> TenantItem:
-        """Test TenantItem
+    def make_instance(self, include_optional) -> OrganizationItem:
+        """Test OrganizationItem
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `TenantItem`
+        # uncomment below to create an instance of `OrganizationItem`
         """
-        model = TenantItem()
+        model = OrganizationItem()
         if include_optional:
-            return TenantItem(
+            return OrganizationItem(
                 var_schema = '',
                 created_at = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 default_locale = '',
@@ -43,7 +43,7 @@ class TestTenantItem(unittest.TestCase):
                 user_count = 56
             )
         else:
-            return TenantItem(
+            return OrganizationItem(
                 created_at = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 default_locale = '',
                 id = '',
@@ -52,8 +52,8 @@ class TestTenantItem(unittest.TestCase):
         )
         """
 
-    def testTenantItem(self):
-        """Test TenantItem"""
+    def testOrganizationItem(self):
+        """Test OrganizationItem"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

@@ -90,6 +90,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List organizations */
+        get: operations["list-organizations"];
+        put?: never;
+        /** Create an organization */
+        post: operations["create-organization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/send": {
         parameters: {
             query?: never;
@@ -215,24 +233,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tenants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List tenants */
-        get: operations["list-tenants"];
-        put?: never;
-        /** Create a tenant */
-        post: operations["create-tenant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/users": {
         parameters: {
             query?: never;
@@ -304,6 +304,16 @@ export interface components {
              */
             sort_order?: number;
         };
+        CreateOrganizationInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example //schemas/CreateOrganizationInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Organization name */
+            name: string;
+        };
         CreateSubscriptionInputBody: {
             /**
              * Format: uri
@@ -342,16 +352,6 @@ export interface components {
             slug: string;
             /** @description Subscription ID (null for standalone) */
             subscription_id?: string;
-        };
-        CreateTenantInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example //schemas/CreateTenantInputBody.json
-             */
-            readonly $schema?: string;
-            /** @description Tenant name */
-            name: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -423,13 +423,13 @@ export interface components {
             delivered_at?: string;
             id: string;
             idempotency_key?: string;
+            organization_id: string;
             /** Format: date-time */
             read_at?: string;
             /** Format: date-time */
             sent_at?: string;
             status: string;
             template_id?: string;
-            tenant_id: string;
             title: string;
             user_id: string;
         };
@@ -450,10 +450,10 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             id: string;
+            organization_id: string;
             status: string;
             template_id?: string;
             template_slug?: string;
-            tenant_id: string;
             title: string;
             user_id: string;
         };
@@ -488,6 +488,21 @@ export interface components {
             name: string;
             slug: string;
             subscription_id?: string;
+        };
+        OrganizationItem: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example //schemas/OrganizationItem.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            created_at: string;
+            default_locale: string;
+            id: string;
+            name: string;
+            /** Format: int64 */
+            user_count: number;
         };
         SendContent: {
             /** @description Optional action button label */
@@ -534,8 +549,8 @@ export interface components {
             contacts?: {
                 [key: string]: string;
             };
-            /** @description Tenant identifier */
-            tenant_id: string;
+            /** @description Organization identifier */
+            organization_id: string;
             /** @description External user identifier */
             user_id: string;
         };
@@ -572,21 +587,6 @@ export interface components {
             /** Format: int64 */
             sort_order: number;
         };
-        TenantItem: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example //schemas/TenantItem.json
-             */
-            readonly $schema?: string;
-            /** Format: date-time */
-            created_at: string;
-            default_locale: string;
-            id: string;
-            name: string;
-            /** Format: int64 */
-            user_count: number;
-        };
         TokenInputBody: {
             /**
              * Format: uri
@@ -599,8 +599,8 @@ export interface components {
              * @description Requested token lifetime in seconds (min 3600 = 1h, max 604800 = 7d, default 14400 = 4h). The actual expiry includes ±10% random jitter to prevent thundering-herd token refreshes.
              */
             expires_in?: number;
-            /** @description Tenant identifier */
-            tenant_id: string;
+            /** @description Organization identifier */
+            organization_id: string;
             /** @description External user identifier */
             user_id: string;
         };
@@ -682,8 +682,8 @@ export interface components {
             external_id: string;
             id: string;
             locale: string | null;
-            tenant_id: string;
-            tenant_name: string;
+            organization_id: string;
+            organization_name: string;
         };
     };
     responses: never;
@@ -870,6 +870,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationStatusOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationItem"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganizationInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationItem"];
                 };
             };
             /** @description Error */
@@ -1309,73 +1371,11 @@ export interface operations {
             };
         };
     };
-    "list-tenants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantItem"][] | null;
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "create-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTenantInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantItem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
     "list-users": {
         parameters: {
             query?: {
-                /** @description Filter by tenant ID */
-                tenant_id?: string;
+                /** @description Filter by organization ID */
+                organization_id?: string;
             };
             header?: never;
             path?: never;

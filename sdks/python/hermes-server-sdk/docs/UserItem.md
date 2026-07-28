@@ -10,8 +10,8 @@ Name | Type | Description | Notes
 **external_id** | **str** |  | 
 **id** | **str** |  | 
 **locale** | **str** |  | 
-**tenant_id** | **str** |  | 
-**tenant_name** | **str** |  | 
+**organization_id** | **str** |  | 
+**organization_name** | **str** |  | 
 
 ## Example
 

@@ -38,14 +38,14 @@ class Notification(BaseModel):
     delivered_at: Optional[datetime] = None
     id: StrictStr
     idempotency_key: Optional[StrictStr] = None
+    organization_id: StrictStr
     read_at: Optional[datetime] = None
     sent_at: Optional[datetime] = None
     status: StrictStr
     template_id: Optional[StrictStr] = None
-    tenant_id: StrictStr
     title: StrictStr
     user_id: StrictStr
-    __properties: ClassVar[List[str]] = ["action_label", "action_url", "archived_at", "body", "category_id", "channels", "created_at", "deleted_at", "delivered_at", "id", "idempotency_key", "read_at", "sent_at", "status", "template_id", "tenant_id", "title", "user_id"]
+    __properties: ClassVar[List[str]] = ["action_label", "action_url", "archived_at", "body", "category_id", "channels", "created_at", "deleted_at", "delivered_at", "id", "idempotency_key", "organization_id", "read_at", "sent_at", "status", "template_id", "title", "user_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -114,11 +114,11 @@ class Notification(BaseModel):
             "delivered_at": obj.get("delivered_at"),
             "id": obj.get("id"),
             "idempotency_key": obj.get("idempotency_key"),
+            "organization_id": obj.get("organization_id"),
             "read_at": obj.get("read_at"),
             "sent_at": obj.get("sent_at"),
             "status": obj.get("status"),
             "template_id": obj.get("template_id"),
-            "tenant_id": obj.get("tenant_id"),
             "title": obj.get("title"),
             "user_id": obj.get("user_id")
         })

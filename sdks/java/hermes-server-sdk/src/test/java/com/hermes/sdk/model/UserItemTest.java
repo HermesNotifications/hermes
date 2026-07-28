@@ -81,19 +81,19 @@ public class UserItemTest {
     }
 
     /**
-     * Test the property 'tenantId'
+     * Test the property 'organizationId'
      */
     @Test
-    public void tenantIdTest() {
-        // TODO: test tenantId
+    public void organizationIdTest() {
+        // TODO: test organizationId
     }
 
     /**
-     * Test the property 'tenantName'
+     * Test the property 'organizationName'
      */
     @Test
-    public void tenantNameTest() {
-        // TODO: test tenantName
+    public void organizationNameTest() {
+        // TODO: test organizationName
     }
 
 }

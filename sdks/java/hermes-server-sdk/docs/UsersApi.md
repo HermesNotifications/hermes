@@ -9,7 +9,7 @@ All URIs are relative to *http://localhost*
 
 <a id="listUsers"></a>
 # **listUsers**
-> List&lt;UserItem&gt; listUsers(tenantId)
+> List&lt;UserItem&gt; listUsers(organizationId)
 
 List users
 
@@ -28,9 +28,9 @@ public class Example {
     defaultClient.setBasePath("http://localhost");
 
     UsersApi apiInstance = new UsersApi(defaultClient);
-    String tenantId = "tenantId_example"; // String | Filter by tenant ID
+    String organizationId = "organizationId_example"; // String | Filter by organization ID
     try {
-      List<UserItem> result = apiInstance.listUsers(tenantId);
+      List<UserItem> result = apiInstance.listUsers(organizationId);
       System.out.println(result);
     } catch (ApiException e) {
       System.err.println("Exception when calling UsersApi#listUsers");
@@ -47,7 +47,7 @@ public class Example {
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **tenantId** | **String**| Filter by tenant ID | [optional] |
+| **organizationId** | **String**| Filter by organization ID | [optional] |
 
 ### Return type
 

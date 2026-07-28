@@ -21,9 +21,9 @@ __all__ = [
     "APIKeysApi",
     "AuthApi",
     "NotificationsApi",
+    "OrganizationsApi",
     "SubscriptionsApi",
     "TemplatesApi",
-    "TenantsApi",
     "UsersApi",
     "ApiResponse",
     "ApiClient",
@@ -37,9 +37,9 @@ __all__ = [
     "ApiKeyCreatedOutputBody",
     "CreateAPIKeyInputBody",
     "CreateCategoryInputBody",
+    "CreateOrganizationInputBody",
     "CreateSubscriptionInputBody",
     "CreateTemplateInputBody",
-    "CreateTenantInputBody",
     "ErrorDetail",
     "ErrorModel",
     "Item",
@@ -48,13 +48,13 @@ __all__ = [
     "NotificationItem",
     "NotificationStatusOutputBody",
     "NotificationTemplate",
+    "OrganizationItem",
     "SendContent",
     "SendInputBody",
     "SendOutputBody",
     "SendRecipient",
     "Subscription",
     "SubscriptionCategory",
-    "TenantItem",
     "TokenInputBody",
     "TokenOutputBody",
     "UpdateCategoryInputBody",
@@ -67,9 +67,9 @@ __all__ = [
 from hermes_server_sdk.api.api_keys_api import APIKeysApi as APIKeysApi
 from hermes_server_sdk.api.auth_api import AuthApi as AuthApi
 from hermes_server_sdk.api.notifications_api import NotificationsApi as NotificationsApi
+from hermes_server_sdk.api.organizations_api import OrganizationsApi as OrganizationsApi
 from hermes_server_sdk.api.subscriptions_api import SubscriptionsApi as SubscriptionsApi
 from hermes_server_sdk.api.templates_api import TemplatesApi as TemplatesApi
-from hermes_server_sdk.api.tenants_api import TenantsApi as TenantsApi
 from hermes_server_sdk.api.users_api import UsersApi as UsersApi
 
 # import ApiClient
@@ -87,9 +87,9 @@ from hermes_server_sdk.exceptions import ApiException as ApiException
 from hermes_server_sdk.models.api_key_created_output_body import ApiKeyCreatedOutputBody as ApiKeyCreatedOutputBody
 from hermes_server_sdk.models.create_api_key_input_body import CreateAPIKeyInputBody as CreateAPIKeyInputBody
 from hermes_server_sdk.models.create_category_input_body import CreateCategoryInputBody as CreateCategoryInputBody
+from hermes_server_sdk.models.create_organization_input_body import CreateOrganizationInputBody as CreateOrganizationInputBody
 from hermes_server_sdk.models.create_subscription_input_body import CreateSubscriptionInputBody as CreateSubscriptionInputBody
 from hermes_server_sdk.models.create_template_input_body import CreateTemplateInputBody as CreateTemplateInputBody
-from hermes_server_sdk.models.create_tenant_input_body import CreateTenantInputBody as CreateTenantInputBody
 from hermes_server_sdk.models.error_detail import ErrorDetail as ErrorDetail
 from hermes_server_sdk.models.error_model import ErrorModel as ErrorModel
 from hermes_server_sdk.models.item import Item as Item
@@ -98,13 +98,13 @@ from hermes_server_sdk.models.notification_event import NotificationEvent as Not
 from hermes_server_sdk.models.notification_item import NotificationItem as NotificationItem
 from hermes_server_sdk.models.notification_status_output_body import NotificationStatusOutputBody as NotificationStatusOutputBody
 from hermes_server_sdk.models.notification_template import NotificationTemplate as NotificationTemplate
+from hermes_server_sdk.models.organization_item import OrganizationItem as OrganizationItem
 from hermes_server_sdk.models.send_content import SendContent as SendContent
 from hermes_server_sdk.models.send_input_body import SendInputBody as SendInputBody
 from hermes_server_sdk.models.send_output_body import SendOutputBody as SendOutputBody
 from hermes_server_sdk.models.send_recipient import SendRecipient as SendRecipient
 from hermes_server_sdk.models.subscription import Subscription as Subscription
 from hermes_server_sdk.models.subscription_category import SubscriptionCategory as SubscriptionCategory
-from hermes_server_sdk.models.tenant_item import TenantItem as TenantItem
 from hermes_server_sdk.models.token_input_body import TokenInputBody as TokenInputBody
 from hermes_server_sdk.models.token_output_body import TokenOutputBody as TokenOutputBody
 from hermes_server_sdk.models.update_category_input_body import UpdateCategoryInputBody as UpdateCategoryInputBody

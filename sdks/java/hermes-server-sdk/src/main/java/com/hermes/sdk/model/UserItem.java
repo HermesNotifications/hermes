@@ -51,7 +51,7 @@ import com.hermes.sdk.JSON;
 /**
  * UserItem
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-06-15T19:42:17.343876-04:00[America/Toronto]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
 public class UserItem {
   public static final String SERIALIZED_NAME_CONTACTS = "contacts";
   @SerializedName(SERIALIZED_NAME_CONTACTS)
@@ -78,15 +78,15 @@ public class UserItem {
   @javax.annotation.Nullable
   private String locale;
 
-  public static final String SERIALIZED_NAME_TENANT_ID = "tenant_id";
-  @SerializedName(SERIALIZED_NAME_TENANT_ID)
+  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
   @javax.annotation.Nonnull
-  private String tenantId;
+  private String organizationId;
 
-  public static final String SERIALIZED_NAME_TENANT_NAME = "tenant_name";
-  @SerializedName(SERIALIZED_NAME_TENANT_NAME)
+  public static final String SERIALIZED_NAME_ORGANIZATION_NAME = "organization_name";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_NAME)
   @javax.annotation.Nonnull
-  private String tenantName;
+  private String organizationName;
 
   public UserItem() {
   }
@@ -194,41 +194,41 @@ public class UserItem {
   }
 
 
-  public UserItem tenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
+  public UserItem organizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
     return this;
   }
 
   /**
-   * Get tenantId
-   * @return tenantId
+   * Get organizationId
+   * @return organizationId
    */
   @javax.annotation.Nonnull
-  public String getTenantId() {
-    return tenantId;
+  public String getOrganizationId() {
+    return organizationId;
   }
 
-  public void setTenantId(@javax.annotation.Nonnull String tenantId) {
-    this.tenantId = tenantId;
+  public void setOrganizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
   }
 
 
-  public UserItem tenantName(@javax.annotation.Nonnull String tenantName) {
-    this.tenantName = tenantName;
+  public UserItem organizationName(@javax.annotation.Nonnull String organizationName) {
+    this.organizationName = organizationName;
     return this;
   }
 
   /**
-   * Get tenantName
-   * @return tenantName
+   * Get organizationName
+   * @return organizationName
    */
   @javax.annotation.Nonnull
-  public String getTenantName() {
-    return tenantName;
+  public String getOrganizationName() {
+    return organizationName;
   }
 
-  public void setTenantName(@javax.annotation.Nonnull String tenantName) {
-    this.tenantName = tenantName;
+  public void setOrganizationName(@javax.annotation.Nonnull String organizationName) {
+    this.organizationName = organizationName;
   }
 
 
@@ -247,13 +247,13 @@ public class UserItem {
         Objects.equals(this.externalId, userItem.externalId) &&
         Objects.equals(this.id, userItem.id) &&
         Objects.equals(this.locale, userItem.locale) &&
-        Objects.equals(this.tenantId, userItem.tenantId) &&
-        Objects.equals(this.tenantName, userItem.tenantName);
+        Objects.equals(this.organizationId, userItem.organizationId) &&
+        Objects.equals(this.organizationName, userItem.organizationName);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(contacts, createdAt, externalId, id, locale, tenantId, tenantName);
+    return Objects.hash(contacts, createdAt, externalId, id, locale, organizationId, organizationName);
   }
 
   @Override
@@ -265,8 +265,8 @@ public class UserItem {
     sb.append("    externalId: ").append(toIndentedString(externalId)).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    locale: ").append(toIndentedString(locale)).append("\n");
-    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
-    sb.append("    tenantName: ").append(toIndentedString(tenantName)).append("\n");
+    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
+    sb.append("    organizationName: ").append(toIndentedString(organizationName)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -288,10 +288,10 @@ public class UserItem {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("contacts", "created_at", "external_id", "id", "locale", "tenant_id", "tenant_name"));
+    openapiFields = new HashSet<String>(Arrays.asList("contacts", "created_at", "external_id", "id", "locale", "organization_id", "organization_name"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("created_at", "external_id", "id", "locale", "tenant_id", "tenant_name"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("created_at", "external_id", "id", "locale", "organization_id", "organization_name"));
   }
 
   /**
@@ -331,11 +331,11 @@ public class UserItem {
       if ((jsonObj.get("locale") != null && !jsonObj.get("locale").isJsonNull()) && !jsonObj.get("locale").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `locale` to be a primitive type in the JSON string but got `%s`", jsonObj.get("locale").toString()));
       }
-      if (!jsonObj.get("tenant_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_id").toString()));
+      if (!jsonObj.get("organization_id").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
       }
-      if (!jsonObj.get("tenant_name").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `tenant_name` to be a primitive type in the JSON string but got `%s`", jsonObj.get("tenant_name").toString()));
+      if (!jsonObj.get("organization_name").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_name` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_name").toString()));
       }
   }
 

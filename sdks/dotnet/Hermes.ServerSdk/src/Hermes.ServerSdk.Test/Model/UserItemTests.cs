@@ -81,21 +81,21 @@ namespace Hermes.ServerSdk.Test.Model
         }
 
         /// <summary>
-        /// Test the property 'TenantId'
+        /// Test the property 'OrganizationId'
         /// </summary>
         [Fact]
-        public void TenantIdTest()
+        public void OrganizationIdTest()
         {
-            // TODO unit test for the property 'TenantId'
+            // TODO unit test for the property 'OrganizationId'
         }
 
         /// <summary>
-        /// Test the property 'TenantName'
+        /// Test the property 'OrganizationName'
         /// </summary>
         [Fact]
-        public void TenantNameTest()
+        public void OrganizationNameTest()
         {
-            // TODO unit test for the property 'TenantName'
+            // TODO unit test for the property 'OrganizationName'
         }
 
         /// <summary>

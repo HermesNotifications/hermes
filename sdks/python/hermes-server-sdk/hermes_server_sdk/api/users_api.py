@@ -41,7 +41,7 @@ class UsersApi:
     @validate_call
     def list_users(
         self,
-        tenant_id: Annotated[Optional[StrictStr], Field(description="Filter by tenant ID")] = None,
+        organization_id: Annotated[Optional[StrictStr], Field(description="Filter by organization ID")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -58,8 +58,8 @@ class UsersApi:
         """List users
 
 
-        :param tenant_id: Filter by tenant ID
-        :type tenant_id: str
+        :param organization_id: Filter by organization ID
+        :type organization_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -83,7 +83,7 @@ class UsersApi:
         """ # noqa: E501
 
         _param = self._list_users_serialize(
-            tenant_id=tenant_id,
+            organization_id=organization_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -107,7 +107,7 @@ class UsersApi:
     @validate_call
     def list_users_with_http_info(
         self,
-        tenant_id: Annotated[Optional[StrictStr], Field(description="Filter by tenant ID")] = None,
+        organization_id: Annotated[Optional[StrictStr], Field(description="Filter by organization ID")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -124,8 +124,8 @@ class UsersApi:
         """List users
 
 
-        :param tenant_id: Filter by tenant ID
-        :type tenant_id: str
+        :param organization_id: Filter by organization ID
+        :type organization_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -149,7 +149,7 @@ class UsersApi:
         """ # noqa: E501
 
         _param = self._list_users_serialize(
-            tenant_id=tenant_id,
+            organization_id=organization_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -173,7 +173,7 @@ class UsersApi:
     @validate_call
     def list_users_without_preload_content(
         self,
-        tenant_id: Annotated[Optional[StrictStr], Field(description="Filter by tenant ID")] = None,
+        organization_id: Annotated[Optional[StrictStr], Field(description="Filter by organization ID")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -190,8 +190,8 @@ class UsersApi:
         """List users
 
 
-        :param tenant_id: Filter by tenant ID
-        :type tenant_id: str
+        :param organization_id: Filter by organization ID
+        :type organization_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -215,7 +215,7 @@ class UsersApi:
         """ # noqa: E501
 
         _param = self._list_users_serialize(
-            tenant_id=tenant_id,
+            organization_id=organization_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -234,7 +234,7 @@ class UsersApi:
 
     def _list_users_serialize(
         self,
-        tenant_id,
+        organization_id,
         _request_auth,
         _content_type,
         _headers,
@@ -257,9 +257,9 @@ class UsersApi:
 
         # process the path parameters
         # process the query parameters
-        if tenant_id is not None:
+        if organization_id is not None:
             
-            _query_params.append(('tenant_id', tenant_id))
+            _query_params.append(('organization_id', organization_id))
             
         # process the header parameters
         # process the form parameters

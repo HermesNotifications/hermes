@@ -46,9 +46,9 @@ namespace Hermes.ServerSdk.Client
             _jsonOptions.Converters.Add(new ApiKeyCreatedOutputBodyJsonConverter());
             _jsonOptions.Converters.Add(new CreateAPIKeyInputBodyJsonConverter());
             _jsonOptions.Converters.Add(new CreateCategoryInputBodyJsonConverter());
+            _jsonOptions.Converters.Add(new CreateOrganizationInputBodyJsonConverter());
             _jsonOptions.Converters.Add(new CreateSubscriptionInputBodyJsonConverter());
             _jsonOptions.Converters.Add(new CreateTemplateInputBodyJsonConverter());
-            _jsonOptions.Converters.Add(new CreateTenantInputBodyJsonConverter());
             _jsonOptions.Converters.Add(new ErrorDetailJsonConverter());
             _jsonOptions.Converters.Add(new ErrorModelJsonConverter());
             _jsonOptions.Converters.Add(new ItemJsonConverter());
@@ -57,13 +57,13 @@ namespace Hermes.ServerSdk.Client
             _jsonOptions.Converters.Add(new NotificationItemJsonConverter());
             _jsonOptions.Converters.Add(new NotificationStatusOutputBodyJsonConverter());
             _jsonOptions.Converters.Add(new NotificationTemplateJsonConverter());
+            _jsonOptions.Converters.Add(new OrganizationItemJsonConverter());
             _jsonOptions.Converters.Add(new SendContentJsonConverter());
             _jsonOptions.Converters.Add(new SendInputBodyJsonConverter());
             _jsonOptions.Converters.Add(new SendOutputBodyJsonConverter());
             _jsonOptions.Converters.Add(new SendRecipientJsonConverter());
             _jsonOptions.Converters.Add(new SubscriptionJsonConverter());
             _jsonOptions.Converters.Add(new SubscriptionCategoryJsonConverter());
-            _jsonOptions.Converters.Add(new TenantItemJsonConverter());
             _jsonOptions.Converters.Add(new TokenInputBodyJsonConverter());
             _jsonOptions.Converters.Add(new TokenOutputBodyJsonConverter());
             _jsonOptions.Converters.Add(new UpdateCategoryInputBodyJsonConverter());
@@ -76,9 +76,9 @@ namespace Hermes.ServerSdk.Client
             _services.AddSingleton<APIKeysApiEvents>();
             _services.AddSingleton<AuthApiEvents>();
             _services.AddSingleton<NotificationsApiEvents>();
+            _services.AddSingleton<OrganizationsApiEvents>();
             _services.AddSingleton<SubscriptionsApiEvents>();
             _services.AddSingleton<TemplatesApiEvents>();
-            _services.AddSingleton<TenantsApiEvents>();
             _services.AddSingleton<UsersApiEvents>();
         }
 
@@ -100,9 +100,9 @@ namespace Hermes.ServerSdk.Client
             builders.Add(_services.AddHttpClient<IAPIKeysApi, APIKeysApi>("Hermes.ServerSdk.Api.IAPIKeysApi", client));
             builders.Add(_services.AddHttpClient<IAuthApi, AuthApi>("Hermes.ServerSdk.Api.IAuthApi", client));
             builders.Add(_services.AddHttpClient<INotificationsApi, NotificationsApi>("Hermes.ServerSdk.Api.INotificationsApi", client));
+            builders.Add(_services.AddHttpClient<IOrganizationsApi, OrganizationsApi>("Hermes.ServerSdk.Api.IOrganizationsApi", client));
             builders.Add(_services.AddHttpClient<ISubscriptionsApi, SubscriptionsApi>("Hermes.ServerSdk.Api.ISubscriptionsApi", client));
             builders.Add(_services.AddHttpClient<ITemplatesApi, TemplatesApi>("Hermes.ServerSdk.Api.ITemplatesApi", client));
-            builders.Add(_services.AddHttpClient<ITenantsApi, TenantsApi>("Hermes.ServerSdk.Api.ITenantsApi", client));
             builders.Add(_services.AddHttpClient<IUsersApi, UsersApi>("Hermes.ServerSdk.Api.IUsersApi", client));
             
             if (builder != null)

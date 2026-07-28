@@ -1,18 +1,18 @@
-# TenantsApi
+# OrganizationsApi
 
 All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**createTenant**](TenantsApi.md#createTenant) | **POST** /v1/tenants | Create a tenant |
-| [**listTenants**](TenantsApi.md#listTenants) | **GET** /v1/tenants | List tenants |
+| [**createOrganization**](OrganizationsApi.md#createOrganization) | **POST** /v1/organizations | Create an organization |
+| [**listOrganizations**](OrganizationsApi.md#listOrganizations) | **GET** /v1/organizations | List organizations |
 
 
-<a id="createTenant"></a>
-# **createTenant**
-> TenantItem createTenant(createTenantInputBody)
+<a id="createOrganization"></a>
+# **createOrganization**
+> OrganizationItem createOrganization(createOrganizationInputBody)
 
-Create a tenant
+Create an organization
 
 ### Example
 ```java
@@ -21,20 +21,20 @@ import com.hermes.sdk.ApiClient;
 import com.hermes.sdk.ApiException;
 import com.hermes.sdk.Configuration;
 import com.hermes.sdk.models.*;
-import com.hermes.sdk.api.TenantsApi;
+import com.hermes.sdk.api.OrganizationsApi;
 
 public class Example {
   public static void main(String[] args) {
     ApiClient defaultClient = Configuration.getDefaultApiClient();
     defaultClient.setBasePath("http://localhost");
 
-    TenantsApi apiInstance = new TenantsApi(defaultClient);
-    CreateTenantInputBody createTenantInputBody = new CreateTenantInputBody(); // CreateTenantInputBody | 
+    OrganizationsApi apiInstance = new OrganizationsApi(defaultClient);
+    CreateOrganizationInputBody createOrganizationInputBody = new CreateOrganizationInputBody(); // CreateOrganizationInputBody | 
     try {
-      TenantItem result = apiInstance.createTenant(createTenantInputBody);
+      OrganizationItem result = apiInstance.createOrganization(createOrganizationInputBody);
       System.out.println(result);
     } catch (ApiException e) {
-      System.err.println("Exception when calling TenantsApi#createTenant");
+      System.err.println("Exception when calling OrganizationsApi#createOrganization");
       System.err.println("Status code: " + e.getCode());
       System.err.println("Reason: " + e.getResponseBody());
       System.err.println("Response headers: " + e.getResponseHeaders());
@@ -48,11 +48,11 @@ public class Example {
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **createTenantInputBody** | [**CreateTenantInputBody**](CreateTenantInputBody.md)|  | |
+| **createOrganizationInputBody** | [**CreateOrganizationInputBody**](CreateOrganizationInputBody.md)|  | |
 
 ### Return type
 
-[**TenantItem**](TenantItem.md)
+[**OrganizationItem**](OrganizationItem.md)
 
 ### Authorization
 
@@ -69,11 +69,11 @@ No authorization required
 | **201** | Created |  -  |
 | **0** | Error |  -  |
 
-<a id="listTenants"></a>
-# **listTenants**
-> List&lt;TenantItem&gt; listTenants()
+<a id="listOrganizations"></a>
+# **listOrganizations**
+> List&lt;OrganizationItem&gt; listOrganizations()
 
-List tenants
+List organizations
 
 ### Example
 ```java
@@ -82,19 +82,19 @@ import com.hermes.sdk.ApiClient;
 import com.hermes.sdk.ApiException;
 import com.hermes.sdk.Configuration;
 import com.hermes.sdk.models.*;
-import com.hermes.sdk.api.TenantsApi;
+import com.hermes.sdk.api.OrganizationsApi;
 
 public class Example {
   public static void main(String[] args) {
     ApiClient defaultClient = Configuration.getDefaultApiClient();
     defaultClient.setBasePath("http://localhost");
 
-    TenantsApi apiInstance = new TenantsApi(defaultClient);
+    OrganizationsApi apiInstance = new OrganizationsApi(defaultClient);
     try {
-      List<TenantItem> result = apiInstance.listTenants();
+      List<OrganizationItem> result = apiInstance.listOrganizations();
       System.out.println(result);
     } catch (ApiException e) {
-      System.err.println("Exception when calling TenantsApi#listTenants");
+      System.err.println("Exception when calling OrganizationsApi#listOrganizations");
       System.err.println("Status code: " + e.getCode());
       System.err.println("Reason: " + e.getResponseBody());
       System.err.println("Response headers: " + e.getResponseHeaders());
@@ -109,7 +109,7 @@ This endpoint does not need any parameter.
 
 ### Return type
 
-[**List&lt;TenantItem&gt;**](TenantItem.md)
+[**List&lt;OrganizationItem&gt;**](OrganizationItem.md)
 
 ### Authorization
 

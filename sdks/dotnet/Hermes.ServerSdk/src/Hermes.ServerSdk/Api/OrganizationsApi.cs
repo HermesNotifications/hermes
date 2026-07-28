@@ -30,62 +30,62 @@ namespace Hermes.ServerSdk.Api
     /// Represents a collection of functions to interact with the API endpoints
     /// This class is registered as transient.
     /// </summary>
-    public interface ITenantsApi : IApi
+    public interface IOrganizationsApi : IApi
     {
         /// <summary>
         /// The class containing the events
         /// </summary>
-        TenantsApiEvents Events { get; }
+        OrganizationsApiEvents Events { get; }
 
         /// <summary>
-        /// Create a tenant
+        /// Create an organization
         /// </summary>
         /// <remarks>
         /// 
         /// </remarks>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
-        /// <param name="createTenantInputBody"></param>
+        /// <param name="createOrganizationInputBody"></param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="ICreateTenantApiResponse"/>&gt;</returns>
-        Task<ICreateTenantApiResponse> CreateTenantAsync(CreateTenantInputBody createTenantInputBody, System.Threading.CancellationToken cancellationToken = default);
+        /// <returns><see cref="Task"/>&lt;<see cref="ICreateOrganizationApiResponse"/>&gt;</returns>
+        Task<ICreateOrganizationApiResponse> CreateOrganizationAsync(CreateOrganizationInputBody createOrganizationInputBody, System.Threading.CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Create a tenant
+        /// Create an organization
         /// </summary>
         /// <remarks>
         /// 
         /// </remarks>
-        /// <param name="createTenantInputBody"></param>
+        /// <param name="createOrganizationInputBody"></param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="ICreateTenantApiResponse"/>?&gt;</returns>
-        Task<ICreateTenantApiResponse?> CreateTenantOrDefaultAsync(CreateTenantInputBody createTenantInputBody, System.Threading.CancellationToken cancellationToken = default);
+        /// <returns><see cref="Task"/>&lt;<see cref="ICreateOrganizationApiResponse"/>?&gt;</returns>
+        Task<ICreateOrganizationApiResponse?> CreateOrganizationOrDefaultAsync(CreateOrganizationInputBody createOrganizationInputBody, System.Threading.CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// List tenants
+        /// List organizations
         /// </summary>
         /// <remarks>
         /// 
         /// </remarks>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="IListTenantsApiResponse"/>&gt;</returns>
-        Task<IListTenantsApiResponse> ListTenantsAsync(System.Threading.CancellationToken cancellationToken = default);
+        /// <returns><see cref="Task"/>&lt;<see cref="IListOrganizationsApiResponse"/>&gt;</returns>
+        Task<IListOrganizationsApiResponse> ListOrganizationsAsync(System.Threading.CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// List tenants
+        /// List organizations
         /// </summary>
         /// <remarks>
         /// 
         /// </remarks>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="IListTenantsApiResponse"/>?&gt;</returns>
-        Task<IListTenantsApiResponse?> ListTenantsOrDefaultAsync(System.Threading.CancellationToken cancellationToken = default);
+        /// <returns><see cref="Task"/>&lt;<see cref="IListOrganizationsApiResponse"/>?&gt;</returns>
+        Task<IListOrganizationsApiResponse?> ListOrganizationsOrDefaultAsync(System.Threading.CancellationToken cancellationToken = default);
     }
 
     /// <summary>
-    /// The <see cref="ICreateTenantApiResponse"/>
+    /// The <see cref="ICreateOrganizationApiResponse"/>
     /// </summary>
-    public interface ICreateTenantApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.TenantItem?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface ICreateOrganizationApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.OrganizationItem?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 201 Created
@@ -101,9 +101,9 @@ namespace Hermes.ServerSdk.Api
     }
 
     /// <summary>
-    /// The <see cref="IListTenantsApiResponse"/>
+    /// The <see cref="IListOrganizationsApiResponse"/>
     /// </summary>
-    public interface IListTenantsApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<TenantItem>?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IListOrganizationsApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<OrganizationItem>?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
@@ -121,53 +121,53 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// Represents a collection of functions to interact with the API endpoints
     /// </summary>
-    public class TenantsApiEvents
+    public class OrganizationsApiEvents
     {
         /// <summary>
         /// The event raised after the server response
         /// </summary>
-        public event EventHandler<ApiResponseEventArgs>? OnCreateTenant;
+        public event EventHandler<ApiResponseEventArgs>? OnCreateOrganization;
 
         /// <summary>
         /// The event raised after an error querying the server
         /// </summary>
-        public event EventHandler<ExceptionEventArgs>? OnErrorCreateTenant;
+        public event EventHandler<ExceptionEventArgs>? OnErrorCreateOrganization;
 
-        internal void ExecuteOnCreateTenant(TenantsApi.CreateTenantApiResponse apiResponse)
+        internal void ExecuteOnCreateOrganization(OrganizationsApi.CreateOrganizationApiResponse apiResponse)
         {
-            OnCreateTenant?.Invoke(this, new ApiResponseEventArgs(apiResponse));
+            OnCreateOrganization?.Invoke(this, new ApiResponseEventArgs(apiResponse));
         }
 
-        internal void ExecuteOnErrorCreateTenant(Exception exception)
+        internal void ExecuteOnErrorCreateOrganization(Exception exception)
         {
-            OnErrorCreateTenant?.Invoke(this, new ExceptionEventArgs(exception));
+            OnErrorCreateOrganization?.Invoke(this, new ExceptionEventArgs(exception));
         }
 
         /// <summary>
         /// The event raised after the server response
         /// </summary>
-        public event EventHandler<ApiResponseEventArgs>? OnListTenants;
+        public event EventHandler<ApiResponseEventArgs>? OnListOrganizations;
 
         /// <summary>
         /// The event raised after an error querying the server
         /// </summary>
-        public event EventHandler<ExceptionEventArgs>? OnErrorListTenants;
+        public event EventHandler<ExceptionEventArgs>? OnErrorListOrganizations;
 
-        internal void ExecuteOnListTenants(TenantsApi.ListTenantsApiResponse apiResponse)
+        internal void ExecuteOnListOrganizations(OrganizationsApi.ListOrganizationsApiResponse apiResponse)
         {
-            OnListTenants?.Invoke(this, new ApiResponseEventArgs(apiResponse));
+            OnListOrganizations?.Invoke(this, new ApiResponseEventArgs(apiResponse));
         }
 
-        internal void ExecuteOnErrorListTenants(Exception exception)
+        internal void ExecuteOnErrorListOrganizations(Exception exception)
         {
-            OnErrorListTenants?.Invoke(this, new ExceptionEventArgs(exception));
+            OnErrorListOrganizations?.Invoke(this, new ExceptionEventArgs(exception));
         }
     }
 
     /// <summary>
     /// Represents a collection of functions to interact with the API endpoints
     /// </summary>
-    public sealed partial class TenantsApi : ITenantsApi
+    public sealed partial class OrganizationsApi : IOrganizationsApi
     {
         private JsonSerializerOptions _jsonSerializerOptions;
 
@@ -179,7 +179,7 @@ namespace Hermes.ServerSdk.Api
         /// <summary>
         /// The logger
         /// </summary>
-        public ILogger<TenantsApi> Logger { get; }
+        public ILogger<OrganizationsApi> Logger { get; }
 
         /// <summary>
         /// The HttpClient
@@ -189,43 +189,43 @@ namespace Hermes.ServerSdk.Api
         /// <summary>
         /// The class containing the events
         /// </summary>
-        public TenantsApiEvents Events { get; }
+        public OrganizationsApiEvents Events { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="TenantsApi"/> class.
+        /// Initializes a new instance of the <see cref="OrganizationsApi"/> class.
         /// </summary>
         /// <returns></returns>
-        public TenantsApi(ILogger<TenantsApi> logger, ILoggerFactory loggerFactory, HttpClient httpClient, JsonSerializerOptionsProvider jsonSerializerOptionsProvider, TenantsApiEvents tenantsApiEvents)
+        public OrganizationsApi(ILogger<OrganizationsApi> logger, ILoggerFactory loggerFactory, HttpClient httpClient, JsonSerializerOptionsProvider jsonSerializerOptionsProvider, OrganizationsApiEvents organizationsApiEvents)
         {
             _jsonSerializerOptions = jsonSerializerOptionsProvider.Options;
             LoggerFactory = loggerFactory;
-            Logger = LoggerFactory.CreateLogger<TenantsApi>();
+            Logger = LoggerFactory.CreateLogger<OrganizationsApi>();
             HttpClient = httpClient;
-            Events = tenantsApiEvents;
+            Events = organizationsApiEvents;
         }
 
-        partial void FormatCreateTenant(CreateTenantInputBody createTenantInputBody);
+        partial void FormatCreateOrganization(CreateOrganizationInputBody createOrganizationInputBody);
 
         /// <summary>
         /// Validates the request parameters
         /// </summary>
-        /// <param name="createTenantInputBody"></param>
+        /// <param name="createOrganizationInputBody"></param>
         /// <returns></returns>
-        private void ValidateCreateTenant(CreateTenantInputBody createTenantInputBody)
+        private void ValidateCreateOrganization(CreateOrganizationInputBody createOrganizationInputBody)
         {
-            if (createTenantInputBody == null)
-                throw new ArgumentNullException(nameof(createTenantInputBody));
+            if (createOrganizationInputBody == null)
+                throw new ArgumentNullException(nameof(createOrganizationInputBody));
         }
 
         /// <summary>
         /// Processes the server response
         /// </summary>
         /// <param name="apiResponseLocalVar"></param>
-        /// <param name="createTenantInputBody"></param>
-        private void AfterCreateTenantDefaultImplementation(ICreateTenantApiResponse apiResponseLocalVar, CreateTenantInputBody createTenantInputBody)
+        /// <param name="createOrganizationInputBody"></param>
+        private void AfterCreateOrganizationDefaultImplementation(ICreateOrganizationApiResponse apiResponseLocalVar, CreateOrganizationInputBody createOrganizationInputBody)
         {
             bool suppressDefaultLog = false;
-            AfterCreateTenant(ref suppressDefaultLog, apiResponseLocalVar, createTenantInputBody);
+            AfterCreateOrganization(ref suppressDefaultLog, apiResponseLocalVar, createOrganizationInputBody);
             if (!suppressDefaultLog)
                 Logger.LogInformation("{0,-9} | {1} | {2}", (apiResponseLocalVar.DownloadedAt - apiResponseLocalVar.RequestedAt).TotalSeconds, apiResponseLocalVar.StatusCode, apiResponseLocalVar.Path);
         }
@@ -235,8 +235,8 @@ namespace Hermes.ServerSdk.Api
         /// </summary>
         /// <param name="suppressDefaultLog"></param>
         /// <param name="apiResponseLocalVar"></param>
-        /// <param name="createTenantInputBody"></param>
-        partial void AfterCreateTenant(ref bool suppressDefaultLog, ICreateTenantApiResponse apiResponseLocalVar, CreateTenantInputBody createTenantInputBody);
+        /// <param name="createOrganizationInputBody"></param>
+        partial void AfterCreateOrganization(ref bool suppressDefaultLog, ICreateOrganizationApiResponse apiResponseLocalVar, CreateOrganizationInputBody createOrganizationInputBody);
 
         /// <summary>
         /// Logs exceptions that occur while retrieving the server response
@@ -244,11 +244,11 @@ namespace Hermes.ServerSdk.Api
         /// <param name="exceptionLocalVar"></param>
         /// <param name="pathFormatLocalVar"></param>
         /// <param name="pathLocalVar"></param>
-        /// <param name="createTenantInputBody"></param>
-        private void OnErrorCreateTenantDefaultImplementation(Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, CreateTenantInputBody createTenantInputBody)
+        /// <param name="createOrganizationInputBody"></param>
+        private void OnErrorCreateOrganizationDefaultImplementation(Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, CreateOrganizationInputBody createOrganizationInputBody)
         {
             bool suppressDefaultLogLocalVar = false;
-            OnErrorCreateTenant(ref suppressDefaultLogLocalVar, exceptionLocalVar, pathFormatLocalVar, pathLocalVar, createTenantInputBody);
+            OnErrorCreateOrganization(ref suppressDefaultLogLocalVar, exceptionLocalVar, pathFormatLocalVar, pathLocalVar, createOrganizationInputBody);
             if (!suppressDefaultLogLocalVar)
                 Logger.LogError(exceptionLocalVar, "An error occurred while sending the request to the server.");
         }
@@ -260,20 +260,20 @@ namespace Hermes.ServerSdk.Api
         /// <param name="exceptionLocalVar"></param>
         /// <param name="pathFormatLocalVar"></param>
         /// <param name="pathLocalVar"></param>
-        /// <param name="createTenantInputBody"></param>
-        partial void OnErrorCreateTenant(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, CreateTenantInputBody createTenantInputBody);
+        /// <param name="createOrganizationInputBody"></param>
+        partial void OnErrorCreateOrganization(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, CreateOrganizationInputBody createOrganizationInputBody);
 
         /// <summary>
-        /// Create a tenant 
+        /// Create an organization 
         /// </summary>
-        /// <param name="createTenantInputBody"></param>
+        /// <param name="createOrganizationInputBody"></param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="ICreateTenantApiResponse"/>&gt;</returns>
-        public async Task<ICreateTenantApiResponse?> CreateTenantOrDefaultAsync(CreateTenantInputBody createTenantInputBody, System.Threading.CancellationToken cancellationToken = default)
+        /// <returns><see cref="Task"/>&lt;<see cref="ICreateOrganizationApiResponse"/>&gt;</returns>
+        public async Task<ICreateOrganizationApiResponse?> CreateOrganizationOrDefaultAsync(CreateOrganizationInputBody createOrganizationInputBody, System.Threading.CancellationToken cancellationToken = default)
         {
             try
             {
-                return await CreateTenantAsync(createTenantInputBody, cancellationToken).ConfigureAwait(false);
+                return await CreateOrganizationAsync(createOrganizationInputBody, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -282,21 +282,21 @@ namespace Hermes.ServerSdk.Api
         }
 
         /// <summary>
-        /// Create a tenant 
+        /// Create an organization 
         /// </summary>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
-        /// <param name="createTenantInputBody"></param>
+        /// <param name="createOrganizationInputBody"></param>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="ICreateTenantApiResponse"/>&gt;</returns>
-        public async Task<ICreateTenantApiResponse> CreateTenantAsync(CreateTenantInputBody createTenantInputBody, System.Threading.CancellationToken cancellationToken = default)
+        /// <returns><see cref="Task"/>&lt;<see cref="ICreateOrganizationApiResponse"/>&gt;</returns>
+        public async Task<ICreateOrganizationApiResponse> CreateOrganizationAsync(CreateOrganizationInputBody createOrganizationInputBody, System.Threading.CancellationToken cancellationToken = default)
         {
             UriBuilder uriBuilderLocalVar = new UriBuilder();
 
             try
             {
-                ValidateCreateTenant(createTenantInputBody);
+                ValidateCreateOrganization(createOrganizationInputBody);
 
-                FormatCreateTenant(createTenantInputBody);
+                FormatCreateOrganization(createOrganizationInputBody);
 
                 using (HttpRequestMessage httpRequestMessageLocalVar = new HttpRequestMessage())
                 {
@@ -304,12 +304,12 @@ namespace Hermes.ServerSdk.Api
                     uriBuilderLocalVar.Port = HttpClient.BaseAddress.Port;
                     uriBuilderLocalVar.Scheme = HttpClient.BaseAddress.Scheme;
                     uriBuilderLocalVar.Path = HttpClient.BaseAddress.AbsolutePath == "/"
-                        ? "/v1/tenants"
-                        : string.Concat(HttpClient.BaseAddress.AbsolutePath, "/v1/tenants");
+                        ? "/v1/organizations"
+                        : string.Concat(HttpClient.BaseAddress.AbsolutePath, "/v1/organizations");
 
-                    httpRequestMessageLocalVar.Content = (createTenantInputBody as object) is System.IO.Stream stream
+                    httpRequestMessageLocalVar.Content = (createOrganizationInputBody as object) is System.IO.Stream stream
                         ? httpRequestMessageLocalVar.Content = new StreamContent(stream)
-                        : httpRequestMessageLocalVar.Content = new StringContent(JsonSerializer.Serialize(createTenantInputBody, _jsonSerializerOptions));
+                        : httpRequestMessageLocalVar.Content = new StringContent(JsonSerializer.Serialize(createOrganizationInputBody, _jsonSerializerOptions));
 
                     httpRequestMessageLocalVar.RequestUri = uriBuilderLocalVar.Uri;
 
@@ -338,21 +338,21 @@ namespace Hermes.ServerSdk.Api
 
                     using (HttpResponseMessage httpResponseMessageLocalVar = await HttpClient.SendAsync(httpRequestMessageLocalVar, cancellationToken).ConfigureAwait(false))
                     {
-                        ILogger<CreateTenantApiResponse> apiResponseLoggerLocalVar = LoggerFactory.CreateLogger<CreateTenantApiResponse>();
-                        CreateTenantApiResponse apiResponseLocalVar;
+                        ILogger<CreateOrganizationApiResponse> apiResponseLoggerLocalVar = LoggerFactory.CreateLogger<CreateOrganizationApiResponse>();
+                        CreateOrganizationApiResponse apiResponseLocalVar;
 
                         switch ((int)httpResponseMessageLocalVar.StatusCode) {
                             default: {
                                 string responseContentLocalVar = await httpResponseMessageLocalVar.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                                apiResponseLocalVar = new(apiResponseLoggerLocalVar, httpRequestMessageLocalVar, httpResponseMessageLocalVar, responseContentLocalVar, "/v1/tenants", requestedAtLocalVar, _jsonSerializerOptions);
+                                apiResponseLocalVar = new(apiResponseLoggerLocalVar, httpRequestMessageLocalVar, httpResponseMessageLocalVar, responseContentLocalVar, "/v1/organizations", requestedAtLocalVar, _jsonSerializerOptions);
 
                                 break;
                             }
                         }
 
-                        AfterCreateTenantDefaultImplementation(apiResponseLocalVar, createTenantInputBody);
+                        AfterCreateOrganizationDefaultImplementation(apiResponseLocalVar, createOrganizationInputBody);
 
-                        Events.ExecuteOnCreateTenant(apiResponseLocalVar);
+                        Events.ExecuteOnCreateOrganization(apiResponseLocalVar);
 
                         return apiResponseLocalVar;
                     }
@@ -360,24 +360,24 @@ namespace Hermes.ServerSdk.Api
             }
             catch(Exception e)
             {
-                OnErrorCreateTenantDefaultImplementation(e, "/v1/tenants", uriBuilderLocalVar.Path, createTenantInputBody);
-                Events.ExecuteOnErrorCreateTenant(e);
+                OnErrorCreateOrganizationDefaultImplementation(e, "/v1/organizations", uriBuilderLocalVar.Path, createOrganizationInputBody);
+                Events.ExecuteOnErrorCreateOrganization(e);
                 throw;
             }
         }
 
         /// <summary>
-        /// The <see cref="CreateTenantApiResponse"/>
+        /// The <see cref="CreateOrganizationApiResponse"/>
         /// </summary>
-        public partial class CreateTenantApiResponse : Hermes.ServerSdk.Client.ApiResponse, ICreateTenantApiResponse
+        public partial class CreateOrganizationApiResponse : Hermes.ServerSdk.Client.ApiResponse, ICreateOrganizationApiResponse
         {
             /// <summary>
             /// The logger
             /// </summary>
-            public ILogger<CreateTenantApiResponse> Logger { get; }
+            public ILogger<CreateOrganizationApiResponse> Logger { get; }
 
             /// <summary>
-            /// The <see cref="CreateTenantApiResponse"/>
+            /// The <see cref="CreateOrganizationApiResponse"/>
             /// </summary>
             /// <param name="logger"></param>
             /// <param name="httpRequestMessage"></param>
@@ -386,14 +386,14 @@ namespace Hermes.ServerSdk.Api
             /// <param name="path"></param>
             /// <param name="requestedAt"></param>
             /// <param name="jsonSerializerOptions"></param>
-            public CreateTenantApiResponse(ILogger<CreateTenantApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, string rawContent, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, rawContent, path, requestedAt, jsonSerializerOptions)
+            public CreateOrganizationApiResponse(ILogger<CreateOrganizationApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, string rawContent, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, rawContent, path, requestedAt, jsonSerializerOptions)
             {
                 Logger = logger;
                 OnCreated(httpRequestMessage, httpResponseMessage);
             }
 
             /// <summary>
-            /// The <see cref="CreateTenantApiResponse"/>
+            /// The <see cref="CreateOrganizationApiResponse"/>
             /// </summary>
             /// <param name="logger"></param>
             /// <param name="httpRequestMessage"></param>
@@ -402,7 +402,7 @@ namespace Hermes.ServerSdk.Api
             /// <param name="path"></param>
             /// <param name="requestedAt"></param>
             /// <param name="jsonSerializerOptions"></param>
-            public CreateTenantApiResponse(ILogger<CreateTenantApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, System.IO.Stream contentStream, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, contentStream, path, requestedAt, jsonSerializerOptions)
+            public CreateOrganizationApiResponse(ILogger<CreateOrganizationApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, System.IO.Stream contentStream, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, contentStream, path, requestedAt, jsonSerializerOptions)
             {
                 Logger = logger;
                 OnCreated(httpRequestMessage, httpResponseMessage);
@@ -420,11 +420,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 201 Created
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.TenantItem? Created()
+            public Hermes.ServerSdk.Model.OrganizationItem? Created()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsCreated
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.TenantItem>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.OrganizationItem>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -433,7 +433,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryCreated([NotNullWhen(true)]out Hermes.ServerSdk.Model.TenantItem? result)
+            public bool TryCreated([NotNullWhen(true)]out Hermes.ServerSdk.Model.OrganizationItem? result)
             {
                 result = null;
 
@@ -501,10 +501,10 @@ namespace Hermes.ServerSdk.Api
         /// Processes the server response
         /// </summary>
         /// <param name="apiResponseLocalVar"></param>
-        private void AfterListTenantsDefaultImplementation(IListTenantsApiResponse apiResponseLocalVar)
+        private void AfterListOrganizationsDefaultImplementation(IListOrganizationsApiResponse apiResponseLocalVar)
         {
             bool suppressDefaultLog = false;
-            AfterListTenants(ref suppressDefaultLog, apiResponseLocalVar);
+            AfterListOrganizations(ref suppressDefaultLog, apiResponseLocalVar);
             if (!suppressDefaultLog)
                 Logger.LogInformation("{0,-9} | {1} | {2}", (apiResponseLocalVar.DownloadedAt - apiResponseLocalVar.RequestedAt).TotalSeconds, apiResponseLocalVar.StatusCode, apiResponseLocalVar.Path);
         }
@@ -514,7 +514,7 @@ namespace Hermes.ServerSdk.Api
         /// </summary>
         /// <param name="suppressDefaultLog"></param>
         /// <param name="apiResponseLocalVar"></param>
-        partial void AfterListTenants(ref bool suppressDefaultLog, IListTenantsApiResponse apiResponseLocalVar);
+        partial void AfterListOrganizations(ref bool suppressDefaultLog, IListOrganizationsApiResponse apiResponseLocalVar);
 
         /// <summary>
         /// Logs exceptions that occur while retrieving the server response
@@ -522,10 +522,10 @@ namespace Hermes.ServerSdk.Api
         /// <param name="exceptionLocalVar"></param>
         /// <param name="pathFormatLocalVar"></param>
         /// <param name="pathLocalVar"></param>
-        private void OnErrorListTenantsDefaultImplementation(Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar)
+        private void OnErrorListOrganizationsDefaultImplementation(Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar)
         {
             bool suppressDefaultLogLocalVar = false;
-            OnErrorListTenants(ref suppressDefaultLogLocalVar, exceptionLocalVar, pathFormatLocalVar, pathLocalVar);
+            OnErrorListOrganizations(ref suppressDefaultLogLocalVar, exceptionLocalVar, pathFormatLocalVar, pathLocalVar);
             if (!suppressDefaultLogLocalVar)
                 Logger.LogError(exceptionLocalVar, "An error occurred while sending the request to the server.");
         }
@@ -537,18 +537,18 @@ namespace Hermes.ServerSdk.Api
         /// <param name="exceptionLocalVar"></param>
         /// <param name="pathFormatLocalVar"></param>
         /// <param name="pathLocalVar"></param>
-        partial void OnErrorListTenants(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar);
+        partial void OnErrorListOrganizations(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar);
 
         /// <summary>
-        /// List tenants 
+        /// List organizations 
         /// </summary>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="IListTenantsApiResponse"/>&gt;</returns>
-        public async Task<IListTenantsApiResponse?> ListTenantsOrDefaultAsync(System.Threading.CancellationToken cancellationToken = default)
+        /// <returns><see cref="Task"/>&lt;<see cref="IListOrganizationsApiResponse"/>&gt;</returns>
+        public async Task<IListOrganizationsApiResponse?> ListOrganizationsOrDefaultAsync(System.Threading.CancellationToken cancellationToken = default)
         {
             try
             {
-                return await ListTenantsAsync(cancellationToken).ConfigureAwait(false);
+                return await ListOrganizationsAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -557,12 +557,12 @@ namespace Hermes.ServerSdk.Api
         }
 
         /// <summary>
-        /// List tenants 
+        /// List organizations 
         /// </summary>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
-        /// <returns><see cref="Task"/>&lt;<see cref="IListTenantsApiResponse"/>&gt;</returns>
-        public async Task<IListTenantsApiResponse> ListTenantsAsync(System.Threading.CancellationToken cancellationToken = default)
+        /// <returns><see cref="Task"/>&lt;<see cref="IListOrganizationsApiResponse"/>&gt;</returns>
+        public async Task<IListOrganizationsApiResponse> ListOrganizationsAsync(System.Threading.CancellationToken cancellationToken = default)
         {
             UriBuilder uriBuilderLocalVar = new UriBuilder();
 
@@ -574,8 +574,8 @@ namespace Hermes.ServerSdk.Api
                     uriBuilderLocalVar.Port = HttpClient.BaseAddress.Port;
                     uriBuilderLocalVar.Scheme = HttpClient.BaseAddress.Scheme;
                     uriBuilderLocalVar.Path = HttpClient.BaseAddress.AbsolutePath == "/"
-                        ? "/v1/tenants"
-                        : string.Concat(HttpClient.BaseAddress.AbsolutePath, "/v1/tenants");
+                        ? "/v1/organizations"
+                        : string.Concat(HttpClient.BaseAddress.AbsolutePath, "/v1/organizations");
 
                     httpRequestMessageLocalVar.RequestUri = uriBuilderLocalVar.Uri;
 
@@ -595,21 +595,21 @@ namespace Hermes.ServerSdk.Api
 
                     using (HttpResponseMessage httpResponseMessageLocalVar = await HttpClient.SendAsync(httpRequestMessageLocalVar, cancellationToken).ConfigureAwait(false))
                     {
-                        ILogger<ListTenantsApiResponse> apiResponseLoggerLocalVar = LoggerFactory.CreateLogger<ListTenantsApiResponse>();
-                        ListTenantsApiResponse apiResponseLocalVar;
+                        ILogger<ListOrganizationsApiResponse> apiResponseLoggerLocalVar = LoggerFactory.CreateLogger<ListOrganizationsApiResponse>();
+                        ListOrganizationsApiResponse apiResponseLocalVar;
 
                         switch ((int)httpResponseMessageLocalVar.StatusCode) {
                             default: {
                                 string responseContentLocalVar = await httpResponseMessageLocalVar.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                                apiResponseLocalVar = new(apiResponseLoggerLocalVar, httpRequestMessageLocalVar, httpResponseMessageLocalVar, responseContentLocalVar, "/v1/tenants", requestedAtLocalVar, _jsonSerializerOptions);
+                                apiResponseLocalVar = new(apiResponseLoggerLocalVar, httpRequestMessageLocalVar, httpResponseMessageLocalVar, responseContentLocalVar, "/v1/organizations", requestedAtLocalVar, _jsonSerializerOptions);
 
                                 break;
                             }
                         }
 
-                        AfterListTenantsDefaultImplementation(apiResponseLocalVar);
+                        AfterListOrganizationsDefaultImplementation(apiResponseLocalVar);
 
-                        Events.ExecuteOnListTenants(apiResponseLocalVar);
+                        Events.ExecuteOnListOrganizations(apiResponseLocalVar);
 
                         return apiResponseLocalVar;
                     }
@@ -617,24 +617,24 @@ namespace Hermes.ServerSdk.Api
             }
             catch(Exception e)
             {
-                OnErrorListTenantsDefaultImplementation(e, "/v1/tenants", uriBuilderLocalVar.Path);
-                Events.ExecuteOnErrorListTenants(e);
+                OnErrorListOrganizationsDefaultImplementation(e, "/v1/organizations", uriBuilderLocalVar.Path);
+                Events.ExecuteOnErrorListOrganizations(e);
                 throw;
             }
         }
 
         /// <summary>
-        /// The <see cref="ListTenantsApiResponse"/>
+        /// The <see cref="ListOrganizationsApiResponse"/>
         /// </summary>
-        public partial class ListTenantsApiResponse : Hermes.ServerSdk.Client.ApiResponse, IListTenantsApiResponse
+        public partial class ListOrganizationsApiResponse : Hermes.ServerSdk.Client.ApiResponse, IListOrganizationsApiResponse
         {
             /// <summary>
             /// The logger
             /// </summary>
-            public ILogger<ListTenantsApiResponse> Logger { get; }
+            public ILogger<ListOrganizationsApiResponse> Logger { get; }
 
             /// <summary>
-            /// The <see cref="ListTenantsApiResponse"/>
+            /// The <see cref="ListOrganizationsApiResponse"/>
             /// </summary>
             /// <param name="logger"></param>
             /// <param name="httpRequestMessage"></param>
@@ -643,14 +643,14 @@ namespace Hermes.ServerSdk.Api
             /// <param name="path"></param>
             /// <param name="requestedAt"></param>
             /// <param name="jsonSerializerOptions"></param>
-            public ListTenantsApiResponse(ILogger<ListTenantsApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, string rawContent, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, rawContent, path, requestedAt, jsonSerializerOptions)
+            public ListOrganizationsApiResponse(ILogger<ListOrganizationsApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, string rawContent, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, rawContent, path, requestedAt, jsonSerializerOptions)
             {
                 Logger = logger;
                 OnCreated(httpRequestMessage, httpResponseMessage);
             }
 
             /// <summary>
-            /// The <see cref="ListTenantsApiResponse"/>
+            /// The <see cref="ListOrganizationsApiResponse"/>
             /// </summary>
             /// <param name="logger"></param>
             /// <param name="httpRequestMessage"></param>
@@ -659,7 +659,7 @@ namespace Hermes.ServerSdk.Api
             /// <param name="path"></param>
             /// <param name="requestedAt"></param>
             /// <param name="jsonSerializerOptions"></param>
-            public ListTenantsApiResponse(ILogger<ListTenantsApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, System.IO.Stream contentStream, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, contentStream, path, requestedAt, jsonSerializerOptions)
+            public ListOrganizationsApiResponse(ILogger<ListOrganizationsApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, System.IO.Stream contentStream, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, contentStream, path, requestedAt, jsonSerializerOptions)
             {
                 Logger = logger;
                 OnCreated(httpRequestMessage, httpResponseMessage);
@@ -677,11 +677,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 200 Ok
             /// </summary>
             /// <returns></returns>
-            public List<TenantItem>? Ok()
+            public List<OrganizationItem>? Ok()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsOk
-                    ? System.Text.Json.JsonSerializer.Deserialize<List<TenantItem>>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<OrganizationItem>>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -690,7 +690,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryOk([NotNullWhen(true)]out List<TenantItem>? result)
+            public bool TryOk([NotNullWhen(true)]out List<OrganizationItem>? result)
             {
                 result = null;
 

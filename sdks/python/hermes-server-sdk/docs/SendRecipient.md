@@ -6,7 +6,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **contacts** | **Dict[str, str]** | Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address | [optional] 
-**tenant_id** | **str** | Tenant identifier | 
+**organization_id** | **str** | Organization identifier | 
 **user_id** | **str** | External user identifier | 
 
 ## Example

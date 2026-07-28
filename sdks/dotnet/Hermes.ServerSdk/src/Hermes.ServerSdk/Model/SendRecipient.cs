@@ -33,13 +33,13 @@ namespace Hermes.ServerSdk.Model
         /// <summary>
         /// Initializes a new instance of the <see cref="SendRecipient" /> class.
         /// </summary>
-        /// <param name="tenantId">Tenant identifier</param>
+        /// <param name="organizationId">Organization identifier</param>
         /// <param name="userId">External user identifier</param>
         /// <param name="contacts">Per-channel address overrides: address key (\&quot;email\&quot;,\&quot;phone\&quot;) -&gt; address</param>
         [JsonConstructor]
-        public SendRecipient(string tenantId, string userId, Option<Dictionary<string, string>?> contacts = default)
+        public SendRecipient(string organizationId, string userId, Option<Dictionary<string, string>?> contacts = default)
         {
-            TenantId = tenantId;
+            OrganizationId = organizationId;
             UserId = userId;
             ContactsOption = contacts;
             OnCreated();
@@ -48,11 +48,11 @@ namespace Hermes.ServerSdk.Model
         partial void OnCreated();
 
         /// <summary>
-        /// Tenant identifier
+        /// Organization identifier
         /// </summary>
-        /// <value>Tenant identifier</value>
-        [JsonPropertyName("tenant_id")]
-        public string TenantId { get; set; }
+        /// <value>Organization identifier</value>
+        [JsonPropertyName("organization_id")]
+        public string OrganizationId { get; set; }
 
         /// <summary>
         /// External user identifier
@@ -83,7 +83,7 @@ namespace Hermes.ServerSdk.Model
         {
             StringBuilder sb = new StringBuilder();
             sb.Append("class SendRecipient {\n");
-            sb.Append("  TenantId: ").Append(TenantId).Append("\n");
+            sb.Append("  OrganizationId: ").Append(OrganizationId).Append("\n");
             sb.Append("  UserId: ").Append(UserId).Append("\n");
             sb.Append("  Contacts: ").Append(Contacts).Append("\n");
             sb.Append("}\n");
@@ -97,10 +97,10 @@ namespace Hermes.ServerSdk.Model
         /// <returns>Validation Result</returns>
         IEnumerable<ValidationResult> IValidatableObject.Validate(ValidationContext validationContext)
         {
-            // TenantId (string) minLength
-            if (this.TenantId != null && this.TenantId.Length < 1)
+            // OrganizationId (string) minLength
+            if (this.OrganizationId != null && this.OrganizationId.Length < 1)
             {
-                yield return new ValidationResult("Invalid value for TenantId, length must be greater than 1.", new [] { "TenantId" });
+                yield return new ValidationResult("Invalid value for OrganizationId, length must be greater than 1.", new [] { "OrganizationId" });
             }
 
             // UserId (string) minLength
@@ -135,7 +135,7 @@ namespace Hermes.ServerSdk.Model
 
             JsonTokenType startingTokenType = utf8JsonReader.TokenType;
 
-            Option<string?> tenantId = default;
+            Option<string?> organizationId = default;
             Option<string?> userId = default;
             Option<Dictionary<string, string>?> contacts = default;
 
@@ -154,8 +154,8 @@ namespace Hermes.ServerSdk.Model
 
                     switch (localVarJsonPropertyName)
                     {
-                        case "tenant_id":
-                            tenantId = new Option<string?>(utf8JsonReader.GetString()!);
+                        case "organization_id":
+                            organizationId = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
                         case "user_id":
                             userId = new Option<string?>(utf8JsonReader.GetString()!);
@@ -169,14 +169,14 @@ namespace Hermes.ServerSdk.Model
                 }
             }
 
-            if (!tenantId.IsSet)
-                throw new ArgumentException("Property is required for class SendRecipient.", nameof(tenantId));
+            if (!organizationId.IsSet)
+                throw new ArgumentException("Property is required for class SendRecipient.", nameof(organizationId));
 
             if (!userId.IsSet)
                 throw new ArgumentException("Property is required for class SendRecipient.", nameof(userId));
 
-            if (tenantId.IsSet && tenantId.Value == null)
-                throw new ArgumentNullException(nameof(tenantId), "Property is not nullable for class SendRecipient.");
+            if (organizationId.IsSet && organizationId.Value == null)
+                throw new ArgumentNullException(nameof(organizationId), "Property is not nullable for class SendRecipient.");
 
             if (userId.IsSet && userId.Value == null)
                 throw new ArgumentNullException(nameof(userId), "Property is not nullable for class SendRecipient.");
@@ -184,7 +184,7 @@ namespace Hermes.ServerSdk.Model
             if (contacts.IsSet && contacts.Value == null)
                 throw new ArgumentNullException(nameof(contacts), "Property is not nullable for class SendRecipient.");
 
-            return new SendRecipient(tenantId.Value!, userId.Value!, contacts);
+            return new SendRecipient(organizationId.Value!, userId.Value!, contacts);
         }
 
         /// <summary>
@@ -211,8 +211,8 @@ namespace Hermes.ServerSdk.Model
         /// <exception cref="NotImplementedException"></exception>
         public void WriteProperties(Utf8JsonWriter writer, SendRecipient sendRecipient, JsonSerializerOptions jsonSerializerOptions)
         {
-            if (sendRecipient.TenantId == null)
-                throw new ArgumentNullException(nameof(sendRecipient.TenantId), "Property is required for class SendRecipient.");
+            if (sendRecipient.OrganizationId == null)
+                throw new ArgumentNullException(nameof(sendRecipient.OrganizationId), "Property is required for class SendRecipient.");
 
             if (sendRecipient.UserId == null)
                 throw new ArgumentNullException(nameof(sendRecipient.UserId), "Property is required for class SendRecipient.");
@@ -220,7 +220,7 @@ namespace Hermes.ServerSdk.Model
             if (sendRecipient.ContactsOption.IsSet && sendRecipient.Contacts == null)
                 throw new ArgumentNullException(nameof(sendRecipient.Contacts), "Property is required for class SendRecipient.");
 
-            writer.WriteString("tenant_id", sendRecipient.TenantId);
+            writer.WriteString("organization_id", sendRecipient.OrganizationId);
 
             writer.WriteString("user_id", sendRecipient.UserId);
 

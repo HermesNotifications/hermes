@@ -32,13 +32,13 @@ class NotificationItem(BaseModel):
     channels: Optional[List[StrictStr]]
     created_at: datetime
     id: StrictStr
+    organization_id: StrictStr
     status: StrictStr
     template_id: Optional[StrictStr] = None
     template_slug: Optional[StrictStr] = None
-    tenant_id: StrictStr
     title: StrictStr
     user_id: StrictStr
-    __properties: ClassVar[List[str]] = ["body", "category_id", "channels", "created_at", "id", "status", "template_id", "template_slug", "tenant_id", "title", "user_id"]
+    __properties: ClassVar[List[str]] = ["body", "category_id", "channels", "created_at", "id", "organization_id", "status", "template_id", "template_slug", "title", "user_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -101,10 +101,10 @@ class NotificationItem(BaseModel):
             "channels": obj.get("channels"),
             "created_at": obj.get("created_at"),
             "id": obj.get("id"),
+            "organization_id": obj.get("organization_id"),
             "status": obj.get("status"),
             "template_id": obj.get("template_id"),
             "template_slug": obj.get("template_slug"),
-            "tenant_id": obj.get("tenant_id"),
             "title": obj.get("title"),
             "user_id": obj.get("user_id")
         })

@@ -1,28 +1,28 @@
-# Hermes.ServerSdk.Api.TenantsApi
+# Hermes.ServerSdk.Api.OrganizationsApi
 
 All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |--------|--------------|-------------|
-| [**CreateTenant**](TenantsApi.md#createtenant) | **POST** /v1/tenants | Create a tenant |
-| [**ListTenants**](TenantsApi.md#listtenants) | **GET** /v1/tenants | List tenants |
+| [**CreateOrganization**](OrganizationsApi.md#createorganization) | **POST** /v1/organizations | Create an organization |
+| [**ListOrganizations**](OrganizationsApi.md#listorganizations) | **GET** /v1/organizations | List organizations |
 
-<a id="createtenant"></a>
-# **CreateTenant**
-> TenantItem CreateTenant (CreateTenantInputBody createTenantInputBody)
+<a id="createorganization"></a>
+# **CreateOrganization**
+> OrganizationItem CreateOrganization (CreateOrganizationInputBody createOrganizationInputBody)
 
-Create a tenant
+Create an organization
 
 
 ### Parameters
 
 | Name | Type | Description | Notes |
 |------|------|-------------|-------|
-| **createTenantInputBody** | [**CreateTenantInputBody**](CreateTenantInputBody.md) |  |  |
+| **createOrganizationInputBody** | [**CreateOrganizationInputBody**](CreateOrganizationInputBody.md) |  |  |
 
 ### Return type
 
-[**TenantItem**](TenantItem.md)
+[**OrganizationItem**](OrganizationItem.md)
 
 ### Authorization
 
@@ -42,18 +42,18 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../../README.md#documentation-for-api-endpoints) [[Back to Model list]](../../README.md#documentation-for-models) [[Back to README]](../../README.md)
 
-<a id="listtenants"></a>
-# **ListTenants**
-> List&lt;TenantItem&gt; ListTenants ()
+<a id="listorganizations"></a>
+# **ListOrganizations**
+> List&lt;OrganizationItem&gt; ListOrganizations ()
 
-List tenants
+List organizations
 
 
 ### Parameters
 This endpoint does not need any parameter.
 ### Return type
 
-[**List&lt;TenantItem&gt;**](TenantItem.md)
+[**List&lt;OrganizationItem&gt;**](OrganizationItem.md)
 
 ### Authorization
 
