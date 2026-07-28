@@ -60,7 +60,7 @@ jobs:
         run: pnpm --filter "@hermes-notifications/server" build
 
   web-admin:
-    name: Admin Portal (lint + typecheck)
+    name: Admin Portal (lint + typecheck + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -82,3 +82,11 @@ jobs:
         run: pnpm --filter "@hermes/admin" lint
       - name: Typecheck
         run: pnpm --filter "@hermes/admin" typecheck
+      # The production build was never run anywhere until now, so nothing caught that
+      # every dashboard route was being statically prerendered and the build failed
+      # without HERMES_API_URL/HERMES_API_KEY. Deliberately runs with no env vars: the
+      # routes are `dynamic = "force-dynamic"`, so a green build here proves none of
+      # them reach for the API at build time. If someone makes a route static again,
+      # this step is what fails.
+      - name: Build
+        run: pnpm --filter "@hermes/admin" build

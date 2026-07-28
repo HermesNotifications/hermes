@@ -9,6 +9,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { AppSidebar } from "@/components/app-sidebar";
 
+// Every route under this group is authenticated and fetches per-request data from the
+// Hermes API, so none of them can be statically prerendered. Without this the production
+// build tries to render them at build time, where getHermes() throws on the missing
+// HERMES_API_URL/HERMES_API_KEY and the build fails on pages that were never meant to be
+// static. Segment config on a layout applies to every route beneath it.
+export const dynamic = "force-dynamic";
+
 export default function DashboardLayout({
   children,
 }: {

@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "TDD gate exemptions — plain glob strings.",
+    "",
+    "web/admin/app/**/layout.tsx:",
+    "  Next.js route segment config (`export const dynamic`) and layout composition are",
+    "  declarative build-time conventions with no runtime behaviour a unit test can",
+    "  observe. web/admin also has no test runner at all — no `test` script, no vitest or",
+    "  jest config — so a .test.tsx here would be a file nothing executes, which reads as",
+    "  coverage that does not exist.",
+    "  TESTED BY: `next build` in .github/workflows/ci-web.yml. The entire effect of",
+    "  `dynamic = \"force-dynamic\"` is on the build — without it the build tries to",
+    "  prerender authenticated pages and fails. The build is the assertion, and it now",
+    "  runs in CI."
+  ],
+  "tdd": {
+    "exempt": [
+      "web/admin/app/**/layout.tsx"
+    ]
+  }
+}
