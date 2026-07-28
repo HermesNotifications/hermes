@@ -583,6 +583,45 @@ Remediation is three small changes plus one CI job: declare `onlyBuiltDependenci
 `CONTRIBUTING.md`, and add the spec-and-SDK drift gate. The gate is the one that matters —
 the others only make it runnable.
 
+## Added 2026-07-28 — found while fixing the admin build
+
+**46. [P1] The entire TypeScript surface has no tests and no test runner.** All five
+packages in the pnpm workspace — `web/admin`, and the four SDK packages
+`hermes-server`, `hermes-client`, `hermes-react`, `hermes-web` — have **no `test` script**,
+and a repo-wide search finds **no test-runner dependency at all**: no vitest, no jest, no
+`@testing-library/*`, no Playwright, in any `package.json`. There is nothing to run, so
+there is nothing to write a test into.
+
+Rated P1 on the same reasoning as finding 45: this is a *detection* gap, and detection
+gaps are what let the other findings survive. It is not hypothetical — it concealed a
+real defect for as long as the code has existed. `next build` for the admin portal failed
+on any machine without `HERMES_API_URL`/`HERMES_API_KEY`, because every route under
+`app/(dashboard)` was being statically prerendered despite being authenticated and
+per-request. Nothing caught it, because `ci-web.yml` ran lint and typecheck only and the
+production build had never been executed anywhere. Fixed at `bcac3ad` with
+`dynamic = "force-dynamic"` on the dashboard layout, plus the build added to CI — but the
+fix is one route group, and the reason it went unseen is unchanged.
+
+The documentation does not overclaim here, which is worth stating precisely: `docs/testing.md`
+does not mention TypeScript, `web/admin`, or the SDKs anywhere, and `CLAUDE.md:100-105`
+describes a strategy entirely in Go terms (`*_test.go`, build tags, `httptest`, mock store
+interfaces). Nothing asserts coverage that does not exist. The gap is that no document
+acknowledges the JS/TS surface as something that *should* be tested, so its absence never
+reads as missing.
+
+Scope note on the SDK packages: `hermes-server` and `hermes-client` are thin generated-type
+wrappers where `tsc --noEmit` genuinely carries most of the weight, so the argument for unit
+tests there is weaker. `hermes-react` and `hermes-web` ship runtime behaviour — hooks and a
+web component — and `web/admin` is a privileged console that creates and revokes API keys.
+Those three are where the absence actually costs something.
+
+Remediation is a runner plus a first test, not a coverage campaign: add vitest to the
+workspace, a `test` script per package, wire it into `ci-web.yml`, and start with the
+behaviour that has already broken. Until a runner exists, the TDD gate cannot be satisfied
+in this part of the tree at all — `.claude/guardrails.json` currently exempts
+`web/admin/app/**/layout.tsx` for exactly that reason, and that exemption should be removed
+once there is something to run.
+
 ---
 
 ## Suggested remediation order
@@ -596,7 +635,9 @@ the others only make it runnable.
    its residue: **43** is now resolved too, leaving only the major version bump as a release
    decision; **44** (audit dashboards and alert rules for the old metric label) belongs in
    step 4; **45** (spec-to-SDK CI gate and toolchain pinning) belongs in step 2, because it
-   is what allowed 43 and will allow the next one.
+   is what allowed 43 and will allow the next one. **46** (no JS/TS test runner) belongs
+   beside 45 for the same reason — both are detection gaps, and a detection gap outranks
+   most of the individual defects it hides.
 4. **Then** — accuracy drift (26–32) and operational gaps (33–41, 44), including the new
    documentation sections in 40. Note that several of these findings cite line numbers in
    files the rename rewrote, so expect drift when working through them; the claims were
@@ -612,6 +653,8 @@ the others only make it runnable.
   is still owed** — finding 43.
 - Audit out-of-repo Grafana dashboards and alert rules for the `tenant_id` label — finding 44.
 - Add the spec-to-SDK drift gate to CI and pin the generation toolchain — finding 45.
+- Add a JS/TS test runner and a first test, then drop the `web/admin/app/**/layout.tsx`
+  exemption from `.claude/guardrails.json` — finding 46.
 - ADR 0002 committed to a follow-up ADR for the normalized content/contact model; PR #43
   shipped that phase without one. Still owed.
 
