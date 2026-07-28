@@ -83,13 +83,13 @@ sdk-java:          ## Generate Java server SDK
 	npx @openapitools/openapi-generator-cli generate \
 		-i api/admin/openapi.yaml -g java \
 		-o sdks/java/hermes-server-sdk \
-		--additional-properties=artifactId=hermes-server-sdk,groupId=com.hermes,invokerPackage=com.hermes.sdk,apiPackage=com.hermes.sdk.api,modelPackage=com.hermes.sdk.model \
+		--additional-properties=artifactId=hermes-server-sdk,groupId=com.hermes,invokerPackage=com.hermes.sdk,apiPackage=com.hermes.sdk.api,modelPackage=com.hermes.sdk.model,hideGenerationTimestamp=true \
 		--global-property=skipFormModel=true
 sdk-dotnet:        ## Generate .NET server SDK
 	npx @openapitools/openapi-generator-cli generate \
 		-i api/admin/openapi.yaml -g csharp \
 		-o sdks/dotnet/Hermes.ServerSdk \
-		--additional-properties=packageName=Hermes.ServerSdk,targetFramework=net8.0 \
+		--additional-properties=packageName=Hermes.ServerSdk,targetFramework=net8.0,hideGenerationTimestamp=true,packageGuid='{102EB2C0-41DB-427A-A9EF-333D033706BE}' \
 		--global-property=skipFormModel=true
 sdk-generate: openapi sdk-ts-generate sdk-ts-build sdk-python sdk-java sdk-dotnet  ## Full pipeline: specs → types → build
 

@@ -1,6 +1,6 @@
 # ADR 0003: Rename `tenant` to `organization`, and name the app as the isolation boundary
 
-**Status:** Proposed  
+**Status:** Accepted (2026-07-28 — implemented at `a5f0874`; SDKs regenerated at `f1b5c81`)  
 **Date:** 2026-07-27  
 **Author:** Daryl Robbins
 

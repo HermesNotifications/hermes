@@ -40,14 +40,7 @@ docs/models/UserItem.md
 docs/scripts/git_push.ps1
 docs/scripts/git_push.sh
 src/Hermes.ServerSdk.Test/Api/DependencyInjectionTests.cs
-src/Hermes.ServerSdk.Test/Api/UsersApiTests.cs
 src/Hermes.ServerSdk.Test/Hermes.ServerSdk.Test.csproj
-src/Hermes.ServerSdk.Test/Model/NotificationItemTests.cs
-src/Hermes.ServerSdk.Test/Model/NotificationTests.cs
-src/Hermes.ServerSdk.Test/Model/SendInputBodyTests.cs
-src/Hermes.ServerSdk.Test/Model/SendRecipientTests.cs
-src/Hermes.ServerSdk.Test/Model/TokenInputBodyTests.cs
-src/Hermes.ServerSdk.Test/Model/UserItemTests.cs
 src/Hermes.ServerSdk.Test/README.md
 src/Hermes.ServerSdk/Api/APIKeysApi.cs
 src/Hermes.ServerSdk/Api/AuthApi.cs

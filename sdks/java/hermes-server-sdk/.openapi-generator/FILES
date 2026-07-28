@@ -100,10 +100,3 @@ src/main/java/com/hermes/sdk/model/UpdateCategoryInputBody.java
 src/main/java/com/hermes/sdk/model/UpdateSubscriptionInputBody.java
 src/main/java/com/hermes/sdk/model/UpdateTemplateInputBody.java
 src/main/java/com/hermes/sdk/model/UserItem.java
-src/test/java/com/hermes/sdk/api/UsersApiTest.java
-src/test/java/com/hermes/sdk/model/NotificationItemTest.java
-src/test/java/com/hermes/sdk/model/NotificationTest.java
-src/test/java/com/hermes/sdk/model/SendInputBodyTest.java
-src/test/java/com/hermes/sdk/model/SendRecipientTest.java
-src/test/java/com/hermes/sdk/model/TokenInputBodyTest.java
-src/test/java/com/hermes/sdk/model/UserItemTest.java

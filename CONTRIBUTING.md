@@ -8,6 +8,14 @@ Thanks for contributing! This page covers the mechanics. For depth, see the docs
 
 ```bash
 # Prerequisites: Go (see go.mod), Docker; for the k8s dev loop: k3d, tilt, kubectl; pnpm for the portal
+#
+# Only if you are regenerating the SDKs (`make sdk-generate`): a JVM is required.
+# @openapitools/openapi-generator-cli (pinned in openapitools.json) is a Node wrapper
+# around a Java JAR, so sdk-python, sdk-java and sdk-dotnet all fail without it — and the
+# error does not mention Java. sdk-ts-generate needs only Node + pnpm.
+#   JDK 21, Maven         — generate, then build/test the Java SDK
+#   .NET 8 SDK            — build/test the C# SDK (Makefile pins targetFramework=net8.0)
+# e.g. mise use -g java@temurin-21 maven@latest dotnet@8
 make dev-up        # full local stack on k3d + Tilt (recommended)
 # — or the lighter path used by the test suite —
 make infra-up && make migrate && make seed && make build

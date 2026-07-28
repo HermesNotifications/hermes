@@ -2,7 +2,6 @@
 
 Hermes Admin API
 - API version: 1.0.0
-  - Build date: 2026-07-28T00:22:36.554995430Z[Etc/UTC]
   - Generator version: 7.20.0
 
 Server-to-server API for managing subscription categories, templates, and notifications.

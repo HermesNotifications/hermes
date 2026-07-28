@@ -87,11 +87,4 @@ setup.cfg
 setup.py
 test-requirements.txt
 test/__init__.py
-test/test_notification.py
-test/test_notification_item.py
-test/test_notification_status_output_body.py
-test/test_send_input_body.py
-test/test_send_recipient.py
-test/test_token_input_body.py
-test/test_user_item.py
 tox.ini

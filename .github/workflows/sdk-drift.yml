@@ -1,0 +1,101 @@
+name: SDK Drift
+
+# Closes the gap that produced finding 43: `make openapi` regenerated the specs during the
+# tenant->organization rename, but the SDKs generated FROM those specs were not, so the
+# checked-in TypeScript client kept advertising /v1/tenants — a path the admin service no
+# longer serves — while every CI check stayed green. Nothing compared the two.
+#
+# This job regenerates both and fails if either moved, which would have caught that on the
+# originating PR.
+#
+# Path-filtered deliberately. `make sdk-generate` needs a JVM, pnpm and .NET, and downloads
+# the openapi-generator JAR, so it is too expensive to run on every PR. A nightly schedule
+# was the alternative and is worse: it lets drift merge first and reports it afterwards,
+# which is the exact failure mode being fixed. The filter covers the inputs that can
+# actually cause drift — the specs, the SDKs, the generator config, and the Go sources the
+# specs are generated from.
+# The path list is duplicated rather than shared via a YAML anchor: GitHub Actions does not
+# support anchors/aliases, even though a standard YAML parser accepts them. Keep the two
+# lists in step.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "sdks/**"
+      - "cmd/openapi/**"
+      - "internal/admin/**"
+      - "internal/inbox/**"
+      - "internal/userservice/**"
+      - "internal/send/**"
+      - "internal/models/**"
+      - "openapitools.json"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/sdk-drift.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "sdks/**"
+      - "cmd/openapi/**"
+      - "internal/admin/**"
+      - "internal/inbox/**"
+      - "internal/userservice/**"
+      - "internal/send/**"
+      - "internal/models/**"
+      - "openapitools.json"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/sdk-drift.yml"
+
+concurrency:
+  group: sdk-drift-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.28.2"
+
+jobs:
+  drift:
+    name: Specs and SDKs in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # openapi-generator-cli is a Node wrapper around a Java JAR: sdk-python, sdk-java and
+      # sdk-dotnet all fail without a JVM, with an error that never mentions Java.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate specs and SDKs
+        run: make sdk-generate
+
+      # Covers `make openapi-check` too, which CONTRIBUTING.md references but no workflow
+      # ran: sdk-generate depends on the openapi target, so diffing api/ alongside sdks/
+      # catches spec drift for free.
+      - name: Fail if anything drifted
+        run: |
+          if ! git diff --exit-code --stat api/ sdks/; then
+            echo "::error::Generated specs or SDKs are out of date. Run 'make sdk-generate' and commit the result."
+            git diff api/ sdks/
+            exit 1
+          fi

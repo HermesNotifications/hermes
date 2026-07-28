@@ -30,7 +30,9 @@ the mock, and drive the handler with an `httptest` request/recorder.
 
 ```bash
 go test ./internal/auth -v                                   # one package
-go test ./internal/store/... -run TestCreateGroup -v          # one test
+go test -tags=integration ./internal/store/... -run TestCreateCategory_And_GetBySlug -v   # one test
+# The -tags=integration is required: store tests are behind //go:build integration, so
+# without it the command matches nothing and exits 0, which looks like a pass.
 ```
 
 ## Integration tests

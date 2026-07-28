@@ -56,7 +56,7 @@ import com.hermes.sdk.JSON;
 /**
  * SendInputBody
  */
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-07-28T00:22:36.554995430Z[Etc/UTC]", comments = "Generator version: 7.20.0")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.20.0")
 public class SendInputBody {
   public static final String SERIALIZED_NAME_$_SCHEMA = "$schema";
   @SerializedName(SERIALIZED_NAME_$_SCHEMA)

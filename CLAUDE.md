@@ -25,7 +25,8 @@ make build-admin
 make test
 
 # Run a single test
-go test ./internal/store/... -run TestCreateGroup -v
+# (store tests are //go:build integration — without the tag this matches nothing; needs make infra-up)
+go test -tags=integration ./internal/store/... -run TestCreateCategory_And_GetBySlug -v
 
 # Run integration tests (requires make infra-up)
 make test-integration
