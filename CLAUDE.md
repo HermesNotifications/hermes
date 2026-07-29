@@ -105,6 +105,8 @@ All config via environment variables with `HERMES_` prefix. Defaults target Dock
 
 When writing new handlers, follow the existing pattern: define methods on the store interface, implement in `internal/store/`, create mock in the service's `testutil_test.go`, test handlers with httptest.
 
+**TypeScript** (`web/admin`, `sdks/typescript/packages/*`) uses vitest, not Go tooling — `pnpm --filter <pkg> test`. Colocate `*.test.ts` beside the source. Prefer a hand-written fake typed against the real interface over module mocking. Note that vitest does not type-check: `build` uses `tsconfig.build.json` (tests excluded, so they stay out of the published `dist/`) and `typecheck` uses `tsconfig.json` (tests included). See [docs/testing.md](docs/testing.md#typescript-tests).
+
 ## Observability
 
 Hermes emits telemetry via OpenTelemetry to an in-cluster **LGTM stack** (Loki, Grafana, Tempo, Prometheus) running in the `observability` namespace, with **Datadog dual-emit** during Phase 1. Canonical docs:

@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "comment": "Workspace root. Exists to pin the package manager: corepack reads packageManager and selects this pnpm for every command, so local installs and .github/workflows/ci-web.yml produce the same pnpm-lock.yaml. Without it, pnpm 10 and 11 disagree about peer-dependency suffixes and the lockfile churns depending on who ran install last. Keep this version and PNPM_VERSION in ci-web.yml in step.",
+  "packageManager": "pnpm@10.28.2"
+}

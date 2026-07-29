@@ -622,6 +622,32 @@ in this part of the tree at all — `.claude/guardrails.json` currently exempts
 `web/admin/app/**/layout.tsx` for exactly that reason, and that exemption should be removed
 once there is something to run.
 
+**Resolved 2026-07-28.** vitest 4.1.10 added to `web/admin`, `hermes-react` and `hermes-web`,
+with a `test` script each and both jobs in `ci-web.yml` running it. 51 tests: `relativeTime`
+boundaries and `slugify` (admin), `useHermesInbox` against a hand-written fake client
+(react), and the `<hermes-inbox>` component in jsdom (web). No vitest config files were
+needed — CLI flags cover it — so nothing new was added to the TDD exemption list.
+
+Two corrections to this finding as written. First, the closing recommendation to drop the
+`layout.tsx` exemption was only half right: that exemption rested on two reasons, and only
+the "no runner exists" one has gone away. Route segment config is still declarative
+build-time convention whose whole effect is on `next build`, so the exemption stays, with
+its comment rewritten to rest on that alone. Removing it would force a test asserting a
+constant equals itself — the fake coverage this finding objects to.
+
+Second, the scope note above is wrong about which packages were drifting. `hermes-client`
+compiles clean; it was `hermes-react` and `hermes-web` that **did not build at all** on
+`main`, both constructing a `Notification` with `group_id` after the schema moved to
+`category_id` (PR #43's normalized model). `ci-web.yml` built only `@hermes-notifications/server`
+and blamed the exclusion of the other three on hermes-client, so two genuinely broken
+packages sat behind a stale `TODO(#36)` with CI green. Fixed here; CI now builds all four
+and type-checks them including their test files, via a `tsconfig.build.json` split that
+keeps tests out of the published `dist/`.
+
+Finding 45's remaining half is also closed in passing, because it blocked this work: adding
+a dependency forced a choice of pnpm, and local corepack (11.17.0) and CI (10.28.2) produced
+different lockfiles. A root `package.json` now pins `packageManager: pnpm@10.28.2`.
+
 ---
 
 ## Suggested remediation order
@@ -652,9 +678,15 @@ once there is something to run.
 - ~~Regenerate the four SDKs~~ done 2026-07-28; **the major version bump ADR 0003 commits to
   is still owed** — finding 43.
 - Audit out-of-repo Grafana dashboards and alert rules for the `tenant_id` label — finding 44.
-- Add the spec-to-SDK drift gate to CI and pin the generation toolchain — finding 45.
-- Add a JS/TS test runner and a first test, then drop the `web/admin/app/**/layout.tsx`
-  exemption from `.claude/guardrails.json` — finding 46.
+- ~~Add the spec-to-SDK drift gate to CI and pin the generation toolchain~~ done — the gate
+  landed at `68308ad`, the `packageManager` pin on 2026-07-28 alongside finding 46.
+- ~~Add a JS/TS test runner and a first test~~ done 2026-07-28. The `web/admin/app/**/layout.tsx`
+  exemption was **kept** deliberately, not dropped — see the resolution note on finding 46.
+- **New, from finding 46's fix:** `hermes-react` and `hermes-web` had a `test` script added
+  but `hermes-client` and `hermes-server` still have none. Both are generated-type wrappers
+  where `tsc` carries most of the weight, but `RealtimeConnection` in `hermes-client`
+  (`src/realtime/connection.ts`) is hand-written runtime code — URL scheme rewriting and
+  publication-to-event mapping — and is untested. Worth a suite when someone next touches it.
 - ADR 0002 committed to a follow-up ADR for the normalized content/contact model; PR #43
   shipped that phase without one. Still owed.
 

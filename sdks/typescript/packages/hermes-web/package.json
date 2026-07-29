@@ -15,15 +15,19 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf dist"
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --environment jsdom"
   },
   "dependencies": {
     "@hermes-notifications/client": "workspace:*",
     "lit": "^3.3.2"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "jsdom": "^30.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   },
   "license": "MIT"
 }

@@ -1,5 +1,11 @@
 # Testing
 
+The Go services have three test tiers, separated by Go build tags and what infrastructure
+they need. The TypeScript surface — the admin portal and the SDKs — is tested separately
+with vitest; see [TypeScript tests](#typescript-tests) below.
+
+## Go tests
+
 Hermes has three test tiers, separated by Go build tags and what infrastructure they need.
 
 | Tier | Build tag | Infra needed | Command |
@@ -75,3 +81,37 @@ CI runs all three tiers with `-race` (Postgres, Redis, and NATS provided as serv
   on external state.
 - Use `-race` when touching concurrent code (the integration target already does).
 - Keep new code unit-testable by depending on the store interface, not `*store.Store` directly.
+
+## TypeScript tests
+
+The pnpm workspace (`web/admin` and `sdks/typescript/packages/*`) uses **vitest**. Each
+package that has tests exposes a `test` script; `.github/workflows/ci-web.yml` runs them.
+
+```bash
+pnpm --filter "@hermes/admin" test                                    # admin portal
+pnpm --filter "./sdks/typescript/packages/*" --parallel run --if-present test
+```
+
+Use the repo's pinned pnpm — the root `package.json` sets `packageManager`, so corepack
+selects it automatically. Installing under a different pnpm major rewrites `pnpm-lock.yaml`.
+
+| Package | What is tested |
+|---|---|
+| `web/admin` | Pure helpers in `lib/` — `relativeTime` bucket boundaries, `slugify` |
+| `hermes-react` | `useHermesInbox` against a hand-written fake client |
+| `hermes-web` | The `<hermes-inbox>` component in jsdom |
+| `hermes-client`, `hermes-server` | No suite yet — mostly generated types |
+
+Conventions, which differ from the Go tiers in ways worth knowing:
+
+- **Fakes, not module mocks.** Type the fake against the real interface (see `InboxSurface`
+  in `hermes-react/src/hooks.test.ts`) so a signature change breaks compilation instead of
+  leaving a mock that passes against a method nobody has anymore.
+- **Tests are type-checked, but not by the build.** `build` uses `tsconfig.build.json`, which
+  excludes tests so they never reach the published `dist/`. `typecheck` uses the full
+  `tsconfig.json` and does include them. Vitest transpiles without type-checking, so without
+  the `typecheck` script nothing would check a test file at all.
+- **jsdom is opt-in per package**, via `--environment jsdom` in the `test` script rather than
+  a config file.
+- Type errors are caught by `build`/`typecheck`, not by vitest. Both run in CI for every SDK
+  package — a compile error in any one of them fails the job.
