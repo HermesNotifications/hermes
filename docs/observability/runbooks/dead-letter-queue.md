@@ -52,20 +52,32 @@ Each message is a JSON envelope:
   "attempts": 10,
   "error": "smtp: connection refused",
   "failed_at": "2026-06-12T10:00:00Z",
-  "payload": { ... }                // original message body, verbatim
+  "payload": "eyJub3RpZmljYXRpb25faWQiOiIuLi4ifQ=="   // original body, base64
 }
 ```
+
+> `payload` is **base64**, not inline JSON. It was previously typed as
+> `json.RawMessage`, which validates its contents on marshal — so a body that was not
+> valid JSON made the whole envelope fail to marshal, and the dead letter was never
+> published at all. That is the exact case the DLQ exists for, and it failed silently.
+> Base64 always round-trips, including for truncated or binary payloads. Decode it
+> before reading: `jq -r .payload | base64 -d`.
 
 Clean up the inspection consumer when done: `nats consumer rm DLQ inspect -f`.
 
 ## Replay
 
 1. Fix the underlying cause first (downstream recovered, bug fixed and deployed).
-2. Republish the envelope's `payload` to its original `subject`:
+2. Decode the envelope's `payload` and republish it to its original `subject`:
 
    ```bash
-   # Single message — paste the payload object only, not the whole envelope:
-   nats pub delivery.email '{"notification_id":"...", ...}'
+   # Decode the payload, then publish the decoded body — not the whole envelope.
+   nats consumer next DLQ inspect --raw \
+     | jq -r '.payload' | base64 -d \
+     | xargs -0 nats pub delivery.email
+
+   # Or, to inspect before sending:
+   nats consumer next DLQ inspect --raw | jq -r '.payload' | base64 -d
    ```
 
 3. Replay is safe to repeat: every pipeline stage is idempotent (the Send service

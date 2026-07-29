@@ -52,6 +52,48 @@ func TestDeadLetter_RoundTrip(t *testing.T) {
 	}
 }
 
+// The case the DLQ exists for. Payload was json.RawMessage, whose MarshalJSON validates
+// its contents — so a payload that is not valid JSON made DeadLetter.Marshal fail, the
+// dead letter was never published, and internal/messaging fell back to nacking the
+// message until MaxAge. A malformed message is precisely what cannot be processed and
+// most needs preserving, so the DLQ failed exactly where it was most needed, silently.
+func TestDeadLetter_PreservesAPayloadThatIsNotValidJSON(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload []byte
+	}{
+		{"plain text", []byte("this is not a delivery message")},
+		{"truncated JSON", []byte(`{"notification_id":`)},
+		{"binary", []byte{0x00, 0x01, 0x02, 0xff, 0xfe}},
+		{"empty", []byte{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := &DeadLetter{
+				Subject: "delivery.email",
+				Stream:  "DELIVERY",
+				Reason:  DeadLetterReasonTerminated,
+				Payload: tc.payload,
+			}
+
+			data, err := in.Marshal()
+			if err != nil {
+				t.Fatalf("Marshal failed, so this message could never reach the DLQ: %v", err)
+			}
+
+			out, err := UnmarshalDeadLetter(data)
+			if err != nil {
+				t.Fatalf("UnmarshalDeadLetter: %v", err)
+			}
+			// Verbatim round-trip is the point: an operator replays what actually failed.
+			if string(out.Payload) != string(tc.payload) {
+				t.Errorf("Payload = %q, want %q", out.Payload, tc.payload)
+			}
+		})
+	}
+}
+
 func TestDeadLetterReasons(t *testing.T) {
 	if DeadLetterReasonMaxDeliveries != "max_deliveries" {
 		t.Errorf("DeadLetterReasonMaxDeliveries = %q", DeadLetterReasonMaxDeliveries)
