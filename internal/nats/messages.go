@@ -90,14 +90,24 @@ const (
 // permanently rejected by a consumer. Published to "dlq.<original subject>"
 // on the DLQ stream by internal/messaging.
 type DeadLetter struct {
-	Subject  string          `json:"subject"`   // original subject, e.g. "delivery.email"
-	Stream   string          `json:"stream"`    // source stream, e.g. "DELIVERY"
-	Consumer string          `json:"consumer"`  // durable consumer name
-	Reason   string          `json:"reason"`    // DeadLetterReasonMaxDeliveries or DeadLetterReasonTerminated
-	Attempts uint64          `json:"attempts"`  // delivery attempts consumed
-	Error    string          `json:"error"`     // handler error from the final attempt
-	FailedAt time.Time       `json:"failed_at"` // when the message was dead-lettered
-	Payload  json.RawMessage `json:"payload"`   // original message body, verbatim
+	Subject  string    `json:"subject"`   // original subject, e.g. "delivery.email"
+	Stream   string    `json:"stream"`    // source stream, e.g. "DELIVERY"
+	Consumer string    `json:"consumer"`  // durable consumer name
+	Reason   string    `json:"reason"`    // DeadLetterReasonMaxDeliveries or DeadLetterReasonTerminated
+	Attempts uint64    `json:"attempts"`  // delivery attempts consumed
+	Error    string    `json:"error"`     // handler error from the final attempt
+	FailedAt time.Time `json:"failed_at"` // when the message was dead-lettered
+	// Payload is the original message body, verbatim. []byte and not json.RawMessage:
+	// RawMessage.MarshalJSON validates its contents, so a payload that is not valid JSON
+	// made Marshal fail, the dead letter was never published, and internal/messaging fell
+	// back to nacking the message until MaxAge. A malformed message is exactly what
+	// cannot be processed and most needs preserving, so the DLQ failed precisely where it
+	// was most needed — and silently, because the publish error only incremented a
+	// counter. []byte marshals as base64, which always round-trips.
+	//
+	// Wire-format note: payload is therefore a base64 string, not inline JSON. Anything
+	// reading the DLQ must decode it — `jq -r .payload | base64 -d`.
+	Payload []byte `json:"payload"`
 }
 
 func (m *DeadLetter) Marshal() ([]byte, error) { return json.Marshal(m) }

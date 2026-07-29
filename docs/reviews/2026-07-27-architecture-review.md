@@ -1333,6 +1333,67 @@ normalised.
 
 ---
 
+## Added and resolved 2026-07-29 — finding 50, found while fixing finding 9
+
+**50. [P0] The dead-letter queue could not capture a malformed payload — the exact case it
+exists for.** `hermenats.DeadLetter.Payload` was typed `json.RawMessage`, whose
+`MarshalJSON` validates its contents. A payload that was not valid JSON therefore made
+`DeadLetter.Marshal` fail, `publishDeadLetter` returned an error, and `processMessage` fell
+back to nacking the message — which then retried until `MaxAge` and was lost.
+
+The failure was **silent**: the publish error only incremented a counter, and
+`internal/messaging` has no logger. From outside, a message that could not be dead-lettered
+was indistinguishable from one being retried normally.
+
+This was invisible before finding 9 because the delivery workers never returned an error at
+all, so nothing on that path ever reached `publishDeadLetter` with an unparseable payload.
+Fixing finding 9 exposed it immediately — the first E2E test to drive a failing delivery to
+its conclusion hit it on the first run.
+
+Fixed by typing `Payload` as `[]byte`, which marshals as base64 and always round-trips,
+including for truncated and binary bodies. **This changes the DLQ wire format**: `payload`
+is now a base64 string rather than inline JSON, so anything reading the DLQ must decode it.
+`docs/observability/runbooks/dead-letter-queue.md` is updated, including its replay
+commands, which would otherwise have been wrong.
+
+### Finding 9 resolved
+
+`internal/delivery/worker.go` returned `nil` on every failure path, which the messaging
+layer reads as success — so the message was acked and dropped, and the retry, backoff and
+dead-letter machinery was unreachable from all three delivery workers. A transient SMTP or
+webhook blip permanently lost the notification.
+
+Now: an unparseable message returns a **permanent** error (retrying cannot help, so it is
+terminated straight to the DLQ with reason `terminated` rather than burning ten attempts),
+and a provider failure returns a **transient** error, so the message is nacked, retried with
+backoff and dead-lettered once retries are exhausted.
+
+Provider errors are deliberately *not* classified per-provider: `Provider.Send` returns a
+bare error, so there is no way to distinguish a 4xx rejection from a connection refused.
+Treating them all as transient is the safe default — a permanent misclassification drops a
+deliverable notification on attempt one. Per-provider classification is worth doing and is
+its own change.
+
+The `<channel>.failed` event now fires only on the final attempt. Publishing on every
+attempt would put up to `maxDeliveries` failure events on the stream for one notification,
+which the status rollup and any alert counting them would both misread.
+
+**The two tests that pinned the bug were inverted, not deleted**, with the reason recorded
+in the test file. `worker_test.go` had required `handleMessage` to return nil on both
+provider and unmarshal errors — so the suite was defending the defect, and any correct fix
+would have "broken" a passing test.
+
+**A new E2E test drives a failing delivery to the DLQ** (`tests/e2e/dlq_test.go`). Nothing
+previously did, which is why finding 9 and finding 50 both survived. It uses the permanent
+path rather than exhausting `maxDeliveries`, because that constant is package-private to
+`internal/messaging` and draining ten attempts with backoff would be slow and flaky.
+
+Verified by execution against real infrastructure: Postgres, NATS, Redis, Mailpit and
+DynamoDB-local, with the full `go test ./... -tags=integration` suite green. The DLQ test
+went from timing out at 20s to passing in 0.03s.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is
