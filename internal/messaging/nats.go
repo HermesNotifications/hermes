@@ -36,8 +36,39 @@ var Streams = []StreamConfig{
 	{Name: "EVENTS", Subjects: []string{"notification.events"}},
 }
 
-func Connect(url string) (*Client, error) {
-	nc, err := nats.Connect(url)
+// Option configures a Connect call. Options exist so the transport security added in
+// ADR 0005 phase 2 is supplied by the caller from configuration rather than hardcoded
+// here, and so the plaintext development path stays reachable by passing nothing.
+type Option func(*connectOptions)
+
+type connectOptions struct {
+	nats []nats.Option
+}
+
+// WithCABundle trusts the PEM bundle at path when verifying the NATS server's
+// certificate, and requires TLS for the connection.
+//
+// An empty path is a no-op, which is what keeps `make infra-up` working: local NATS has
+// no certificate and HERMES_NATS_CA_BUNDLE is unset. The private CA that cert-manager
+// uses for nats.hermes.svc is in no system trust store, so in a real deployment this is
+// how the connection can be verified at all — but a missing bundle fails the connection
+// loudly rather than downgrading it, so an unset variable cannot put data on the wire.
+func WithCABundle(path string) Option {
+	return func(o *connectOptions) {
+		if path == "" {
+			return
+		}
+		o.nats = append(o.nats, nats.RootCAs(path))
+	}
+}
+
+func Connect(url string, opts ...Option) (*Client, error) {
+	var co connectOptions
+	for _, opt := range opts {
+		opt(&co)
+	}
+
+	nc, err := nats.Connect(url, co.nats...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}

@@ -24,9 +24,15 @@ type EmailConfig struct {
 }
 
 type Config struct {
-	HTTPPort           int
-	DatabaseURL        string
-	NATSUrl            string
+	HTTPPort    int
+	DatabaseURL string
+	NATSUrl     string
+	// NATSCABundlePath is a PEM file of the roots that verify the NATS server
+	// certificate. cert-manager signs nats.hermes.svc with a private CA (ADR 0005
+	// phase 2) that is in no system trust store, so this is how the connection can be
+	// verified. Empty means "use the system pool", which is the local development
+	// path — `make infra-up` runs NATS without TLS at all.
+	NATSCABundlePath   string
 	RedisURL           string
 	JWTSecret          string
 	CentrifugoAPIURL   string
@@ -61,6 +67,7 @@ func Load() Config {
 		HTTPPort:         envInt("HERMES_HTTP_PORT", 8080),
 		DatabaseURL:      envStr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"),
 		NATSUrl:          envStr("HERMES_NATS_URL", "nats://localhost:4222"),
+		NATSCABundlePath: envStr("HERMES_NATS_CA_BUNDLE", ""),
 		RedisURL:         envStr("HERMES_REDIS_URL", "redis://localhost:6379/0"),
 		JWTSecret:        envStr("HERMES_JWT_SECRET", "hermes-jwt-secret"),
 		CentrifugoAPIURL: envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000"),

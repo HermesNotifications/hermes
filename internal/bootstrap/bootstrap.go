@@ -34,8 +34,12 @@ func MustConnectDB(ctx context.Context, url string, logger *slog.Logger) *pgxpoo
 }
 
 // MustConnectNATS connects to NATS or exits the process.
-func MustConnectNATS(url string, logger *slog.Logger) *messaging.Client {
-	client, err := messaging.Connect(url)
+//
+// Callers pass messaging.WithCABundle(cfg.NATSCABundlePath) so transport security comes
+// from configuration rather than being hardcoded here (ADR 0005 phase 2). Exiting is the
+// fail-closed behaviour: a service that cannot verify the bus does not run.
+func MustConnectNATS(url string, logger *slog.Logger, opts ...messaging.Option) *messaging.Client {
+	client, err := messaging.Connect(url, opts...)
 	if err != nil {
 		logger.Error("nats connection failed", "error", err)
 		os.Exit(1)

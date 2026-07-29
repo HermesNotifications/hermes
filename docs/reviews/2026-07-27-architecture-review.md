@@ -1464,6 +1464,75 @@ prose is cheap and rots; a test that fails is what keeps it true.
 
 ---
 
+## Added and resolved 2026-07-29 — finding 51, and ADR 0005 phase 2
+
+**51. [P0] The NATS StatefulSet could not form a JetStream cluster, for three independent
+reasons.** Found while implementing ADR 0005 phase 2, because the change could not be
+verified until the cluster would actually start. All three are pre-existing in
+`deploy/k8s/base/infra/nats.yaml` and all three were confirmed by observation, not inference.
+
+1. **`OrderedReady` plus a `/healthz` readiness probe deadlocks.** `nats-0` cannot become
+   Ready until the JetStream meta layer elects a leader; that needs quorum; quorum needs
+   `nats-1`; and `OrderedReady` will not create `nats-1` until `nats-0` is Ready. Observed:
+   `/healthz` returning 503 `"JetStream is still recovering meta layer"` in a loop while the
+   liveness probe restarted the pod, restart count climbing. Fixed with
+   `podManagementPolicy: Parallel` — **not updatable on a live StatefulSet**, so an existing
+   cluster needs delete-and-recreate.
+2. **`/healthz?js-server-only=true` as a readiness probe is a lie.** On a single node it
+   returns 200 while every `stream add` fails with `JetStream system temporarily unavailable
+   (10008)`, indefinitely. Readiness now uses full `/healthz`; liveness stays on
+   `js-enabled-only=true` so meta-layer elections do not cause restart storms.
+3. **Strict readiness requires `publishNotReadyAddresses: true`** on the headless Service.
+   Without it, DNS publishes only Ready endpoints, so routes never resolve and all three pods
+   sit `0/1` logging `lookup nats-1.nats: no such host`. With it, Ready in ~10s. The trade-off
+   is documented in the manifest: a client dialling `tls://nats:4222` can reach a not-ready
+   pod.
+
+**Also found: staging's NATS patch would have silently disabled TLS.** It replaces `args`
+wholesale with plaintext flags, which now also drops `-c nats-server.conf` — while
+`HERMES_ENV=staging` makes every service demand `tls://`, so they would refuse to start. And
+staging's `replicas: 1` cannot use the base config at all (three routes, no quorum — verified
+broken). Staging now gets its own `nats-server.conf` with the same `tls` block and no
+`cluster` block.
+
+### ADR 0005 phase 2 and finding 19 resolved
+
+Verified against a real k3s cluster with cert-manager v1.21.0, not reasoned:
+
+- **cert-manager issues for internal names.** selfSigned Issuer → CA Certificate → CA Issuer →
+  leaf, all Ready in 7s, with SANs covering `nats`, `nats.<ns>`, `nats.<ns>.svc` and
+  `nats.<ns>.svc.cluster.local`.
+- **NATS runs with TLS from the repo's own rendered manifest** — 3/3 Ready, route mTLS
+  established, a replica-3 stream with `Leader: nats-2` and both replicas current, and a
+  message published and consumed over TLS.
+- **TLS is required, not merely offered.** `tls://` with the CA connects; without the CA, 3/3
+  fail `x509: certificate signed by unknown authority`; plaintext `nats://` fails 6/6. Proven
+  at the wire level too: raw TCP shows `"tls_required":true` in INFO, and a plaintext
+  `CONNECT` + `PING` receives neither `+OK` nor `PONG`.
+- **`internal/messaging` itself** connects, sets up all four streams and publishes against the
+  live TLS cluster with the cert-manager CA; refuses without it; refuses on `nats://`.
+- **Finding 19 is fully achievable, `readOnlyRootFilesystem` included.** `id` reports
+  `uid=65534(nobody)`, `touch /oops` fails read-only, `touch /data/ok` succeeds. `fsGroup:
+  65534` is required — the `nats:2-alpine` image runs as **root** by default.
+
+Mutation-checked: making `WithCABundle` a no-op fails `TestConnect_TLSWithCABundle` with
+`unknown authority`; removing its empty-path guard fails
+`TestWithCABundle_EmptyPathLeavesPlaintextWorking`. The local overlay was verified to render
+with **zero** cert-manager resources and plaintext NATS, so `make infra-up`-style development
+is unaffected.
+
+**Unverified:** the local and production overlays were rendered, never applied — there is no
+k3d here and no AWS. Certificate **renewal** is untested through an actual expiry cycle, and
+NATS reloads certificates only on SIGHUP, so a renewal is picked up at next restart. TLS cost
+on the JetStream hot path remains unmeasured.
+
+Six open decisions are now recorded as an amendment to
+[ADR 0005](../adr/0005-transport-security-for-infrastructure-connections.md). One deserves
+attention rather than acceptance: the self-signed CA's private key lives in the `hermes`
+namespace, so anything that can read Secrets there can mint a certificate every service trusts.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is

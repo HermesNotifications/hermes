@@ -14,6 +14,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/delivery"
 	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermes-notifications/hermes/internal/messaging"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger)
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger, messaging.WithCABundle(cfg.NATSCABundlePath))
 	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
 

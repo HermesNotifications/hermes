@@ -10,8 +10,29 @@ resources:
   - secrets.yaml
 
 patches:
-  # Replace 3-node NATS StatefulSet with single-node for local dev
+  # Replace 3-node NATS StatefulSet with single-node plaintext for local dev
   - path: patches/nats-local.yaml
+  # ADR 0005 phase 2. The k3d cluster `make dev-up` creates has no cert-manager —
+  # infra/scripts/bootstrap-cluster.sh installs it on EKS, not here — so applying these
+  # would fail on a missing CRD. Local NATS runs plaintext and needs no certificates.
+  - target:
+      group: cert-manager.io
+      kind: Certificate
+    patch: |
+      $patch: delete
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: unused
+  - target:
+      group: cert-manager.io
+      kind: Issuer
+    patch: |
+      $patch: delete
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: unused
   # Relax readOnlyRootFilesystem for Tilt live_update (restart wrapper needs writes)
   - path: patches/security-dev.yaml
     target:
@@ -53,6 +74,12 @@ configMapGenerator:
     literals:
       - HERMES_DATABASE_URL=postgres://hermes:hermes@postgres:5432/hermes?sslmode=disable
       - HERMES_REDIS_URL=redis://redis:6379/0
+      # ADR 0005 phase 2's explicit dev opt-out. The base defaults are tls:// and a CA
+      # bundle path; local NATS has neither, so both are named here. An empty CA bundle
+      # makes internal/messaging.WithCABundle a no-op. HERMES_ENV is unset, so it defaults
+      # to "development" and config.Validate does not reject these.
+      - HERMES_NATS_URL=nats://nats:4222
+      - HERMES_NATS_CA_BUNDLE=
       - HERMES_EMAIL_SMTP_HOST=mailpit
       - HERMES_DYNAMO_ENDPOINT=http://dynamodb-local:8000
       - HERMES_DYNAMO_REGION=us-east-1

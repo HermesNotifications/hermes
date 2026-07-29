@@ -14,6 +14,14 @@ patches:
 - path: patches/nats.yaml
 # DATABASE_URL and REDIS_URL are provided by ExternalSecret (hermes-secrets)
 # No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL
+secretGenerator:
+# ADR 0005 phase 2. Staging is single-node, and the base configuration's three cluster
+# routes leave a one-peer JetStream meta layer without quorum forever. Same TLS, no
+# cluster block. See overlays/staging/nats-server.conf.
+- name: nats-server-config
+  behavior: replace
+  files:
+  - nats.conf=nats-server.conf
 configMapGenerator:
 - name: hermes-config
   behavior: merge

@@ -8,11 +8,30 @@ spec:
     spec:
       containers:
         - name: nats
+          # ADR 0005 phase 2 keeps local development working without certificates, and
+          # this is where that opt-out is spelled out rather than implied. Replacing the
+          # args drops `-c nats.conf`, so the server never reads the `tls` block and runs
+          # plaintext on 4222 with plain HTTP monitoring on 8222 — the same thing
+          # `make infra-up` gives you. The base `certs` volume is optional, so the
+          # cert-manager Secret being absent here does not block the pod.
+          #
+          # The matching client half is in kustomization.yaml: HERMES_NATS_URL goes back
+          # to nats:// and HERMES_NATS_CA_BUNDLE is emptied.
           args:
             - "--jetstream"
             - "--store_dir=/data"
             - "-m"
             - "8222"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8222
+              scheme: HTTP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8222
+              scheme: HTTP
   volumeClaimTemplates:
     - metadata:
         name: data
