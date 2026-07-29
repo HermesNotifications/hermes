@@ -13,6 +13,7 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0001](0001-dynamodb-model-via-extenddb.md) | Adopt the DynamoDB programming model for the hot notification path | Accepted | 2026-05-29 |
 | [0002](0002-provider-plugin-model-bus-native-isolation.md) | Adopt a provider plugin model with bus-native (NATS subject) isolation | Accepted | 2026-06-13 |
 | [0003](0003-rename-tenant-to-organization.md) | Rename `tenant` to `organization`, and name the app as the isolation boundary | Accepted | 2026-07-27 |
+| [0004](0004-ownership-manifest-for-review-remediation.md) | Ownership manifest for the review-remediation batch, with auth owned by a unit rather than escalated | Accepted | 2026-07-29 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 
