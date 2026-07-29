@@ -127,5 +127,60 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(len(failures), 4)
 
 
+class TestPeerSelectors(unittest.TestCase):
+    """`from:`/`to:` selectors are the same defect class as podSelector.
+
+    A peer selector that matches nothing does not make a policy permissive — it makes the
+    rule unsatisfiable, so required traffic is denied. Verified in-cluster: pointing the
+    `to:` selector of allow-egress-to-nats at a label no pod carries dropped
+    hermes -> nats:4222 (curl exit 7) while the podSelector-only gate still reported ok.
+    """
+
+    def _policy_with_peer(self, name, direction, peer):
+        return {"kind": "NetworkPolicy", "metadata": {"name": name},
+                "spec": {"podSelector": {}, direction: [{"to" if direction == "egress" else "from": [peer]}]}}
+
+    def test_reports_a_peer_selector_matching_nothing(self):
+        docs = [
+            _deployment("admin", {"app.kubernetes.io/name": "hermes-admin"}),
+            self._policy_with_peer("egress-to-nats", "egress",
+                                   {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "TYPO"}}}),
+        ]
+        failures, _, _ = check.evaluate(docs)
+        self.assertEqual([name for name, _ in failures], ["egress-to-nats (egress peer)"])
+
+    def test_accepts_a_peer_selector_that_matches(self):
+        docs = [
+            _deployment("nats", {"app.kubernetes.io/name": "nats"}),
+            self._policy_with_peer("egress-to-nats", "egress",
+                                   {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "nats"}}}),
+        ]
+        failures, _, _ = check.evaluate(docs)
+        self.assertEqual(failures, [])
+
+    def test_ignores_cross_namespace_and_ipblock_peers(self):
+        # These name pods this manifest does not contain, so "matches nothing" here is
+        # not evidence of a defect. Flagging them would make the gate cry wolf.
+        docs = [
+            _deployment("admin", {"app.kubernetes.io/name": "hermes-admin"}),
+            self._policy_with_peer("ns-peer", "ingress",
+                                   {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "ingress-nginx"}}}),
+            self._policy_with_peer("both", "ingress",
+                                   {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "observability"}},
+                                    "podSelector": {"matchLabels": {"app": "prometheus"}}}),
+            self._policy_with_peer("ip", "egress", {"ipBlock": {"cidr": "10.0.0.0/8"}}),
+        ]
+        failures, _, _ = check.evaluate(docs)
+        self.assertEqual(failures, [])
+
+    def test_empty_peer_selector_matches_every_pod(self):
+        docs = [
+            _deployment("admin", {"app.kubernetes.io/name": "hermes-admin"}),
+            self._policy_with_peer("monitor", "ingress", {"podSelector": {}}),
+        ]
+        failures, _, _ = check.evaluate(docs)
+        self.assertEqual(failures, [])
+
+
 if __name__ == "__main__":
     unittest.main()

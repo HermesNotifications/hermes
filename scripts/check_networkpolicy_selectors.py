@@ -7,9 +7,17 @@
 This exists because of finding 47 in the 2026-07-27 architecture review. The kustomize
 `labels:` transformer ran with `includeSelectors: false` and no `includeTemplates`, so
 `app.kubernetes.io/part-of` was written to resource metadata but never onto a pod
-template. Four of the seven NetworkPolicies keyed their podSelector on that label and
-therefore selected ZERO pods — the declared effect of the entire policy set was DNS
-egress and nothing else.
+template. Five selector sites across four of the seven NetworkPolicies keyed on that
+label and therefore matched ZERO pods — the declared effect of the entire policy set was
+DNS egress and nothing else.
+
+The review recorded this as "four policies keyed their podSelector"; rendering the
+pre-fix overlay and checking it shows that is two errors. Only THREE policies keyed a
+podSelector (allow-egress-managed-services, allow-egress-to-nats,
+allow-egress-to-centrifugo). The other two sites are `from:` peer selectors — in
+allow-nats-client, which the review counted, and in allow-centrifugo-egress, which it
+missed. The bottom line held, but the mechanism differs: an inert podSelector removes a
+policy, an inert peer selector leaves the policy in force with an unsatisfiable rule.
 
 Nothing detected it, and nothing could have. `kustomize build` succeeds, `kubectl apply`
 succeeds, and the API server happily accepts a NetworkPolicy that matches nothing. A
@@ -85,11 +93,33 @@ def selects(selector, labels):
     return True
 
 
+def local_peer_selectors(spec):
+    """Pod selectors in `from:`/`to:` that refer to pods in *this* manifest.
+
+    Peers carrying a namespaceSelector name pods in another namespace, and ipBlock peers
+    name no pods at all; neither can be resolved from a single rendered overlay, so both
+    are skipped rather than reported. Only a bare podSelector is answerable here.
+    """
+    for direction in ("ingress", "egress"):
+        for rule in spec.get(direction) or []:
+            for peer in rule.get("from") or rule.get("to") or []:
+                if "namespaceSelector" in peer or "ipBlock" in peer:
+                    continue
+                if "podSelector" in peer:
+                    yield direction, peer["podSelector"]
+
+
 def evaluate(docs):
     """Return (failures, policies checked, workloads found).
 
     `failures` is a list of (policy name, workload count) for policies matching nothing.
     Split out from main() so the gate's decision is testable without rendering YAML.
+
+    Both a policy's own podSelector and its peer selectors are checked. A peer selector
+    matching nothing is not permissive — it makes the rule unsatisfiable, so the traffic
+    it was written to allow is denied by whatever default-deny is in force. Confirmed
+    in-cluster: a one-word typo in the `to:` selector of allow-egress-to-nats silently
+    dropped all NATS client traffic.
     """
     pods = workloads(docs)
     failures = []
@@ -100,9 +130,12 @@ def evaluate(docs):
             continue
         checked += 1
         name = (doc.get("metadata") or {}).get("name", "?")
-        selector = (doc.get("spec") or {}).get("podSelector")
-        if not any(selects(selector, labels) for _, _, labels in pods):
+        spec = doc.get("spec") or {}
+        if not any(selects(spec.get("podSelector"), labels) for _, _, labels in pods):
             failures.append((name, len(pods)))
+        for direction, selector in local_peer_selectors(spec):
+            if not any(selects(selector, labels) for _, _, labels in pods):
+                failures.append((f"{name} ({direction} peer)", len(pods)))
 
     return failures, checked, len(pods)
 

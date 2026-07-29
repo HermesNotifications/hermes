@@ -1013,15 +1013,33 @@ enforcement is switched on. So `scripts/check_networkpolicy_selectors.py` now fa
 `make verify-manifests` if any policy's `podSelector` matches no workload, and it names
 `includeTemplates` as the likely cause.
 
-Proven to bite: reverting the one-line fix makes `make verify-manifests` exit non-zero with
-`FAIL: 3 of 9 NetworkPolicies select no pods`. The script has 11 unit tests, also run by
-`verify-manifests`.
+Proven to bite: reverting the one-line fix makes `make verify-manifests` exit non-zero and
+name the offending policies. The script's unit tests also run in `verify-manifests`.
 
-> The count differs between the mutation run (3) and the original triage (4) because the
-> fourth, `allow-nats-client`, keys its *source* selector on `part-of` while its `podSelector`
-> keys on `name: nats`. It selects a pod either way — but its ingress rule matched no source
-> until the label was fixed. A `podSelector` check cannot see that, so the gate is necessary
-> but not sufficient. Peer selectors inside rules remain unchecked.
+> The count differs between the mutation run and the original triage because `part-of` is
+> keyed at two *kinds* of site. Three policies key their `podSelector` on it
+> (`allow-egress-managed-services`, `allow-egress-to-nats`, `allow-egress-to-centrifugo`).
+> Two more key a `from:` *peer* selector on it: `allow-nats-client`, which the triage
+> counted as the "fourth", and `allow-centrifugo-egress`, which the triage missed entirely.
+> Five sites, not four. The mechanisms differ and it matters: an inert `podSelector`
+> deletes the policy's effect, while an inert peer selector leaves the policy enforcing an
+> unsatisfiable rule, so required traffic is denied.
+
+**Verified in-cluster 2026-07-29** against a real k3s node where NetworkPolicy is enforced
+(the EKS vpc-cni caveat above means it is not enforced in the project's own environments).
+The rendered policy set was retargeted onto stand-in pods carrying the rendered labels. All
+required flows pass and the intended denials hold, including NATS 6222 cluster routing, and
+`allow-nats-cluster-egress` was confirmed load-bearing by deleting it and watching 6222 drop.
+
+That run also closed the gap this section left open. Peer selectors are no longer unchecked:
+a one-word typo in the `to:` selector of `allow-egress-to-nats` silently dropped all NATS
+client traffic in-cluster while the podSelector-only gate still reported `ok`. The gate now
+checks `from:`/`to:` pod selectors too, skipping peers that carry a `namespaceSelector` or
+`ipBlock` since those name pods no single rendered overlay contains.
+
+The gate was also wired into CI. It had been added to `make verify-manifests` only, while
+the `kustomize-validate` job merely rendered the overlays — so nothing on the merge path
+would have caught a reintroduction of the very defect the gate exists to prevent.
 
 ### Still open in this cluster
 
