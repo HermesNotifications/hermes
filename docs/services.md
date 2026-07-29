@@ -67,6 +67,7 @@ All services expose unauthenticated `GET /healthz` and `GET /readyz` probes.
 | `cleanup` | `cmd/cleanup` | Delete `notification_events` older than the retention window | `make cleanup` (k8s CronJob in prod) |
 | `loadseed` | `cmd/loadseed` | Generate the load-test dataset (organizations/users) | `make loadseed` |
 | `openapi` | `cmd/openapi` | Emit OpenAPI 3.1 specs from the huma API definitions | `make openapi` |
+| `dispatchbench` | `cmd/dispatchbench` | Sweep dispatch worker concurrency and prefetch against a real backend | `make dispatchbench` |
 | `hermes` | `cmd/hermes` | Admin CLI + interactive inbox TUI | see [cli.md](cli.md) |
 
 ## Shared internal packages

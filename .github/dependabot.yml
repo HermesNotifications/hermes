@@ -59,6 +59,11 @@ updates:
         patterns:
           - "*"
 
+  # Actions are pinned to commit SHAs with the tag in a trailing comment
+  # (finding 16) — `uses: actions/checkout@d23441a… # v6`. Dependabot understands
+  # that form and bumps both the SHA and the comment, so pinning does not mean
+  # going stale. This entry is what keeps that true; removing it silently freezes
+  # every action at whatever commit was current when it was pinned.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

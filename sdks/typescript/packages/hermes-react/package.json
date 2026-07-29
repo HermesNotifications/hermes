@@ -15,8 +15,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf dist"
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --environment jsdom"
   },
   "dependencies": {
     "@hermes-notifications/client": "workspace:*"
@@ -25,9 +27,14 @@
     "react": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
-    "react": "^19.2.4",
-    "typescript": "^5.9.3"
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^30.0.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   },
   "license": "MIT"
 }

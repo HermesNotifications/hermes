@@ -19,6 +19,10 @@ configMapGenerator:
   behavior: merge
   literals:
   - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=staging
+  # ADR 0005. Anything other than "development" makes config.Validate enforce TLS on every
+  # datastore connection and reject the built-in placeholder secrets. Without this the
+  # check defaults to development and is silently inert here.
+  - HERMES_ENV=staging
   options:
     disableNameSuffixHash: true
 - name: hermes-domain

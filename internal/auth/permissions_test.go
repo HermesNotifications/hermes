@@ -4,68 +4,71 @@
 package auth_test
 
 import (
-	"net/http"
-	"net/http/httptest"
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/hermes-notifications/hermes/internal/auth"
 )
 
-func TestRequirePermission_Allowed(t *testing.T) {
-	handler := auth.RequirePermission(auth.PermNotificationsSend)(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-	)
+// Finding 3. RequirePermission was `func(http.Handler) http.Handler`, which cannot be
+// applied to a Huma operation — Huma handlers are func(ctx, input) and never see an
+// http.Handler. That shape is *why* it had zero production call sites while being fully
+// unit-tested: the tests exercised a function no route could use. CheckPermission takes a
+// context instead, which is what a Huma handler actually has.
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(auth.WithValidatedKey(req.Context(), &auth.ValidatedKey{
+func TestCheckPermission_AllowsAKeyHoldingThePermission(t *testing.T) {
+	ctx := auth.WithValidatedKey(context.Background(), &auth.ValidatedKey{
 		ID:          "key_abc123",
 		Permissions: []string{auth.PermNotificationsSend, auth.PermTemplatesManage},
-	}))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+	})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if err := auth.CheckPermission(ctx, auth.PermNotificationsSend); err != nil {
+		t.Fatalf("expected the permission to be granted, got: %v", err)
 	}
 }
 
-func TestRequirePermission_Denied(t *testing.T) {
-	handler := auth.RequirePermission(auth.PermAPIKeysManage)(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-	)
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(auth.WithValidatedKey(req.Context(), &auth.ValidatedKey{
+func TestCheckPermission_DeniesAKeyWithoutThePermission(t *testing.T) {
+	ctx := auth.WithValidatedKey(context.Background(), &auth.ValidatedKey{
 		ID:          "key_abc123",
 		Permissions: []string{auth.PermNotificationsSend},
-	}))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+	})
 
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", rec.Code)
+	err := auth.CheckPermission(ctx, auth.PermAPIKeysManage)
+	if !errors.Is(err, auth.ErrInsufficientPermission) {
+		t.Fatalf("expected ErrInsufficientPermission, got: %v", err)
+	}
+	// The caller has to distinguish 403 from 401, so the two must not collapse.
+	if errors.Is(err, auth.ErrNoAPIKey) {
+		t.Error("a key that lacks a permission must not read as a missing key")
 	}
 }
 
-func TestRequirePermission_NoKeyInContext(t *testing.T) {
-	handler := auth.RequirePermission(auth.PermNotificationsSend)(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-	)
+// The critical one. The three inline checks this replaces were written
+// `if key != nil && !HasPermission(...)`, which PASSES when the key is nil. That is
+// fail-open: a route reached without a validated key was granted every permission.
+// It was unreachable in production because the middleware 401s first, but it is exactly
+// the kind of latent hazard that becomes live the moment a route is mounted differently.
+func TestCheckPermission_FailsClosedWithNoKeyInContext(t *testing.T) {
+	err := auth.CheckPermission(context.Background(), auth.PermNotificationsSend)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
+	if err == nil {
+		t.Fatal("expected an error with no key in context; a missing key must never grant access")
+	}
+	if !errors.Is(err, auth.ErrNoAPIKey) {
+		t.Fatalf("expected ErrNoAPIKey, got: %v", err)
 	}
 }
+
+func TestCheckPermission_DeniesAKeyWithNoPermissionsAtAll(t *testing.T) {
+	ctx := auth.WithValidatedKey(context.Background(), &auth.ValidatedKey{ID: "key_empty"})
+
+	if err := auth.CheckPermission(ctx, auth.PermNotificationsSend); !errors.Is(err, auth.ErrInsufficientPermission) {
+		t.Fatalf("expected ErrInsufficientPermission, got: %v", err)
+	}
+}
+
+// SkipAuthMiddleware is covered in middleware_test.go, beside the implementation.
 
 func TestValidatePermissions(t *testing.T) {
 	valid := []string{auth.PermNotificationsSend, auth.PermTemplatesManage}

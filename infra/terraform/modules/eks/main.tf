@@ -174,7 +174,11 @@ resource "aws_iam_role_policy" "external_secrets" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = "secretsmanager:GetSecretValue"
+        # Finding 21. DescribeSecret added: External Secrets calls it to read metadata
+        # and version stages, and without it ESO fails on secrets it can otherwise read
+        # — an error that surfaces as a sync failure rather than a permissions message.
+        # Both stay scoped to secret:hermes/*, unlike the Crossplane role in finding 6.
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
         Resource = "arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:hermes/*"
       },
       {

@@ -56,6 +56,33 @@ spec:
         - protocol: TCP
           port: 4222
 ---
+# Allow NATS nodes to reach each other for cluster routing.
+#
+# Not part of the original findings, but exposed by fixing finding 47: allow-nats-client
+# above permits 6222 INGRESS between NATS pods, and nothing permitted the matching
+# EGRESS. While the part-of label never reached a pod these policies selected nothing and
+# the omission was invisible. Staging runs a single replica so it would not have noticed,
+# but the rule is kept identical to production deliberately.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nats-cluster-egress
+  namespace: hermes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats
+      ports:
+        - protocol: TCP
+          port: 6222
+---
 # Allow hermes pods to connect to Centrifugo
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

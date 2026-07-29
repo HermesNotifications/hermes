@@ -72,7 +72,7 @@ export function useHermesInbox(
         created_at: e.createdAt,
         organization_id: "",
         user_id: "",
-        group_id: "",
+        category_id: "",
       };
       setNotifications((prev) => [notif, ...prev]);
       setUnreadCount((c) => c + 1);

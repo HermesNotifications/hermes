@@ -75,3 +75,7 @@ node_modules/
 
 # Kustomize helmCharts inflation (downloaded by `kustomize build --enable-helm`)
 /deploy/observability/base/*/charts/
+
+# Python bytecode — scripts/ holds the manifest checks run by `make verify-manifests`
+__pycache__/
+*.pyc

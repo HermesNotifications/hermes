@@ -11,6 +11,26 @@ import (
 // APIKeyValidator validates a raw API key and returns the validated key on success.
 type APIKeyValidator func(rawKey string) *ValidatedKey
 
+// SkipAuthMiddleware injects a synthetic key holding every permission, for servers
+// constructed with SetSkipAuth(true). Intended for tests only.
+//
+// It exists so CheckPermission can fail closed unconditionally. The alternative — letting
+// handlers treat a missing key as permitted — is what made the previous inline checks
+// fail open, and a security control weakened for the convenience of tests protects
+// nothing. Skipping authentication now means "act as a fully privileged caller", which is
+// what tests actually want, rather than "skip authorization too", which is what they got.
+func SkipAuthMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := WithValidatedKey(r.Context(), &ValidatedKey{
+				ID:          "key_skipauth",
+				Permissions: AllPermissions,
+			})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // APIKeyMiddleware returns HTTP middleware that validates API keys from the Authorization header.
 func APIKeyMiddleware(validate APIKeyValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

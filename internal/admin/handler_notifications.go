@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -53,6 +54,10 @@ func (s *Server) registerNotificationRoutes() {
 		Summary:     "List recent notifications",
 		Tags:        []string{"Notifications"},
 	}, func(ctx context.Context, input *listNotificationsInput) (*notificationListOutput, error) {
+		if err := requirePermission(ctx, auth.PermOrganizationsManage); err != nil {
+			return nil, err
+		}
+
 		limit := input.Limit
 		if limit <= 0 {
 			limit = 50
@@ -102,6 +107,10 @@ func (s *Server) registerNotificationRoutes() {
 		Summary:     "Get notification status and events",
 		Tags:        []string{"Notifications"},
 	}, func(ctx context.Context, input *getNotificationInput) (*notificationStatusOutput, error) {
+		if err := requirePermission(ctx, auth.PermOrganizationsManage); err != nil {
+			return nil, err
+		}
+
 		n, err := s.store.GetNotificationByID(ctx, input.ID)
 		if err != nil {
 			return nil, huma.Error404NotFound("notification not found")

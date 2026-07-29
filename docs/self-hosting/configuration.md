@@ -26,6 +26,13 @@ hermes:
 
 ```yaml
 image:
+  # NOTE: three repository identities coexist in this project and only the source
+  # location is settled — the repository is github.com/darylrobbins/hermes. The chart
+  # publishes to ghcr.io/hermesnotifications (charts/hermes/values.yaml) while go.mod
+  # declares module github.com/hermes-notifications/hermes. The registry below matches
+  # the chart, which is what actually publishes; reconciling the three is a maintainer
+  # decision and changing the module path would touch every import.
+  # See finding 31.12 in docs/reviews/2026-07-27-architecture-review.md.
   registry: ghcr.io/hermesnotifications
   tag: ""                         # Defaults to chart appVersion
   pullPolicy: IfNotPresent

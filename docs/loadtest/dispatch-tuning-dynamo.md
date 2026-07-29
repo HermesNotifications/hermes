@@ -27,3 +27,9 @@
 
 **Recommended:** workers=16 prefetch=64
 
+> These are the values this benchmark found optimal against the DynamoDB path; they are **not**
+> what ships. The defaults are `HERMES_DISPATCH_CONCURRENCY=8` and `HERMES_DISPATCH_PREFETCH=64`
+> (`internal/config/config.go`), so adopting the recommendation means doubling concurrency
+> explicitly. See also [dispatch-tuning-2026-06.md](dispatch-tuning-2026-06.md), which measured
+> the Postgres path and reached a different conclusion.
+

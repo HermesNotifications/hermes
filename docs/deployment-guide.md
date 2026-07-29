@@ -55,7 +55,7 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 │  │  │ NAT Gateway │        │  EKS Cluster               │   │  │
 │  │  │ NLB (nginx) │───────>│  ┌──────────────────────┐  │   │  │
 │  │  └─────────────┘        │  │ hermes namespace     │  │   │  │
-│  │                         │  │  8 services + NATS   │  │   │  │
+│  │                         │  │  9 services + NATS   │  │   │  │
 │  │                         │  │  + Centrifugo        │  │   │  │
 │  │                         │  └──────┬───────┬───────┘  │   │  │
 │  │                         └─────────┼───────┼──────────┘   │  │
@@ -71,7 +71,7 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 │                                                                 │
 │  ┌─────────────┐  ┌─────────────────┐                          │
 │  │     ECR     │  │    S3 bucket    │                          │
-│  │  9 repos    │  │  TF state       │                          │
+│  │  10 repos   │  │  TF state       │                          │
 │  └─────────────┘  └─────────────────┘                          │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -133,8 +133,8 @@ terraform output -raw node_security_group_id    # used by Crossplane Environment
 | Resource | Staging | Production |
 |----------|---------|------------|
 | VPC | 2 AZs, 1 NAT GW | 3 AZs, 3 NAT GWs (HA) |
-| EKS | `t4g.medium` nodes, 2-4 count | `m7g.large` nodes, 3-10 count |
-| ECR | 9 repositories (AES256 encrypted) | Shared (apply once) |
+| EKS | `t4g.large` nodes, 2-4 count | `m7g.large` nodes, 3-10 count |
+| ECR | 10 repositories (AES256 encrypted) | Shared (apply once) |
 | IAM (CICD) | GitHub Actions OIDC role | Shared (apply once) |
 | IAM (Crossplane) | IRSA role for Crossplane AWS provider | Per-cluster |
 
@@ -150,7 +150,8 @@ Set your AWS account ID as a repository secret (keeps it out of the codebase):
 gh secret set AWS_ACCOUNT_ID --body "$(aws sts get-caller-identity --query Account --output text)"
 ```
 
-The CD workflow derives the ECR registry URL and IAM role ARN at runtime — no hardcoded account IDs.
+The CD workflow derives the ECR registry URL and IAM role ARN at runtime, so it carries no
+hardcoded account IDs. The deploy manifests are a different matter — see the table above.
 
 ---
 
@@ -208,6 +209,13 @@ Create a DNS record pointing your domain to this NLB:
 
 For production, use `hermes.example.com` → production NLB.
 
+> `example.com` above is a stand-in for your own domain. Note what the overlays in this
+> repository currently commit, which is not symmetric: staging is already set to a real
+> domain (`staging.hermes.dgr.io`, in `overlays/staging/kustomization.yaml` and its ingress
+> patch), while **production is still the placeholder** `hermes.example.com`
+> (`overlays/production/kustomization.yaml`). Production will not serve traffic until that is
+> replaced.
+
 > **Note:** If using Route53, you can create an Alias record (A record) instead of CNAME, which avoids the extra DNS lookup.
 
 ---
@@ -218,11 +226,18 @@ For production, use `hermes.example.com` → production NLB.
 
 Replace `ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com` in:
 
+The account ID `471524413120` is hardcoded in **six** non-documentation files, not one.
+Missing any of them leaves a deployment pointing at the wrong registry or assuming a role in
+the wrong account:
+
 | File | What to replace |
 |------|-----------------|
 | `deploy/kargo/warehouse.yaml` | `471524413120` in all image repoURLs |
-| `deploy/k8s/overlays/staging/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
-| `deploy/k8s/overlays/production/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
+| `deploy/kargo/stages/staging.yaml` | `471524413120` in the image references |
+| `deploy/kargo/stages/production.yaml` | `471524413120` in the image references |
+| `deploy/k8s/overlays/staging/images/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
+| `deploy/k8s/overlays/production/images/kustomization.yaml` | `REGISTRY/hermes-*` image newName values |
+| `infra/crossplane/provider/runtime-config.yaml` | the `eks.amazonaws.com/role-arn` annotation |
 
 Get the actual ECR URL:
 ```bash
@@ -233,7 +248,9 @@ cd infra/terraform && terraform output -raw ecr_registry_url
 
 ### GitHub repository URL
 
-Replace `OWNER` in:
+These files already point at the real repository (`git@github.com:darylrobbins/hermes.git`);
+there is no `OWNER` placeholder left to replace. The table is kept because a fork or a
+rename still has to update all four in step:
 
 | File | What to replace |
 |------|-----------------|
@@ -248,6 +265,49 @@ If your domain isn't `hermes.example.com`, update:
 - `deploy/k8s/overlays/staging/patches/ingress.yaml`
 - `deploy/k8s/overlays/production/patches/ingress.yaml`
 
+### Application secrets
+
+Secrets are split into two Secrets Manager entries **by who owns them**, because a secret
+has a single value and whoever writes it owns all of it. Mixing the two is how a documented
+"just update the value" procedure gets silently reverted on the next reconcile.
+
+| Secret | Owner | Contents |
+|---|---|---|
+| `hermes/<env>/app` | You, seeded once | `jwt_secret`, `api_key_hmac_secret`, `centrifugo_token_secret`, `centrifugo_api_key` |
+| `hermes/<env>/connection` | Crossplane | `database_url`, `redis_url`, `centrifugo_redis_address`, `centrifugo_redis_password` |
+
+Crossplane creates both containers but writes a version only for `/connection`, so anything
+you put in `/app` is permanent.
+
+Seed `/app` before the first deploy. `centrifugo_token_secret` **must equal** `jwt_secret` —
+Centrifugo validates the same Hermes-issued tokens the services do:
+
+```bash
+ENV=staging
+JWT=$(openssl rand -base64 48)
+
+aws secretsmanager put-secret-value --secret-id "hermes/$ENV/app" --secret-string "$(jq -n \
+  --arg jwt "$JWT" \
+  --arg hmac "$(openssl rand -base64 48)" \
+  --arg capi "$(openssl rand -base64 32)" \
+  '{jwt_secret: $jwt, api_key_hmac_secret: $hmac, centrifugo_token_secret: $jwt, centrifugo_api_key: $capi}')"
+```
+
+> **`/connection` must currently be seeded by hand as well.** The composition creates the
+> container but does not yet assemble its contents — see the note in
+> `infra/crossplane/compositions/aws/secrets.yaml` and finding 12. Read the values from the
+> Crossplane-written connection secrets in `crossplane-system`, and note the two constraints
+> the services enforce at startup (ADR 0005): `database_url` must carry `sslmode=require` or
+> stricter, and `redis_url` must use `rediss://`. A service given a plaintext URL refuses to
+> start rather than connecting in the clear.
+
+```bash
+DB=$(kubectl get secret -n crossplane-system hermes-database-conn -o jsonpath='{.data}')
+# database_url:  postgres://<username>:<password>@<endpoint>:<port>/hermes?sslmode=require
+# redis_url:     rediss://:<auth_token>@<endpoint>:6379/0
+# centrifugo_redis_address / centrifugo_redis_password: the same endpoint and auth_token
+```
+
 ### Webhook URLs
 
 After deploying, update the webhook URLs in SSM Parameter Store:
@@ -261,7 +321,9 @@ aws ssm put-parameter --name "/hermes/staging/sms_webhook_url" \
 
 ### Let's Encrypt email
 
-Update the ACME email in `infra/scripts/bootstrap-cluster.sh` (line with `email: ops@example.com`) before running bootstrap.
+The ACME contact in `infra/scripts/bootstrap-cluster.sh` is already a real address. Change it
+if you are deploying your own instance — Let's Encrypt sends expiry and revocation notices
+there, so it should be a monitored mailbox rather than an individual.
 
 ### Commit and push
 
@@ -309,7 +371,7 @@ kubectl apply -f deploy/kargo/stages/production.yaml
 
 ### Trigger first build
 
-Push any commit to `main` to trigger the CD pipeline. This builds all 9 images and pushes them to ECR. Kargo then detects the new images and promotes to staging.
+Push any commit to `main` to trigger the CD pipeline. This builds all 10 images — the 9 services plus `hermes-migrate` — and pushes them to ECR. Kargo then detects the new images and promotes to staging.
 
 ```bash
 gh run watch
@@ -325,7 +387,8 @@ gh run watch
 kubectl get pods -n hermes
 ```
 
-All 8 service deployments + NATS StatefulSet + Centrifugo should be Running.
+All 9 service deployments + NATS StatefulSet + Centrifugo should be Running. The 9 are
+admin, send, dispatch, inbox, user, and the four workers (events, email, sms, inbox).
 
 ### Check health endpoints
 
@@ -417,7 +480,10 @@ make tf-plan ENV=production
 make tf-apply ENV=production
 ```
 
-**Horizontal (pod count):** Production services use HPA. To adjust:
+**Horizontal (pod count):** Four of the nine production services have an HPA — `hermes-admin`,
+`hermes-dispatch`, `hermes-inbox` and `hermes-worker-email` (`overlays/production/hpa/`). The
+other five run at the fixed replica count committed in `patches/replicas.yaml`. To adjust an
+HPA-managed service:
 - Edit `deploy/k8s/overlays/production/hpa/*.yaml`
 - Commit and push — ArgoCD auto-syncs
 
@@ -435,31 +501,42 @@ Crossplane applies changes with the same maintenance-window behavior as the AWS 
 
 ### Secrets Rotation
 
-Secrets are stored in AWS Secrets Manager and synced to K8s by External Secrets Operator (1h refresh interval). The Secrets Manager secret itself is managed by the `HermesSecretsBundle` Crossplane composition, which assembles connection details from the Aurora and ElastiCache claims.
+Secrets live in AWS Secrets Manager and are synced to Kubernetes by External Secrets Operator
+(1h refresh). They are split by ownership — see [Application secrets](#application-secrets) —
+and **which secret a value lives in determines how you rotate it.**
 
-**Rotate database password:**
+**Rotating operator-owned values** (`jwt_secret`, `api_key_hmac_secret`,
+`centrifugo_token_secret`, `centrifugo_api_key`) is a straightforward
+`put-secret-value` against `hermes/<env>/app`, because Crossplane never writes there. Two
+caveats: `centrifugo_token_secret` must keep matching `jwt_secret`, and rotating `jwt_secret`
+invalidates every issued JWT. Note also that changing `HERMES_JWT_SECRET` does **not** rotate
+the Hermes-internal signing key row — see [architecture.md](architecture.md).
+
+**Rotating the database password is not an out-of-band operation, and the procedure
+previously documented here did not work.** It told you to `aws rds modify-db-cluster` and then
+overwrite the secret by hand. Crossplane owns that password: `compositions/aws/database.yaml`
+sets `autoGeneratePassword: true` with a `masterPasswordSecretRef`, so it reconciles the
+password back and the hand-written secret value is overwritten. The old instructions even
+hedged — "Crossplane manages the secret resource, but you can update the value" — which is
+precisely the trap.
+
+Rotate it through Crossplane instead, by causing it to regenerate and propagate. The exact
+mechanism depends on the provider version and **has not been verified against a running
+cluster**, so treat the following as the shape of the procedure rather than a tested recipe,
+and rehearse it in staging first:
+
 ```bash
-NEW_PASS=$(openssl rand -base64 32)
+# 1. Trigger regeneration of the master password via the Crossplane-managed resource,
+#    NOT via `aws rds modify-db-cluster`, which will be reverted.
+# 2. Wait for the claim to report Ready and for the connection secret in
+#    crossplane-system to carry the new password.
+# 3. Re-derive hermes/<env>/connection from it — until the composition assembles that
+#    secret automatically (finding 12), this step is manual.
 
-# Update Aurora
-aws rds modify-db-cluster \
-  --db-cluster-identifier hermes-production \
-  --master-user-password "$NEW_PASS" \
-  --apply-immediately
-
-# Update Secrets Manager (Crossplane manages the secret resource, but you can update the value)
-aws secretsmanager put-secret-value \
-  --secret-id hermes/production \
-  --secret-string "$(
-    aws secretsmanager get-secret-value --secret-id hermes/production \
-      --query SecretString --output text | \
-    jq --arg pw "$NEW_PASS" '.database_url = "postgres://hermes:\($pw)@" + (.database_url | split("@")[1])'
-  )"
-
-# Force ESO to resync (or wait up to 1 hour)
+# Force ESO to resync rather than waiting up to an hour.
 kubectl annotate externalsecret hermes-secrets -n hermes force-sync=$(date +%s) --overwrite
 
-# Restart pods to pick up new secret
+# Restart to pick up the new value.
 kubectl rollout restart deployment -n hermes
 ```
 
@@ -469,20 +546,41 @@ kubectl rollout restart deployment -n hermes
 
 ### Database Migrations
 
-Migrations run automatically as a K8s Job during each ArgoCD sync (defined in `deploy/k8s/base/migration-job.yaml`). The job runs `cmd/migrate` with the database URL from Secrets Manager.
+Migrations are defined as a K8s Job in `deploy/k8s/base/migration-job.yaml`, which runs
+`cmd/migrate` with the database URL from Secrets Manager.
+
+> **They do not currently run automatically.** The `argocd.argoproj.io/hook: PreSync` and
+> `hook-delete-policy` annotations on that Job are commented out, so ArgoCD applies it as an
+> ordinary resource rather than a sync hook. A `Job`'s pod template is immutable, so the
+> second promotion that changes the image tag fails to apply. Until the hook is re-enabled,
+> run migrations manually using the command below. See finding 11 in the
+> [2026-07-27 architecture review](reviews/2026-07-27-architecture-review.md).
 
 **Run migrations manually:**
 ```bash
-kubectl delete job hermes-migration -n hermes --ignore-not-found
+kubectl delete job hermes-migrate -n hermes --ignore-not-found
 kubectl apply -f deploy/k8s/base/migration-job.yaml
 ```
 
-**Rollback a migration:**
+**Rolling back a migration is not automated.** `cmd/migrate` takes only `-database-url` and
+`-migrations-path`, and calls `Up()` unconditionally — it has no direction, step count, or
+`down` subcommand, and the image built from it contains a single binary at `/service`. The
+`.down.sql` files in `migrations/` are real and paired with every `.up.sql`, but nothing in
+this repository applies them.
+
+To roll back, run the down migration yourself against the database with a golang-migrate CLI
+installed separately, or apply the `.down.sql` by hand inside a transaction:
+
 ```bash
-kubectl run migrate-down --rm -it \
-  --image=$(kubectl get deploy hermes-admin -n hermes -o jsonpath='{.spec.template.spec.containers[0].image}') \
-  -- /migrate -database-url="$DATABASE_URL" -migrations-path=/migrations down 1
+# Inspect what would be reverted first.
+cat migrations/000017_rename_tenant_to_organization.down.sql
+
+# Then apply it deliberately, against a database you have backed up.
+psql "$DATABASE_URL" -1 -f migrations/000017_rename_tenant_to_organization.down.sql
 ```
+
+Applying a `.down.sql` by hand does not update the `schema_migrations` version, so correct it
+in the same transaction or the next `Up()` will skip or re-run the wrong step.
 
 ### Upgrading EKS
 
@@ -497,7 +595,10 @@ kubectl run migrate-down --rm -it \
    ```
 4. Verify: `kubectl get nodes` — all nodes should show the new version
 
-> **Important:** Only upgrade one minor version at a time (e.g., 1.31 → 1.32). Check the [EKS release calendar](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html) for deprecations.
+> **Important:** Only upgrade one minor version at a time (e.g., 1.35 → 1.36). The current
+> default is `1.35` (`infra/terraform/variables.tf`). Check the
+> [EKS release calendar](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html)
+> for deprecations.
 
 ### Monitoring and Debugging
 
@@ -506,8 +607,13 @@ kubectl run migrate-down --rm -it \
 # Specific service
 kubectl logs -n hermes -l app.kubernetes.io/name=hermes-admin --tail=100 -f
 
-# All services
-kubectl logs -n hermes -l app.kubernetes.io/part-of=hermes --tail=50
+# All services.
+# NOTE: this selector currently matches NOTHING. The kustomize `labels:` transformer in
+# deploy/k8s/base/kustomization.yaml runs with includeSelectors: false and no
+# includeTemplates, so app.kubernetes.io/part-of lands on resource metadata but never on
+# pod templates. See finding 47 in the architecture review. Until that is fixed, select by
+# component instead:
+kubectl logs -n hermes -l app.kubernetes.io/component=api --tail=50
 
 # NATS
 kubectl logs -n hermes nats-0 --tail=100

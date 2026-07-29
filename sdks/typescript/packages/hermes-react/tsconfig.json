@@ -5,5 +5,7 @@
     "rootDir": "./src",
     "jsx": "react-jsx"
   },
+  // Tests are included here on purpose, so `tsc --noEmit` checks them against the
+  // real client types. tsconfig.build.json drops them from the emitted package.
   "include": ["src"]
 }

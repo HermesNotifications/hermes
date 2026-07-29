@@ -33,8 +33,27 @@ resource "aws_iam_role" "github_actions" {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
+        # Finding 15. This was `repo:<org>/<repo>:*`, which trusts EVERY ref in the
+        # repository — any branch, any tag, any pull_request target. A workflow added on
+        # a feature branch, or a fork's PR run if the repo ever allows one, could assume
+        # this role and reach ECR and Terraform state.
+        #
+        # Scoped to the refs that legitimately need it:
+        #   - refs/heads/main   cd.yml, via workflow_run on CI success
+        #   - refs/tags/v*      cd.yml, via push of a version tag
+        #
+        # Note this deliberately narrows loadtest.yml as well. It is workflow_dispatch and
+        # holds `id-token: write`, so before this change it could assume the role from any
+        # branch — a second, easily-missed entry point. It now works only when dispatched
+        # from main, which is where a load test against real infrastructure belongs.
+        #
+        # A sub claim carries no wildcard for the branch form, so exact-matching main
+        # would also work; both are kept in StringLike for symmetry with the tag pattern.
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main",
+            "repo:${var.github_org}/${var.github_repo}:ref:refs/tags/v*",
+          ]
         }
       }
     }]

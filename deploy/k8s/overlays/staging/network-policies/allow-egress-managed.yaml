@@ -37,3 +37,44 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    # Finding 10. OTLP to the in-cluster Collector. Every service targets
+    # otel-collector-opentelemetry-collector.observability.svc:4317
+    # (base/kustomization.yaml, OTEL_EXPORTER_OTLP_ENDPOINT), and no rule permitted it —
+    # so with policy enforced, traces and metrics never leave the pods. The failure is
+    # silent: the SDK buffers and drops, and the service keeps serving.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4317 # OTLP/gRPC
+        - protocol: TCP
+          port: 4318 # OTLP/HTTP, for overlays that switch protocol
+---
+# Finding 10, corollary. The observability stack scrapes exporters that live in this
+# namespace — deploy/observability/base/exporters/ targets nats.hermes.svc:8222 and the
+# Postgres and Redis exporters similarly. allow-nats.yaml permits 8222 only from
+# `podSelector: {}`, which means same-namespace, so those cross-namespace scrapes are
+# denied. This grants the observability namespace ingress to the exporter ports.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-observability-scrape
+  namespace: hermes
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 8222 # NATS monitoring
+        - protocol: TCP
+          port: 9187 # postgres-exporter
+        - protocol: TCP
+          port: 9121 # redis-exporter

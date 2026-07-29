@@ -144,8 +144,13 @@ func TestDeliveryPipeline(t *testing.T) {
 		t.Fatalf("parse key: %v", err)
 	}
 	keyHash := auth.HMACHashAPIKey(secret, "test-hmac-secret")
-	_, err = pool.Exec(ctx, "INSERT INTO api_keys (id, key_hash, name) VALUES ($1, $2, $3)",
-		keyID, keyHash, "Delivery Test Key")
+	// Permissions are explicit. Inserting a key with no permissions column at all
+	// left these tests sending with a key that held nothing — which passed only
+	// because /v1/send checked no permission (finding 3). Granting exactly what the
+	// test exercises means a future gap fails here rather than passing silently.
+	_, err = pool.Exec(ctx,
+		"INSERT INTO api_keys (id, key_hash, name, permissions) VALUES ($1, $2, $3, $4)",
+		keyID, keyHash, "Delivery Test Key", []string{auth.PermNotificationsSend})
 	if err != nil {
 		t.Fatalf("create api key: %v", err)
 	}

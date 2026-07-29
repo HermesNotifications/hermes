@@ -38,11 +38,11 @@ jobs:
     name: TypeScript SDKs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -52,22 +52,35 @@ jobs:
       # pnpm-lock.yaml (which previously slipped through because nothing ran it).
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
-      - name: Build server SDK
-        # Only @hermes-notifications/server builds cleanly today. The hermes-client
-        # SDK has generated-type drift vs api/{user,inbox}/openapi.yaml, and both
-        # hermes-react and hermes-web depend on it — so those three are excluded
-        # until hermes-client is fixed. TODO(#36): re-include them once green.
-        run: pnpm --filter "@hermes-notifications/server" build
+      # All four packages build again. The previous single-package filter blamed
+      # hermes-client for generated-type drift, but hermes-client compiles clean;
+      # the drift was in hermes-react and hermes-web, which both still constructed
+      # a Notification with `group_id` after the schema moved to `category_id`.
+      # Building only one package is what let that sit undetected, so build all of
+      # them — a compile error in any SDK now fails the job.
+      - name: Build SDKs
+        run: pnpm --filter "./sdks/typescript/packages/*" build
+      # The build emits from tsconfig.build.json, which excludes tests so they are
+      # not published. This checks the full tsconfig, tests included — otherwise a
+      # test fake could drift out of sync with the real client types and nothing
+      # would say so, since vitest transpiles without type-checking.
+      - name: Typecheck (including tests)
+        run: pnpm --filter "./sdks/typescript/packages/*" --parallel run --if-present typecheck
+      # Type errors are caught by the build above; this runs the behavioural suites
+      # for the two packages that ship runtime code (hooks and a web component).
+      # --if-present so packages without a suite yet do not fail the job.
+      - name: Test
+        run: pnpm --filter "./sdks/typescript/packages/*" --parallel run --if-present test
 
   web-admin:
     name: Admin Portal (lint + typecheck + build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -82,6 +95,8 @@ jobs:
         run: pnpm --filter "@hermes/admin" lint
       - name: Typecheck
         run: pnpm --filter "@hermes/admin" typecheck
+      - name: Test
+        run: pnpm --filter "@hermes/admin" test
       # The production build was never run anywhere until now, so nothing caught that
       # every dashboard route was being statically prerendered and the build failed
       # without HERMES_API_URL/HERMES_API_KEY. Deliberately runs with no env vars: the

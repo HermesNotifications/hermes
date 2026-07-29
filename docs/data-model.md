@@ -13,11 +13,14 @@ managed with [golang-migrate](https://github.com/golang-migrate/migrate): number
 
 ```
 organizations ──< users ──< user_subscriptions >── subscriptions >── subscription_categories
-   │                                              │                      │
-   └──< notifications >── notification_templates ─┘                      │
-              │           (template_id, nullable)                        │
-              │                                                          │
-              ├── category_id (nullable) ─────────────────────────────── ┘
+   │                │                             │                      │
+   │                └──< user_contact_points       │                      │
+   │                                               │                      │
+   └──< notifications >── notification_templates ──┘                      │
+              │           (template_id, nullable)  │                      │
+              │                                    └──< template_channel_content
+              │                                                           │
+              ├── category_id (nullable) ──────────────────────────────── ┘
               │
               └──< notification_events
 
@@ -31,9 +34,23 @@ Columns: `id`, `name`, `default_locale` (default `en`), `settings` (JSONB), `cre
 
 ### `users`
 A recipient within an organization. `id` (base62, `usr_…`), `organization_id` → `organizations`, `external_id`
-(your application's user identifier), `email`, `phone`, `locale`, `created_at`.
+(your application's user identifier), `locale`, `created_at`.
 Unique on `(organization_id, external_id)` — each external user maps to exactly one Hermes user
 per organization.
+
+> The fixed `email` and `phone` columns were **dropped** in migration `000016`. Addresses now
+> live in `user_contact_points`, one row per address key, so a channel can be added without a
+> schema change.
+
+### `user_contact_points`
+A user's address for one channel. Composite PK `(user_id, address_key)`, plus `address` and
+`verified` (bool). `address_key` is the channel's address slug — `email`, `phone` — so adding a
+channel adds rows rather than columns. Backfilled from the old `users.email`/`users.phone` in
+migration `000015`.
+
+> `verified` is currently **inert**: it is written `false` by the default and never set to
+> `true`, never read, and never exposed through the API. It records an intent that is not yet
+> implemented — treat a `false` here as "unknown", not "unverified".
 
 ### `subscription_categories`
 Top-level grouping of notification preferences (e.g. *Account*, *General*, *Marketing*).
@@ -46,8 +63,19 @@ A specific preference within a category. `id`, `category_id` → `subscription_c
 
 ### `notification_templates`
 Reusable per-channel content. `id`, `subscription_id` → `subscriptions` (nullable), `slug`
-(unique), `name`, `default_channels` (text[]), and the channel bodies: `email_subject`,
-`email_body`, `sms_body`, `inbox_title`, `inbox_body`, `created_at`.
+(unique), `name`, `default_channels` (text[]), `created_at`.
+
+> The five fixed content columns — `email_subject`, `email_body`, `sms_body`, `inbox_title`,
+> `inbox_body` — were **dropped** in migration `000016`. Content moved to
+> `template_channel_content` in `000015`, which is why a template can now carry content for a
+> channel the schema has never heard of.
+
+### `template_channel_content`
+One row of content per template per channel. Composite PK `(template_id, channel_slug)`, plus
+`content` (JSONB, default `{}`), cascading on template delete. The JSONB shape is per-channel —
+email uses `subject` and `body`, SMS and inbox use their own keys — so a new channel needs no
+migration. The `000015` backfill used `jsonb_strip_nulls`, so a template that only ever had a
+subject does not carry a null body.
 
 ### `user_subscriptions`
 A user's opt-in/out for a subscription. Composite PK `(user_id, subscription_id)`, plus
@@ -104,3 +132,20 @@ that arrive out of order can never move a notification backward.
 `notification_events` grows unboundedly, so `cmd/cleanup` deletes events older than
 `HERMES_EVENT_RETENTION_DAYS` (default 90). Run it with `make cleanup`; in production it runs as
 a Kubernetes CronJob (see [self-hosting/configuration.md](self-hosting/configuration.md)).
+
+> **Retention does not run on the DynamoDB path.** `cmd/cleanup` exits immediately when
+> `HERMES_DYNAMO_ENDPOINT` is set, before touching anything. It logs and returns 0, so the
+> CronJob reports success while deleting nothing. Events on that path are expected to expire
+> by TTL instead, and nothing verifies that they do.
+
+Retention here covers events only. Two things it does **not** cover, which matter for a data
+deletion request:
+
+- **Soft-deleted notifications are never hard-deleted.** `notifications.deleted_at` marks a row
+  as removed from a user's inbox; nothing subsequently purges it, so the title and body persist
+  indefinitely.
+- **`user_contact_points` holds addresses and is not covered by any retention job.** Deleting a
+  user cascades to it (`ON DELETE CASCADE`), but nothing deletes users on a schedule.
+
+There is no documented erasure procedure. See finding 40 in the
+[2026-07-27 architecture review](reviews/2026-07-27-architecture-review.md).

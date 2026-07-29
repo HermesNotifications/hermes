@@ -14,17 +14,42 @@ spec:
           spec:
             backoffLimit: 1
             template:
+              metadata:
+                # Selected by allow-health-check-egress in rbac.yaml. Without a label the
+                # policy can match, the pod gets default-deny-all and cannot reach the
+                # API server — see finding 47 for how a policy matching nothing looks
+                # exactly like one that works.
+                labels:
+                  app.kubernetes.io/name: hermes-health-check
               spec:
                 restartPolicy: Never
+                # Finding 35. Previously unset, so the pod ran as `default`, which holds
+                # no permissions — every kubectl call returned 403.
+                serviceAccountName: hermes-health-check
                 containers:
                   - name: health-check
-                    image: bitnami/kubectl:latest
+                    # Pinned by digest rather than :latest. An unpinned verification gate
+                    # is one where a new image can silently change what "healthy" means
+                    # between two promotions of identical code.
+                    #
+                    # Digest resolved from bitnami/kubectl:latest on 2026-07-29 and
+                    # verified to exist. The tag is kept alongside it for readability;
+                    # the digest is what actually selects the image.
+                    #
+                    # Separately: the triage recorded an unverified external claim that
+                    # the bitnami registry is being retired. If that is true this image
+                    # needs replacing regardless, and a digest pin at least makes the
+                    # failure a clean pull error rather than a silent behaviour change.
+                    image: bitnami/kubectl:latest@sha256:bb91d6086d968982b7589dbed517aac72409337c76556e4ddcc15d810b6cc06d
                     command:
                       - /bin/sh
                       - -c
                       - |
-                        # Wait for each deployment rollout to complete
-                        for deploy in admin dispatch inbox user worker-events worker-email worker-sms worker-inbox; do
+                        set -eu
+                        # Wait for each deployment rollout to complete.
+                        # hermes-send was missing from this list, so the platform's
+                        # primary write path was never verified after a promotion.
+                        for deploy in admin send dispatch inbox user worker-events worker-email worker-sms worker-inbox; do
                           echo "Checking hermes-${deploy}..."
                           kubectl rollout status deployment/hermes-${deploy} -n hermes --timeout=120s
                         done

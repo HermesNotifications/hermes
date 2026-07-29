@@ -21,7 +21,14 @@ resource "aws_ecr_repository" "services" {
 
   name                 = "hermes-${each.value}"
   image_tag_mutability = "IMMUTABLE"
-  force_delete         = true
+
+  # Finding 21. force_delete lets `terraform destroy` remove a repository that still
+  # contains images, which quietly undoes the point of IMMUTABLE above: the tags cannot
+  # be overwritten, but the whole repository — and every image a running deployment is
+  # pulling — can be deleted in one apply.
+  #
+  # Left on outside production so throwaway environments stay disposable.
+  force_delete = var.environment != "production"
 
   image_scanning_configuration {
     scan_on_push = true

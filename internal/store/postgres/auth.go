@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error) {
@@ -86,16 +87,45 @@ func (s *Store) ListActiveJWTSigningKeys(ctx context.Context) ([]models.JWTSigni
 	return keys, rows.Err()
 }
 
-// EnsureHermesSigningKey inserts the Hermes internal signing key if it doesn't already exist.
+// EnsureHermesSigningKey inserts the Hermes internal signing key if it does not
+// already exist. First write wins: an existing row is never overwritten.
+//
+// If the caller's secret disagrees with the stored one, the stored key is kept and
+// a warning is logged. This runs at startup in admin, inbox and user, each passing
+// cfg.JWTSecret — which has a default — so the previous ON CONFLICT DO UPDATE meant
+// a single service booting without HERMES_JWT_SECRET set silently replaced a
+// properly rotated signing key and invalidated every token issued under it.
+//
+// The consequence is that setting HERMES_JWT_SECRET against a database that
+// already holds this row does NOT rotate it. Rotation is a deliberate operation on
+// jwt_signing_keys, and must be coordinated with Centrifugo's single
+// token_hmac_secret_key. See docs/architecture.md.
 func (s *Store) EnsureHermesSigningKey(ctx context.Context, secret string) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO jwt_signing_keys (id, name, algorithm, secret, user_id_claim, organization_id_claim)
 		 VALUES ('hermes-internal', 'hermes-internal', 'HS256', $1, 'sub', 'organization_id')
-		 ON CONFLICT (id) DO UPDATE SET secret = $1`,
+		 ON CONFLICT (id) DO NOTHING`,
 		secret,
 	)
 	if err != nil {
 		return fmt.Errorf("ensure hermes signing key: %w", err)
+	}
+
+	var stored string
+	if err := s.pool.QueryRow(ctx,
+		`SELECT secret FROM jwt_signing_keys WHERE id = 'hermes-internal'`,
+	).Scan(&stored); err != nil {
+		return fmt.Errorf("read back hermes signing key: %w", err)
+	}
+
+	// Neither secret is logged, nor any prefix of one: the row's whole purpose is
+	// that its contents are not disclosed. That the two differ is the signal.
+	if stored != secret {
+		slog.WarnContext(ctx,
+			"configured JWT signing secret differs from the stored signing key; the configured value is ignored",
+			"key_id", "hermes-internal",
+			"remedy", "unset HERMES_JWT_SECRET to adopt the stored key, or rotate jwt_signing_keys deliberately",
+		)
 	}
 	return nil
 }

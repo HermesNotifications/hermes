@@ -1,4 +1,9 @@
 # Allow ingress controller to reach API services and Centrifugo
+#
+# Finding 8. hermes-send was missing from both the selector AND the port list, so the
+# platform's primary write path — /v1/send, routed here by base/ingress.yaml — was
+# denied by policy. Two independent omissions, either of which alone would have
+# blocked it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -11,6 +16,7 @@ spec:
         operator: In
         values:
           - hermes-admin
+          - hermes-send
           - hermes-inbox
           - hermes-user
           - centrifugo
@@ -23,10 +29,12 @@ spec:
               kubernetes.io/metadata.name: ingress-nginx
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8080 # hermes-admin
         - protocol: TCP
-          port: 8086
+          port: 8086 # hermes-inbox
         - protocol: TCP
-          port: 8087
+          port: 8087 # hermes-user
         - protocol: TCP
-          port: 8000
+          port: 8088 # hermes-send
+        - protocol: TCP
+          port: 8000 # centrifugo

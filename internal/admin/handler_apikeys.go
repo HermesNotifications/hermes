@@ -50,10 +50,11 @@ func (s *Server) registerAPIKeyRoutes() {
 		Summary:     "List all API keys",
 		Tags:        []string{"API Keys"},
 	}, func(ctx context.Context, input *struct{}) (*listAPIKeysOutput, error) {
-		// Permission check
-		key := auth.GetValidatedKey(ctx)
-		if key != nil && !auth.HasPermission(key, auth.PermAPIKeysManage) {
-			return nil, huma.Error403Forbidden("insufficient permissions")
+		// Finding 3. Previously `if key != nil && !HasPermission(...)`, which PASSES
+		// when the key is nil — a nil key was granted every permission. Unreachable in
+		// production because APIKeyMiddleware 401s first, but fail-open by construction.
+		if err := requirePermission(ctx, auth.PermAPIKeysManage); err != nil {
+			return nil, err
 		}
 
 		keys, err := s.store.ListAPIKeys(ctx)
@@ -85,10 +86,11 @@ func (s *Server) registerAPIKeyRoutes() {
 		Tags:          []string{"API Keys"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, input *createAPIKeyInput) (*apiKeyCreatedOutput, error) {
-		// Permission check
-		key := auth.GetValidatedKey(ctx)
-		if key != nil && !auth.HasPermission(key, auth.PermAPIKeysManage) {
-			return nil, huma.Error403Forbidden("insufficient permissions")
+		// Finding 3. Previously `if key != nil && !HasPermission(...)`, which PASSES
+		// when the key is nil — a nil key was granted every permission. Unreachable in
+		// production because APIKeyMiddleware 401s first, but fail-open by construction.
+		if err := requirePermission(ctx, auth.PermAPIKeysManage); err != nil {
+			return nil, err
 		}
 
 		permissions := input.Body.Permissions
@@ -134,10 +136,11 @@ func (s *Server) registerAPIKeyRoutes() {
 		Tags:          []string{"API Keys"},
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, input *deleteAPIKeyInput) (*struct{}, error) {
-		// Permission check
-		key := auth.GetValidatedKey(ctx)
-		if key != nil && !auth.HasPermission(key, auth.PermAPIKeysManage) {
-			return nil, huma.Error403Forbidden("insufficient permissions")
+		// Finding 3. Previously `if key != nil && !HasPermission(...)`, which PASSES
+		// when the key is nil — a nil key was granted every permission. Unreachable in
+		// production because APIKeyMiddleware 401s first, but fail-open by construction.
+		if err := requirePermission(ctx, auth.PermAPIKeysManage); err != nil {
+			return nil, err
 		}
 
 		// Prevent self-deletion

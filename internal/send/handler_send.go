@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/auth"
 	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 )
@@ -52,6 +53,13 @@ func (s *Server) registerSendRoutes() {
 		Tags:          []string{"Notifications"},
 		DefaultStatus: http.StatusAccepted,
 	}, func(ctx context.Context, input *sendInput) (*sendOutput, error) {
+		// Finding 3. /v1/send is the platform's primary write path and previously
+		// accepted ANY valid API key: a key issued narrowly for template management
+		// could forge notifications to any user in any organization.
+		if err := requirePermission(ctx, auth.PermNotificationsSend); err != nil {
+			return nil, err
+		}
+
 		req := &input.Body
 
 		// Validate: exactly one of template or content

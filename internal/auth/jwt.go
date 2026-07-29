@@ -19,6 +19,15 @@ const (
 	ContextKeyOrganizationID contextKey = "organization_id"
 )
 
+// defaultSigningAlgorithm is assumed for a signing key that records no algorithm.
+// No current writer produces one: the column is NOT NULL DEFAULT 'HS256'
+// (migrations/000009_create_jwt_signing_keys.up.sql:4) and EnsureHermesSigningKey
+// hardcodes HS256. NOT NULL still permits the empty string, though, so the case is
+// handled deterministically rather than treated as unreachable. Assuming HS256 is
+// deliberately tighter than falling back to "any HMAC method", which is the very
+// hole this constant exists to close.
+const defaultSigningAlgorithm = "HS256"
+
 // HermesClaims is the JWT claims structure for Hermes-issued tokens.
 type HermesClaims struct {
 	jwt.RegisteredClaims
@@ -68,12 +77,22 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 			for i := range configs {
 				cfg := &configs[i]
 				claims := jwt.MapClaims{}
+				algorithm := cfg.Algorithm
+				if algorithm == "" {
+					algorithm = defaultSigningAlgorithm
+				}
+				// WithValidMethods pins the token's alg header to the algorithm this
+				// key was registered with. Without it the keyfunc below only checked
+				// the HMAC *family*, so a key registered as HS512 accepted an HS256
+				// token signed with the same secret. The family check is kept as
+				// defence in depth: it turns a key misconfigured with an asymmetric
+				// algorithm into a clear error rather than a []byte-as-RSA-key failure.
 				token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
 					if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 						return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 					}
 					return cfg.Secret, nil
-				})
+				}, jwt.WithValidMethods([]string{algorithm}))
 				if err == nil && token.Valid {
 					validClaims = claims
 					matchedCfg = cfg
@@ -91,12 +110,18 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 			if !ok {
 				userIDRaw = validClaims["sub"]
 			}
-			organizationIDRaw, tok := validClaims[matchedCfg.OrganizationIDClaim]
+			// Index without comma-ok: an absent claim yields nil, which claimToString
+			// reports as unusable. The previous form took the map-presence bool and
+			// tested `!present && organizationID == ""`, so a claim that was present
+			// but not convertible — a bool, object, array, null, or an empty string —
+			// satisfied the guard and the request proceeded with an empty
+			// organization ID in context. Presence is not usability.
+			organizationIDRaw := validClaims[matchedCfg.OrganizationIDClaim]
 
 			userID, _ := claimToString(userIDRaw)
-			organizationID, _ := claimToString(organizationIDRaw)
+			organizationID, organizationOK := claimToString(organizationIDRaw)
 
-			if userID == "" || (!tok && organizationID == "") {
+			if userID == "" || !organizationOK {
 				http.Error(w, `{"error":"missing claims"}`, http.StatusUnauthorized)
 				return
 			}

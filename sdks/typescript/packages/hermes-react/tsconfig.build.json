@@ -1,0 +1,8 @@
+{
+  // Emit config. Identical to tsconfig.json except that tests are left out of the
+  // output: package.json publishes `files: ["dist"]`, so anything emitted here ships
+  // to npm, and a stale dist/*.test.js is also collected as a second copy of the
+  // suite. Tests are still type-checked — by `tsc --noEmit` against tsconfig.json.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts"]
+}

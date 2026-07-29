@@ -253,7 +253,7 @@ export class HermesInbox extends LitElement {
           created_at: e.createdAt,
           organization_id: "",
           user_id: "",
-          group_id: "",
+          category_id: "",
         };
         this.notifications = [notif, ...this.notifications];
         this.unreadCount++;

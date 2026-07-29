@@ -11,6 +11,7 @@ spec:
         operator: In
         values:
           - hermes-admin
+          - hermes-send
           - hermes-inbox
           - hermes-user
           - centrifugo
@@ -23,10 +24,12 @@ spec:
               kubernetes.io/metadata.name: ingress-nginx
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8080 # hermes-admin
         - protocol: TCP
-          port: 8086
+          port: 8086 # hermes-inbox
         - protocol: TCP
-          port: 8087
+          port: 8087 # hermes-user
         - protocol: TCP
-          port: 8000
+          port: 8088 # hermes-send
+        - protocol: TCP
+          port: 8000 # centrifugo
