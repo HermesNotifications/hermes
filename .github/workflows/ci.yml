@@ -202,3 +202,14 @@ jobs:
           kubectl kustomize deploy/k8s/overlays/local
           kubectl kustomize deploy/k8s/overlays/staging
           kubectl kustomize deploy/k8s/overlays/production
+
+      # Finding 47: rendering cleanly is not enough. A NetworkPolicy whose selector
+      # matches no pod is accepted by kustomize and by the API server, and is
+      # indistinguishable from a working one until enforcement is switched on. This gate
+      # was added to `make verify` but never to CI, so until now nothing on the merge
+      # path would have caught a reintroduction.
+      - name: NetworkPolicy selectors must match pods
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_networkpolicy_selectors.py -
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_networkpolicy_selectors.py -

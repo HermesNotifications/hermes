@@ -104,8 +104,12 @@ spec:
         - protocol: TCP
           port: 8000
 ---
-# Allow Centrifugo to reach NATS (broker)
-# Centrifugo's egress to managed Redis is covered by allow-egress-managed-services
+# Despite the name, this is an INGRESS policy: it lets Hermes pods reach Centrifugo's API
+# on 8000. It grants Centrifugo no egress at all. Centrifugo's own egress comes from the
+# part-of-keyed policies, because its pod carries that label too — NATS 4222 from
+# allow-egress-to-nats, managed Redis from allow-egress-managed-services. Verified
+# in-cluster: with this set applied, centrifugo -> nats:4222 succeeds.
+# The name is kept as-is because renaming a NetworkPolicy is a delete-and-recreate.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
