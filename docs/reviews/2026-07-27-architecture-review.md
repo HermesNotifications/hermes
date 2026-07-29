@@ -1116,6 +1116,62 @@ has been read, not executed.
 
 ---
 
+## 2026-07-29 — ADR 0005 and phase 1 of the transport-security work
+
+Findings **1, 14 and 19** were repeatedly deferred as "large" without anyone deciding the
+shape of the work, which is the state in which items stay deferred indefinitely.
+[ADR 0005](../adr/0005-transport-security-for-infrastructure-connections.md) now decides it:
+NKey authentication plus TLS for NATS, an explicit TLS configuration surface for the
+datastores, a private cert-manager issuer for in-cluster certificates, and three separately
+shippable phases.
+
+Two facts found while writing it change the work, and both are worth pulling out:
+
+- **The Redis half is nearly free.** `compositions/aws/cache.yaml` already sets
+  `atRestEncryptionEnabled`, wires an `authTokenSecretRef` with `ROTATE`, and maps
+  `spec.transitEncryption` through; production already claims `transitEncryption: true`. The
+  infrastructure is provisioned for authenticated TLS and only the client is not using it.
+- **cert-manager is installed but cannot issue what finding 1 needs.**
+  `bootstrap-cluster.sh` creates a *Let's Encrypt* ClusterIssuer — a public ACME issuer that
+  can serve the ingress domain and cannot issue for `nats.hermes.svc`. The tool is present;
+  a private issuer is not. Any estimate for finding 1 that assumed cert-manager was ready
+  was wrong.
+
+**Phase 1 has landed.** `internal/config` gained an `Environment` field (`HERMES_ENV`) and a
+`Validate()` that, outside development, rejects a database URL without a secure `sslmode`,
+a non-`rediss://` Redis URL, a non-`tls://` NATS URL, and any of the three built-in
+placeholder secrets. All nine services now call `MustLoad()`, so a service that cannot reach
+its datastores securely refuses to start instead of connecting in the clear.
+
+`Validate` inspects the connection strings themselves rather than parallel "TLS enabled"
+settings, because two settings that can disagree are worse than one that cannot. It reports
+every problem at once — nine restarts each revealing one more misconfiguration is a bad way
+to learn what is wrong. `allow` and `prefer` are excluded from the accepted `sslmode` values
+deliberately: both silently fall back to plaintext, which is the exact failure this closes.
+
+**This also closes finding 4's second half.** The insecure defaults now have the environment
+gate the finding asked for. Their first half — the signing-key overwrite — was fixed earlier
+today.
+
+> **The gate was nearly inert on arrival.** Nothing set `HERMES_ENV`, so every deployment
+> would have defaulted to `development` and skipped every check — a control that exists and
+> does not run, which is precisely finding 47's pattern. `HERMES_ENV` is now set in both
+> overlay `configMapGenerator`s and its presence verified in the rendered output. Worth
+> recording as a near miss: a validation nobody triggers is indistinguishable from one that
+> passes.
+
+Phases 2 (NATS TLS) and 3 (NATS accounts and per-service subject permissions) remain open,
+and finding 19's `securityContext` should land with phase 2 because both change the NATS
+StatefulSet and both force the same rolling restart.
+
+**Sequencing constraint, recorded in the ADR:** phase 1's Postgres half cannot be completed
+until **finding 12** is fixed. `HERMES_DATABASE_URL` is assembled from Crossplane connection
+details by the `HermesSecretsBundle` composition, which is a no-op — so whoever fixes 12
+chooses the `sslmode`. The validation now in place will reject the result if they choose
+wrongly, which is the intended order of events.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is

@@ -4,6 +4,7 @@
 package config_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hermes-notifications/hermes/internal/config"
@@ -50,5 +51,136 @@ func TestLoad_OverrideFromEnv(t *testing.T) {
 	}
 	if cfg.DatabaseURL != "postgres://custom:5432/hermes" {
 		t.Fatalf("expected custom DB URL, got %s", cfg.DatabaseURL)
+	}
+}
+
+// ADR 0005 phase 1. Validate is what makes transport security legible and enforceable
+// in code rather than a substring of a secret nobody can inspect. It deliberately checks
+// the connection strings themselves rather than parallel "tls enabled" settings, because
+// two settings that can disagree are worse than one that cannot.
+
+func secureConfig() config.Config {
+	return config.Config{
+		Environment:      "production",
+		DatabaseURL:      "postgres://u:p@db:5432/hermes?sslmode=verify-full",
+		RedisURL:         "rediss://:token@cache:6379/0",
+		NATSUrl:          "tls://nats:4222",
+		JWTSecret:        "a-real-secret",
+		APIKeyHMACSecret: "another-real-secret",
+		CentrifugoAPIKey: "a-real-centrifugo-key",
+	}
+}
+
+func TestValidate_AcceptsAFullySecureProductionConfig(t *testing.T) {
+	if err := secureConfig().Validate(); err != nil {
+		t.Fatalf("expected a secure production config to validate, got: %v", err)
+	}
+}
+
+// The whole point of an environment gate: local development must keep working with the
+// plaintext defaults that `make infra-up` provides.
+func TestValidate_AllowsPlaintextInDevelopment(t *testing.T) {
+	cfg := config.Load() // defaults: sslmode=disable, redis://, nats://, placeholder secrets
+	if cfg.Environment != "development" {
+		t.Fatalf("expected the default environment to be development, got %q", cfg.Environment)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("development config must validate, got: %v", err)
+	}
+}
+
+func TestValidate_RejectsInsecureTransportOutsideDevelopment(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*config.Config)
+		wantSub string
+	}{
+		{
+			name:    "rejects a database URL with TLS disabled",
+			mutate:  func(c *config.Config) { c.DatabaseURL = "postgres://u:p@db:5432/hermes?sslmode=disable" },
+			wantSub: "HERMES_DATABASE_URL",
+		},
+		{
+			name:    "rejects a database URL with no sslmode at all",
+			mutate:  func(c *config.Config) { c.DatabaseURL = "postgres://u:p@db:5432/hermes" },
+			wantSub: "HERMES_DATABASE_URL",
+		},
+		{
+			name:    "rejects plaintext redis",
+			mutate:  func(c *config.Config) { c.RedisURL = "redis://cache:6379/0" },
+			wantSub: "HERMES_REDIS_URL",
+		},
+		{
+			name:    "rejects plaintext nats",
+			mutate:  func(c *config.Config) { c.NATSUrl = "nats://nats:4222" },
+			wantSub: "HERMES_NATS_URL",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := secureConfig()
+			tc.mutate(&cfg)
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatal("expected an error, got nil — the service would have started in the clear")
+			}
+			if !strings.Contains(err.Error(), tc.wantSub) {
+				t.Errorf("error %q does not name the offending variable %q", err, tc.wantSub)
+			}
+		})
+	}
+}
+
+// Finding 4's second half: the placeholder secrets have no environment gate, so a service
+// with no variables set comes up fully functional and trivially forgeable.
+func TestValidate_RejectsPlaceholderSecretsOutsideDevelopment(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*config.Config)
+	}{
+		{"rejects the default JWT secret", func(c *config.Config) { c.JWTSecret = "hermes-jwt-secret" }},
+		{"rejects the default HMAC secret", func(c *config.Config) { c.APIKeyHMACSecret = "hermes-dev-hmac-secret" }},
+		{"rejects the default Centrifugo key", func(c *config.Config) { c.CentrifugoAPIKey = "centrifugo-api-key" }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := secureConfig()
+			tc.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("expected an error, got nil — a published default would be the live secret")
+			}
+		})
+	}
+}
+
+// One report listing everything wrong beats nine restarts each revealing one more problem.
+func TestValidate_ReportsEveryProblemAtOnce(t *testing.T) {
+	cfg := secureConfig()
+	cfg.DatabaseURL = "postgres://u:p@db:5432/hermes?sslmode=disable"
+	cfg.RedisURL = "redis://cache:6379/0"
+	cfg.JWTSecret = "hermes-jwt-secret"
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	for _, want := range []string{"HERMES_DATABASE_URL", "HERMES_REDIS_URL", "HERMES_JWT_SECRET"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %s: %v", want, err)
+		}
+	}
+}
+
+func TestValidate_TreatsUnknownEnvironmentsAsProduction(t *testing.T) {
+	// A typo in HERMES_ENV must not silently disable every check. Anything that is not
+	// explicitly development gets the strict path.
+	cfg := secureConfig()
+	cfg.Environment = "prodution" // deliberate typo
+	cfg.RedisURL = "redis://cache:6379/0"
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("a misspelled environment must not fall back to the permissive path")
 	}
 }
