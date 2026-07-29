@@ -32,7 +32,16 @@ func NewSMTPProvider(cfg Config) *SMTPProvider {
 			mail.WithPassword(cfg.SMTPPassword),
 		)
 	} else {
-		opts = append(opts, mail.WithTLSPolicy(mail.NoTLS))
+		// Credentials and transport security are independent: an unauthenticated
+		// relay still deserves an encrypted connection. This branch previously set
+		// NoTLS, so pointing HERMES_EMAIL_SMTP_HOST at a real relay without
+		// credentials sent mail in the clear with no warning.
+		//
+		// Opportunistic, not mandatory: STARTTLS is attempted only when the server
+		// advertises it, so the local MailHog default (localhost:1025, no STARTTLS)
+		// keeps working. A relay that does advertise it now gets an encrypted
+		// connection instead of a plaintext one.
+		opts = append(opts, mail.WithTLSPolicy(mail.TLSOpportunistic))
 	}
 
 	client, err := mail.NewClient(cfg.SMTPHost, opts...)

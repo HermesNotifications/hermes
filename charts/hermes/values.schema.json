@@ -63,8 +63,8 @@
           "properties": {
             "provider": {
               "type": "string",
-              "enum": ["smtp", "ses", "sendgrid"],
-              "description": "Email delivery provider"
+              "enum": ["smtp", "ses"],
+              "description": "Email delivery provider. Only smtp and ses are implemented: templates/configmap.yaml branches on exactly these two, and internal/email/email.go rejects anything else at startup. 'sendgrid' was previously accepted here, which passed helm install and then crash-looped the worker with 'unknown email provider'."
             }
           }
         },

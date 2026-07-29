@@ -30,7 +30,7 @@ committed under `api/`:
 | Inbox | `api/inbox/openapi.yaml` · `.json` |
 | User | `api/user/openapi.yaml` · `.json` |
 
-The asynchronous NATS contract (the three JetStream streams and the WebSocket channel) is a
+The asynchronous NATS contract (the four JetStream streams and the WebSocket channel) is a
 hand-written AsyncAPI 3 spec at `api/async/asyncapi.yaml`. These mirror the Go message structs in
 `internal/nats/messages.go` — see [architecture.md](../architecture.md#messaging-nats-jetstream).
 

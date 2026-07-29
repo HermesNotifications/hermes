@@ -875,6 +875,110 @@ still contains only 0001, 0002 and 0003.
 
 ---
 
+## Resolved 2026-07-29 — step 2 of the revised order
+
+The trivial, self-contained, no-decision batch. Ten findings, all landed and verified.
+
+**4 and 27 — the shared defect.** `EnsureHermesSigningKey` now uses `ON CONFLICT (id) DO
+NOTHING`, reads the stored secret back, and logs a warning when the caller's secret disagrees
+— neither secret nor any prefix of one is logged, since that the two differ is the whole
+signal. The signature is unchanged, because its three callers in `cmd/` and the interfaces at
+`internal/store/interfaces.go:118` and `internal/admin/server.go:72` were out of scope.
+
+The semantics were a decision, not a mechanical fix: plain `DO NOTHING` stops the clobber but
+makes `HERMES_JWT_SECRET` silently inert on an existing database, which is a second surprise.
+Warn-on-mismatch was chosen over fail-fast so a service booting with a stale variable degrades
+loudly rather than refusing to start mid-rollout.
+
+`docs/architecture.md` now says rotation is an explicit database operation coordinated with
+Centrifugo's single `token_hmac_secret_key`, and no longer implies a config change performs
+one. The multi-key claim is kept — it is true for externally registered issuers.
+
+**Verified by execution, and this one needed it.** The only coverage was
+`internal/store/postgres/jwt_keys_test.go`, which asserted the bug as correct ("Second call
+updates secret"). That assertion was inverted, not deleted, and the tests moved to
+`auth_test.go` beside the implementation. `make verify` does **not** run them — they are
+`//go:build integration` — so they were run against a real Postgres: red first
+(`stored secret = "secret-2", want "secret-1"`), then green after the fix.
+
+**20 — both JWT gaps.** Per-key `Algorithm` is now enforced via `jwt.WithValidMethods`, so an
+HS512-registered key rejects an HS256 token signed with the same secret. An empty algorithm is
+treated as HS256 rather than falling back to "any HMAC", which would have been dead code
+preserving the exact hole: `migrations/000009_create_jwt_signing_keys.up.sql:4` is
+`NOT NULL DEFAULT 'HS256'`, so no writer produces one — but `NOT NULL` still permits `''`, so
+it is handled rather than assumed away. The missing-claims guard now uses `claimToString`'s
+success return instead of raw map presence, which also closes a same-class hole the finding
+did not mention: a present but **empty-string** claim passed too, not just a non-string one.
+
+**13 — SMTP.** `mail.NoTLS` → `mail.TLSOpportunistic`. Opportunistic, not mandatory: STARTTLS
+is attempted only when advertised, so the MailHog local default is unaffected while a real
+relay now gets an encrypted connection. `go-mail` exposes `Client.TLSPolicy()`, so this is
+asserted rather than assumed.
+
+**17 — committed placeholders.** Both `deploy/k8s/base/infra/centrifugo.yaml` and the third
+instance found during triage, `deploy/centrifugo/config.json`, now carry empty strings instead
+of `CHANGE-ME-…` constants. Empty fails closed — Centrifugo cannot verify a token without a
+secret — where the placeholder failed *open*, coming up fully working with a secret published
+in a public repository. All three overlays replace this config wholesale, so nothing regresses.
+
+> **`deploy/centrifugo/config.json` appears to be orphaned.** The root `docker-compose.yml`
+> defines no Centrifugo service, and the only local Centrifugo runs under Tilt/k3d from
+> `deploy/k8s/overlays/local/centrifugo-config.json`. Nothing in this repository consumes it.
+> Its placeholder is fixed, but it is a candidate for deletion — flagged rather than deleted,
+> since "nothing here consumes it" is not proof nothing does.
+
+**34 — ArgoCD vs the HPAs.** `ignoreDifferences` on `/spec/replicas` for `apps/Deployment`
+added to the production Application only; staging includes no `hpa/` and has nothing to
+contend. Chosen over deleting `replicas` from the patch so the committed value still seeds a
+fresh deployment and still governs the five services with no HPA.
+
+**49 — `sendgrid`.** Dropped from the `values.schema.json` enum. Not implemented, deliberately:
+the chart's configmap branches only on `smtp`/`ses` and `internal/email/email.go` rejects
+anything else, so the enum was converting a config error into a runtime crash loop.
+
+**26, 29, 31 — documentation.** Counts corrected (9 services, 10 ECR repos and images, the
+tenth being `hermes-migrate`). `data-model.md` gained `template_channel_content` and
+`user_contact_points` with an updated entity diagram, lost the dropped `users.email`/`phone`
+and the five template content columns, and now records that `verified` is inert, that
+retention does not run on the DynamoDB path, and that soft-deleted notifications are never
+hard-deleted. Eleven of finding 31's items fixed.
+
+### One item in finding 31 was wrong and is withdrawn
+
+**31.2 — `self-hosting/upgrading.md:49` is correct as written and has been left alone.** The
+triage recorded "Database migrations cannot be rolled back automatically" as stale because 17
+`.down.sql` files exist. That inference does not hold: the files existing does not mean
+anything runs them. `cmd/migrate/main.go` exposes only `-database-url` and
+`-migrations-path`, and `internal/database/database.go:43` calls `m.Up()` — there is no
+direction flag, no step count, no `down`. Implementing the item as filed would have replaced a
+true statement with a false one.
+
+31.3 follows from the same fact, so the rollback recipe was rewritten to say rollback is
+**manual** rather than repaired with different flags. The two independent defects in it are
+real and were fixed: `/migrate` does not exist in that image (`ENTRYPOINT` is `/service`) and
+the Job is `hermes-migrate`, not `hermes-migration`, so the documented delete silently
+no-opped.
+
+### Deferred, needing a maintainer decision
+
+- **31.12 — repository identity.** Three identities coexist and nothing establishes which is
+  intended: `go.mod:1` is `github.com/hermes-notifications/hermes`,
+  `charts/hermes/values.yaml:5` publishes to `ghcr.io/hermesnotifications`, and the ArgoCD
+  `repoURL`s point at `git@github.com:darylrobbins/hermes.git`. Normalising to any one of them
+  is a decision, not an edit, so the docs were left untouched.
+- **31.13 — `docs/adr/0001:245`** refers to "keys per namespace" and no namespace concept
+  exists in the code. Amending a past ADR is governed by the amend-versus-supersede rule, so
+  it is left for a deliberate decision.
+
+### Found while fixing, not previously filed
+
+`docs/deployment-guide.md` told operators to tail logs with
+`-l app.kubernetes.io/part-of=hermes`. Per finding 47 that label never reaches a pod, so the
+command matches nothing and returns silently. Corrected to select by component, with a pointer
+to 47.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is

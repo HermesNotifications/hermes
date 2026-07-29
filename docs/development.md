@@ -65,6 +65,12 @@ make build           # build all services into bin/<service>/service
 Then run individual services from `bin/`, or just use this mode to run integration tests
 (see [testing.md](testing.md)). `make infra-down` stops the infrastructure.
 
+This mode is also what `make dispatchbench` needs — it sweeps dispatch worker concurrency and
+prefetch against a real backend (`BACKENDS=postgres|dynamo`) and is how the numbers in
+[loadtest/](loadtest/) were produced. Note its pool constraint: `pool_max_conns` must be at
+least the highest worker count in the sweep, or the run measures connection starvation rather
+than dispatch throughput.
+
 ## Building
 
 ```bash

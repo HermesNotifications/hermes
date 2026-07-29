@@ -149,11 +149,30 @@ partitioning labels, not authorization scopes. See
 HMAC-SHA256 hash of the secret (keyed by `HERMES_API_KEY_HMAC_SECRET`) is stored, in
 `api_keys.key_hash`; verification recomputes the HMAC and compares in constant time.
 
-**JWTs** (`internal/auth/jwt.go`). Tokens are Hermes-issued and HMAC-signed. The middleware
-accepts any of several active signing keys (`jwt_signing_keys`), so keys can be rotated without
-downtime; non-HMAC algorithms are rejected. The `sub` claim is the internal user ID and an
-`organization_id` claim accompanies the request. Backends obtain a token by exchanging a user
-identifier via the Admin auth endpoint (see [Integration Guide](integration-guide.md)).
+**JWTs** (`internal/auth/jwt.go`). Tokens are Hermes-issued and HMAC-signed. Each registered
+key records its own algorithm and is validated against exactly that algorithm, so a token
+signed with a different HMAC variant is rejected even when the secret matches.
+
+The middleware does accept several concurrently valid signing keys from `jwt_signing_keys`,
+which is what makes it possible to phase in an externally registered issuer without a flag
+day. **Rotating the Hermes-internal key is not, however, something a config change performs.**
+That row is written once, on first startup, and is never overwritten afterwards: setting
+`HERMES_JWT_SECRET` against a database that already holds it has no effect, and the service
+logs a warning at startup saying the configured value is being ignored. This is deliberate —
+the variable has a default, and three services call `EnsureHermesSigningKey` on boot, so an
+upsert meant any one of them starting without the variable set would silently replace a
+rotated key and invalidate every token issued under it.
+
+Rotating it is therefore an explicit operation against `jwt_signing_keys`, and it must be
+coordinated with Centrifugo, which validates the same tokens but accepts exactly one
+`token_hmac_secret_key` (see [Integration Guide](integration-guide.md)). Changing
+`HERMES_JWT_SECRET` on a *fresh* database is a different matter — there the value is adopted,
+because there is no row to conflict with.
+
+The `sub` claim is the internal user ID, and an `organization_id` claim must be present and
+resolve to a non-empty value; a claim that is present but not a string or number is rejected
+rather than treated as blank. Backends obtain a token by exchanging a user identifier via the
+Admin auth endpoint (see [Integration Guide](integration-guide.md)).
 
 ## IDs
 

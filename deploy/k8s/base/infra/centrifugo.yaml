@@ -3,14 +3,28 @@ kind: ConfigMap
 metadata:
   name: centrifugo-config
 data:
+  # Finding 17. token_hmac_secret_key and api_key are deliberately EMPTY here.
+  #
+  # They previously carried the literal placeholders "CHANGE-ME-must-match-HERMES_JWT_SECRET"
+  # and "CHANGE-ME-centrifugo-api-key", which are committed to a public repository. A
+  # deployment that applied this base unmodified came up fully working with a secret
+  # anyone can read — the failure mode is silent, because everything functions.
+  #
+  # Empty fails closed instead: Centrifugo cannot verify a JWT without a secret, so
+  # tokens are rejected rather than forged. Every real environment supplies both via
+  # the CENTRIFUGO_TOKEN_HMAC_SECRET_KEY and CENTRIFUGO_API_KEY environment variables
+  # (see overlays/*/patches/centrifugo-env.yaml), which take precedence over this file.
+  #
+  # token_hmac_secret_key must equal HERMES_JWT_SECRET: Centrifugo validates the same
+  # Hermes-issued tokens the services do, and it accepts exactly one such key.
   config.json: |
     {
       "engine": "redis",
       "redis_address": "redis://redis:6379/0",
       "broker": "nats",
       "nats_url": "nats://nats:4222",
-      "token_hmac_secret_key": "CHANGE-ME-must-match-HERMES_JWT_SECRET",
-      "api_key": "CHANGE-ME-centrifugo-api-key",
+      "token_hmac_secret_key": "",
+      "api_key": "",
       "admin": false,
       "presence": true,
       "history_size": 50,

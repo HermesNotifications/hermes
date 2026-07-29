@@ -1,4 +1,6 @@
-# Kargo Warehouse watches ECR for new images across all 9 Hermes services.
+# Kargo Warehouse watches ECR for new images across all 10 Hermes images:
+# the 9 long-running services plus hermes-migrate, which is subscribed below
+# like any other and is why the count is 10 rather than 9.
 # When any service publishes a new tag, Kargo creates a Freight that can
 # be promoted through the staging -> production pipeline.
 #

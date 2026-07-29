@@ -92,3 +92,4 @@ These are separate binaries (not subcommands of `hermes`), usually run via `make
 | `make cleanup` | `cmd/cleanup` | Delete old `notification_events` |
 | `make loadseed` | `cmd/loadseed` | Generate the load-test dataset |
 | `make openapi` | `cmd/openapi` | Regenerate the OpenAPI specs |
+| `make dispatchbench` | `cmd/dispatchbench` | Sweep dispatch worker concurrency and prefetch. Requires `make infra-up`; takes `BACKENDS=postgres\|dynamo`. Results live in [loadtest/](loadtest/) |

@@ -22,6 +22,23 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: hermes
+  # Finding 34. Four Deployments (admin, dispatch, inbox, worker-email) carry both a
+  # committed replica count in overlays/production/patches/replicas.yaml AND an HPA in
+  # overlays/production/hpa/. With selfHeal on and no exception, ArgoCD reverts every
+  # scaling decision the HPA makes back to the git-committed number, so the two
+  # controllers fight and autoscaling silently does not work.
+  #
+  # Ignoring /spec/replicas is preferred over deleting it from the patch: the committed
+  # value still serves as the initial count for a fresh deployment, and it stays
+  # meaningful for the five Deployments that have no HPA.
+  #
+  # Staging deliberately has no equivalent — its kustomization includes no hpa/ directory,
+  # so nothing there contends for the field.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
