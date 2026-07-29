@@ -90,9 +90,13 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	// Event Writer
 	ew := eventwriter.New(natsClient, st, logger)
 
-	// Email Worker — SMTP to Mailpit
+	// Email Worker — SMTP to Mailpit.
+	// The host is overridable for the same reason MAILPIT_API_URL above is: an
+	// environment that cannot reach published ports on loopback (a sandbox, or Docker
+	// without host networking) needs to address the container directly. Hardcoding one
+	// half of the pair while parameterising the other made this test unrunnable outside CI.
 	emailProvider := email.NewSMTPProvider(email.Config{
-		SMTPHost: "localhost",
+		SMTPHost: envOr("MAILPIT_SMTP_HOST", "localhost"),
 		SMTPPort: 1025,
 	})
 	layout := template.Must(template.New("layout").Parse(`{{.Content}}`))
@@ -128,8 +132,13 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 		t.Fatalf("parse key: %v", err)
 	}
 	keyHash := auth.HMACHashAPIKey(secret, "test-hmac-secret")
-	_, err = pool.Exec(ctx, "INSERT INTO api_keys (id, key_hash, name) VALUES ($1, $2, $3)",
-		keyID, keyHash, "Email E2E Key")
+	// Permissions are explicit. Inserting a key with no permissions column at all
+	// left these tests sending with a key that held nothing — which passed only
+	// because /v1/send checked no permission (finding 3). Granting exactly what the
+	// test exercises means a future gap fails here rather than passing silently.
+	_, err = pool.Exec(ctx,
+		"INSERT INTO api_keys (id, key_hash, name, permissions) VALUES ($1, $2, $3, $4)",
+		keyID, keyHash, "Email E2E Key", []string{auth.PermNotificationsSend})
 	if err != nil {
 		t.Fatalf("create api key: %v", err)
 	}
@@ -184,7 +193,7 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	rec := doRequest("POST", "/v1/send", map[string]any{
 		"to": map[string]any{
 			"organization_id": organizationID,
-			"user_id":   userExternalID,
+			"user_id":         userExternalID,
 		},
 		"template": templateSlug,
 		"data":     map[string]string{"name": "Alice", "order_id": "12345"},
