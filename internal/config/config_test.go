@@ -32,6 +32,20 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 }
 
+// ADR 0005 phase 2. The CA bundle defaults to empty on purpose: local NATS has no
+// certificate, and internal/messaging treats an empty path as "leave the connection
+// alone". Deployments set it to the cert-manager CA mounted into the pod.
+func TestLoad_NATSCABundle(t *testing.T) {
+	if got := config.Load().NATSCABundlePath; got != "" {
+		t.Fatalf("expected no CA bundle by default so make infra-up keeps working, got %q", got)
+	}
+
+	t.Setenv("HERMES_NATS_CA_BUNDLE", "/etc/nats-certs/ca.crt")
+	if got := config.Load().NATSCABundlePath; got != "/etc/nats-certs/ca.crt" {
+		t.Fatalf("expected the CA bundle path from the environment, got %q", got)
+	}
+}
+
 func TestLoad_DispatchConcurrencyOverride(t *testing.T) {
 	t.Setenv("HERMES_DISPATCH_CONCURRENCY", "12")
 

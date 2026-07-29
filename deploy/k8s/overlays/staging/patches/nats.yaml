@@ -3,23 +3,21 @@ kind: StatefulSet
 metadata:
   name: nats
 spec:
+  # ADR 0005 phase 2. This patch used to replace the container args with plaintext flags,
+  # which would now also drop `-c nats.conf` and silently take staging back to an
+  # unencrypted bus while HERMES_ENV=staging tells the services to require tls:// — they
+  # would refuse to start. The args are deliberately not touched: staging differs from
+  # production only in size and storage class.
+  #
+  # The old patch also set --server_name=nats-staging; the base passes --name $(POD_NAME),
+  # which satisfies JetStream's unique-name requirement without a per-overlay value.
   replicas: 1
-  template:
-    spec:
-      containers:
-      - name: nats
-        args:
-        - "--jetstream"
-        - "--store_dir=/data"
-        - "--server_name=nats-staging"
-        - "-m"
-        - "8222"
   volumeClaimTemplates:
-  - metadata:
-      name: data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      storageClassName: gp3
-      resources:
-        requests:
-          storage: 5Gi
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 5Gi

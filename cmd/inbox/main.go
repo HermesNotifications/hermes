@@ -14,6 +14,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/inbox"
+	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/store/dynamo"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
@@ -29,7 +30,7 @@ func main() {
 	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
 	defer pool.Close()
 
-	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger)
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger, messaging.WithCABundle(cfg.NATSCABundlePath))
 	defer natsClient.Close()
 
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)

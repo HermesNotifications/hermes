@@ -3,4 +3,15 @@ kind: Kustomization
 
 resources:
   - nats.yaml
+  - nats-certificates.yaml
   - centrifugo.yaml
+
+# The NATS server configuration is a generated Secret rather than a checked-in one so its
+# name carries a content hash: editing nats-server.conf changes the name, which changes
+# the StatefulSet's pod template, which rolls the cluster. A plain Secret would let the
+# config drift from what the running servers loaded. Phase 3's NKey accounts go in this
+# same file, at which point the Secret is holding real credentials.
+secretGenerator:
+  - name: nats-server-config
+    files:
+      - nats.conf=nats-server.conf

@@ -7,6 +7,12 @@ metadata:
     app.kubernetes.io/component: messaging
 spec:
   serviceName: nats
+  # Ordered startup deadlocks a JetStream cluster: the readiness probe cannot pass until
+  # the meta layer has a leader, the meta layer cannot elect one until a quorum of peers
+  # is up, and OrderedReady will not create nats-1 until nats-0 is Ready. Verified in a
+  # live cluster — with OrderedReady nats-0 sat at 503 "JetStream is still recovering
+  # meta layer" and was killed by its liveness probe on a loop.
+  podManagementPolicy: Parallel
   replicas: 3
   selector:
     matchLabels:
@@ -17,17 +23,33 @@ spec:
         app.kubernetes.io/name: nats
         app.kubernetes.io/component: messaging
     spec:
+      # Finding 19. The image runs as root by default (verified: `id` in nats:2-alpine
+      # reports uid=0), and nothing about nats-server needs it — it binds 4222/6222/8222,
+      # all above 1024. fsGroup is what makes /data writable by the non-root user; the
+      # JetStream store is the only thing this container writes, so the root filesystem
+      # can be read-only.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nats
           image: nats:2-alpine
+          # A JetStream cluster requires a unique server_name per node and refuses to
+          # start without one. The pod name is already unique and stable across restarts.
           args:
-            - "--jetstream"
-            - "--store_dir=/data"
-            - "--cluster_name=hermes-nats"
-            - "--cluster=nats://0.0.0.0:6222"
-            - "--routes=nats://nats-0.nats:6222,nats://nats-1.nats:6222,nats://nats-2.nats:6222"
-            - "-m"
-            - "8222"
+            - "-c"
+            - "/etc/nats-config/nats.conf"
+            - "--name"
+            - "$(POD_NAME)"
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           ports:
             - containerPort: 4222
               name: client
@@ -35,27 +57,67 @@ spec:
               name: cluster
             - containerPort: 8222
               name: monitor
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: config
+              mountPath: /etc/nats-config
+              readOnly: true
+            - name: certs
+              mountPath: /etc/nats-certs
+              readOnly: true
           resources:
             requests:
               cpu: 100m
               memory: 256Mi
             limits:
               memory: 512Mi
+          # Split on purpose, and both halves were checked against a live cluster.
+          #
+          # Readiness uses the full /healthz, which reports unavailable until the
+          # JetStream meta layer has a leader. That is only safe because startup is
+          # Parallel: the narrower js-server-only=true variant returns 200 on a server
+          # whose JetStream is unusable — observed on a single-node deployment that was
+          # Ready while every stream create failed with "JetStream system temporarily
+          # unavailable". Readiness has to mean "can serve", or it gates nothing.
+          #
+          # Liveness deliberately asks less: only whether this is still a working NATS
+          # process with JetStream enabled. Pointing liveness at the full /healthz turns
+          # every meta-layer election into a restart storm, which is how a recoverable
+          # blip becomes an outage.
           readinessProbe:
             httpGet:
               path: /healthz
               port: 8222
+              scheme: HTTPS
             initialDelaySeconds: 3
             periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /healthz?js-enabled-only=true
               port: 8222
+              scheme: HTTPS
             initialDelaySeconds: 10
             periodSeconds: 10
+      volumes:
+        - name: config
+          secret:
+            secretName: nats-server-config
+        # optional: the local overlay runs NATS in plaintext and has no cert-manager, so
+        # this Secret does not exist there. It is not a silent downgrade: the server only
+        # accepts plaintext when the local overlay also replaces the args to drop the
+        # `tls` block, and a client whose CA bundle is missing fails to connect rather
+        # than falling back — see internal/messaging.WithCABundle.
+        - name: certs
+          secret:
+            secretName: nats-server-tls
+            optional: true
+            defaultMode: 0440
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -71,6 +133,19 @@ metadata:
   name: nats
 spec:
   clusterIP: None
+  # Without this the cluster cannot form. A headless Service publishes DNS records only
+  # for Ready endpoints, the readiness probe is not Ready until JetStream has a meta
+  # leader, and the meta layer cannot elect one until the routes — which are the per-pod
+  # DNS names nats-0.nats, … — resolve. Verified: all three pods sat at 0/1 for three
+  # minutes logging `lookup nats-1.nats: no such host` on a loop.
+  #
+  # The cost is that this Service, which clients also reach as tls://nats:4222, can hand
+  # out a pod that is not ready yet. That is tolerable — nats.go reconnects, and services
+  # already fail closed and restart if the bus is unreachable — whereas a cluster that
+  # cannot form is not. What readiness still buys is rollout safety: updateStrategy is
+  # RollingUpdate regardless of podManagementPolicy, so a restart waits for real JetStream
+  # health before taking the next pod down.
+  publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/name: nats
   ports:

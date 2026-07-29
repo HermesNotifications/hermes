@@ -165,8 +165,58 @@ cost of failing open is data on the wire, which is silent and is not.
 - **The performance cost of TLS on the JetStream hot path.** Unmeasured. `cmd/dispatchbench`
   exists and would measure it; that has not been run.
 
+## Amendment 2026-07-29 — phase 2 implemented, six details settled
+
+Phase 2 (NATS TLS) and finding 19 landed together as planned. The decision stands; these are
+the details it left open, now settled by implementation and verified against a real k3s
+cluster with cert-manager v1.21.0.
+
+**Corrected premise.** This record says cert-manager's only issuer is a public Let's Encrypt
+ClusterIssuer that cannot sign for `nats.hermes.svc`. On the cluster used for verification
+there are **zero** ClusterIssuers — that issuer exists in `bootstrap-cluster.sh`, not
+necessarily in any given cluster. The conclusion held for the right reason (a public ACME
+issuer cannot sign an internal name) but it was reasoned, not observed.
+
+1. **A namespaced `Issuer`, not a `ClusterIssuer`.** Everything needing an internal
+   certificate lives in `hermes`. A namespaced issuer cannot be borrowed from another
+   namespace, so if Centrifugo or the observability stack later need certificates from
+   elsewhere this must change.
+2. **A self-signed in-cluster CA.** Its private key sits in `hermes-internal-ca-tls` in the
+   application namespace, so **anything that can read Secrets in `hermes` can mint a
+   certificate every service trusts.** That is a real weakening and is accepted here only
+   because the alternative — Vault or AWS Private CA — is a larger dependency than phase 2
+   warrants. Revisit if the namespace gains untrusted workloads or broader Secret readers.
+3. **`HERMES_NATS_CA_BUNDLE` is not required outside development.** Making `Validate` demand
+   it was considered and rejected: without it, nats.go verifies against the system pool and
+   **errors** rather than downgrading — verified, there is no silent-plaintext path — and
+   requiring it would false-positive on an operator who baked the CA into the image or uses a
+   publicly-trusted certificate. Fail-closed is carried by the `tls://` check plus
+   `MustConnectNATS` exiting non-zero.
+4. **Monitoring moved to `https` on 8222** with `scheme: HTTPS` probes. `/varz` exposes
+   subjects, peers and connection details, and was previously readable in the clear.
+5. **Server-only TLS; no `verify: true`.** Client certificates would authenticate a connection
+   while still granting every client every subject, which is the argument this record already
+   makes against mTLS-without-accounts. Authn/authz stays with phase 3's NKeys. Route TLS is
+   mutual regardless, which is why the certificate carries client-auth usage.
+6. **Server config in a hash-suffixed `secretGenerator`**, as this record specified. It holds no
+   secret today; the benefit is that editing it rolls the cluster, and phase 3's NKeys land in
+   the same file.
+
+**Two operational consequences that are not obvious:**
+
+- **`podManagementPolicy` is not updatable on a live StatefulSet.** Phase 2 changes it to
+  `Parallel` (see finding 51), which on an existing NATS cluster requires delete-and-recreate,
+  not a rolling update.
+- **NATS does not reload certificates on file change**, only on SIGHUP. A renewal is therefore
+  picked up at the next restart. Untested through an actual expiry cycle; a reloader annotation
+  or SIGHUP sidecar may be wanted before certificates get short lifetimes.
+
 ## Status history
 
 - 2026-07-29 — Accepted. Written before implementation, to unblock findings 1, 14 and 19,
   which the triage established are entangled and were repeatedly deferred as "large" without
   the shape of the work being decided.
+- 2026-07-29 — Amended: phase 2 and finding 19 implemented and verified in-cluster; six open
+  details settled above; the claim about the existing Let's Encrypt ClusterIssuer corrected
+  from observed to reasoned. Phases 1 and 2 are done; **phase 3 (NKey accounts and
+  per-service subject permissions) remains open** and is where authn/authz actually arrives.

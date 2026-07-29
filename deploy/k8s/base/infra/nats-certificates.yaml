@@ -1,0 +1,97 @@
+# ADR 0005 phase 2 — a private cert-manager issuer for in-cluster certificates.
+#
+# The Let's Encrypt ClusterIssuer created by infra/scripts/bootstrap-cluster.sh is a
+# public ACME issuer: it proves control of a public domain and cannot sign for
+# nats.hermes.svc. It stays for ingress and is not reused here.
+#
+# These are namespaced Issuers rather than ClusterIssuers. Everything that needs an
+# internal certificate today lives in this namespace, and a namespaced issuer cannot be
+# borrowed by a workload in another namespace to mint a certificate our services trust.
+---
+# Bootstrap issuer. Its only job is to sign the CA below; nothing else references it.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: hermes-selfsigned-bootstrap
+  labels:
+    app.kubernetes.io/component: pki
+spec:
+  selfSigned: {}
+---
+# The internal CA. Its private key lives in this Secret, in this namespace — so anything
+# that can read Secrets here can mint a certificate every Hermes service will trust.
+# Replacing this with an intermediate from a real PKI (cert-manager supports Vault and
+# AWS Private CA issuers) is the upgrade path; ADR 0005 does not settle which.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hermes-internal-ca
+  labels:
+    app.kubernetes.io/component: pki
+spec:
+  isCA: true
+  commonName: hermes-internal-ca
+  secretName: hermes-internal-ca-tls
+  duration: 87600h # 10y
+  renewBefore: 8760h # 1y
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: hermes-selfsigned-bootstrap
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: hermes-internal-ca
+  labels:
+    app.kubernetes.io/component: pki
+spec:
+  ca:
+    secretName: hermes-internal-ca-tls
+---
+# The NATS server certificate. cert-manager renews it in place and the kubelet
+# propagates the updated Secret into the mounted volume; NATS reloads certificates on
+# SIGHUP but not on file change, so a renewal is picked up at the next restart. The
+# 90d/15d window leaves ample room for a routine roll.
+#
+# The SAN list is not decoration. `nats` and `nats.hermes.svc*` cover clients dialling
+# the headless Service; the wildcards cover the per-pod names (nats-0.nats, …) that the
+# cluster routes use, which is what makes route mTLS verify. The namespace is spelled out
+# because kustomize's `namespace:` transformer does not rewrite strings inside dnsNames —
+# renaming the namespace means editing this list.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-server-tls
+  labels:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/component: messaging
+spec:
+  secretName: nats-server-tls
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+  dnsNames:
+    - nats
+    - nats.hermes
+    - nats.hermes.svc
+    - nats.hermes.svc.cluster.local
+    - "*.nats"
+    - "*.nats.hermes"
+    - "*.nats.hermes.svc"
+    - "*.nats.hermes.svc.cluster.local"
+  issuerRef:
+    name: hermes-internal-ca
+    kind: Issuer
+    group: cert-manager.io

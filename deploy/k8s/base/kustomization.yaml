@@ -29,7 +29,15 @@ resources:
 configMapGenerator:
   - name: hermes-config
     literals:
-      - HERMES_NATS_URL=nats://nats:4222
+      # ADR 0005 phase 2. tls:// is the default so a deployment that forgets to configure
+      # transport security is the one that fails, not the one that leaks: config.Validate
+      # rejects a non-tls:// URL outside development, and the local overlay opts out
+      # explicitly rather than by omission.
+      - HERMES_NATS_URL=tls://nats:4222
+      # Where each service finds the private CA that signs the NATS server certificate.
+      # No system trust store contains it. The path is the mount in every NATS client
+      # pod; an empty value means "use the system pool", which is the local dev setting.
+      - HERMES_NATS_CA_BUNDLE=/etc/nats-certs/ca.crt
       - HERMES_CENTRIFUGO_API_URL=http://centrifugo:8000
       # OpenTelemetry — cluster-local Collector in the observability namespace.
       # Overlays may override to an out-of-cluster endpoint.
