@@ -3,10 +3,19 @@ kind: Kustomization
 
 namespace: hermes
 
+# Finding 47. includeTemplates is what puts the label on spec.template.metadata.labels.
+# Without it the label reached resource metadata only, never a pod — so every
+# NetworkPolicy whose podSelector keys on part-of selected ZERO pods, and the declared
+# effect of the policy set was DNS egress and nothing else for the entire namespace.
+#
+# includeSelectors stays false deliberately: turning it on would write part-of into
+# Deployment.spec.selector and Service.spec.selector, which are immutable on an existing
+# Deployment and would require deleting and recreating each one.
 labels:
   - pairs:
       app.kubernetes.io/part-of: hermes
     includeSelectors: false
+    includeTemplates: true
 
 resources:
   - namespace.yaml

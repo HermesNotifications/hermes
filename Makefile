@@ -42,6 +42,11 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 	kubectl kustomize deploy/k8s/overlays/staging > /dev/null
 	kubectl kustomize deploy/k8s/overlays/production > /dev/null
 	python3 -c "import yaml, glob; [list(yaml.safe_load_all(open(p))) for p in glob.glob('infra/crossplane/**/*.yaml', recursive=True) + glob.glob('deploy/kargo/**/*.yaml', recursive=True) + glob.glob('.github/workflows/*.yml')]"
+	@# Finding 47: a NetworkPolicy whose podSelector matches nothing is silently inert.
+	@# kustomize build and kubectl apply both accept it, so only this catches it.
+	python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_networkpolicy_selectors.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_networkpolicy_selectors.py -
 
 # --- Helm ---
 .PHONY: helm-lint

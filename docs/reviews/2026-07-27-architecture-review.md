@@ -979,6 +979,68 @@ to 47.
 
 ---
 
+## Resolved 2026-07-29 — step 3, the NetworkPolicy cluster
+
+Findings **47, 8 and 10**, fixed as one change because fixing any of them alone is either
+useless or dangerous: 8 and 10 patch allow rules in a policy set that selected no pods, and
+47 alone would have flipped the namespace from *policies inert* to *policies enforced and
+wrong*.
+
+**47.** `deploy/k8s/base/kustomization.yaml` now sets `includeTemplates: true` on the `labels:`
+transformer, so `app.kubernetes.io/part-of` reaches `spec.template.metadata.labels`. Verified
+by rendering both overlays: all 13 pod-producing workloads now carry it, where previously none
+did. `includeSelectors` stays `false` deliberately — turning it on would write the label into
+`Deployment.spec.selector`, which is immutable on an existing Deployment.
+
+**8.** `hermes-send` added to the `allow-ingress-to-api` selector *and* port 8088 to its port
+list. Two independent omissions, either of which alone blocked `/v1/send`.
+
+**10.** Egress to the `observability` namespace on 4317/4318 added, so OTLP can actually
+leave the pods. Plus the corollary the finding missed: a new `allow-observability-scrape`
+policy permits the observability namespace to reach the NATS, Postgres and Redis exporter
+ports, which `allow-nats.yaml` had restricted to same-namespace via `podSelector: {}`.
+
+**Found while fixing, and only visible because 47 was fixed.** `allow-nats-client` permits
+6222 *ingress* between NATS pods and nothing permitted the matching *egress*. While the label
+never reached a pod this was invisible; with it fixed, a 3-replica JetStream cluster would
+have failed to form under default-deny. Added as `allow-nats-cluster-egress` in both overlays.
+
+### A regression gate, because this defect class is invisible by construction
+
+`kustomize build` succeeds, `kubectl apply` succeeds, and the API server accepts a
+NetworkPolicy matching nothing. An inert policy is indistinguishable from a working one until
+enforcement is switched on. So `scripts/check_networkpolicy_selectors.py` now fails
+`make verify-manifests` if any policy's `podSelector` matches no workload, and it names
+`includeTemplates` as the likely cause.
+
+Proven to bite: reverting the one-line fix makes `make verify-manifests` exit non-zero with
+`FAIL: 3 of 9 NetworkPolicies select no pods`. The script has 11 unit tests, also run by
+`verify-manifests`.
+
+> The count differs between the mutation run (3) and the original triage (4) because the
+> fourth, `allow-nats-client`, keys its *source* selector on `part-of` while its `podSelector`
+> keys on `name: nats`. It selects a pod either way — but its ingress rule matched no source
+> until the label was fixed. A `podSelector` check cannot see that, so the gate is necessary
+> but not sufficient. Peer selectors inside rules remain unchecked.
+
+### Still open in this cluster
+
+- **Enforcement is still off.** `infra/terraform/modules/eks/main.tf` declares the `vpc-cni`
+  addon with no `configuration_values`, so `enableNetworkPolicy` is unset and none of these
+  policies are enforced. That is now a deliberate choice rather than an oversight: the policy
+  set is correct as declared, and turning enforcement on is a separate, reviewable change.
+- **Finding 8's capacity half is untouched.** `hermes-send` is still absent from the replicas
+  patch, resources patch, HPA set, PDB set, anti-affinity patch and the Kargo health check, so
+  it stays at `replicas: 1` in production. Those are capacity decisions, not correctness fixes.
+- **Finding 35** is unaddressed: the Kargo health check has no ServiceAccount or RBAC and its
+  AnalysisRun pod cannot reach the API server under default-deny. Two independent blockers.
+- **Email egress is unresolved and deliberately not guessed at.** No `HERMES_EMAIL_PROVIDER`
+  is set in either overlay, so whether the email worker needs SMTP egress (587/465/25) or is
+  covered by the existing 443 rule depends on findings 23 and 41. No rule was added on
+  speculation.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is
