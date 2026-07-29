@@ -1041,6 +1041,81 @@ Proven to bite: reverting the one-line fix makes `make verify-manifests` exit no
 
 ---
 
+## Resolved 2026-07-29 — step 4 (partial), the small security items
+
+Findings **15, 16** and most of **21**. Findings **1, 3 and 14** are deliberately not
+attempted here — see below.
+
+**16 — all 38 action references pinned to commit SHAs** across all six workflows, each with
+the tag in a trailing comment (`uses: actions/checkout@d23441a… # v6`). Every tag was
+resolved through the GitHub API rather than copied from anywhere, dereferencing annotated
+tags to their commit. That also settles the note in the `68308ad` commit message recording
+`actions/setup-java@v5` and `actions/setup-dotnet@v5` as unconfirmed: both exist and resolve.
+
+Pinning is only half of it — a pin that nobody bumps is a stale dependency wearing a
+security control's clothes. `.github/dependabot.yml` already carries a weekly
+`github-actions` entry, and Dependabot understands the SHA-plus-comment form and updates
+both parts. That entry is now commented to say so, because deleting it would silently freeze
+every action at whatever commit was current when it was pinned.
+
+Image signing and provenance, the finding's second half, is **not** done. It needs an
+admission-time verifier that does not exist in `deploy/` and is properly its own piece of work.
+
+**15 — OIDC trust narrowed** from `repo:<org>/<repo>:*`, which trusts every ref in the
+repository, to exactly `refs/heads/main` and `refs/tags/v*` — the two that `cd.yml` actually
+uses. This deliberately also narrows `loadtest.yml`, which is `workflow_dispatch` with
+`id-token: write` and could previously assume the role from any branch; it now works only when
+dispatched from main.
+
+**21 — five of eight sub-items fixed.**
+
+- Raw API keys are no longer map keys. The bucket key is now a SHA-256 digest, applied
+  *inside* `RateLimit` rather than at each call site so no caller can forget it. The raw
+  bearer token — not even stripped of its `Bearer ` prefix — was previously a live map key
+  retained for up to 30 minutes by the eviction sweep, so any heap profile carried working
+  credentials. Note this does **not** bound the map: an unauthenticated caller sending
+  garbage still mints a bucket per distinct value, because `RateLimit` is applied outside the
+  auth middleware. That is finding 39 and needs the ordering changed, not a different hash.
+- `automountServiceAccountToken: false` on the `hermes` ServiceAccount. No service talks to
+  the Kubernetes API.
+- `force_delete` on ECR is now `var.environment != "production"`. It previously let
+  `terraform destroy` remove a repository full of images, quietly undoing the point of the
+  `IMMUTABLE` tag policy on the line above it.
+- The `recoveryWindowDays` XRD default moved from `0` to `7`. A default is what a claim gets
+  when its author has not thought about it, and `0` — immediate, unrecoverable deletion — is
+  the least recoverable value available. Staging still sets `0` explicitly, which is fine
+  because it is a choice rather than an accident.
+- `secretsmanager:DescribeSecret` added to the ESO policy, still scoped to `secret:hermes/*`.
+- `nodes/proxy` dropped from the Datadog ClusterRole; it permits arbitrary requests through
+  every node's kubelet API, far beyond what metrics collection needs.
+
+Not done: **VPC flow logs**, which need a destination and retention decision rather than a
+line of code, and the **ACME contact address**, which is a real address belonging to the
+repository owner and is theirs to change.
+
+### Not attempted, and why
+
+- **1 (NATS unauthenticated and unencrypted)** is the largest item in the review and is
+  genuinely entangled: it needs a config surface, secret plumbing through ExternalSecrets, a
+  NATS accounts/users configuration, and certificate issuance — and it overlaps findings 14
+  and 19. It changes an auth model, so per `CLAUDE.md` it warrants an ADR before code.
+- **3 (permission enforcement)** is not mechanical either. `RequirePermission` has no call
+  sites *because* its `func(http.Handler) http.Handler` shape does not fit Huma's routing;
+  enforcing per-operation permissions means choosing a different integration point. That
+  choice should be made deliberately.
+- **14 (datastore TLS)** is small as a config surface and large as a real capability — a CA
+  bundle and client certificates are a different piece of work from adding a field. It shares
+  plumbing with finding 1 and should land with it.
+
+### Unverified
+
+The Terraform edits (findings 15, 21) are **not** validated: `terraform` is not installed in
+this environment, so `terraform fmt` and `terraform validate` could not be run. The HCL is
+syntactically conventional and `make verify` covers everything else, but the Terraform itself
+has been read, not executed.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is

@@ -4,10 +4,34 @@
 package middleware
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"sync"
 	"time"
 )
+
+// bucketKey derives the map key a caller's bucket is stored under.
+//
+// Finding 21. The API-key services pass `r.Header.Get("Authorization")` through as the
+// key, so without this the raw bearer token — the secret itself, not even stripped of its
+// "Bearer " prefix — was a live map key retained for up to 30 minutes by the eviction
+// sweep. Anything that reads process memory, including a heap profile shipped to a
+// debugging tool, would hand over working credentials.
+//
+// Hashing here rather than at each call site means no caller can forget it, and the
+// keyFunc signature stays unchanged. SHA-256 is not doing password-hashing work — there
+// is no offline-guessing threat model for a map key — it is doing "this value is no
+// longer a credential" work, and a fast hash is the right tool for that.
+//
+// Note this does NOT bound the map: an unauthenticated caller sending garbage tokens
+// still mints one bucket per distinct value, because RateLimit is applied outside the
+// auth middleware in send and admin. That is finding 39 and needs the ordering changed,
+// not a different hash.
+func bucketKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
 
 type tokenBucket struct {
 	tokens     float64
@@ -59,7 +83,7 @@ func RateLimit(keyFunc func(*http.Request) string, burst int, sustained int) fun
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := keyFunc(r)
+			key := bucketKey(keyFunc(r))
 			val, _ := buckets.LoadOrStore(key, &tokenBucket{
 				tokens:     float64(burst),
 				maxTokens:  float64(burst),

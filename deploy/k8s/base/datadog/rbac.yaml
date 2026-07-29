@@ -9,7 +9,10 @@ metadata:
   name: datadog-agent
 rules:
   - apiGroups: [""]
-    resources: ["nodes", "nodes/metrics", "nodes/spec", "nodes/stats", "nodes/proxy"]
+    # Finding 21. nodes/proxy removed: it permits arbitrary requests through the
+    # kubelet API on every node, which is a far larger grant than metrics collection
+    # needs. The remaining four subresources are what the Agent actually reads.
+    resources: ["nodes", "nodes/metrics", "nodes/spec", "nodes/stats"]
     verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["pods", "services", "endpoints"]
