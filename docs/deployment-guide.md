@@ -265,6 +265,49 @@ If your domain isn't `hermes.example.com`, update:
 - `deploy/k8s/overlays/staging/patches/ingress.yaml`
 - `deploy/k8s/overlays/production/patches/ingress.yaml`
 
+### Application secrets
+
+Secrets are split into two Secrets Manager entries **by who owns them**, because a secret
+has a single value and whoever writes it owns all of it. Mixing the two is how a documented
+"just update the value" procedure gets silently reverted on the next reconcile.
+
+| Secret | Owner | Contents |
+|---|---|---|
+| `hermes/<env>/app` | You, seeded once | `jwt_secret`, `api_key_hmac_secret`, `centrifugo_token_secret`, `centrifugo_api_key` |
+| `hermes/<env>/connection` | Crossplane | `database_url`, `redis_url`, `centrifugo_redis_address`, `centrifugo_redis_password` |
+
+Crossplane creates both containers but writes a version only for `/connection`, so anything
+you put in `/app` is permanent.
+
+Seed `/app` before the first deploy. `centrifugo_token_secret` **must equal** `jwt_secret` —
+Centrifugo validates the same Hermes-issued tokens the services do:
+
+```bash
+ENV=staging
+JWT=$(openssl rand -base64 48)
+
+aws secretsmanager put-secret-value --secret-id "hermes/$ENV/app" --secret-string "$(jq -n \
+  --arg jwt "$JWT" \
+  --arg hmac "$(openssl rand -base64 48)" \
+  --arg capi "$(openssl rand -base64 32)" \
+  '{jwt_secret: $jwt, api_key_hmac_secret: $hmac, centrifugo_token_secret: $jwt, centrifugo_api_key: $capi}')"
+```
+
+> **`/connection` must currently be seeded by hand as well.** The composition creates the
+> container but does not yet assemble its contents — see the note in
+> `infra/crossplane/compositions/aws/secrets.yaml` and finding 12. Read the values from the
+> Crossplane-written connection secrets in `crossplane-system`, and note the two constraints
+> the services enforce at startup (ADR 0005): `database_url` must carry `sslmode=require` or
+> stricter, and `redis_url` must use `rediss://`. A service given a plaintext URL refuses to
+> start rather than connecting in the clear.
+
+```bash
+DB=$(kubectl get secret -n crossplane-system hermes-database-conn -o jsonpath='{.data}')
+# database_url:  postgres://<username>:<password>@<endpoint>:<port>/hermes?sslmode=require
+# redis_url:     rediss://:<auth_token>@<endpoint>:6379/0
+# centrifugo_redis_address / centrifugo_redis_password: the same endpoint and auth_token
+```
+
 ### Webhook URLs
 
 After deploying, update the webhook URLs in SSM Parameter Store:
@@ -458,31 +501,42 @@ Crossplane applies changes with the same maintenance-window behavior as the AWS 
 
 ### Secrets Rotation
 
-Secrets are stored in AWS Secrets Manager and synced to K8s by External Secrets Operator (1h refresh interval). The Secrets Manager secret itself is managed by the `HermesSecretsBundle` Crossplane composition, which assembles connection details from the Aurora and ElastiCache claims.
+Secrets live in AWS Secrets Manager and are synced to Kubernetes by External Secrets Operator
+(1h refresh). They are split by ownership — see [Application secrets](#application-secrets) —
+and **which secret a value lives in determines how you rotate it.**
 
-**Rotate database password:**
+**Rotating operator-owned values** (`jwt_secret`, `api_key_hmac_secret`,
+`centrifugo_token_secret`, `centrifugo_api_key`) is a straightforward
+`put-secret-value` against `hermes/<env>/app`, because Crossplane never writes there. Two
+caveats: `centrifugo_token_secret` must keep matching `jwt_secret`, and rotating `jwt_secret`
+invalidates every issued JWT. Note also that changing `HERMES_JWT_SECRET` does **not** rotate
+the Hermes-internal signing key row — see [architecture.md](architecture.md).
+
+**Rotating the database password is not an out-of-band operation, and the procedure
+previously documented here did not work.** It told you to `aws rds modify-db-cluster` and then
+overwrite the secret by hand. Crossplane owns that password: `compositions/aws/database.yaml`
+sets `autoGeneratePassword: true` with a `masterPasswordSecretRef`, so it reconciles the
+password back and the hand-written secret value is overwritten. The old instructions even
+hedged — "Crossplane manages the secret resource, but you can update the value" — which is
+precisely the trap.
+
+Rotate it through Crossplane instead, by causing it to regenerate and propagate. The exact
+mechanism depends on the provider version and **has not been verified against a running
+cluster**, so treat the following as the shape of the procedure rather than a tested recipe,
+and rehearse it in staging first:
+
 ```bash
-NEW_PASS=$(openssl rand -base64 32)
+# 1. Trigger regeneration of the master password via the Crossplane-managed resource,
+#    NOT via `aws rds modify-db-cluster`, which will be reverted.
+# 2. Wait for the claim to report Ready and for the connection secret in
+#    crossplane-system to carry the new password.
+# 3. Re-derive hermes/<env>/connection from it — until the composition assembles that
+#    secret automatically (finding 12), this step is manual.
 
-# Update Aurora
-aws rds modify-db-cluster \
-  --db-cluster-identifier hermes-production \
-  --master-user-password "$NEW_PASS" \
-  --apply-immediately
-
-# Update Secrets Manager (Crossplane manages the secret resource, but you can update the value)
-aws secretsmanager put-secret-value \
-  --secret-id hermes/production \
-  --secret-string "$(
-    aws secretsmanager get-secret-value --secret-id hermes/production \
-      --query SecretString --output text | \
-    jq --arg pw "$NEW_PASS" '.database_url = "postgres://hermes:\($pw)@" + (.database_url | split("@")[1])'
-  )"
-
-# Force ESO to resync (or wait up to 1 hour)
+# Force ESO to resync rather than waiting up to an hour.
 kubectl annotate externalsecret hermes-secrets -n hermes force-sync=$(date +%s) --overwrite
 
-# Restart pods to pick up new secret
+# Restart to pick up the new value.
 kubectl rollout restart deployment -n hermes
 ```
 

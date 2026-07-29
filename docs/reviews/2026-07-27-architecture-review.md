@@ -1172,6 +1172,55 @@ wrongly, which is the intended order of events.
 
 ---
 
+## 2026-07-29 — finding 12 partially resolved, finding 28 corrected
+
+Finding 12 turned out to contain a design decision rather than a missing line. The
+composition can derive four of the eight properties the ExternalSecrets read; the other four
+— `jwt_secret`, `api_key_hmac_secret`, `centrifugo_token_secret`, `centrifugo_api_key` — are
+application secrets Crossplane cannot invent. A Secrets Manager secret has a single
+`secretString`, so whoever writes it owns all of it, and one secret containing both kinds
+means Crossplane reverts whatever an operator seeds.
+
+**Decision (2026-07-29): split by ownership.**
+
+| Secret | Owner | Contents |
+|---|---|---|
+| `hermes/<env>/connection` | Crossplane, reconciled | `database_url`, `redis_url`, `centrifugo_redis_address`, `centrifugo_redis_password` |
+| `hermes/<env>/app` | Operator, seeded once | `jwt_secret`, `api_key_hmac_secret`, `centrifugo_token_secret`, `centrifugo_api_key` |
+
+Crossplane creates both containers and writes a version only for `/connection`, so an
+operator-seeded value in `/app` is permanent. Both overlays' ExternalSecrets now read from
+the correct one, and `docs/deployment-guide.md` has the seeding procedure.
+
+**This also corrects finding 28**, which the triage had parked as needing a maintainer
+decision. The split makes the answer plain: `database_url` lives in the Crossplane-owned
+secret and `compositions/aws/database.yaml` sets `autoGeneratePassword: true`, so the
+documented rotation — `aws rds modify-db-cluster` followed by a hand-written
+`put-secret-value` — could never have held. The guide no longer instructs it. The replacement
+is explicitly marked as unverified shape rather than tested recipe.
+
+### What is NOT done, and why it was not guessed at
+
+**The `/connection` secret is still not populated.** Assembling it means reading the
+connection Secrets that the Aurora and ElastiCache compositions write, which requires
+`function-extra-resources`. That function is installed in `functions.yaml` but **is used by no
+composition in this repository** — there is no working pattern here to copy, and no cluster
+available to develop one against.
+
+Writing it blind would produce a composition that reconciles successfully and delivers
+nothing, which is the exact defect finding 12 describes. So the gap is now marked in the
+composition itself, and the deployment guide documents seeding `/connection` by hand as the
+interim, including the two constraints `config.Validate` enforces at startup (`sslmode=require`
+or stricter, and `rediss://`).
+
+Net effect: four of the eight properties are now workable end-to-end via manual seeding, up
+from zero, and the ownership question that blocked the other four is settled rather than open.
+
+**Unverified:** none of this has been applied. `make verify` covers YAML validity and nothing
+else — no cluster, and `terraform` is not installed in this environment either.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is
