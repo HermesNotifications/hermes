@@ -4,8 +4,8 @@ Findings from a full review of the architecture documentation, the code it descr
 the deployment/infrastructure configuration.
 
 **Reviewed at:** `68f0996` (main)  
-**Last updated:** 2026-07-28, after the organization rename landed at `a5f0874` and the SDKs
-were regenerated  
+**Last updated:** 2026-07-29, after a full triage sweep re-verified every open finding
+against the tree — see [Triage 2026-07-29](#triage-2026-07-29--all-open-findings-re-verified)  
 **Scope:** `docs/` (all), `internal/`, `cmd/`, `migrations/`, `deploy/`, `infra/`,
 `charts/`, `.github/workflows/`  
 **Method:** every claim below was verified against source, migrations, or manifests — not
@@ -19,14 +19,23 @@ inferred from documentation. File and line references are from that commit and w
 | **P1** | Serious security hardening, or documentation that actively breaks users |
 | **P2** | Accuracy drift and operational gaps |
 
-**Severity is deployment-readiness, not live breakage.** The staging and production
+**Severity is deployment-readiness, not live breakage.** ~~The staging and production
 environments exist and are reconciled by ArgoCD, but neither carries real users, real
-traffic, or real data, and there are no external SDK consumers — the same premise ADR 0003
+traffic, or real data~~ — **corrected 2026-07-29: neither environment is deployed at all.**
+The manifests, Terraform and ArgoCD Applications are all committed, but nothing has been
+applied to AWS. There are likewise no external SDK consumers — the same premise ADR 0003
 relies on to justify a clean break with no compatibility window. So "P0" here means *this
-will fail, or is already failing, the moment the environment carries load*, not *customers
-are affected right now*. Nothing below is downgraded on that basis: pre-production is the
-cheap time to fix all of it, and the absence of traffic is why several of these have gone
+will fail the moment the environment is stood up and carries load*, not *customers are
+affected right now*. Nothing below is downgraded on that basis: pre-production is the cheap
+time to fix all of it, and the absence of a deployment is why several of these have gone
 unnoticed rather than a reason to defer them.
+
+That correction cuts both ways, and it is why the remediation order was revised. Several
+findings are *cheaper now than they will ever be again* — changing a VPC CIDR (38) is a
+one-line edit today and an environment rebuild once applied; EKS envelope encryption (5) is
+irreversible after cluster creation. Those acquire a deadline the rest do not have. Equally,
+any finding whose severity rested on "already broken in a deployed environment" — notably 8
+and 10 — was mis-rated, because there is no deployed environment for it to be broken in.
 
 Findings marked **[code]** are cases where the documentation correctly describes the
 intended behaviour and the implementation does not deliver it — the fix belongs in code,
@@ -253,6 +262,39 @@ is wired into five services — dispatch, admin, inbox, user, worker-events — 
 (`internal/config/config.go:75-76`). Note Postgres remains required even in Dynamo mode:
 `dynamo.NewEventStore` takes the Postgres store as a delegate, and every service still calls
 `MustConnectDB` unconditionally.
+
+**Re-verified and scoped 2026-07-29.** All claims hold at current coordinates: `go.mod:17`,
+`internal/config/config.go:75-76`, and the five gated call sites (`cmd/admin/main.go:45`,
+`cmd/dispatch/main.go:46`, `cmd/inbox/main.go:59`, `cmd/user/main.go`,
+`cmd/worker-events/main.go:39`, plus `cmd/dispatchbench/wiring.go`). A case-insensitive
+search for "dynamo" across `docs/` hits only `adr/`, `reviews/`, `superpowers/` and
+`loadtest/` — the single `deployment-guide.md:98` hit is about Terraform state locking and
+unrelated. The user-facing docs imply the backend does not exist.
+
+**Decision (2026-07-29): the DynamoDB backend is a supported deployment option**, not an
+internal experiment. That settles the open question this finding raised and enlarges it from
+"mention the dual store" to a documentation workstream:
+
+- `HERMES_DYNAMO_ENDPOINT` / `HERMES_DYNAMO_REGION` in `self-hosting/configuration.md`, with
+  the constraint that **Postgres remains required regardless** — it is a delegate, not an
+  alternative.
+- The dual-store reality in `architecture.md` and `data-model.md`, replacing the
+  "single shared database" claims at `architecture.md:172` and `data-model.md:3`.
+- `internal/store/dynamo` added to the shared-packages table in `services.md:76` (this
+  overlaps finding 30, which flags the same table for a different omission — do both at once).
+- A backup and restore story for the Dynamo path. `self-hosting/production.md` has no backup
+  section at all today, and the AWS DR section at `deployment-guide.md:541-565` is never
+  referenced from the self-hosting path (this is finding 40's second gap; the two should land
+  together).
+- **An integrator-facing warning about cursor incompatibility.** ADR 0001:225-232 records
+  that Postgres-format cursors are not forward-compatible and that clients get
+  `"invalid cursor"` after a backend switch. Searching outside `docs/adr/` and `docs/reviews/`
+  for "invalid cursor" returns zero hits — nothing in `integration-guide.md` or any SDK doc
+  warns anyone. Now that this is a supported option, that omission becomes a defect in its
+  own right rather than an internal note.
+- The cleanup CronJob's Dynamo no-op (`cmd/cleanup/main.go:27-30` exits early when
+  `HERMES_DYNAMO_ENDPOINT` is set) becomes documented behaviour rather than a surprise —
+  and arguably a gap to close, since retention then silently does not run.
 
 ## P2 — Documentation accuracy and drift
 
@@ -540,12 +582,49 @@ commit with a coordinated dashboard update**. It shipped inside the 148-file mec
 instead, where a reviewer is least likely to weigh it, and the coordinated update did not
 happen.
 
-Grafana dashboards, saved queries, and any alert rule that groups by the old label live
+~~Grafana dashboards, saved queries, and any alert rule that groups by the old label live
 outside this repo and still reference `tenant_id`. They do not error; they silently return
 no series. Alert rules are the sharp edge — one grouping by `tenant_id` stops firing rather
 than starts failing, and the pre-production quiet makes that indistinguishable from healthy.
-Audit the LGTM dashboards and alert rules for the old label, and treat this as the worked
-example for the next rename that touches a metric label.
+Audit the LGTM dashboards and alert rules for the old label.~~
+
+**Amended 2026-07-29 — the premise above was wrong, and the process point survives without
+it.** The renamed token was never an emitted metric label. All five occurrences are entries
+in an `attributes/metrics` **deletion** list —
+`deploy/observability/base/otel-collector/values.yaml:85-93`, under the comment "Strip
+high-cardinality attributes before they hit Prometheus (they remain on spans)" — and that
+processor sits in the metrics pipeline (`values.yaml:136-139`), the only pipeline feeding
+`prometheusremotewrite` and, via overlay, `datadog`. `docs/observability/semantic-conventions.md:23-29`
+independently lists `organization_id` under "Forbidden high-cardinality labels — These kill
+Prometheus. Never put them on metrics," and calls the collector rule a backstop. No Go code
+emits such an attribute: the only `attribute.String` call sites in `internal/` are `stream`,
+`consumer`, `reason` (`internal/messaging/dlq.go:56-64`) and `batch.size`,
+`messaging.destination` (`internal/eventwriter/writer.go:79-80`).
+
+So no Prometheus series has ever carried `tenant_id`, and a panel or alert grouping by it
+returned no series *before* the rename too. The stated failure mode — alert rules silently
+ceasing to fire — could not have occurred.
+
+The claim that dashboards and alert rules live outside this repo is also wrong. Four
+dashboards (`deploy/observability/base/grafana/dashboards/`) and three rule files
+(`deploy/observability/base/prometheus-rules/`) are checked in, and grepping all seven for
+`tenant`/`organization` returns zero hits — every expression groups by bounded labels only
+(`sum by (channel)`, `sum by (stream, consumer)`, `sum by (service)`, `sum by (le)`). The
+in-repo alerting surface was never exposed and needs no fix.
+
+**What is actually left, and it is not what the finding asked for.** The production and
+staging Datadog collector config is *not* checked in —
+`deploy/observability/overlays/production/patches/otel-collector-dd-exporter.yaml:2-4` states
+that the pipeline fan-out "is handled by swapping in a production values.yaml for the chart."
+Verify that file still deletes `organization_id` and still has `attributes/metrics` in its
+metrics pipeline. If it says `tenant_id`, the cardinality guard there is a **no-op** — which
+is a cost and cardinality risk, the inverse of the risk originally filed, and the only
+actionable item in this finding.
+
+The ADR 0003 process point stands on its own and is the durable lesson: a change ADR 0003
+singled out as carrying real risk shipped inside a 148-file mechanical pass where no reviewer
+would weigh it. That it turned out to be harmless is luck, not diligence. Keep this as the
+worked example for the next rename touching observability config.
 
 ## Added 2026-07-28 — found while fixing 43
 
@@ -648,9 +727,160 @@ Finding 45's remaining half is also closed in passing, because it blocked this w
 a dependency forced a choice of pnpm, and local corepack (11.17.0) and CI (10.28.2) produced
 different lockfiles. A root `package.json` now pins `packageManager: pnpm@10.28.2`.
 
+## Added 2026-07-29 — found during the triage sweep
+
+**47. [P0] The `part-of: hermes` label never reaches any pod, so four NetworkPolicies select
+nothing.** `deploy/k8s/base/kustomization.yaml:6-9` uses the kustomize `labels:` transformer
+with `includeSelectors: false` and no `includeTemplates`, so
+`app.kubernetes.io/part-of: hermes` is applied to resource `metadata.labels` only — never to
+`spec.template.metadata.labels`. Rendering both overlays with `kubectl kustomize` confirms it:
+every pod template in staging and production carries only `app.kubernetes.io/name` and
+`app.kubernetes.io/component`.
+
+Four of the seven rendered NetworkPolicies key their `podSelector` on `part-of: hermes` —
+`allow-egress-managed-services`, `allow-egress-to-nats`, `allow-egress-to-centrifugo`, and the
+source selector inside `allow-nats-client`. All four therefore select **zero pods**. Only
+`default-deny-all` (`podSelector: {}`) and the two name-keyed policies match anything. The
+net declared effect is that every Hermes pod gets DNS egress and nothing else: no Postgres,
+no Redis, no NATS, no Centrifugo, no webhooks, no OTLP.
+
+This **subsumes findings 8 and 10**, which describe two specific holes in a policy set that
+does not select its pods at all. Fixing 8 or 10 without fixing this changes nothing; fixing
+this without first correcting every allow rule flips the namespace from "policies inert" to
+"policies enforced and wrong".
+
+Critically, it also explains why the platform works despite 8 and 10:
+`infra/terraform/modules/eks/main.tf:370-375` declares the `vpc-cni` addon with no
+`configuration_values`, so `enableNetworkPolicy` is unset — and AWS VPC CNI does not enforce
+NetworkPolicy unless it is explicitly enabled. **The policies are almost certainly not
+enforced at all.** The review's framing of 8 and 10 as "broken in both deployed environments
+right now" is therefore wrong; the real hazard is that enabling enforcement, or fixing this
+label, takes the entire namespace dark in a single step.
+
+**48. [P1] The Helm chart's ingress omits four admin routes and serves two that no handler
+answers.** `charts/hermes/templates/ingress.yaml:28,35` route `/v1/types` and `/v1/groups` —
+pre-rename paths no admin handler serves — while the chart has **no** rule for
+`/v1/templates`, `/v1/apikeys`, `/v1/organizations`, or `/v1/subscriptions`. Those admin
+endpoints are unreachable through a chart install. `deploy/k8s/base/ingress.yaml` has the
+missing four but also retains the two dead ones. This is residue of the rename that finding
+42's sweep did not reach, and it only affects self-hosters, which is why nothing caught it.
+
+**49. [P1] `sendgrid` is a valid chart value that guarantees a crash at runtime.**
+`charts/hermes/values.schema.json:66` declares `"enum": ["smtp", "ses", "sendgrid"]`, and
+that enum *is* enforced — so `provider: sendgrid` passes `helm install` validation. But
+`charts/hermes/templates/configmap.yaml:22,31` branches only on `smtp` and `ses`, so the
+pod starts with `HERMES_EMAIL_PROVIDER: sendgrid` and no provider config, and
+`internal/email/email.go:47` then kills the worker with `unknown email provider: "sendgrid"`.
+A validating schema that admits a value the code rejects is worse than no schema: it converts
+a config error into a runtime crash loop. Either implement the provider or drop it from the
+enum.
+
+---
+
+## Triage 2026-07-29 — all open findings re-verified
+
+Every open finding was re-checked against the tree by six parallel read-only agents,
+partitioned by domain (security, cloud infrastructure, Kubernetes, application code,
+documentation, observability). Each finding was re-anchored to current coordinates rather
+than trusted, per the warning in the remediation order below. Method note: verdicts were
+`STILL-VALID` / `ALREADY-FIXED` / `PARTIALLY-FIXED` / `CLAIM-WRONG` / `CANNOT-VERIFY-FROM-REPO`,
+with a quoted decisive line required for each.
+
+**Standing fact that governs all effort estimates: nothing is deployed yet.** Neither the
+staging nor the production environment exists in AWS as of 2026-07-29. This collapses the
+cost of several findings by an order of magnitude and should be exploited before it stops
+being true:
+
+- **38 (shared VPC CIDR)** is a one-line edit per tfvars file today. Once deployed it is an
+  environment rebuild — `aws_vpc.cidr_block` is `ForceNew`, taking the VPC, subnets, NAT
+  gateways, EKS cluster, node groups and every attached Aurora/ElastiCache with it.
+- **5 (EKS KMS envelope encryption)** is free now and **irreversible** once a cluster exists.
+- **6, 7, 12** carry no reconciliation or coordination risk while there is nothing to
+  reconcile. In particular 7's fix, which would otherwise make production Crossplane begin
+  provisioning real datastores for the first time, is inert today.
+- **47 / 8 / 10** — the whole NetworkPolicy cluster can be fixed in one pass and validated
+  with `kubectl kustomize` plus a policy unit test, rather than staged behind a soak.
+
+Aggregate: of the ~41 open findings, the overwhelming majority verified as still valid at
+corrected coordinates. Four were partially fixed, and several individual claims were refuted.
+No finding recorded as resolved was found to be unresolved — 42, 43, 45 and 46 all hold up,
+46 verified by executing its suites and 45 by an observed green CI run (`sdk-drift`, run
+30323615986, on `68308ad`).
+
+### Claims refuted or corrected
+
+| Finding | Correction |
+|---|---|
+| **3** | Main claim holds — `auth.RequirePermission` still has **zero** production call sites, and the only enforcement is three inline checks in `handler_apikeys.go:55,90,139`. But the fail-open sub-claim is wrong: `internal/auth/middleware.go:30-34` returns 401 when validation yields nil, so `key == nil` is reachable only via `SetSkipAuth(true)`, which has no non-test caller. Latent hazard, not an exploitable one. |
+| **10** | The ServiceMonitor sub-claim is wrong — there are no Hermes ServiceMonitors in the deployed kustomize path at all (`charts/hermes/templates/servicemonitor.yaml` belongs to a chart ArgoCD never deploys), so nothing is being blocked from scraping. A real corollary was missed instead: `deploy/observability/base/exporters/nats-exporter.yaml:32` scrapes `nats.hermes.svc:8222` cross-namespace, and `allow-nats.yaml:32-36` permits 8222 only from the same namespace. Same for the Postgres and Redis exporters. |
+| **16** | `ci.yml` does not hold `id-token: write` and does not push (`ci.yml:174` is `push: false`); that description fits `cd.yml` and `loadtest.yml`. The surface has since **grown**: `sdk-drift.yml` (7 actions), `ci-web.yml` (6) and `loadtest.yml` (4) all landed after the review, none SHA-pinned. `loadtest.yml:29-30,43` holds `id-token: write` and assumes AWS credentials, making it a second OIDC entry point — which also enlarges finding 15. |
+| **22** | The mechanism is wrong and the reality is worse. `values.schema.json` has **no** `additionalProperties: false` anywhere, so `services:`, `networkPolicies:` and friends are **silently ignored** rather than rejected — the install succeeds and quietly runs on chart defaults. Seven further wrong keys were found beyond the four filed (`cleanup:`, `migration.enabled`, `adminPortal.replicaCount`, `externalCentrifugo.apiKey`, two `existingSecretKey` values, top-level `image:`), and the one genuinely required value, `global.domain`, is never mentioned. |
+| **24** | Over-listed: `cli.md:44-45` and `glossary.md:32` are prose that describes the model correctly and names no JSON fields — not stale. A worse instance was missed: `data-model.md:49-50` still lists the five dropped columns as live DB columns. Coordinates in this finding have drifted ~8 lines. |
+| **31** | One of fourteen sub-items is fixed (`TestCreateGroup`, at `68308ad`). The hardcoded account ID appears in **six** non-doc files, not five. |
+| **40** | The isolation-model debt finding 42 claimed to discharge is genuinely discharged — verified at `glossary.md:6`, `architecture.md:137`, `integration-guide.md:84`. The four coverage gaps remain. |
+| **41** | Sub-claim 2 is fixed for staging only: `overlays/staging/patches/centrifugo-env.yaml:26-34` now sets `CENTRIFUGO_REDIS_PASSWORD` and TLS, added in `65cdb5c` — which **predates the review**. The production patch still stops at the address while its claim sets `transitEncryption: true`. Staging is a ready-made template. |
+| **44** | Premise refuted entirely — see the amendment on the finding itself. |
+
+### Two consolidations
+
+**Findings 4 and 27 are the same defect.** `internal/store/postgres/auth.go:94` —
+`ON CONFLICT (id) DO UPDATE SET secret = $1` — is both the silent-overwrite path in 4 and the
+reason `architecture.md:152-154`'s zero-downtime rotation claim in 27 is false. It is called
+unconditionally at startup by admin, inbox and user, each passing `cfg.JWTSecret`, which
+defaults to the literal `"hermes-jwt-secret"`. The function's own doc comment at `:89` claims
+it "inserts … if it doesn't already exist", which its body contradicts. One trivial fix
+closes both findings.
+
+**Finding 9's fix requires inverting two currently-passing tests.**
+`internal/delivery/worker_test.go:94-114` and `:116-127` assert the ack-on-failure behaviour
+as *correct* — "handleMessage should return nil on provider error". The suite is actively
+defending the bug, which is the single most important thing to know before touching it. Note
+also that the DLQ machinery is real and wired at the messaging layer
+(`internal/messaging/nats.go:227-261`, exercised by `dispatch`); it is dead **only** on the
+delivery path, because nothing `worker.go` does can produce a non-nil error. Consequently
+`docs/observability/runbooks/dead-letter-queue.md` uses `dlq.delivery.email` as its worked
+example for a scenario that cannot occur.
+
+### Smaller additions, folded into their parent findings
+
+- **17** — a third committed placeholder at `deploy/centrifugo/config.json:6`, the Docker
+  Compose local-dev config.
+- **21** — `secretsmanager:DescribeSecret` is missing from the ESO policy
+  (`infra/terraform/modules/eks/main.tf:177` is a bare `GetSecretValue` string, not a list);
+  the ACME contact coordinate is `bootstrap-cluster.sh:50`, not `:49`.
+- **39** — the 429 response carries no `Retry-After` and is plain text rather than the JSON
+  error envelope used everywhere else (`internal/middleware/ratelimit.go:72`). Worse, the two
+  API-key services apply `RateLimit` *outside* `APIKeyMiddleware`, so buckets are keyed on the
+  raw unvalidated `Authorization` header — every garbage token gets its own bucket, bounded
+  only by the 30-minute eviction sweep. Fixing this interacts with finding 3's enforcement work.
+- **11 / 31** — `deployment-guide.md:476` deletes a Job named `hermes-migration`; the Job is
+  `hermes-migrate`, so the documented recovery step silently no-ops and the subsequent apply
+  fails identically.
+- **35** — the health check has **two** independent blockers, not one: no ServiceAccount or
+  Role grants it `rollout status` permission, *and* the AnalysisRun pod lands in `hermes`
+  under `default-deny-all` with no matching allow rule, so it cannot reach the API server
+  either. Production's stage has no `verification` block at all, so nothing verifies a
+  production promotion.
+- **19 / 36** — both force a NATS StatefulSet rolling restart. Do them in one roll.
+- **45** — the drift gate's path filter is a hand-maintained package list. It is adequate
+  today (verified: `cmd/openapi/main.go:15-18` imports exactly the covered packages, and no
+  spec-visible struct references an uncovered one), but it will silently stop covering the
+  spec surface if a handler struct ever embeds a type from outside the list.
+
+### Still owed, unchanged
+
+The SDK major version bump ADR 0003 committed to — all four packages remain `0.1.0`. And
+ADR 0002's promised follow-up ADR for the normalized content/contact model: `docs/adr/`
+still contains only 0001, 0002 and 0003.
+
 ---
 
 ## Suggested remediation order
+
+> **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is
+> kept for the record. Its step 1 rests on findings 8 and 10 being "broken in both deployed
+> environments right now", which the triage showed is almost certainly false: nothing is
+> deployed, and the policies are not enforced anyway (finding 47).
 
 1. **Immediately** — findings 8 and 10, which are broken in both deployed environments right
    now, then the security workstream 1, 3, 4, 5, 6, 7, then 9, 11, 12.
@@ -669,15 +899,57 @@ different lockfiles. A root `package.json` now pins `packageManager: pnpm@10.28.
    files the rename rewrote, so expect drift when working through them; the claims were
    re-verified, the coordinates were not.
 
+## Revised remediation order (2026-07-29)
+
+Reordered around two facts the triage established: **nothing is deployed yet**, and the
+NetworkPolicy set does not select its own pods and is probably not enforced (finding 47).
+Coordinates throughout the findings were re-anchored during the triage, so the caveat in
+step 4 above no longer applies.
+
+1. **While nothing is deployed — take the free wins that stop being free.** 38 (VPC CIDRs:
+   one line per tfvars now, an environment rebuild later), 5's KMS envelope encryption
+   (irreversible once a cluster exists), then 6, 7, 12, which carry no reconciliation risk
+   while there is nothing to reconcile. This step has a deadline that the others do not.
+2. **The trivial, self-contained, no-decision batch.** 4+27 (one `ON CONFLICT` line closes
+   both), 13 (SMTP silently disabling TLS), 20 (both JWT gaps), 17 (committed placeholders),
+   26/29/31 (editorial), 34 (`ignoreDifferences`), 49 (drop or implement `sendgrid`). Each is
+   independently verified, repo-only, and needs no decision.
+3. **The NetworkPolicy cluster, as one change.** 47 first — the label bug — then 8, 10, and
+   35's egress blocker, then decide explicitly whether to enable `enableNetworkPolicy` on the
+   VPC CNI addon. Doing 8 or 10 alone is wasted work; doing 47 alone flips the namespace from
+   inert to enforced-and-wrong. Validate with `kubectl kustomize` against both overlays.
+4. **The remaining security workstream.** 1 (NATS auth — the large one, entangled with 14 and
+   19), 3 (permission enforcement — note the Huma middleware shape is why `RequirePermission`
+   has no call sites), 14, 15, 16 (pin the actions, including the three workflows added since
+   the review), 21.
+5. **Delivery correctness.** 9, which needs explicit sign-off that the two tests pinning
+   ack-on-failure are wrong before they are inverted. Then 11, 33, 35, 36, 19.
+6. **Documentation that breaks users**, now that 22's real failure mode is understood as
+   silent no-op rather than validation failure: 22, 23, 24, 48. Then the dual-store
+   documentation workstream under 25, which is larger than originally filed now that the
+   DynamoDB backend is a supported option, and which should land together with 30 and 40's
+   backup gap since they touch the same files.
+7. **Everything else** — 28, 32, 37, 39, 40, 41, and 44's single remaining out-of-repo check.
+
 ## Follow-ups
 
-- [ADR 0003](../adr/0003-rename-tenant-to-organization.md) — **implemented at `a5f0874`, but
-  still `Status: Proposed`** in the ADR and in `docs/adr/README.md:15`. Flip both to
-  `Accepted`. Per `adr/README.md:56-69` this is a clarification, so amend in place with a
-  date rather than superseding.
+- ~~[ADR 0003](../adr/0003-rename-tenant-to-organization.md) is implemented but still
+  `Status: Proposed`~~ done at `68308ad` — both the ADR and `docs/adr/README.md:15` now read
+  `Accepted`, amended in place with a date per `adr/README.md:56-69`. (This entry sat stale
+  in two places after the work had landed; corrected 2026-07-29.)
 - ~~Regenerate the four SDKs~~ done 2026-07-28; **the major version bump ADR 0003 commits to
   is still owed** — finding 43.
-- Audit out-of-repo Grafana dashboards and alert rules for the `tenant_id` label — finding 44.
+- ~~Audit out-of-repo Grafana dashboards and alert rules for the `tenant_id` label~~ premise
+  refuted 2026-07-29 — the renamed token was never an emitted label and the in-repo dashboards
+  and rules never referenced it. **Replaced by:** verify the unversioned production/staging
+  collector `values.yaml` (the one carrying the Datadog pipeline fan-out) still deletes
+  `organization_id`, or its cardinality guard is a no-op. See the amendment on finding 44.
+- **Decision 2026-07-29: the DynamoDB backend is a supported deployment option**, not an
+  internal experiment. This enlarges finding 25 into a documentation workstream — see the
+  scoping note on that finding. The integrator-facing cursor-incompatibility warning
+  (ADR 0001:225-232) is now a defect rather than an internal note.
+- **Decision 2026-07-29: neither environment is deployed.** Findings 5, 6, 7, 12 and 38 are
+  cheap now and expensive later; see step 1 of the revised remediation order.
 - ~~Add the spec-to-SDK drift gate to CI and pin the generation toolchain~~ done — the gate
   landed at `68308ad`, the `packageManager` pin on 2026-07-28 alongside finding 46.
 - ~~Add a JS/TS test runner and a first test~~ done 2026-07-28. The `web/admin/app/**/layout.tsx`
