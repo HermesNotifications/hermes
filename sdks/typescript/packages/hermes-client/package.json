@@ -22,8 +22,8 @@
     "generate": "pnpm generate:inbox && pnpm generate:user"
   },
   "dependencies": {
-    "centrifuge": "^5.5.3",
-    "openapi-fetch": "^0.13.8"
+    "centrifuge": "^5.7.0",
+    "openapi-fetch": "^0.17.0"
   },
   "devDependencies": {
     "openapi-typescript": "^7.13.0",
