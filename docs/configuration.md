@@ -26,6 +26,20 @@ configuration at all.
 | `HERMES_DISPATCH_CONCURRENCY` | `8` | Size of the **dispatch** worker pool — how many `notification.send` messages are processed in parallel. Distinct notifications are independent (status rollup is monotonic downstream), so raising this lifts dispatch throughput. The default of 8 is from the June 2026 load-test sweep ([docs/loadtest/dispatch-tuning-2026-06.md](loadtest/dispatch-tuning-2026-06.md)): throughput scales to ~16 workers, but 8 is the balanced point that leaves DB-pool headroom. Dispatch is I/O-bound, so the useful ceiling is the database pool, not CPU cores: the value is **clamped to the Postgres pool size** (`pool_max_conns`, default `max(4, NumCPU)`) and a warning is logged if set higher — raise `pool_max_conns` in `HERMES_DATABASE_URL` (and this value, toward 16) to push throughput further. |
 | `HERMES_DISPATCH_PREFETCH` | `64` | Dispatch fetcher's in-flight buffer (NATS `PullMaxMessages`) feeding the worker pool. Decouples fetching from processing so the pull pipeline stays full without one consumer hoarding the backlog. Auto-raised to at least `concurrency + 1`; the consumer's server-side `MaxAckPending` is raised to at least `prefetch + concurrency`. Tune against load tests. |
 
+### Store backend
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_ENV` | `development` | Anything other than the exact string `development` enables the startup validation in [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md): TLS is required on every datastore connection and the built-in placeholder secrets are rejected. A service failing validation **refuses to start** rather than connecting in the clear. A misspelling takes the strict path, so a typo cannot silently disable the checks. |
+| `HERMES_DYNAMO_ENDPOINT` | _(empty)_ | Enables the DynamoDB-model store for the hot notification and event path ([ADR 0001](adr/0001-dynamodb-model-via-extenddb.md)). Empty keeps everything on Postgres. Read by admin, dispatch, inbox, user and worker-events. **Postgres remains required** — the Dynamo store delegates to it and every service connects unconditionally. See the caveats in [architecture.md](architecture.md#the-dual-store): cursors are not portable between backends, `cmd/cleanup` does not run on this path, and no backup mechanism for the table exists in this repository. |
+| `HERMES_DYNAMO_REGION` | `us-east-1` | AWS region for the DynamoDB store. Ignored when `HERMES_DYNAMO_ENDPOINT` is empty. |
+
+Transport security is expressed in the connection strings themselves rather than in separate
+flags, because two settings that can disagree are worse than one that cannot. Outside
+development, `HERMES_DATABASE_URL` needs `sslmode=require` or stricter (`allow` and `prefer`
+are rejected — both silently fall back to plaintext), `HERMES_REDIS_URL` must use `rediss://`,
+and `HERMES_NATS_URL` must use `tls://`.
+
 ### Email (`worker-email`)
 
 | Variable | Default | Purpose |

@@ -75,6 +75,8 @@ All services expose unauthenticated `GET /healthz` and `GET /readyz` probes.
 | Package | Role |
 |---|---|
 | `internal/store`, `internal/store/postgres` | Repository interfaces and the Postgres implementation all services use |
+| `internal/store/dynamo` | Optional DynamoDB-model store for the hot notification and event path, enabled by `HERMES_DYNAMO_ENDPOINT`. Delegates to the Postgres store, so Postgres stays required — see [architecture.md](architecture.md#the-dual-store) and [ADR 0001](adr/0001-dynamodb-model-via-extenddb.md) |
+| `internal/provider` | Channel/provider registry (per [ADR 0002](adr/0002-provider-plugin-model-bus-native-isolation.md)). `Builtins` is constructed at package-init and read-only thereafter; delivery subjects remain per-channel, not per-provider |
 | `internal/models` | Shared domain types and the notification status model (`status.go`) |
 | `internal/nats` (`hermenats`) | NATS message contracts (`SendMessage`, `DeliveryMessage`, `EventMessage`) |
 | `internal/messaging` | NATS JetStream client and stream setup |

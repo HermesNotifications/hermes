@@ -1394,6 +1394,58 @@ went from timing out at 20s to passing in 0.03s.
 
 ---
 
+## Resolved 2026-07-29 — findings 25, 30, 32 and 40's coverage gaps
+
+**25 — the dual store is documented.** `architecture.md` gained a *The dual store* section
+and `HERMES_DYNAMO_ENDPOINT`/`HERMES_DYNAMO_REGION` are in `configuration.md`, alongside
+`HERMES_ENV`, which ADR 0005 phase 1 added and nothing documented. The three consequences
+that matter are stated rather than implied: Postgres stays **required** (the Dynamo store
+delegates to it), `cmd/cleanup` does not run on that path so retention is TTL-only and
+unverified, and no backup mechanism for the table exists in this repository.
+
+**30 — the shared-packages table** in `services.md` now lists `internal/store/dynamo` and
+`internal/provider`, and the glossary has a **Provider** entry drawing the channel/provider
+distinction — including that delivery subjects remain per-channel, so which provider runs is
+decided inside the worker rather than by routing.
+
+**40's cursor and backup gaps are closed.** `integration-guide.md` now warns integrators that
+cursors encode backend-specific state and are rejected across a backend switch, with the
+instruction to discard and re-request rather than persist them — ADR 0001 recorded this and
+no integrator-facing document had ever mentioned it. `self-hosting/production.md` gained a
+Backup and Restore section, which it previously lacked entirely.
+
+That section is deliberately labelled as untested: **a backup you have not restored from is a
+hypothesis**, and none of it has been rehearsed. It does name two non-obvious restore hazards
+— `jwt_signing_keys` must come back with the dump or every issued JWT silently dies, and
+`schema_migrations` must match the deployed image because `cmd/migrate` only goes forward.
+It also warns that the chart's `networkPolicy.enabled: true` is not isolation, since every
+rule has an empty peer list (finding 41).
+
+### Finding 32 fixed, and now enforced rather than merely described
+
+The channel-resolution order was wrong in four places: `architecture.md`, `glossary.md`,
+`CLAUDE.md`, and the doc comment on `ResolveChannels` itself. All four described a three-way
+precedence — explicit → user preference → category default — that the data model cannot
+express, because `user_subscriptions` has `opted_in` and no channel column.
+
+What the code does: a user preference is a **boolean gate over an already-resolved set**. A
+`required` category skips the preference check entirely. Explicit channels **replace** the
+category default wholesale rather than merging with it. Two narrowing passes run afterwards
+and are not part of resolution.
+
+**The important part is that this is now pinned.** `ResolveChannels` had zero test coverage —
+its only reference outside its own definition was the single call site in `dispatch.go` — so
+nothing would have failed if someone had "fixed" the code to match the wrong documentation
+instead of the other way round. `internal/dispatch/channel_resolution_test.go` now covers
+every branch, including the two with the most user-visible consequence and no prior coverage:
+a `required` category ignoring an opt-out, and `default_state = "off"`.
+
+Mutation-checked: disabling the `required` branch fails
+`TestResolveChannels_RequiredCategoryIgnoresOptOut` with `got [], want [email]`. Correcting
+prose is cheap and rots; a test that fails is what keeps it true.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is

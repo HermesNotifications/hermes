@@ -81,7 +81,7 @@ SaaS Backend → Send → NATS [notification.send] → Dispatch → NATS [delive
 
 **Notification status rollup:** Status only advances (pending→sent→delivered→read→archived), never regresses. The Event Writer uses conditional SQL with rank comparison in the WHERE clause to handle out-of-order events.
 
-**Channel resolution order:** Explicit override from send request → user preferences per group → group default channels. For type-based sends, channels are filtered to those with templates defined.
+**Channel resolution:** Explicit channels on the send request, else the subscription category's `default_channels`. A user preference is a **boolean opt-in gate, not a channel selection** — `user_subscriptions` has no channel column. A `required` category skips the preference check entirely. Two narrowing passes run afterwards: channels the template defines content for, then channels the recipient has a contact point for. (This paragraph previously described a three-way precedence using the pre-rename words *group* and *type*; see `internal/dispatch/channels.go` and [docs/architecture.md](docs/architecture.md#channel-resolution).)
 
 **Two auth modes:** API key (HMAC-SHA256 hashed, keyed by `HERMES_API_KEY_HMAC_SECRET`) for the server-to-server Send and Admin APIs. JWT (HMAC-signed, Hermes-issued, multi-key for rotation) for user-facing Inbox/User APIs. Health endpoints (`/healthz`, `/readyz`) skip auth. See `internal/auth/`.
 

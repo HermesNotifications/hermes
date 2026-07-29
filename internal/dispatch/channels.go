@@ -77,8 +77,20 @@ func (cr *ChannelResolver) resolveCategory(ctx context.Context, id string) (*mod
 }
 
 // ResolveChannels determines target channels for a template-based send.
-// For templates with a subscription: required check -> user pref -> category default.
-// For standalone templates: explicit channels -> template default_channels.
+//
+// Finding 32. The previous comment read "required check -> user pref -> category default",
+// implying a three-way precedence. It is not: the user's preference cannot select channels
+// at all — user_subscriptions has opted_in and no channel column — so it acts as a boolean
+// gate over a set already resolved from the category default or the explicit override.
+//
+//   - standalone template (no subscription): explicit, else template.DefaultChannels, else error
+//   - category default_state == "required": explicit, else cat.DefaultChannels, and the user's
+//     preference is not consulted at all
+//   - otherwise: cat.DefaultChannels, replaced WHOLESALE by explicit if any (not merged), then
+//     gated by the user's opt-in, falling back to cat.DefaultState when no preference is stored
+//
+// FilterChannelsForTemplate and filterChannelsByContact narrow the result afterwards; they are
+// separate passes, not part of resolution. See docs/architecture.md#channel-resolution.
 func (cr *ChannelResolver) ResolveChannels(ctx context.Context, explicitChannels []string, userID string, template *models.NotificationTemplate) ([]string, error) {
 	// Standalone template (no subscription)
 	if template.SubscriptionID == nil {
