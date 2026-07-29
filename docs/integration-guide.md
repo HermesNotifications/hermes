@@ -297,6 +297,13 @@ curl "https://hermes.example.com/inbox/v1/inbox?limit=20&archived=false" \
 - `cursor` (string) -- pagination cursor from previous response
 - `archived` (bool, default false) -- if true, returns archived notifications
 
+> **Treat cursors as short-lived and be ready for them to be rejected.** A cursor encodes
+> backend-specific state, and Hermes can be deployed against either of two stores (see
+> [architecture.md](architecture.md#the-dual-store)). A cursor issued by one is **not valid**
+> on the other, so if an operator switches the backend, in-flight cursors start returning
+> `invalid cursor`. Handle that by discarding the cursor and re-requesting the first page —
+> do not persist cursors across sessions or treat one as a stable bookmark.
+
 ### Mark as Read
 
 ```bash

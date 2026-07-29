@@ -32,8 +32,17 @@ absence of an explicit choice falls back to the category's default state.
 **Template** — Reusable, per-channel content (email subject/body, SMS body, inbox title/body)
 referenced by slug when sending. A send may instead provide direct content with no template.
 
-**Channel** — A delivery medium: `email`, `sms`, or `inbox`. The set of channels for a given
-notification is resolved as: explicit request channels → user preference → category default.
+**Channel** — A delivery medium: `email`, `sms`, or `inbox`. The channel set for a
+notification comes from the explicit request channels if given, otherwise the subscription
+category's `default_channels`. A user's preference is a **boolean opt-in, not a channel
+selection**: opting out suppresses the notification entirely, and opting in accepts whatever
+set was already resolved. See [architecture.md](architecture.md#channel-resolution).
+
+**Provider** — The mechanism that actually delivers on a channel — SMTP or SES for `email`,
+a webhook for `sms`, Centrifugo for `inbox`. A channel can have several providers
+(`internal/provider`, per [ADR 0002](adr/0002-provider-plugin-model-bus-native-isolation.md)),
+but delivery subjects are still per-*channel* (`delivery.email`), not per-provider, so which
+provider runs is decided inside the worker rather than by routing.
 
 **Notification** — A single message to a single user. It carries content, a channel set, and a
 `status` that advances through its lifecycle.

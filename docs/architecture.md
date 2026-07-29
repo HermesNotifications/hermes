@@ -115,10 +115,33 @@ status with a rank comparison in the SQL `WHERE` clause, so a late `sent` event 
 notification back from `read`. `failed` shares rank 0 with `pending` — it's a terminal outcome,
 not an advancement.
 
-**Channel resolution order.** Dispatch resolves the delivery channels as: explicit channels on
-the send request → the user's per-subscription preference → the subscription category's default
-channels. For template-driven sends, the set is narrowed to channels the template actually
-defines content for.
+### Channel resolution
+
+Dispatch resolves channels in `internal/dispatch/channels.go`. The order below is what the
+code does; earlier versions of this page described a three-way precedence that the data model
+cannot express.
+
+**A user's preference cannot select channels.** `user_subscriptions` holds `opted_in` and no
+channel column, so a preference is a boolean gate: opting out suppresses the notification
+entirely, and opting in accepts whatever set was already resolved. Per-channel preference
+granularity is an explicit non-goal of the subscriptions design.
+
+Resolution, for a template-driven send:
+
+1. **Standalone template** (no subscription): explicit channels, else the template's
+   `default_channels`, else an error.
+2. **Category `default_state = "required"`**: explicit channels, else the category's
+   `default_channels` — and the user's preference is **not consulted at all**. A required
+   category ignores an opt-out by design.
+3. **Otherwise**: start from the category's `default_channels`, replaced *wholesale* by the
+   explicit channels if any were given — this is a replacement, not a merge or a per-channel
+   override. Then consult the user's preference: opted out yields nothing; opted in yields the
+   set unchanged. With no stored preference, the category's `default_state` decides — `off`
+   yields nothing, `on` yields the set.
+
+Two narrowing passes then run *after* resolution, not as part of it: the set is filtered to
+channels the template actually defines content for, and then to channels the recipient has a
+contact point for.
 
 **Two auth modes.** API keys (HMAC-SHA256, see below) authenticate server-to-server traffic to
 Send and Admin. JWTs (HMAC-signed, multi-key) authenticate user-facing traffic to Inbox and
@@ -188,11 +211,41 @@ superseded by `internal/id/v2`.)
 
 ## Infrastructure
 
-- **Postgres** — single shared database; all services go through `internal/store`. Migrations in
-  `migrations/` via golang-migrate.
+- **Postgres** — one shared database, reached through `internal/store`. Migrations in
+  `migrations/` via golang-migrate. **Required in every configuration**, including when the
+  DynamoDB path below is enabled.
+- **DynamoDB (optional)** — a second store for the hot notification and event path, enabled
+  by setting `HERMES_DYNAMO_ENDPOINT`. See [the dual store](#the-dual-store) below.
 - **NATS JetStream** — the four streams above.
 - **Redis** — cache, idempotency dedup, and Centrifugo engine.
 - **Centrifugo** — real-time WebSocket push on user-scoped channels; NATS broker, Redis engine.
+
+### The dual store
+
+Setting `HERMES_DYNAMO_ENDPOINT` switches the notification and event path to a DynamoDB-model
+store (`internal/store/dynamo`, per [ADR 0001](adr/0001-dynamodb-model-via-extenddb.md)).
+Leaving it empty — the default — keeps everything on Postgres. Five services read the
+variable: admin, dispatch, inbox, user and worker-events.
+
+**Postgres is still required.** This is a delegation, not a replacement: `dynamo.NewEventStore`
+takes the Postgres store as a delegate, and every service calls `MustConnectDB`
+unconditionally before consulting the variable. A deployment that provisions DynamoDB and
+drops Postgres will not start.
+
+Three consequences worth knowing before enabling it:
+
+- **Cursors are not portable between backends.** Inbox pagination cursors encode
+  backend-specific state, so a cursor issued by one store is rejected by the other with
+  `invalid cursor`. Switching backends invalidates every cursor a client is holding — see
+  [ADR 0001](adr/0001-dynamodb-model-via-extenddb.md) and the note in
+  [integration-guide.md](integration-guide.md).
+- **Event retention does not run.** `cmd/cleanup` exits immediately when
+  `HERMES_DYNAMO_ENDPOINT` is set, so the nightly CronJob reports success while deleting
+  nothing. Records are expected to expire by TTL instead, and nothing verifies that they do.
+  See [data-model.md](data-model.md#retention).
+- **Backup is a separate story.** The Postgres backup guidance in
+  [self-hosting/production.md](self-hosting/production.md) does not cover the DynamoDB
+  table, and no backup mechanism for it exists in this repository.
 
 ## Where to go next
 
