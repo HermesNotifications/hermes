@@ -1,0 +1,78 @@
+# RBAC for the Kargo post-promotion health check.
+#
+# Finding 35. The AnalysisRun pod previously ran as the `default` ServiceAccount in the
+# hermes namespace, which has no permissions at all — so every `kubectl rollout status`
+# returned 403 and the check could never pass. Nothing surfaced that: production's Kargo
+# stage has no `verification` block, so the check's result was never consulted.
+#
+# Scoped to reading rollout state in this namespace only. It does not need to create,
+# patch or delete anything, and it has no business outside `hermes`, so this is a Role
+# rather than a ClusterRole.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hermes-health-check
+  namespace: hermes
+automountServiceAccountToken: true # unlike the app ServiceAccount, this one must talk to the API
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hermes-health-check
+  namespace: hermes
+rules:
+  # `kubectl rollout status` reads the workload and watches it to completion.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  # The pod-readiness sweep at the end of the script.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hermes-health-check
+  namespace: hermes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hermes-health-check
+subjects:
+  - kind: ServiceAccount
+    name: hermes-health-check
+    namespace: hermes
+---
+# Second, independent blocker. The AnalysisRun pod lands in `hermes` under
+# default-deny-all and carries none of the labels the allow rules select on, so even with
+# RBAC it could not reach the Kubernetes API server. Egress to the API server is a
+# distinct rule from anything the application services need.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-health-check-egress
+  namespace: hermes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-health-check
+  policyTypes:
+    - Egress
+  egress:
+    # DNS, to resolve the kubernetes service.
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The API server. 443 to any destination is broader than ideal — the endpoint is an
+    # IP outside the cluster CIDR and is not expressible as a namespaceSelector — but it
+    # is scoped to this one short-lived pod rather than the namespace.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

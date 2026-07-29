@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -52,6 +53,10 @@ func (s *Server) registerSubscriptionRoutes() {
 		Summary:     "List subscriptions in a category",
 		Tags:        []string{"Subscriptions"},
 	}, func(ctx context.Context, input *listSubscriptionsInput) (*subscriptionListOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		subs, err := s.store.ListSubscriptionsByCategory(ctx, input.CategoryID)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
@@ -67,6 +72,10 @@ func (s *Server) registerSubscriptionRoutes() {
 		Tags:          []string{"Subscriptions"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, input *createSubscriptionInput) (*subscriptionOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		sub, err := s.store.CreateSubscription(ctx, input.CategoryID, input.Body.Slug, input.Body.Name, input.Body.SortOrder)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
@@ -81,6 +90,10 @@ func (s *Server) registerSubscriptionRoutes() {
 		Summary:     "Update a subscription",
 		Tags:        []string{"Subscriptions"},
 	}, func(ctx context.Context, input *updateSubscriptionInput) (*subscriptionOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		sub, err := s.store.UpdateSubscription(ctx, input.ID, input.Body.Name, input.Body.SortOrder)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
@@ -99,6 +112,10 @@ func (s *Server) registerSubscriptionRoutes() {
 		Tags:          []string{"Subscriptions"},
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, input *subscriptionIDInput) (*struct{}, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		if err := s.store.DeleteSubscription(ctx, input.ID); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}

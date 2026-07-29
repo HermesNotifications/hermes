@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/auth"
 )
 
 type listUsersInput struct {
@@ -37,6 +38,10 @@ func (s *Server) registerUserRoutes() {
 		Summary:     "List users",
 		Tags:        []string{"Users"},
 	}, func(ctx context.Context, input *listUsersInput) (*userListOutput, error) {
+		if err := requirePermission(ctx, auth.PermOrganizationsManage); err != nil {
+			return nil, err
+		}
+
 		users, err := s.store.ListUsers(ctx, input.OrganizationID)
 		if err != nil {
 			s.logger.Error("failed to list users", "error", err)

@@ -38,6 +38,10 @@ func (s *Server) registerAuthRoutes() {
 		Summary:     "Exchange credentials for a user JWT token",
 		Tags:        []string{"Auth"},
 	}, func(ctx context.Context, input *tokenInput) (*tokenOutput, error) {
+		if err := requirePermission(ctx, auth.PermOrganizationsManage); err != nil {
+			return nil, err
+		}
+
 		// Auto-create organization on first sight
 		if _, err := s.organizations.EnsureOrganization(ctx, input.Body.OrganizationID); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")

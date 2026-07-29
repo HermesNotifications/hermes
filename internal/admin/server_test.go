@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/hermes-notifications/hermes/internal/admin"
@@ -85,6 +86,27 @@ func TestHandler_EnforcesPerRoutePermissions(t *testing.T) {
 			grant: auth.PermAPIKeysManage,
 			other: auth.PermNotificationsSend,
 		},
+		// The four route groups finding 3 left ungated, folded onto existing constants
+		// rather than given new ones. Folding avoids reissuing every existing key; the
+		// cost is that the mapping is looser than a purpose-built permission would be.
+		{
+			name:  "subscription categories fold under templates:manage",
+			path:  "/v1/subscriptions/categories",
+			grant: auth.PermTemplatesManage,
+			other: auth.PermNotificationsSend,
+		},
+		{
+			name:  "users fold under organizations:manage",
+			path:  "/v1/users",
+			grant: auth.PermOrganizationsManage,
+			other: auth.PermNotificationsSend,
+		},
+		{
+			name:  "notifications fold under organizations:manage",
+			path:  "/v1/notifications",
+			grant: auth.PermOrganizationsManage,
+			other: auth.PermNotificationsSend,
+		},
 	}
 
 	for _, tc := range cases {
@@ -113,6 +135,32 @@ func TestHandler_RejectsUnauthenticatedRequests(t *testing.T) {
 		if code := get(t, handler, path, ""); code != http.StatusUnauthorized {
 			t.Errorf("%s: expected 401 with no bearer token, got %d", path, code)
 		}
+	}
+}
+
+// /v1/auth is the sharpest of the four folded groups: it mints a JWT for an arbitrary
+// user ID, so an unauthorized caller reaching it can impersonate anyone in the
+// organization. It is a POST, so it gets its own test rather than joining the GET table.
+func TestHandler_TokenExchangeRequiresOrganizationsManage(t *testing.T) {
+	body := `{"organization_id":"org_1","user_id":"usr_1"}`
+
+	post := func(handler http.Handler, bearer string) int {
+		req := httptest.NewRequest(http.MethodPost, "/v1/auth/token", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	denied, key := authenticatedAdmin(t, auth.PermNotificationsSend)
+	if code := post(denied, key); code != http.StatusForbidden {
+		t.Errorf("a key without %s minted a token: got %d, want 403", auth.PermOrganizationsManage, code)
+	}
+
+	allowed, key2 := authenticatedAdmin(t, auth.PermOrganizationsManage)
+	if code := post(allowed, key2); code == http.StatusForbidden {
+		t.Errorf("a key holding %s was refused token exchange", auth.PermOrganizationsManage)
 	}
 }
 

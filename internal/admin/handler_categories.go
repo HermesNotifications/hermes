@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -51,6 +52,10 @@ func (s *Server) registerCategoryRoutes() {
 		Summary:     "List subscription categories",
 		Tags:        []string{"Subscriptions"},
 	}, func(ctx context.Context, input *struct{}) (*categoryListOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		categories, err := s.store.ListCategories(ctx)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
@@ -66,6 +71,10 @@ func (s *Server) registerCategoryRoutes() {
 		Tags:          []string{"Subscriptions"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, input *createCategoryInput) (*categoryOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		c, err := s.store.CreateCategory(ctx, input.Body.Slug, input.Body.Name, input.Body.DefaultChannels, input.Body.DefaultState, input.Body.SortOrder)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
@@ -80,6 +89,10 @@ func (s *Server) registerCategoryRoutes() {
 		Summary:     "Update a subscription category",
 		Tags:        []string{"Subscriptions"},
 	}, func(ctx context.Context, input *updateCategoryInput) (*categoryOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		c, err := s.store.UpdateCategory(ctx, input.ID, input.Body.Name, input.Body.DefaultChannels, input.Body.DefaultState, input.Body.SortOrder)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
@@ -98,6 +111,10 @@ func (s *Server) registerCategoryRoutes() {
 		Tags:          []string{"Subscriptions"},
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, input *categoryIDInput) (*struct{}, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		if err := s.store.DeleteCategory(ctx, input.ID); err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
 		}

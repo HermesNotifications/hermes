@@ -2,7 +2,7 @@
 
 ## General Upgrade Process
 
-1. **Check release notes** for the target version at the [releases page](https://github.com/hermesnotifications/hermes/releases).
+1. **Check release notes** for the target version at the [releases page](https://github.com/darylrobbins/hermes/releases).
 
 2. **Back up your database** before upgrading. The migration job runs automatically during `helm upgrade`, and migrations are not reversible.
 

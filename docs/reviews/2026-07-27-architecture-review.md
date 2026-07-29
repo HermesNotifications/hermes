@@ -1283,6 +1283,56 @@ production, since an unauthenticated request never reaches a handler.
 
 ---
 
+## Resolved 2026-07-29 — finding 3 completed, finding 35, and 31.12 settled
+
+**Finding 3's remaining gap is closed.** The four ungated route groups are folded onto the
+existing constants rather than given new ones: subscriptions and categories under
+`templates:manage`; users, notifications and token exchange under `organizations:manage`.
+Folding was chosen over new constants because new ones would mean every existing key lacks
+them, forcing either a widened `DefaultPermissions` or a reissue. The cost is that the
+mapping is looser than purpose-built permissions would be — `auth:issue` is not really
+organization management — and that is the trade recorded here rather than hidden.
+
+All eight route groups now enforce a permission: **22 handler-level checks**, up from three.
+
+The `/v1/auth` case is the one that mattered. Its test was watched failing with **200 OK** —
+a key holding only `notifications:send` minted a JWT for an arbitrary user, which is
+impersonation of anyone in the organization.
+
+**Finding 35** had two independent blockers and both are fixed. A ServiceAccount, Role and
+RoleBinding scoped to reading Deployments, StatefulSets and Pods in `hermes` only — the
+AnalysisRun previously ran as `default`, which holds nothing, so every `kubectl` call
+returned 403. And an egress NetworkPolicy, because the pod lands under `default-deny-all`
+and could not reach the API server even with RBAC. The pod now carries a label the policy
+selects on; without one the policy would match nothing, which per finding 47 looks exactly
+like a policy that works. `hermes-send` was also missing from the rollout loop, so the
+platform's primary write path was never verified after a promotion.
+
+The image was `bitnami/kubectl:latest`. It is now pinned by digest — an unpinned
+verification gate is one where a new image silently changes what "healthy" means between two
+promotions of identical code.
+
+> **Caught while writing this:** I first pinned to `bitnami/kubectl:1.31.0`, a tag I had not
+> checked. `docker manifest inspect` shows it does not exist. The digest now in the file was
+> resolved from `:latest` and verified. Worth recording because an invented-but-plausible
+> tag would have failed only at promotion time, in the gate meant to catch failures.
+
+**Production still has no `verification` block, deliberately.** Adding one makes a failing
+health check block production promotions, and this check has never executed — it could not
+have, given the two blockers above. Wire it to production only after it has passed in
+staging at least once. The review's own advice was to fix the check first and connect it
+after; that ordering is being followed rather than restated.
+
+**31.12 is settled:** the repository is `github.com/darylrobbins/hermes`, and the docs' one
+plainly wrong GitHub URL is corrected. The other two identities are **not** changed: `go.mod`
+declares `github.com/hermes-notifications/hermes` and the chart publishes to
+`ghcr.io/hermesnotifications`. Changing the module path would touch every import, and the
+registry namespace is the chart's to decide — so both are flagged in
+`self-hosting/configuration.md` where a reader would trip over them, rather than silently
+normalised.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is
