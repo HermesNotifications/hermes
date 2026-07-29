@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hermes-notifications/hermes/internal/auth"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
 
@@ -51,6 +52,10 @@ func (s *Server) registerTemplateRoutes() {
 		Summary:     "List notification templates",
 		Tags:        []string{"Templates"},
 	}, func(ctx context.Context, input *struct{}) (*templateListOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		templates, err := s.store.ListTemplates(ctx)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
@@ -66,6 +71,10 @@ func (s *Server) registerTemplateRoutes() {
 		Tags:          []string{"Templates"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, input *createTemplateInput) (*templateOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		nt := &models.NotificationTemplate{
 			Slug: input.Body.Slug, Name: input.Body.Name,
 			SubscriptionID: input.Body.SubscriptionID, DefaultChannels: input.Body.DefaultChannels,
@@ -86,6 +95,10 @@ func (s *Server) registerTemplateRoutes() {
 		Summary:     "Update a notification template",
 		Tags:        []string{"Templates"},
 	}, func(ctx context.Context, input *updateTemplateInput) (*templateOutput, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		nt := &models.NotificationTemplate{
 			ID: input.ID, Name: input.Body.Name,
 			SubscriptionID: input.Body.SubscriptionID, DefaultChannels: input.Body.DefaultChannels,
@@ -111,6 +124,10 @@ func (s *Server) registerTemplateRoutes() {
 		Tags:          []string{"Templates"},
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, input *deleteTemplateInput) (*struct{}, error) {
+		if err := requirePermission(ctx, auth.PermTemplatesManage); err != nil {
+			return nil, err
+		}
+
 		// Get slug for cache invalidation before deleting
 		existing, err := s.store.GetTemplateByID(ctx, input.ID)
 		if err != nil {

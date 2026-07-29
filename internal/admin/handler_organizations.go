@@ -10,6 +10,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
+	"github.com/hermes-notifications/hermes/internal/auth"
 )
 
 type organizationItem struct {
@@ -42,6 +43,10 @@ func (s *Server) registerOrganizationRoutes() {
 		Summary:     "List organizations",
 		Tags:        []string{"Organizations"},
 	}, func(ctx context.Context, input *struct{}) (*organizationListOutput, error) {
+		if err := requirePermission(ctx, auth.PermOrganizationsManage); err != nil {
+			return nil, err
+		}
+
 		organizations, err := s.store.ListOrganizations(ctx)
 		if err != nil {
 			s.logger.Error("failed to list organizations", "error", err)
@@ -75,6 +80,10 @@ func (s *Server) registerOrganizationRoutes() {
 		Tags:          []string{"Organizations"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, input *createOrganizationInput) (*createOrganizationOutput, error) {
+		if err := requirePermission(ctx, auth.PermOrganizationsManage); err != nil {
+			return nil, err
+		}
+
 		id := uuid.New().String()
 		organization, err := s.store.CreateOrganization(ctx, id, input.Body.Name)
 		if err != nil {

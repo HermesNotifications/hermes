@@ -1221,6 +1221,68 @@ else — no cluster, and `terraform` is not installed in this environment either
 
 ---
 
+## Resolved 2026-07-29 — finding 3, the unenforced permission system
+
+The finding said `auth.RequirePermission` was defined, unit-tested, and had **zero**
+production call sites. The triage confirmed it and added the reason: its signature was
+`func(http.Handler) http.Handler`, and every service routes through Huma, whose handlers
+are `func(ctx, input)` and never see an `http.Handler`. **The middleware could not be
+applied to any operation, so its tests exercised a function no route could use.** That is
+worth stating plainly, because a fully-tested security control that cannot be wired up
+looks from a coverage report exactly like one that works.
+
+Replaced with `auth.CheckPermission(ctx, perm) error`, which takes the context a Huma
+handler actually has, plus a thin `requirePermission` in each service mapping it onto
+Huma's error types. Now enforced on:
+
+| Route group | Permission | Was |
+|---|---|---|
+| `/v1/send` | `notifications:send` | **unenforced** |
+| `/v1/templates` (all 4 ops) | `templates:manage` | **unenforced** |
+| `/v1/organizations` (both ops) | `organizations:manage` | **unenforced** |
+| `/v1/apikeys` (all 3 ops) | `apikeys:manage` | enforced, but fail-open |
+
+The send case is the one that mattered: `/v1/send` is the platform's primary write path,
+and a key issued narrowly for template management could forge notifications to any user in
+any organization. The test that proves it now was watched failing with **`202 Accepted`** —
+the notification was genuinely sent.
+
+**Fail-open is gone.** The three existing checks read
+`if key != nil && !auth.HasPermission(...)`, which *passes* when the key is nil. It was
+unreachable in production because `APIKeyMiddleware` returns 401 first, so the triage
+correctly downgraded it from the finding's claim — but it was fail-open by construction, and
+one differently-mounted route away from being live. `CheckPermission` now fails closed
+unconditionally.
+
+That was only possible by fixing what made the nil-check necessary: `SetSkipAuth(true)`
+removed the auth middleware entirely, leaving no key in context, so handlers had to tolerate
+nil for tests to pass. Skip-auth now injects a synthetic key holding every permission, so
+tests run the same code path as production. **A security control weakened for the
+convenience of tests protects nothing.**
+
+### Gaps left open, deliberately
+
+**Four route groups still enforce nothing**, because no permission constant covers them and
+inventing one is an API decision, not a fix: `/v1/subscriptions` and
+`/v1/subscriptions/categories`, `/v1/auth` (token exchange — note this issues a JWT for an
+arbitrary user, so it is the most consequential of the four), `/v1/notifications`, and
+`/v1/users`. `AllPermissions` has four entries and the service has eight route groups.
+Adding constants would also change what existing keys need, so it wants a deliberate
+decision about the permission model rather than an incremental patch.
+
+**Permission checks run after input validation.** Huma validates the request body before
+invoking the handler, so a malformed request from an unauthorized caller returns 422 rather
+than 403. No meaningful information leaks — 422 is returned identically whether or not the
+caller is authorized — but it is worth knowing before writing a test that expects 403 and
+sees 422, which is exactly what happened while writing these.
+
+**`internal/auth/middleware.go` had no tests at all** before this change, despite being the
+authentication boundary. It now has them, including that health endpoints bypass auth and
+carry no key — which is what makes `CheckPermission`'s fail-closed behaviour safe in
+production, since an unauthenticated request never reaches a handler.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is

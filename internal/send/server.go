@@ -6,6 +6,7 @@ package send
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -93,10 +94,33 @@ func (s *Server) Handler() http.Handler {
 	}, 5000, 2000)(h)
 	if !s.skipAuth {
 		h = auth.APIKeyMiddleware(s.validateAPIKey)(h)
+	} else {
+		// Skipping authentication must not also skip authorization. Injecting a fully
+		// privileged key keeps handlers on the same code path as production, so
+		// auth.CheckPermission can fail closed rather than carrying a nil-key exemption
+		// that would be fail-open in production too. See finding 3.
+		h = auth.SkipAuthMiddleware()(h)
 	}
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)
 	return h
+}
+
+// requirePermission maps auth.CheckPermission onto Huma's error types.
+//
+// Huma handlers are func(ctx, input) and never see an http.Handler, which is why this is
+// a call at the top of a handler rather than middleware — and why auth.RequirePermission,
+// which returned func(http.Handler) http.Handler, could never be applied to any route.
+func requirePermission(ctx context.Context, perm string) error {
+	err := auth.CheckPermission(ctx, perm)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, auth.ErrNoAPIKey):
+		return huma.Error401Unauthorized("unauthorized")
+	default:
+		return huma.Error403Forbidden("insufficient permissions")
+	}
 }
 
 func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
