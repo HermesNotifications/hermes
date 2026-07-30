@@ -21,7 +21,21 @@ helm install hermes oci://ghcr.io/hermesnotifications/charts/hermes \
   --set hermes.apiKey.hmacSecret="$(openssl rand -base64 32)"
 ```
 
-This deploys all Hermes services along with bundled PostgreSQL, NATS, and Redis sub-charts for a self-contained evaluation environment.
+`global.domain` is required — the chart's schema rejects an install without it, because every
+ingress rule is bound to that hostname. (There is no `ingress.host`.)
+
+This deploys all Hermes services along with bundled PostgreSQL, NATS, Redis and Centrifugo
+sub-charts. Two Jobs run first as Helm `pre-install` hooks — the database migration and the
+NATS stream provisioner — so nothing has to be run by hand and the services do not start
+before the schema and the JetStream streams exist.
+
+> **This is an evaluation environment, and only that.** The bundled PostgreSQL, Redis and
+> NATS are unauthenticated and unencrypted, the Postgres password is the committed string
+> `hermes`, and the bundled Centrifugo uses the in-memory engine, so realtime push does not
+> fan out beyond a single replica. That is a deliberate posture for getting started quickly,
+> not a default to harden in place: production requires external datastores over TLS and
+> `hermes.env: production`, which the bundled sub-charts cannot satisfy. See
+> [Production Hardening](production.md).
 
 ## Verify
 
@@ -35,14 +49,15 @@ You should see all tests pass, confirming that each service's health endpoint is
 
 ## Access the API
 
-If you have an ingress controller, enable ingress:
+Ingress is enabled by default (`ingress.enabled: true`), so if you have an ingress controller
+the API is already served at `global.domain`. Set `ingress.className` to match your
+controller:
 
 ```bash
 helm upgrade hermes oci://ghcr.io/hermesnotifications/charts/hermes \
   --namespace hermes \
   --reuse-values \
-  --set ingress.enabled=true \
-  --set global.domain=hermes.example.com
+  --set ingress.className=nginx
 ```
 
 Otherwise, port-forward to the admin service:

@@ -310,14 +310,29 @@ DB=$(kubectl get secret -n crossplane-system hermes-database-conn -o jsonpath='{
 
 ### Webhook URLs
 
-After deploying, update the webhook URLs in SSM Parameter Store:
-```bash
-aws ssm put-parameter --name "/hermes/staging/email_webhook_url" \
-  --value "https://your-email-provider.com/send" --overwrite
+SMS delivery is webhook-based. After deploying, set its URL in SSM Parameter Store:
 
+```bash
 aws ssm put-parameter --name "/hermes/staging/sms_webhook_url" \
   --value "https://your-sms-provider.com/send" --overwrite
 ```
+
+> **There is no email webhook.** Earlier revisions of this guide also told you to create
+> `/hermes/<env>/email_webhook_url`. No Go code has ever read `HERMES_EMAIL_WEBHOOK_URL` —
+> `internal/email/email.go` builds either an SMTP or an SES provider and rejects anything
+> else with `unknown email provider`. The `ExternalSecret` entry that pulled that parameter
+> into the cluster was dead config and has been removed from
+> `deploy/k8s/overlays/{staging,production}/external-secrets.yaml`. Configure email with
+> `HERMES_EMAIL_PROVIDER` set to `smtp` or `ses` instead — see
+> [self-hosting/configuration.md](self-hosting/configuration.md#email).
+>
+> The SSM parameter itself is still created by
+> `infra/crossplane/compositions/aws/secrets.yaml`; removing it there is follow-up work.
+
+> **Note also that `hermes-config-params` is not consumed by any workload** — finding 41 of
+> the [2026-07-27 review](reviews/2026-07-27-architecture-review.md). Setting
+> `sms_webhook_url` above is necessary but not currently sufficient: `HERMES_SMS_WEBHOOK_URL`
+> does not reach the SMS worker until that Secret is wired into the Deployment.
 
 ### Let's Encrypt email
 
