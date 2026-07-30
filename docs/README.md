@@ -23,6 +23,7 @@ SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch
 | If you want to… | Read |
 |---|---|
 | Send notifications from your backend | [Integration Guide](integration-guide.md) → [API Reference](api/README.md) |
+| Put a notification inbox in your frontend | [Embedding the Inbox](embedding-the-inbox.md) |
 | Understand how Hermes works internally | [Architecture](architecture.md) |
 | Run Hermes locally and contribute | [Development](development.md) → [Contributing](../CONTRIBUTING.md) |
 | Deploy Hermes on your own cluster | [Self-Hosting](self-hosting/quickstart.md) |
@@ -35,6 +36,10 @@ SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch
   creating organizations and API keys, sending notifications, the inbox and user APIs, and real-time push.
 - **[API Reference](api/README.md)** — auth modes, the generated OpenAPI/AsyncAPI specs, and how
   to regenerate them.
+- **[Embedding the Inbox](embedding-the-inbox.md)** — drop the supplied inbox widget into any
+  frontend: the custom element, the React binding, token refresh, proxying, and theming.
+- **[Integration demos](../examples/README.md)** — a working React host application with the widget
+  embedded, plus the token-minting backend it shares with future framework demos.
 - **[CLI Reference](cli.md)** — the `hermes` command-line tool for managing resources and an
   interactive inbox viewer.
 

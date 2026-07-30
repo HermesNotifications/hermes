@@ -92,6 +92,21 @@ make dev-admin        # next dev on :3000
 
 See [web/admin/README.md](../web/admin/README.md).
 
+## Inbox demo
+
+A React host application with the embeddable inbox widget in its header, plus the token-minting and
+proxying backend it shares with future framework demos.
+
+```bash
+make demo-install     # dependencies, and build the workspace SDKs
+make dev-demo         # token server on :8899, demo app on :5173
+make demo-check       # typecheck, test and build the demo packages (no cluster needed)
+```
+
+`make dev-up` starts both automatically as Tilt resources. See
+[examples/README.md](../examples/README.md), and
+[Embedding the Inbox](embedding-the-inbox.md) for the widget itself.
+
 ## Project layout
 
 ```
@@ -106,6 +121,8 @@ deploy/         Dockerfiles, k3d config, Kustomize bases/overlays, ArgoCD/Kargo,
 infra/          Terraform (AWS) and Crossplane
 charts/hermes/  Helm chart
 web/admin/      Next.js admin portal
+examples/       Integration demos - React host app plus the shared token/proxy server
+tests/browser/  Live browser E2E suite (Playwright) for the embedded inbox
 loadtest/       k6 load-testing system
 docs/           This documentation
 tests/e2e/      End-to-end tests
@@ -118,6 +135,9 @@ tests/e2e/      End-to-end tests
 | Run unit tests | `make test` |
 | Run integration tests | `make test-integration` (needs `make infra-up`) |
 | Run e2e tests | `make test-e2e` (needs `make infra-up`) |
+| Run the TypeScript SDK tests | `make sdk-ts-test` |
+| Check the demo packages | `make demo-check` |
+| Run the live browser E2E suite | `make demo-e2e` (needs `make dev-up`) |
 | Lint | `make lint` |
 | Regenerate OpenAPI specs | `make openapi` |
 | Validate the AsyncAPI spec | `make asyncapi-check` |

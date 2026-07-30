@@ -2,29 +2,108 @@
 // See LICENSE and NOTICE in the project root for full terms and restrictions.
 
 import { LitElement, html, css, nothing, type TemplateResult } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { property } from "lit/decorators.js";
 import {
-  HermesClient,
-  type Notification,
-  type NewNotificationEvent,
+  relativeTime,
+  type HermesClient,
+  type HermesError,
+  type InboxState,
   type InboxUpdatedEvent,
+  type NewNotificationEvent,
+  type Notification,
+  type RealtimeStatus,
 } from "@hermes-notifications/client";
+import { InboxController, type ClientFactory } from "./inbox-controller.js";
 
-@customElement("hermes-inbox")
+/**
+ * `<hermes-inbox>` — an embeddable notification inbox.
+ *
+ * Deliberately **not** decorated with `@customElement`: registration happens through
+ * `registerHermesInbox()` or by importing `@hermes-notifications/web/define`, so that
+ * importing this module is safe on a server. See `register.ts`.
+ *
+ * All state and network work lives in {@link InboxController}; this class is the view.
+ *
+ * ## Attributes
+ * | Attribute | Purpose |
+ * |---|---|
+ * | `api-url` | Origin serving the inbox API. Defaults to the page's own origin. |
+ * | `socket-url` | Base URL for the Centrifugo websocket. |
+ * | `token` | A Hermes user JWT. Expires, so prefer `token-url`. |
+ * | `token-url` | Endpoint on your app that mints a token; enables auto-refresh. |
+ * | `user-id` | Internal Hermes user id. Defaults to the token's `sub` claim. |
+ * | `page-size` | Rows per page (default 20). |
+ * | `archived` | Show the archived view. |
+ * | `open` | Reflected; whether the panel is open. |
+ * | `heading` | Panel heading text. |
+ * | `empty-text` | Text shown when there is nothing to list. |
+ *
+ * ## Events
+ * All bubble and are composed, so a host can listen on an ancestor or on `document`.
+ * `hermes-notification`, `hermes-update`, `hermes-unread-count-change`,
+ * `hermes-open-change`, `hermes-connected`, `hermes-error`, `hermes-notification-click`,
+ * and the cancellable `hermes-action`.
+ */
 export class HermesInbox extends LitElement {
+  /**
+   * Origin the inbox API is served from. Defaults to the page's own origin, which is the
+   * right default when the host app proxies `/v1/*` — the common integration today, since
+   * the services ship no CORS headers.
+   */
   @property({ attribute: "api-url" }) apiUrl = "";
   @property({ attribute: "socket-url" }) socketUrl = "";
   @property() token = "";
+  @property({ attribute: "token-url" }) tokenUrl = "";
   @property({ attribute: "user-id" }) userId = "";
+  @property({ attribute: "page-size", type: Number }) pageSize = 20;
+  @property({ type: Boolean }) archived = false;
+  @property({ type: Boolean, reflect: true }) open = false;
+  @property() heading = "Notifications";
+  @property({ attribute: "empty-text" }) emptyText = "No notifications";
 
-  @state() private open = false;
-  @state() private notifications: Notification[] = [];
-  @state() private unreadCount = 0;
-  @state() private loading = false;
-  @state() private cursor?: string;
+  /**
+   * Supplies a fresh token on demand. A property rather than an attribute because a
+   * callback cannot be expressed in HTML — `token-url` is the markup-only equivalent.
+   */
+  @property({ attribute: false }) getToken?: () => Promise<string>;
 
-  private client?: HermesClient;
-  private cleanups: Array<() => void> = [];
+  /** A pre-built client. When set, the element does no token handling at all. */
+  @property({ attribute: false }) client?: HermesClient;
+
+  /** Overrides how the client is constructed. Escape hatch for tests and wrappers. */
+  @property({ attribute: false }) clientFactory?: ClientFactory;
+
+  private controller = new InboxController(this, {
+    onNotification: (event: NewNotificationEvent) => this.emit("hermes-notification", event),
+    onUpdate: (event: InboxUpdatedEvent) => this.emit("hermes-update", event),
+    onUnreadCountChange: (count: number) => this.emit("hermes-unread-count-change", count),
+    onStatusChange: (status: RealtimeStatus) => {
+      // Emitted so a host — or a browser test — can wait for the inbox to actually be
+      // live, rather than guessing with a timer. Publications that land before the channel
+      // subscription completes would otherwise be missed.
+      if (status === "connected") this.emit("hermes-connected", { status });
+    },
+    onError: (error: HermesError) => this.emit("hermes-error", error),
+  });
+
+  /** Read-only view of the inbox state, for hosts that want to render their own chrome. */
+  get state(): Readonly<InboxState> {
+    return this.controller.state;
+  }
+
+  private onDocumentPointerDown = (event: Event) => {
+    // composedPath, not contains: across a shadow boundary the event target is retargeted
+    // to the host, so `this.contains(event.target)` is true for every click on the page and
+    // the panel would never close.
+    if (!event.composedPath().includes(this)) this.setOpen(false);
+  };
+
+  private onDocumentKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && this.open) {
+      this.setOpen(false);
+      this.focusTrigger();
+    }
+  };
 
   static styles = css`
     :host {
@@ -33,6 +112,28 @@ export class HermesInbox extends LitElement {
       font-family: var(--hermes-font-family, system-ui, -apple-system, sans-serif);
       font-size: var(--hermes-font-size, 14px);
       color: var(--hermes-text-color, #1a1a1a);
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+    }
+
+    :focus-visible {
+      outline: var(--hermes-focus-ring, 2px solid #3b82f6);
+      outline-offset: 2px;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
     }
 
     .trigger {
@@ -55,8 +156,8 @@ export class HermesInbox extends LitElement {
       position: absolute;
       top: -4px;
       right: -4px;
-      min-width: 18px;
-      height: 18px;
+      min-width: var(--hermes-badge-size, 18px);
+      height: var(--hermes-badge-size, 18px);
       padding: 0 5px;
       border-radius: 9px;
       background: var(--hermes-badge-bg, #ef4444);
@@ -78,11 +179,17 @@ export class HermesInbox extends LitElement {
       background: var(--hermes-popover-bg, #fff);
       border: 1px solid var(--hermes-border-color, #e0e0e0);
       border-radius: var(--hermes-popover-radius, 12px);
-      box-shadow: var(--hermes-popover-shadow, 0 8px 30px rgba(0,0,0,0.12));
+      box-shadow: var(--hermes-popover-shadow, 0 8px 30px rgba(0, 0, 0, 0.12));
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      z-index: 1000;
+      /* A custom property, because a host with a modal above this value would otherwise
+         clip the panel with no way to fix it from outside the shadow root. */
+      z-index: var(--hermes-popover-z-index, 1000);
+    }
+    :host([data-placement="bottom-start"]) .popover {
+      right: auto;
+      left: 0;
     }
 
     .header {
@@ -113,6 +220,7 @@ export class HermesInbox extends LitElement {
       flex: 1;
       overflow-y: auto;
       overscroll-behavior: contain;
+      max-height: var(--hermes-list-max-height, none);
     }
 
     .notification {
@@ -120,7 +228,6 @@ export class HermesInbox extends LitElement {
       gap: 12px;
       padding: 12px 16px;
       border-bottom: 1px solid var(--hermes-border-color, #e0e0e0);
-      cursor: pointer;
       transition: background 0.1s;
     }
     .notification:hover {
@@ -151,7 +258,24 @@ export class HermesInbox extends LitElement {
     .notification-content {
       flex: 1;
       min-width: 0;
+      text-align: left;
     }
+
+    /* Rows are real buttons and links so they are keyboard reachable in the natural tab
+       order. That needs the browser's own button styling stripped back. */
+    .row-target {
+      display: block;
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+      text-align: left;
+      color: inherit;
+      text-decoration: none;
+    }
+
     .notification-title {
       font-weight: 500;
       margin-bottom: 2px;
@@ -172,16 +296,19 @@ export class HermesInbox extends LitElement {
       font-size: 11px;
       margin-top: 4px;
     }
+    .action-link {
+      color: var(--hermes-action-color, #3b82f6);
+      font-size: 12px;
+      font-weight: 500;
+      display: inline-block;
+      margin-top: 6px;
+    }
 
     .actions {
       display: flex;
       gap: 4px;
       flex-shrink: 0;
-      opacity: 0;
-      transition: opacity 0.1s;
-    }
-    .notification:hover .actions {
-      opacity: 1;
+      align-items: flex-start;
     }
     .action-btn {
       background: none;
@@ -197,221 +324,317 @@ export class HermesInbox extends LitElement {
       color: var(--hermes-text-color, #1a1a1a);
     }
 
-    .empty {
+    .footer {
+      padding: 8px;
+      border-top: 1px solid var(--hermes-border-color, #e0e0e0);
+    }
+    .load-more {
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 8px;
+      cursor: pointer;
+      color: var(--hermes-accent-color, #3b82f6);
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+    }
+    .load-more:hover {
+      background: var(--hermes-accent-bg, #eff6ff);
+    }
+    .load-more[disabled] {
+      cursor: default;
+      color: var(--hermes-muted-color, #666);
+    }
+
+    .empty,
+    .loading,
+    .error {
       padding: 40px 16px;
       text-align: center;
       color: var(--hermes-muted-color, #666);
     }
-
     .loading {
       padding: 20px;
-      text-align: center;
-      color: var(--hermes-muted-color, #666);
+    }
+    .error {
+      padding: 20px 16px;
+      color: var(--hermes-error-color, #b91c1c);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .trigger,
+      .notification {
+        transition: none;
+      }
     }
   `;
 
-  connectedCallback() {
+  connectedCallback(): void {
     super.connectedCallback();
-    this.initClient();
+    this.applyConfig();
   }
 
-  disconnectedCallback() {
+  disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.cleanups.forEach((fn) => fn());
-    this.cleanups = [];
-    this.client?.disconnect();
-    this.client = undefined;
+    this.stopDismissListeners();
   }
 
-  updated(changed: Map<string, unknown>) {
-    if (changed.has("token") || changed.has("apiUrl")) {
-      this.initClient();
-    }
+  updated(): void {
+    // Safe to call unconditionally: configure() compares against the applied config and
+    // returns early when nothing changed. There is deliberately no watch list here — that
+    // is what previously let `user-id` changes go unnoticed while double-applying the two
+    // fields that *were* watched.
+    this.applyConfig();
   }
 
-  private async initClient() {
-    if (!this.apiUrl || !this.token) return;
-
-    this.cleanups.forEach((fn) => fn());
-    this.cleanups = [];
-    this.client?.disconnect();
-
-    this.client = new HermesClient({
-      apiUrl: this.apiUrl,
-      socketUrl: this.socketUrl || undefined,
-      token: this.token,
+  private applyConfig(): void {
+    this.controller.configure({
+      // Falling back to the page origin makes the same-origin/proxy setup — today's
+      // supported integration — expressible without repeating the host name in markup.
+      apiUrl: this.apiUrl || defaultOrigin(),
+      ...(this.socketUrl ? { socketUrl: this.socketUrl } : {}),
+      ...(this.token ? { token: this.token } : {}),
+      ...(this.tokenUrl ? { tokenUrl: this.tokenUrl } : {}),
+      ...(this.getToken ? { getToken: this.getToken } : {}),
+      ...(this.userId ? { userId: this.userId } : {}),
+      pageSize: this.pageSize,
+      archived: this.archived,
+      ...(this.client ? { client: this.client } : {}),
     });
+  }
 
-    this.cleanups.push(
-      this.client.on("notification", (e: NewNotificationEvent) => {
-        const notif: Notification = {
-          id: e.id,
-          title: e.title,
-          body: e.body,
-          status: "delivered",
-          channels: ["inbox"],
-          created_at: e.createdAt,
-          organization_id: "",
-          user_id: "",
-          category_id: "",
-        };
-        this.notifications = [notif, ...this.notifications];
-        this.unreadCount++;
-        this.dispatchEvent(new CustomEvent("notification", { detail: e }));
-      })
+  /** Dispatch a bubbling, composed CustomEvent. */
+  private emit<T>(type: string, detail: T, cancelable = false): boolean {
+    return this.dispatchEvent(
+      // composed is what lets the event escape the shadow root at all; without it a React
+      // wrapper — or any ancestor listener — never sees it.
+      new CustomEvent<T>(type, { detail, bubbles: true, composed: true, cancelable })
     );
-
-    this.cleanups.push(
-      this.client.on("update", (e: InboxUpdatedEvent) => {
-        this.unreadCount = e.unreadCount;
-        if (e.action === "read" || e.action === "archive" || e.action === "delete") {
-          this.notifications = this.notifications.map((n) =>
-            n.id === e.notificationId
-              ? { ...n, read_at: e.action === "read" ? new Date().toISOString() : n.read_at }
-              : n
-          );
-          if (e.action === "delete") {
-            this.notifications = this.notifications.filter((n) => n.id !== e.notificationId);
-          }
-        }
-        if (e.action === "read-all") {
-          this.notifications = this.notifications.map((n) => ({
-            ...n,
-            read_at: n.read_at ?? new Date().toISOString(),
-          }));
-        }
-        this.dispatchEvent(new CustomEvent("update", { detail: e }));
-      })
-    );
-
-    this.cleanups.push(
-      this.client.on("unreadCountChange", (count: number) => {
-        this.dispatchEvent(new CustomEvent("unread-count-change", { detail: count }));
-      })
-    );
-
-    await this.loadNotifications();
-
-    if (this.userId) {
-      this.client.connect(this.userId).catch((err) => {
-        console.error("Hermes: failed to connect real-time:", err);
-      });
-    }
   }
 
-  private async loadNotifications() {
-    if (!this.client) return;
-    this.loading = true;
-    try {
-      const page = await this.client.inbox.list({ limit: 20 });
-      this.notifications = page.data;
-      this.unreadCount = page.unreadCount;
-      this.cursor = page.cursor;
-    } catch (err) {
-      console.error("Hermes: failed to load notifications:", err);
-    } finally {
-      this.loading = false;
-    }
+  private setOpen(open: boolean): void {
+    if (this.open === open) return;
+    this.open = open;
+    this.emit("hermes-open-change", { open });
+    if (open) this.startDismissListeners();
+    else this.stopDismissListeners();
   }
 
-  private toggle() {
-    this.open = !this.open;
+  private startDismissListeners(): void {
+    document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
+    document.addEventListener("keydown", this.onDocumentKeyDown, true);
   }
 
-  private async handleMarkRead(e: Event, id: string) {
-    e.stopPropagation();
-    await this.client?.inbox.markRead(id);
-    this.notifications = this.notifications.map((n) =>
-      n.id === id ? { ...n, read_at: new Date().toISOString() } : n
-    );
-    this.unreadCount = Math.max(0, this.unreadCount - 1);
+  private stopDismissListeners(): void {
+    document.removeEventListener("pointerdown", this.onDocumentPointerDown, true);
+    document.removeEventListener("keydown", this.onDocumentKeyDown, true);
   }
 
-  private async handleArchive(e: Event, id: string) {
-    e.stopPropagation();
-    await this.client?.inbox.archive(id);
-    this.notifications = this.notifications.filter((n) => n.id !== id);
+  private focusTrigger(): void {
+    this.renderRoot.querySelector<HTMLButtonElement>("button.trigger")?.focus();
   }
 
-  private async handleMarkAllRead() {
-    await this.client?.inbox.markAllRead();
-    this.notifications = this.notifications.map((n) => ({
-      ...n,
-      read_at: n.read_at ?? new Date().toISOString(),
-    }));
-    this.unreadCount = 0;
+  private toggle(): void {
+    this.setOpen(!this.open);
   }
 
-  private formatTime(dateStr: string): string {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "just now";
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
-    const diffDay = Math.floor(diffHr / 24);
-    if (diffDay < 7) return `${diffDay}d ago`;
-    return date.toLocaleDateString();
+  private onRowActivate(notification: Notification): void {
+    this.emit("hermes-notification-click", { notification });
+    if (!notification.read_at) void this.controller.markRead(notification.id);
   }
 
-  private renderBellIcon(): TemplateResult {
-    return html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+  private onActionActivate(event: Event, notification: Notification): void {
+    // Cancellable so a single-page-app host can preventDefault() and route internally
+    // rather than losing its state to a full page navigation.
+    const proceed = this.emit("hermes-action", { notification }, true);
+    if (!proceed) event.preventDefault();
+    if (!notification.read_at) void this.controller.markRead(notification.id);
   }
 
-  render() {
+  render(): TemplateResult {
+    const { unreadCount } = this.controller.state;
+    const label =
+      unreadCount > 0 ? `${this.heading}, ${unreadCount} unread` : this.heading;
+
     return html`
-      <button class="trigger" part="trigger" @click=${this.toggle} aria-label="Notifications">
-        ${this.renderBellIcon()}
-        ${this.unreadCount > 0
-          ? html`<span class="badge" part="badge">${this.unreadCount > 99 ? "99+" : this.unreadCount}</span>`
+      <button
+        class="trigger"
+        part="trigger"
+        type="button"
+        aria-label=${label}
+        aria-haspopup="dialog"
+        aria-expanded=${this.open ? "true" : "false"}
+        aria-controls="hermes-panel"
+        @click=${this.toggle}
+      >
+        ${renderBellIcon()}
+        ${unreadCount > 0
+          ? html`<span class="badge" part="badge" aria-hidden="true"
+              >${unreadCount > 99 ? "99+" : unreadCount}</span
+            >`
           : nothing}
       </button>
 
-      ${this.open
-        ? html`
-            <div class="popover" part="popover">
-              <div class="header" part="header">
-                <span>Notifications</span>
-                ${this.unreadCount > 0
-                  ? html`<button class="mark-all-read" @click=${this.handleMarkAllRead}>Mark all read</button>`
-                  : nothing}
-              </div>
-              <div class="list" part="list">
-                ${this.loading
-                  ? html`<div class="loading">Loading...</div>`
-                  : this.notifications.length === 0
-                    ? html`<div class="empty" part="empty">No notifications</div>`
-                    : this.notifications.map((n) => this.renderNotification(n))}
-              </div>
-            </div>
-          `
-        : nothing}
+      <!-- Rendered unconditionally: a live region must already be in the DOM before its
+           content changes, so putting aria-live on the conditional badge would announce
+           nothing on the 0 -> 1 transition, which is the only one that matters. -->
+      <span class="visually-hidden" part="status" role="status" aria-live="polite">
+        ${unreadCount > 0 ? `${unreadCount} unread notifications` : ""}
+      </span>
+
+      ${this.open ? this.renderPanel() : nothing}
     `;
   }
 
-  private renderNotification(n: Notification): TemplateResult {
-    const isUnread = !n.read_at;
+  private renderPanel(): TemplateResult {
+    const { notifications, unreadCount, loading, loadingMore, hasMore, error } =
+      this.controller.state;
+
     return html`
-      <div class="notification ${isUnread ? "unread" : ""}" part="notification">
+      <div
+        class="popover"
+        part="popover"
+        id="hermes-panel"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="hermes-heading"
+      >
+        <div class="header" part="header">
+          <span id="hermes-heading">${this.heading}</span>
+          ${unreadCount > 0
+            ? html`<button
+                class="mark-all-read"
+                part="mark-all-read"
+                type="button"
+                @click=${() => void this.controller.markAllRead()}
+              >
+                Mark all read
+              </button>`
+            : nothing}
+        </div>
+
+        <div class="list" part="list">
+          ${loading
+            ? html`<div class="loading" part="loading">Loading…</div>`
+            : notifications.length === 0
+              ? html`<div class="empty" part="empty">${this.emptyText}</div>`
+              : notifications.map((notification) => this.renderNotification(notification))}
+          ${error && !loading
+            ? html`<div class="error" part="error" role="alert">${error.message}</div>`
+            : nothing}
+        </div>
+
+        ${hasMore
+          ? html`<div class="footer" part="footer">
+              <button
+                class="load-more"
+                part="load-more"
+                type="button"
+                ?disabled=${loadingMore}
+                @click=${() => void this.controller.loadMore()}
+              >
+                ${loadingMore ? "Loading…" : "Load more"}
+              </button>
+            </div>`
+          : nothing}
+      </div>
+    `;
+  }
+
+  private renderNotification(notification: Notification): TemplateResult {
+    const isUnread = !notification.read_at;
+    const hasAction = Boolean(notification.action_url);
+
+    const body = html`
+      <div class="notification-title" part="title">${notification.title}</div>
+      <div class="notification-body" part="body">${notification.body}</div>
+      <div class="notification-time" part="time">
+        ${relativeTime(notification.created_at)}
+      </div>
+      ${hasAction
+        ? html`<span class="action-link" part="action-label"
+            >${notification.action_label ?? "View"}</span
+          >`
+        : nothing}
+    `;
+
+    // An <a> when there is somewhere to go, a <button> otherwise — either way a real
+    // interactive element, so the row is reachable by keyboard without any roving-tabindex
+    // machinery. Previously rows were plain divs and entirely unreachable.
+    const target = hasAction
+      ? html`<a
+          class="row-target"
+          part="action-link"
+          href=${notification.action_url ?? "#"}
+          @click=${(event: Event) => this.onActionActivate(event, notification)}
+        >
+          <div class="notification-content">${body}</div>
+        </a>`
+      : html`<button
+          class="row-target"
+          type="button"
+          @click=${() => this.onRowActivate(notification)}
+        >
+          <div class="notification-content">${body}</div>
+        </button>`;
+
+    return html`
+      <div
+        class="notification ${isUnread ? "unread" : ""}"
+        part="notification ${isUnread ? "unread" : "read"}"
+      >
         ${isUnread
           ? html`<div class="unread-dot" part="unread-dot"></div>`
-          : html`<div class="read-dot"></div>`}
-        <div class="notification-content">
-          <div class="notification-title" part="title">${n.title}</div>
-          <div class="notification-body" part="body">${n.body}</div>
-          <div class="notification-time" part="time">${this.formatTime(n.created_at)}</div>
-        </div>
-        <div class="actions">
+          : html`<div class="read-dot" part="read-dot"></div>`}
+        ${target}
+        <div class="actions" part="actions">
           ${isUnread
-            ? html`<button class="action-btn" @click=${(e: Event) => this.handleMarkRead(e, n.id)}>Read</button>`
+            ? html`<button
+                class="action-btn"
+                part="action-btn"
+                type="button"
+                aria-label="Mark ${notification.title} as read"
+                @click=${() => void this.controller.markRead(notification.id)}
+              >
+                Read
+              </button>`
             : nothing}
-          <button class="action-btn" @click=${(e: Event) => this.handleArchive(e, n.id)}>Archive</button>
+          <button
+            class="action-btn"
+            part="action-btn"
+            type="button"
+            aria-label="Archive ${notification.title}"
+            @click=${() => void this.controller.archive(notification.id)}
+          >
+            Archive
+          </button>
         </div>
       </div>
     `;
   }
+}
+
+function renderBellIcon(): TemplateResult {
+  return html`<svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>`;
+}
+
+/** The page's own origin, or empty string where there is no document. */
+function defaultOrigin(): string {
+  return typeof location === "undefined" ? "" : location.origin;
 }
 
 declare global {

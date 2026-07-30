@@ -1,0 +1,104 @@
+name: E2E (live browser)
+
+# The live browser suite: a real Chromium driving the real widget against a real cluster.
+#
+# Deliberately NOT a required check on every PR. It needs a k3d cluster, ingress-nginx,
+# Centrifugo, Postgres/NATS/Redis and ten compiled Go services — none of which ci-web.yml has —
+# so it is a 15-to-30 minute job with a large surface of environmental failure, attached to some
+# of the most frequently touched paths in the repo. That is how a suite ends up
+# `continue-on-error`'d and then ignored.
+#
+# Instead: nightly, on demand, and opt-in per PR via the `e2e-live` label. Day-to-day confidence
+# comes from `make demo-e2e` locally plus the cheap spec-compile step in ci-web.yml.
+on:
+  workflow_dispatch:
+  schedule:
+    # 06:00 UTC daily, so a regression is caught within a day of landing.
+    - cron: "0 6 * * *"
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: e2e-live-${{ github.ref }}
+  # Never cancel: a half-torn-down k3d cluster is worse than a queued run.
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.28.2"
+
+jobs:
+  live:
+    name: Live browser E2E
+    # On a pull request, only when explicitly labelled.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e-live')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install k3d and Tilt
+        run: |
+          curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash
+          k3d version
+          tilt version
+
+      # `tilt ci` exits once every resource is ready, or non-zero if any fails to come up. It also
+      # runs migrate and seed, which is what produces the dev API key the suite needs.
+      - name: Bring up the cluster
+        run: make dev-up-ci
+
+      - name: Install dependencies and build the SDKs
+        run: make demo-install
+
+      - name: Install the Playwright browser
+        run: make demo-e2e-install
+
+      - name: Run the live E2E suite
+        run: make demo-e2e
+
+      # Always: the trace of a notification arriving over the websocket is the whole diagnostic
+      # value, and it matters most precisely when the run failed.
+      - name: Upload the Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report
+          path: |
+            tests/browser/playwright-report/
+            tests/browser/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Collect cluster logs on failure
+        if: failure()
+        run: |
+          kubectl get pods -A || true
+          for service in hermes-admin hermes-send hermes-dispatch hermes-worker-inbox hermes-inbox centrifugo; do
+            echo "::group::$service"
+            kubectl logs "deployment/$service" --tail=200 || true
+            echo "::endgroup::"
+          done
+
+      - name: Tear down
+        if: always()
+        run: make dev-down || true

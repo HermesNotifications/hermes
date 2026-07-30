@@ -5,18 +5,27 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc && cp -r src/generated dist/generated",
+    "build": "tsc -p tsconfig.build.json && cp -r src/generated dist/generated",
     "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "generate:inbox": "openapi-typescript ../../../../api/inbox/openapi.yaml -o src/generated/inbox-api.d.ts",
     "generate:user": "openapi-typescript ../../../../api/user/openapi.yaml -o src/generated/user-api.d.ts",
     "generate": "pnpm generate:inbox && pnpm generate:user"
@@ -27,7 +36,8 @@
   },
   "devDependencies": {
     "openapi-typescript": "^7.13.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   },
   "license": "MIT"
 }

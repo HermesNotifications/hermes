@@ -1,0 +1,6 @@
+{
+  // Type-check-only config for `pnpm build`: tests are excluded so a test-only type error does
+  // not block a production build, while `pnpm typecheck` still covers them.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

@@ -44,6 +44,19 @@ sdks/typescript/node_modules/
 sdks/typescript/packages/*/dist/
 sdks/typescript/packages/*/node_modules/
 
+# Integration demos (examples/) and the live browser suite
+examples/*/node_modules/
+examples/*/dist/
+examples/*/.vite/
+examples/*/*.tsbuildinfo
+examples/*/.env.local
+tests/browser/node_modules/
+# Playwright artefacts. The trace of a notification arriving is the diagnostic value, but it is
+# uploaded as a CI artefact rather than committed.
+tests/browser/playwright-report/
+tests/browser/test-results/
+tests/browser/.playwright/
+
 # SDKs - Java
 sdks/java/hermes-server-sdk/target/
 sdks/java/hermes-server-sdk/build/

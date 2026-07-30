@@ -166,7 +166,11 @@ k8s_resource(
 # --- Admin Portal (Next.js) ---
 local_resource(
     "admin-portal-install",
-    cmd="pnpm install --frozen-lockfile",
+    # The SDK build is not incidental: the workspace packages are ESM compiled to dist/, and
+    # admin resolves @hermes-notifications/server through it. ci-web.yml has carried an explicit
+    # "Build workspace SDK dependency" step for this reason; without it here, a fresh clone's
+    # first `tilt up` could fail to compile the portal.
+    cmd="pnpm install --frozen-lockfile && pnpm --filter './sdks/typescript/packages/*' build",
     deps=["web/admin/package.json", "pnpm-lock.yaml"],
     resource_deps=["seed"],
     labels=["frontend"],
@@ -178,6 +182,28 @@ local_resource(
     deps=["web/admin/package.json"],
     resource_deps=["admin-portal-install", "hermes-admin"],
     links=["http://localhost:3000"],
+    labels=["frontend"],
+)
+
+# --- Inbox demo (examples/) ---
+# The demo shares admin-portal-install, which already builds the workspace SDKs.
+local_resource(
+    "demo-server",
+    serve_cmd="scripts/demo-env pnpm --filter @hermes/demo-server dev",
+    deps=["examples/demo-server/package.json"],
+    # Depends on hermes-send as well as hermes-admin, unlike the admin portal: the demo mints
+    # tokens through admin *and* sends test notifications through send.
+    resource_deps=["admin-portal-install", "hermes-admin", "hermes-send"],
+    links=["http://localhost:8899"],
+    labels=["frontend"],
+)
+
+local_resource(
+    "demo-web",
+    serve_cmd="pnpm --filter @hermes/react-demo dev",
+    deps=["examples/react-demo/package.json"],
+    resource_deps=["demo-server"],
+    links=["http://localhost:5173"],
     labels=["frontend"],
 )
 

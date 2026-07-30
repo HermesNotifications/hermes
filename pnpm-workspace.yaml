@@ -1,12 +1,19 @@
 packages:
   - "sdks/typescript/packages/*"
   - "web/admin"
+  # Integration demos an integrator copies, plus the live browser test suite.
+  - "examples/*"
+  - "tests/browser"
 # Written deliberately, not by `pnpm install` -- pnpm scaffolds this key with the
 # literal text "set this to true or false", which is not valid config and makes every
-# subsequent `pnpm run` fail with ERR_PNPM_IGNORED_BUILDS. All three genuinely need
-# their build scripts: protobufjs and unrs-resolver compile native bindings, sharp
-# fetches its platform binary.
+# subsequent `pnpm run` fail with ERR_PNPM_IGNORED_BUILDS. Each entry genuinely needs
+# its build script: protobufjs and unrs-resolver compile native bindings, sharp and
+# esbuild fetch their platform binaries.
 allowBuilds:
+  # esbuild's postinstall downloads its platform-specific binary; without this the
+  # `bundle` script in @hermes-notifications/web has no executable to run. It appeared as
+  # a transitive dependency of vite before, where its binary came along for the ride.
+  esbuild: true
   protobufjs: true
   sharp: true
   unrs-resolver: true

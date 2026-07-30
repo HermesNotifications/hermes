@@ -1,0 +1,381 @@
+/*
+ * Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+ * See LICENSE and NOTICE in the project root for full terms and restrictions.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Host application chrome.
+ *
+ * Deliberately plain: this is a stand-in for *your* app, and the point of the demo is that the
+ * widget looks at home in it without knowing anything about it.
+ * ------------------------------------------------------------------------ */
+
+:root {
+  --page-bg: #f6f7f9;
+  --panel-bg: #ffffff;
+  --ink: #14171f;
+  --ink-muted: #626b7d;
+  --line: #e3e6ec;
+  --brand: #4f46e5;
+  --sidebar-bg: #14171f;
+  --sidebar-ink: #cfd4de;
+}
+
+:root[data-theme="dark"] {
+  --page-bg: #0f1116;
+  --panel-bg: #171a21;
+  --ink: #e9ecf2;
+  --ink-muted: #9aa3b4;
+  --line: #262b36;
+  --brand: #818cf8;
+  --sidebar-bg: #0a0c10;
+  --sidebar-ink: #9aa3b4;
+}
+
+:root[data-theme="brand"] {
+  --page-bg: #fdf6f0;
+  --panel-bg: #ffffff;
+  --ink: #2a1a10;
+  --ink-muted: #7a6455;
+  --line: #efe0d3;
+  --brand: #d1541f;
+  --sidebar-bg: #2a1a10;
+  --sidebar-ink: #e8d5c6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page-bg);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  min-height: 100vh;
+}
+
+/* --- sidebar --- */
+
+.sidebar {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-ink);
+  padding: 20px 16px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+  color: #fff;
+  margin-bottom: 28px;
+}
+
+.sidebar-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--brand);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: #fff;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-link {
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+.sidebar-link[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+/* --- header: where the widget lives --- */
+
+.header {
+  /* Sticky and z-indexed on purpose: this is exactly where an embedded popover gets clipped
+     or hidden in a real app, and only a real browser shows whether it survives. */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.header-title {
+  font-weight: 600;
+  margin: 0;
+  font-size: 16px;
+}
+
+.header-search {
+  margin-left: auto;
+  min-width: 220px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--page-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* --- content --- */
+
+main {
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+}
+
+.card {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.card h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.card p.hint {
+  margin: 0 0 14px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.stat-label {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.side-column {
+  display: grid;
+  gap: 20px;
+}
+
+/* --- forms --- */
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+
+input[type="text"],
+input[type="url"],
+select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--page-bg);
+  color: inherit;
+  font: inherit;
+  margin-bottom: 10px;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-bg);
+  color: inherit;
+  padding: 7px 12px;
+}
+
+button.primary {
+  background: var(--brand);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* --- session panel --- */
+
+dl.session {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  font-size: 12px;
+}
+dl.session dt {
+  color: var(--ink-muted);
+}
+dl.session dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pill[data-status="connected"] {
+  background: #dcfce7;
+  color: #166534;
+}
+.pill[data-status="connecting"] {
+  background: #fef9c3;
+  color: #854d0e;
+}
+.pill[data-status="disconnected"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.log {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.log li {
+  padding: 3px 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+}
+
+.error {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Theming the embedded widget from outside its shadow root.
+ *
+ * Both mechanisms are exercised here because they fail independently, and the demo is the
+ * proof that an integrator can restyle the widget without forking it:
+ *
+ *   1. CSS custom properties, which cross the shadow boundary by inheritance.
+ *   2. ::part() selectors, which are the only way to touch the widget's internal elements.
+ * ------------------------------------------------------------------------ */
+
+hermes-inbox {
+  --hermes-font-family: inherit;
+  --hermes-text-color: var(--ink);
+  --hermes-muted-color: var(--ink-muted);
+  --hermes-border-color: var(--line);
+  --hermes-popover-bg: var(--panel-bg);
+  --hermes-trigger-border: 1px solid var(--line);
+  --hermes-trigger-hover-bg: var(--page-bg);
+  --hermes-accent-color: var(--brand);
+  --hermes-badge-bg: #ef4444;
+  --hermes-hover-bg: var(--page-bg);
+  --hermes-unread-bg: color-mix(in srgb, var(--brand) 8%, transparent);
+  --hermes-unread-hover-bg: color-mix(in srgb, var(--brand) 14%, transparent);
+  /* The header is z-index 20 and sticky; without this the panel would be trapped underneath. */
+  --hermes-popover-z-index: 50;
+  --hermes-popover-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+
+/* Proof that ::part works: the trigger picks up the host app's own radius, which no custom
+   property exposes. */
+hermes-inbox::part(trigger) {
+  border-radius: 10px;
+}
+
+hermes-inbox::part(badge) {
+  font-variant-numeric: tabular-nums;
+}

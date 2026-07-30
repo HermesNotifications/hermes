@@ -61,7 +61,10 @@ curl -X POST https://hermes.example.com/admin/v1/auth/token \
 
 The `user_id` you provide is the **external user ID** in your system. Hermes auto-creates an internal user record if one does not exist. The returned JWT contains the Hermes **internal** user ID as `sub` and the `organization_id` claim.
 
-Tokens expire in approximately 1 hour (with jitter). Your backend should request a new token before expiry and pass it to the frontend.
+Tokens expire after approximately 4 hours, with ±10% jitter. Pass `expires_in` (seconds, minimum
+3600, maximum 604800) to choose a different lifetime. Your backend should request a new token before
+expiry and pass it to the frontend — or, if you are using the supplied inbox widget, point it at a
+token endpoint and it will refresh itself. See [Embedding the Inbox](embedding-the-inbox.md#tokens-and-refresh).
 
 The same JWT is used for:
 - **Inbox API** requests (`Authorization: Bearer <token>`)
@@ -364,21 +367,29 @@ curl https://hermes.example.com/user/v1/users/me \
   "id": "usr-internal-id",
   "organization_id": "my-organization",
   "external_id": "ext-user-123",
-  "email": "alice@example.com",
-  "phone": "+1234567890",
+  "contacts": {
+    "email": "alice@example.com",
+    "phone": "+1234567890"
+  },
   "created_at": "2026-03-21T10:00:00Z"
 }
 ```
 
 ### Update Contact Info
 
+Addresses are nested under a `contacts` map, keyed by address type. A flat body is rejected
+with 400. Keys are validated against the known address types (`email`, `phone`), and the whole
+map replaces the existing one.
+
 ```bash
 curl -X PUT https://hermes.example.com/user/v1/users/me/contacts \
   -H "Authorization: Bearer USER_JWT" \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "alice-new@example.com",
-    "phone": "+1987654321"
+    "contacts": {
+      "email": "alice-new@example.com",
+      "phone": "+1987654321"
+    }
   }'
 ```
 
@@ -447,6 +458,11 @@ Hermes uses [Centrifugo](https://centrifugal.dev/) for real-time WebSocket deliv
 The same JWT from `POST /v1/auth/token` is used to connect to Centrifugo -- no separate token endpoint is needed. Centrifugo is configured with the same HMAC signing secret as Hermes (`HERMES_JWT_SECRET`).
 
 ### Connecting from the Frontend
+
+> If all you want is an inbox UI, do not write any of this. The supplied widget handles the
+> connection, the channel name, reconnection and token refresh — see
+> [Embedding the Inbox](embedding-the-inbox.md). The example below documents the underlying
+> protocol, for building your own client.
 
 Using the [centrifuge-js](https://github.com/centrifugal/centrifuge-js) client:
 

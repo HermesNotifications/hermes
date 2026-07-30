@@ -71,13 +71,19 @@ asyncapi-check:    ## Validate AsyncAPI spec
 	npx --yes @asyncapi/cli validate api/async/asyncapi.yaml
 
 # --- SDKs ---
-.PHONY: sdk-ts-generate sdk-ts-build sdk-generate
+.PHONY: sdk-ts-generate sdk-ts-build sdk-ts-typecheck sdk-ts-test sdk-generate
 sdk-ts-generate:   ## Generate TypeScript types from OpenAPI specs
 	pnpm --filter @hermes-notifications/server generate
 	pnpm --filter @hermes-notifications/client generate
+# All four packages, not just server+client. The narrower version is why a `group_id` ->
+# `category_id` rename once left hermes-react and hermes-web unable to build at all while
+# `make` reported success — only ci-web.yml noticed.
 sdk-ts-build:      ## Build TypeScript SDKs
-	pnpm --filter @hermes-notifications/server build
-	pnpm --filter @hermes-notifications/client build
+	pnpm --filter "./sdks/typescript/packages/*" build
+sdk-ts-typecheck:  ## Typecheck the TypeScript SDKs, tests included
+	pnpm --filter "./sdks/typescript/packages/*" --parallel run --if-present typecheck
+sdk-ts-test:       ## Run the TypeScript SDK unit tests
+	pnpm --filter "./sdks/typescript/packages/*" --parallel run --if-present test
 sdk-python:        ## Generate Python server SDK
 	npx @openapitools/openapi-generator-cli generate \
 		-i api/admin/openapi.yaml -g python \
@@ -117,6 +123,34 @@ admin-install:     ## Install admin portal dependencies
 	cd web/admin && pnpm install
 dev-admin:         ## Start the admin portal dev server (port 3000)
 	cd web/admin && pnpm dev
+
+# --- Inbox demo (examples/) ---
+.PHONY: demo-install dev-demo demo-check demo-e2e demo-e2e-install demo-e2e-ui demo-e2e-full
+# Builds the SDKs as well as installing: the packages are ESM compiled to dist/, so the demo
+# cannot resolve them from source. ci-web.yml carries the same step for the admin portal.
+demo-install:      ## Install demo deps and build the workspace SDKs
+	pnpm install
+	pnpm --filter "./sdks/typescript/packages/*" build
+dev-demo:          ## Start the inbox demo (app on :5173, token server on :8899)
+	scripts/demo-env sh -c 'pnpm --filter @hermes/demo-server dev & pnpm --filter @hermes/react-demo dev; kill %1'
+demo-check:        ## Typecheck, test and build the demo packages (no cluster needed)
+	pnpm --filter @hermes/demo-server run typecheck
+	pnpm --filter @hermes/demo-server test
+	pnpm --filter @hermes/react-demo run typecheck
+	pnpm --filter @hermes/react-demo test
+	pnpm --filter @hermes/react-demo build
+	pnpm --filter @hermes/browser-tests run typecheck
+	pnpm --filter @hermes/browser-tests run test:list
+demo-e2e-install:  ## Install the Playwright browser (one-time)
+	pnpm --filter @hermes/browser-tests run install-browsers
+demo-e2e:          ## Run the live browser E2E suite (requires make dev-up)
+	scripts/demo-env pnpm --filter @hermes/browser-tests test
+demo-e2e-ui:       ## Open the Playwright UI runner against the live stack
+	scripts/demo-env pnpm --filter @hermes/browser-tests run test:ui
+demo-e2e-full:     ## Bring up the cluster, run the live E2E suite, tear it down
+	$(MAKE) dev-up-ci
+	$(MAKE) demo-e2e-install
+	$(MAKE) demo-e2e; status=$$?; $(MAKE) dev-down; exit $$status
 
 # --- Docker ---
 .PHONY: docker-%

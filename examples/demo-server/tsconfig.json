@@ -1,0 +1,13 @@
+{
+  "extends": "../../sdks/typescript/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "types": ["node"]
+  },
+  // Tests are included here on purpose, so `tsc --noEmit` checks them against the real SDK
+  // types. tsconfig.build.json drops them from the emitted output.
+  "include": ["src"]
+}
