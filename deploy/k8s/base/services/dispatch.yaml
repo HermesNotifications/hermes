@@ -78,6 +78,10 @@ spec:
             - name: nats-ca
               mountPath: /etc/nats-certs
               readOnly: true
+            # ADR 0005 phase 3. Only this service's NKey seed is projected — see send.yaml.
+            - name: nats-nkey
+              mountPath: /etc/nats-nkey
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir:
@@ -89,6 +93,14 @@ spec:
             items:
               - key: ca.crt
                 path: ca.crt
+        - name: nats-nkey
+          secret:
+            secretName: nats-nkeys
+            optional: true
+            defaultMode: 0400
+            items:
+              - key: hermes-dispatch.nk
+                path: seed.nk
 ---
 apiVersion: v1
 kind: Service

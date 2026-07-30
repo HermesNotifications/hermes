@@ -16,7 +16,6 @@ import (
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
 	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/middleware"
 	"github.com/hermes-notifications/hermes/internal/models"
 )
@@ -40,11 +39,16 @@ type InboxStore interface {
 }
 
 // Server is the inbox HTTP service.
+//
+// It holds no NATS client on purpose. It never published or subscribed to anything — the
+// field was dead — and under ADR 0005 phase 3 that matters: a connection needs an NKey user
+// and a set of subject permissions, so a client kept "just in case" is a credential granted
+// for nothing. Real-time push to this service's users goes out through the inbox worker over
+// Centrifugo's HTTP API, not the bus.
 type Server struct {
 	store          InboxStore
 	cache          *cache.Client
 	centrifugo     *centrifugo.Client
-	nats           *messaging.Client
 	logger         *slog.Logger
 	router         chi.Router
 	api            huma.API
@@ -57,12 +61,11 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-func NewServer(store InboxStore, cent *centrifugo.Client, nats *messaging.Client, cacheClient *cache.Client, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
+func NewServer(store InboxStore, cent *centrifugo.Client, cacheClient *cache.Client, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
 	s := &Server{
 		store:          store,
 		cache:          cacheClient,
 		centrifugo:     cent,
-		nats:           nats,
 		jwtKeyProvider: keyProvider,
 		logger:         logger,
 		router:         chi.NewRouter(),

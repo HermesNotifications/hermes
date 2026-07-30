@@ -53,7 +53,7 @@ func main() {
 		}
 		writeSpec(adminSrv.API(), *out, *format)
 	case "inbox":
-		srv := inbox.NewServer(nil, nil, nil, nil, nil, logger)
+		srv := inbox.NewServer(nil, nil, nil, nil, logger)
 		writeSpec(srv.API(), *out, *format)
 	case "user":
 		srv := userservice.NewServer(nil, nil, logger)

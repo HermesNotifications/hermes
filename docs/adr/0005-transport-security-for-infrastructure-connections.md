@@ -5,7 +5,10 @@ status: Accepted
 affects:
   - internal/config/**
   - internal/messaging/**
-  - deploy/k8s/base/infra/nats.yaml
+  - deploy/k8s/base/infra/**
+  - deploy/k8s/base/services/**
+  - deploy/k8s/overlays/**
+  - cmd/natskeys/**
   - infra/crossplane/**
 source: docs/reviews/2026-07-27-architecture-review.md — findings 1, 14 and 19; triage of 2026-07-29
 ---
@@ -211,6 +214,76 @@ issuer cannot sign an internal name) but it was reasoned, not observed.
   picked up at the next restart. Untested through an actual expiry cycle; a reloader annotation
   or SIGHUP sidecar may be wanted before certificates get short lifetimes.
 
+## Amendment 2026-07-30 — phase 3 implemented; least privilege reached, with one named gap
+
+Phase 3 (NKey accounts and per-service subject permissions) is done, and the decision stands
+as written: one `HERMES` account, one NKey user per service, users scoped to the subjects they
+use, credentials delivered through ExternalSecrets. What follows is what implementation
+settled, verified against the same k3s cluster and cert-manager v1.21.0 phase 2 used, plus an
+embedded `nats-server` in `make test`.
+
+**The permissions were derived from an observed protocol trace, not from the subject list.**
+Running `internal/messaging` against a traced JetStream server showed what the code actually
+emits, and two of the four things it emits are not subjects at all:
+
+- `SetupStreams` publishes `$JS.API.STREAM.UPDATE.<S>` *and* `$JS.API.STREAM.CREATE.<S>` —
+  `CreateOrUpdateStream` tries UPDATE first and falls back on "stream not found", so both are
+  required. Granting only CREATE makes first boot work and every boot after it hang.
+- Consuming needs `$JS.API.CONSUMER.CREATE.<S>.<consumer>.<filter…>`,
+  `$JS.API.CONSUMER.MSG.NEXT.<S>.<consumer>` and `$JS.ACK.<S>.<consumer>.>`. A missing
+  JetStream grant produces no error — the request gets no reply and times out — which is why
+  this record's warning about runtime failure understates it: it looks like a broken stream.
+
+1. **A pull consumer needs no `subscribe` permission on the stream subject, and that moves the
+   boundary.** Messages arrive on the client's own reply inbox, not on `delivery.email`. So
+   `subscribe: _INBOX.>` — the obvious grant — would let any service receive copies of every
+   other service's pulled messages, reading recipient addresses and rendered bodies with no
+   `delivery.*` permission at all. `messaging.WithIdentity` therefore confines each connection
+   to `_INBOX.<service>` and each user may subscribe to only its own prefix. **The client-side
+   prefix and the server-side permission are one mechanism; changing either alone reopens the
+   hole.** This was the least obvious finding of the phase and is verified in both directions.
+2. **The permissions live in their own file, `nats-accounts.conf`, included by both server
+   configurations.** Staging's `secretGenerator` changed from `behavior: replace` to `merge`:
+   replace would have dropped the `accounts.conf` key, silently removing all authorisation from
+   staging while leaving TLS in place. That is the exact failure this record warns about, and
+   it would have been invisible in a rendered diff of `nats.conf`.
+3. **Users are named by `$VARIABLE`, resolved from the server's environment.** Permissions stay
+   reviewable in git; identities stay per-environment in the `nats-nkeys` Secret. Verified
+   fail-closed in-cluster: with the Secret deleted the server refuses to start with
+   `variable reference for 'HERMES_NKEY_SEND' ... can not be found` rather than starting with
+   no accounts. `go run ./cmd/natskeys` generates a matched set.
+4. **`HERMES_NATS_NKEY_SEED` is not required outside development**, following the same
+   reasoning as `HERMES_NATS_CA_BUNDLE` in the phase 2 amendment: a server with accounts
+   answers an unauthenticated CONNECT with an authorization violation, so an unset seed is a
+   refused connection at startup, not a quieter one. Verified, both in `make test` and against
+   the cluster.
+5. **The inbox service lost its NATS connection entirely.** It held a `*messaging.Client` no
+   code read. Under per-service credentials a connection costs an identity and a permission
+   set, so the dead client was a credential granted for nothing; it is deleted rather than
+   given a no-permission user.
+6. **`nats:2-alpine` accepts the accounts configuration**, answering one of this record's "what
+   I could not check" items. Verified on the image's current 2.14.3 and on the embedded 2.12.6.
+
+**Where least privilege is not achieved, and why.** Every service calls `SetupStreams` at boot,
+so **every user can create or update all four streams** — including streams it neither
+publishes to nor consumes. Deletion, purge, direct get and listing are granted to nobody, so
+the residual is stream-config tampering (an availability concern), not reading or forging
+traffic. Fixing it properly means moving stream provisioning to a single identity, which trades
+a startup ordering guarantee for the narrower grant; that was judged the worse deal while
+`MustSetupStreams` exits non-zero on failure. Revisit if a provisioning job appears for other
+reasons.
+
+**Unresolved, and now urgent: Centrifugo cannot use this bus.** `centrifugo:v5` (5.4.9) exposes
+exactly one NATS setting, `--nats_url`, documented as `nats://user:pass@host:4222`. There is no
+NATS CA, TLS or NKey option. The base ConfigMap still sets `nats_url: nats://nats:4222` and
+neither overlay changes it, so **Centrifugo's NATS broker was already incompatible with phase
+2** — plaintext against a TLS-required server — and phase 3 adds authentication it also cannot
+present. Phase 3 deliberately does **not** add a Centrifugo user: what credential form it can
+actually present was not verified, and inventing one would be a guess. NATS accounts do support
+password users alongside NKey users, so a password in `nats_url` is the likely path, but the TLS
+half has no evident answer short of a sidecar or a plaintext listener. This blocks multi-node
+Centrifugo fan-out in staging and production and is not a phase 3 regression.
+
 ## Status history
 
 - 2026-07-29 — Accepted. Written before implementation, to unblock findings 1, 14 and 19,
@@ -220,3 +293,8 @@ issuer cannot sign an internal name) but it was reasoned, not observed.
   details settled above; the claim about the existing Let's Encrypt ClusterIssuer corrected
   from observed to reasoned. Phases 1 and 2 are done; **phase 3 (NKey accounts and
   per-service subject permissions) remains open** and is where authn/authz actually arrives.
+- 2026-07-30 — Amended: phase 3 implemented and verified both in `make test` (embedded
+  nats-server loading the committed permissions file) and against the k3s cluster. **All three
+  phases are now done**, and finding 1 is closed. One residual over-grant is named above
+  (stream create/update for every service), and one blocker is surfaced rather than solved
+  (Centrifugo's NATS broker cannot present TLS or a credential).
