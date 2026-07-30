@@ -97,6 +97,17 @@ spec:
                   name: nats-nkeys
                   key: HERMES_NKEY_WORKER_EVENTS
                   optional: true
+            # ADR 0005 phase 4. Centrifugo's credential. Unlike the six above this is a
+            # PASSWORD, not a public key, because centrifugo:v5 can present nothing else —
+            # so this one variable is a secret the server holds in plaintext in its process
+            # environment. It lives in the same Secret and follows the same fail-closed
+            # rule: unset is a configuration parse error, not a server without accounts.
+            - name: HERMES_CENTRIFUGO_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_CENTRIFUGO_NATS_PASSWORD
+                  optional: true
           ports:
             - containerPort: 4222
               name: client

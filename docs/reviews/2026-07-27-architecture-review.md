@@ -1607,12 +1607,166 @@ Mutation-checked: adding `delivery.sms` to the email worker fails
   credential form it can present was not verified. Multi-node Centrifugo fan-out is blocked in
   staging and production until this is decided.
 
+  > **Resolved 2026-07-30 by ADR 0005 phase 4, and the claim above is half wrong.** Centrifugo
+  > has no NKey option — that part holds — but it does have a TLS option: an undocumented
+  > `nats_tls` configuration key with no flag equivalent. `--help` is not the configuration
+  > surface. See the phase 4 section below.
+
 **Unverified:** the production overlay was rendered, never applied — no AWS and no ESO here, so
 the two new `nats-nkeys` ExternalSecrets are structurally valid and untested against a real
 secret store. The in-cluster run used the staging shape (single node); route-level behaviour
 under a 3-node cluster with accounts was not exercised. Key **rotation** — replacing a seed and
 its public key while services run — is reasoned from nats.go re-reading the seed file per
 challenge, not observed.
+
+---
+
+## Resolved 2026-07-30 — ADR 0005 phase 4, the three items phase 3 left open
+
+Phase 3 closed finding 1 and named three residuals. All three are closed. Two of them reverse a
+judgement an earlier ADR 0005 amendment made, and both reversals are recorded there rather than
+quietly applied.
+
+### Centrifugo's NATS broker — a wrong premise, not a missing feature
+
+Phase 3 reported `centrifugo:v5` as having "no NATS CA, TLS or NKey option" and correctly
+declined to guess at a credential. Establishing it empirically shows **the option exists and is
+simply not in `--help`**: Centrifugo registers configuration keys with no flag equivalent, and
+`nats_tls` is one of them.
+
+```json
+"nats_url": "tls://nats:4222",
+"nats_tls": { "enabled": true, "server_ca_pem_file": "/etc/nats-certs/ca.crt" }
+```
+
+Found by reading the image's registered keys and struct tags, then executing every candidate.
+The trail, in order, is the evidence:
+
+| attempt | result |
+|---|---|
+| base ConfigMap as shipped (`nats://nats:4222`, no TLS config) | `tls: failed to verify certificate: x509: certificate signed by unknown authority` |
+| `"nats_tls": true` | `error configuring nats tls: extract TLS config: '' expected a map, got 'bool'` |
+| `"nats_tls": {enabled, server_ca_pem_file}`, no credential | `nats: Authorization Violation` — TLS satisfied |
+| the above plus `tls://centrifugo:<pass>@nats:4222` | `Nats Broker connected` |
+
+Three things this corrects or pins down:
+
+- **The live failure was never a refused plaintext connection.** nats.go upgrades to TLS when
+  the server advertises `tls_required`, so the shipped ConfigMap failed on CA *verification*.
+  There was no silent-plaintext path here either.
+- **`nats_tls` is a map while the overlays' `CENTRIFUGO_REDIS_TLS` is a bool.** Centrifugo is
+  inconsistent, and the guess by analogy is the one that fails — most likely why phase 3
+  concluded the setting did not exist.
+- **No NKey option exists in any form**, so Centrifugo is a *password* user beside the six NKey
+  users. The environment form works too, which is what keeps the password out of git:
+  `CENTRIFUGO_NATS_URL` from a Secret, `nats_tls` in the ConfigMap.
+
+`centrifugo.>` is granted in both directions rather than the three observed subjects
+(`centrifugo.control`, `centrifugo.node.<nodeID>`, `centrifugo.client.<channel>`), because all
+three are needed both ways and an exact list would fail **silently** on a future Centrifugo
+version. Observed with the subscribe grant narrowed: the server logs
+`Permissions Violation for Subscription`, Centrifugo logs it, the client stays connected, and
+publications never arrive. Nothing reaches the subscriber.
+
+Verified — observed, not reasoned:
+
+- **Two-node cross-node fan-out**, the exact capability that was down: a subscriber attached to
+  node A received a publication entered through node B's API, over TLS, authenticated, with zero
+  permission violations.
+- **Against the repository's own artifacts**: staging's `nats-server.conf` and the committed
+  `nats-accounts.conf`, served with a certificate cert-manager issued from the new
+  ClusterIssuer, with Centrifugo configured from the base ConfigMap's `nats_tls` block.
+- **Denials**: wrong password, no credential, and right password with a wrong username all get
+  `Authorization Violation`. `"enabled": false` with the CA still supplied falls back to
+  `unknown authority`, so the flag is load-bearing.
+- **`make test`** runs the committed permissions file with a `centrifugo` password user: the
+  three subjects round-trip, and 9 publish and 8 subscribe denials against pipeline subjects
+  (including `_INBOX.>`) are asserted against the server's `-ERR`, plus the reverse direction —
+  no Hermes service may touch `centrifugo.>`.
+
+**A new coupling worth knowing about:** the password is stored twice, as `centrifugo_password`
+for nats-server and inside `centrifugo_nats_url` for Centrifugo, because Centrifugo has no
+separate password setting. Nothing in the cluster checks they agree; `cmd/natskeys` emits both
+from one value and a test asserts the URL round-trips it through `url.Parse`.
+
+### The stream over-grant — closed by reversing phase 3's own judgement
+
+Phase 3 called a provisioning identity "the worse deal while `MustSetupStreams` exits non-zero".
+That framed a binary that is not one: the startup guarantee comes from a service **failing
+closed on a stream it needs**, not from its being able to create one. So `cmd/natsprovision`
+runs as a Job holding `$JS.API.STREAM.CREATE/UPDATE` alone, and services hold
+`$JS.API.STREAM.INFO.<S>` — a read — for only the streams in `messaging.StreamsForService`.
+
+Verified with the real binaries against a real TLS+NKey server:
+
+- provisioner seed → all four streams created, exit 0; run again → `STREAM.UPDATE` path, exit 0;
+- **worker-email's seed → `Permissions Violation for Publish to "$JS.API.STREAM.UPDATE.NOTIFICATIONS"`, exit 1**;
+  dispatch's seed → the same. Both also hit
+  `Permissions Violation for Subscription to "_INBOX.hermes-natsprovision..."`, because
+  `WithIdentity` gives the connection the provisioner's inbox prefix, which no service may use;
+- fresh bus, provisioning not run → worker-email exits 1 with
+  `stream DELIVERY is not available to hermes-worker-email (has cmd/natsprovision run?)`, and
+  starts normally after the Job's binary runs. That is the loud-failure property phase 3 was
+  right to want and wrong to think required the create grant.
+
+Removing streams to set that test up **required a fresh server**, because `STREAM.DELETE` and
+`STREAM.PURGE` are granted to nobody — provisioner included. `$JS.API.INFO`, `STREAM.LIST`,
+`DIRECT.GET`, `STREAM.MSG.GET` and `CONSUMER.DELETE` likewise.
+
+`STREAM.INFO` is a new grant. It leaks stream configuration and message counts — metadata, not
+traffic — and only for streams the service depends on;
+`TestProvisioning_ServicesCannotReadStreamsTheyDoNotDependOn` asserts each refusal.
+
+Mutation-checked: granting send `$JS.API.STREAM.CREATE/UPDATE.NOTIFICATIONS` back fails
+`TestAccounts_OnlyTheProvisionerMayDeclareStreams` *and*
+`TestProvisioning_NoServiceCanCreateOrUpdateAnyStream/hermes-send_...`; removing DLQ from
+worker-email's stream list fails `TestAccounts_StreamInfoGrantsMatchStreamsForService` and the
+matching in-cluster denial.
+
+### The CA private key — out of `hermes`, and why that departs from phase 2
+
+Phase 2 chose a namespaced `Issuer` so it "cannot be borrowed by a workload in another
+namespace", accepting that the CA key sat in `hermes` where anything with Secret-read could mint
+a certificate every service trusts. The CA is now a `ClusterIssuer` whose signing Secret lives in
+cert-manager's cluster-resource namespace.
+
+Verified — including the negative:
+
+- **cert-manager v1.21.0 runs with `--cluster-resource-namespace=$(POD_NAMESPACE)`**, read off
+  the running Deployment, so a `ca` ClusterIssuer resolves its Secret in `cert-manager`.
+- **A Certificate in an unrelated namespace issued from such a ClusterIssuer**, and the CA key
+  Secret was `NotFound` in that namespace. Only the leaf landed there — `ca.crt`, `tls.crt`,
+  `tls.key`, `CA:FALSE`, so it can sign nothing.
+- **The leaf works where it has to**: a real `nats-server`, running the repo's staging config,
+  served it and a real client verified it with the `ca.crt` from that Secret.
+- **A missing Secret is loud**: the ClusterIssuer reports
+  `ErrGetKeyPair: Error getting keypair for CA issuer: secrets "hermes-internal-ca-tls" not found`
+  and issues nothing — observed accidentally, by renaming the Secret during setup.
+
+**Phase 2's objection was not wrong and the cost is real**, so it is recorded rather than
+glossed: a ClusterIssuer can be used from *any* namespace, verified here by minting a
+`nats.hermes.svc` certificate from a namespace that is not `hermes`. The trade is deliberate — a
+never-rotated ten-year root read silently and offline versus a logged API write yielding one
+90-day leaf — and **the residual is not closed**: nothing here stops another namespace requesting
+a certificate this CA signs. Closing it needs admission policy or cert-manager approver RBAC.
+
+The whole fix rests on `deploy/k8s/pki` being a sibling of `base/` rather than inside it, since
+`base` sets `namespace: hermes` and the transformer would move the CA key back with a manifest
+that applies cleanly and certificates that still issue. Nothing about that failure is visible in
+behaviour, so `scripts/check_ca_key_location.py` gates it in `make verify`; mutation-checked by
+adding `../pki` to `base/kustomization.yaml`, which fails with
+`Certificate/hermes-internal-ca has isCA: true in namespace hermes`.
+
+**Unverified, and labelled as such:** nothing was applied to a real staging or production
+cluster — no AWS and no ESO — so the new `HERMES_CENTRIFUGO_NATS_URL`,
+`HERMES_CENTRIFUGO_NATS_PASSWORD` and provisioner ExternalSecret entries are structurally valid
+and untested against a real secret store. **`hermes-natsprovision` has never run as a Kubernetes
+Job**: the binary was exercised in a container with the configuration the Job supplies, but the
+Job manifest, its ordering against the services, and its image tag reaching staging via Kargo
+are all unexercised. Certificate renewal through the new ClusterIssuer was not driven through an
+expiry cycle. **Finding 41's second half is still open** — production's `centrifugo-env.yaml`
+still sets no `CENTRIFUGO_REDIS_PASSWORD` or Redis TLS variables, though the ExternalSecret does
+now carry the value.
 
 ---
 

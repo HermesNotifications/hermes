@@ -1,0 +1,91 @@
+# ADR 0005 phase 4 — the one identity that may declare JetStream streams.
+#
+# Phase 3 let every service call SetupStreams at boot, so every service's NKey user held
+# STREAM.CREATE and STREAM.UPDATE on all four streams, including streams it never touched.
+# That was the residual over-grant phase 3 named and accepted. This Job holds those rights
+# now, and no service does.
+#
+# It is deliberately shaped like hermes-migrate, because it is the same kind of thing: streams
+# are schema. Services verify rather than declare (messaging.EnsureStreams) and exit non-zero
+# if a stream is missing, so a deploy where this Job has not finished is a crash-loop that
+# converges once it does — not a service that comes up Ready and fails every request.
+#
+# Re-running is safe: SetupStreams is CreateOrUpdate.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hermes-natsprovision
+  labels:
+    app.kubernetes.io/name: hermes-natsprovision
+    app.kubernetes.io/component: provisioning
+  annotations:
+    # A Job's pod template is immutable, so re-applying a changed one fails. The same is
+    # true of hermes-migrate, and the fix is the same: an Argo PreSync hook that deletes
+    # the previous Job first. Left commented to match hermes-migrate rather than enabling
+    # it for one Job and not the other.
+    # argocd.argoproj.io/hook: PreSync
+    # argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    kubernetes.io/description: >-
+      Declares the NOTIFICATIONS, DELIVERY, EVENTS and DLQ JetStream streams. The only
+      bus identity holding STREAM.CREATE/UPDATE (ADR 0005 phase 4).
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes-natsprovision
+        app.kubernetes.io/component: provisioning
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: natsprovision
+          image: hermes-natsprovision
+          envFrom:
+            - configMapRef:
+                name: hermes-config
+                optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The private CA that signs the NATS server certificate, exactly as every
+            # service mounts it. Only ca.crt — this pod presents no certificate.
+            - name: nats-ca
+              mountPath: /etc/nats-certs
+              readOnly: true
+            # The provisioner's own seed, and only that key. It is not any service's
+            # credential: that separation is the entire point of this Job.
+            - name: nats-nkey
+              mountPath: /etc/nats-nkey
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      volumes:
+        - name: nats-ca
+          secret:
+            secretName: nats-server-tls
+            optional: true
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: nats-nkey
+          secret:
+            secretName: nats-nkeys
+            optional: true
+            defaultMode: 0400
+            items:
+              - key: hermes-natsprovision.nk
+                path: seed.nk
+      restartPolicy: Never

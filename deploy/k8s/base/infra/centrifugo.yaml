@@ -17,12 +17,37 @@ data:
   #
   # token_hmac_secret_key must equal HERMES_JWT_SECRET: Centrifugo validates the same
   # Hermes-issued tokens the services do, and it accepts exactly one such key.
+  #
+  # ADR 0005 phase 4. nats_url and nats_tls are how Centrifugo reaches a bus that requires
+  # TLS and a credential. `--help` lists only --nats_url, which is why phase 3 recorded this
+  # as unsolved; `nats_tls` is a real configuration key with no flag equivalent, found by
+  # reading the binary and verified against a TLS-required nats-server. Three details are
+  # load-bearing and each was observed rather than assumed:
+  #
+  #   * nats_tls is a MAP, not a bool. `"nats_tls": true` is rejected with
+  #     `error configuring nats tls: extract TLS config: '' expected a map, got 'bool'`.
+  #     Note redis_tls in the overlays IS a bool — Centrifugo is inconsistent here, so the
+  #     obvious guess by analogy is the wrong one.
+  #   * "enabled": true is required. With it false the CA below is ignored and the
+  #     connection fails `x509: certificate signed by unknown authority`.
+  #   * The credential can only travel in the URL's userinfo. Centrifugo exposes no NKey
+  #     option at all, so Centrifugo is the one bus client that is a password user rather
+  #     than an NKey user — see nats-accounts.conf.
+  #
+  # nats_url carries no password here because this file is world-readable in git. The real
+  # URL arrives as CENTRIFUGO_NATS_URL from a Secret (overlays/*/patches/centrifugo-env.yaml).
+  # Leaving it out fails closed: a credential-less CONNECT to a server with accounts is
+  # answered with an authorization violation and Centrifugo exits non-zero.
   config.json: |
     {
       "engine": "redis",
       "redis_address": "redis://redis:6379/0",
       "broker": "nats",
-      "nats_url": "nats://nats:4222",
+      "nats_url": "tls://nats:4222",
+      "nats_tls": {
+        "enabled": true,
+        "server_ca_pem_file": "/etc/nats-certs/ca.crt"
+      },
       "token_hmac_secret_key": "",
       "api_key": "",
       "admin": false,
@@ -63,6 +88,14 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /centrifugo
+            # ADR 0005 phase 4. The private CA that signs the NATS server certificate, the
+            # same ca.crt every Hermes service mounts. Only ca.crt is projected; Centrifugo
+            # presents no client certificate. optional: true keeps the pod startable in the
+            # local overlay, where NATS is plaintext, this Secret does not exist, and the
+            # replaced config.json sets no nats_tls.
+            - name: nats-ca
+              mountPath: /etc/nats-certs
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -85,6 +118,13 @@ spec:
         - name: config
           configMap:
             name: centrifugo-config
+        - name: nats-ca
+          secret:
+            secretName: nats-server-tls
+            optional: true
+            items:
+              - key: ca.crt
+                path: ca.crt
 ---
 apiVersion: v1
 kind: Service

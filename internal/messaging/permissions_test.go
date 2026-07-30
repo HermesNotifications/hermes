@@ -5,6 +5,8 @@ package messaging_test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,6 +41,9 @@ const accountsConfPath = "../../deploy/k8s/base/infra/nats-accounts.conf"
 // drives the `_INBOX.<service>.>` subscribe permission, the variable names the user.
 var natsRoles = []struct{ service, envVar string }{
 	{"hermes-send", "HERMES_NKEY_SEND"},
+	// ADR 0005 phase 4. Not a service — cmd/natsprovision, run as a Job. It is in this table
+	// because it is a bus identity with a credential and a permission set like any other.
+	{messaging.ProvisionerService, "HERMES_NKEY_PROVISION"},
 	{"hermes-dispatch", "HERMES_NKEY_DISPATCH"},
 	{"hermes-worker-email", "HERMES_NKEY_WORKER_EMAIL"},
 	{"hermes-worker-sms", "HERMES_NKEY_WORKER_SMS"},
@@ -48,11 +53,22 @@ var natsRoles = []struct{ service, envVar string }{
 
 // --- the embedded server -------------------------------------------------------------
 
+// ADR 0005 phase 4. Centrifugo's identity. It is a password user rather than an NKey user
+// because centrifugo:v5 exposes no NKey setting in any form — verified against the image — and
+// its only credential channel is the userinfo of nats_url.
+const (
+	centrifugoUser        = "centrifugo"
+	centrifugoPasswordVar = "HERMES_CENTRIFUGO_NATS_PASSWORD"
+)
+
 type permFixture struct {
 	url   string
 	seeds map[string]string // service name → path to that service's NKey seed
 	dir   string
 	srv   *server.Server
+	// centrifugoPassword is the value the server resolved $HERMES_CENTRIFUGO_NATS_PASSWORD
+	// to, so the tests can present the same credential Centrifugo would.
+	centrifugoPassword string
 }
 
 var permFixtureOnce = sync.OnceValues(startPermFixture)
@@ -91,6 +107,18 @@ func startPermFixture() (*permFixture, error) {
 		if err := os.Setenv(r.envVar, pub); err != nil {
 			return nil, err
 		}
+	}
+
+	// ADR 0005 phase 4. Centrifugo's password reaches the server the same way the public keys
+	// do — as a variable the configuration resolves — so an unset one is a parse error here
+	// exactly as it is in the cluster. Generated per run so no test can depend on a constant.
+	pw := make([]byte, 32)
+	if _, err := rand.Read(pw); err != nil {
+		return nil, err
+	}
+	f.centrifugoPassword = base64.RawURLEncoding.EncodeToString(pw)
+	if err := os.Setenv(centrifugoPasswordVar, f.centrifugoPassword); err != nil {
+		return nil, err
 	}
 
 	opts, err := serverOptsFromAccountsConf(dir)
@@ -240,20 +268,29 @@ func TestAccounts_PipelineRunsUnderPerServiceCredentials(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// ADR 0005 phase 4. Provisioning is its own identity now, so the pipeline starts the way
+	// the cluster does: the Job declares the streams, then the services run. Called twice on
+	// purpose — the second call exercises the STREAM.UPDATE path against streams that already
+	// exist, a different permission from STREAM.CREATE that a first-boot-only test misses.
+	provisioner := connectAs(t, messaging.ProvisionerService)
+	if err := provisioner.SetupStreams(ctx); err != nil {
+		t.Fatalf("the provisioner could not declare the streams: %v", err)
+	}
+	if err := provisioner.SetupStreams(ctx); err != nil {
+		t.Fatalf("the provisioner could not re-declare the streams: %v", err)
+	}
+
 	send := connectAs(t, "hermes-send")
-	if err := send.SetupStreams(ctx); err != nil {
-		t.Fatalf("send could not declare the streams: %v", err)
+	if err := send.EnsureStreams(ctx, "hermes-send"); err != nil {
+		t.Fatalf("send could not verify its streams: %v", err)
 	}
 	if err := send.Publish(ctx, "notification.send", []byte(`{"hop":"send"}`)); err != nil {
 		t.Fatalf("send could not publish notification.send: %v", err)
 	}
 
 	dispatch := connectAs(t, "hermes-dispatch")
-	// Every service calls SetupStreams at boot, so the second call exercises the
-	// STREAM.UPDATE path against streams that already exist — a different permission
-	// from STREAM.CREATE, and one a first-boot-only test would miss.
-	if err := dispatch.SetupStreams(ctx); err != nil {
-		t.Fatalf("dispatch could not re-declare the streams: %v", err)
+	if err := dispatch.EnsureStreams(ctx, "hermes-dispatch"); err != nil {
+		t.Fatalf("dispatch could not verify its streams: %v", err)
 	}
 	fromSend := subscribeOne(t, dispatch, "notification.send", "dispatch")
 	if got := waitFor(t, fromSend, "dispatch consuming notification.send"); string(got) != `{"hop":"send"}` {
@@ -279,8 +316,8 @@ func TestAccounts_PipelineRunsUnderPerServiceCredentials(t *testing.T) {
 		{"hermes-worker-inbox", "delivery.inbox", "worker-inbox"},
 	} {
 		worker := connectAs(t, w.service)
-		if err := worker.SetupStreams(ctx); err != nil {
-			t.Fatalf("%s could not declare the streams: %v", w.service, err)
+		if err := worker.EnsureStreams(ctx, w.service); err != nil {
+			t.Fatalf("%s could not verify its streams: %v", w.service, err)
 		}
 		delivered := subscribeOne(t, worker, w.channel, w.consumer)
 		waitFor(t, delivered, w.service+" consuming "+w.channel)
@@ -293,8 +330,8 @@ func TestAccounts_PipelineRunsUnderPerServiceCredentials(t *testing.T) {
 	}
 
 	events := connectAs(t, "hermes-worker-events")
-	if err := events.SetupStreams(ctx); err != nil {
-		t.Fatalf("worker-events could not declare the streams: %v", err)
+	if err := events.EnsureStreams(ctx, "hermes-worker-events"); err != nil {
+		t.Fatalf("worker-events could not verify its streams: %v", err)
 	}
 	seen := subscribeOne(t, events, "notification.events", "event-writer")
 	waitFor(t, seen, "event writer consuming notification.events")
@@ -517,6 +554,304 @@ func TestAccounts_MissingKeyVariableRefusesToStart(t *testing.T) {
 	}
 }
 
+// --- stream provisioning (ADR 0005 phase 4) -------------------------------------------
+
+// The grant this whole phase exists to isolate. Only the provisioner may declare streams, and
+// the denial for everyone else is asserted per service and per stream rather than sampled —
+// this is the permission phase 3 named as its residual over-grant.
+func TestProvisioning_NoServiceCanCreateOrUpdateAnyStream(t *testing.T) {
+	streams := []string{"NOTIFICATIONS", "DELIVERY", "EVENTS", messaging.DLQStreamName}
+
+	for _, r := range natsRoles {
+		if r.service == messaging.ProvisionerService {
+			continue
+		}
+		for _, stream := range streams {
+			for _, verb := range []string{"CREATE", "UPDATE"} {
+				subject := "$JS.API.STREAM." + verb + "." + stream
+				t.Run(r.service+" "+subject, func(t *testing.T) {
+					nc, errs := rawConnAs(t, r.service)
+					if err := nc.Publish(subject, []byte("{}")); err != nil {
+						t.Fatalf("publish returned an error before the server saw it: %v", err)
+					}
+					if err := nc.Flush(); err != nil {
+						t.Fatalf("flush: %v", err)
+					}
+					awaitPermissionError(t, errs, r.service+" publishing "+subject)
+				})
+			}
+		}
+	}
+}
+
+// SetupStreams through the client, as a service would call it. The table above proves the wire
+// operation is refused; this proves internal/messaging surfaces the refusal as an error, which
+// is what makes bootstrap exit non-zero rather than log and continue.
+func TestProvisioning_SetupStreamsFailsForAServiceThroughTheClient(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := connectAs(t, "hermes-dispatch").SetupStreams(ctx); err == nil {
+		t.Fatal("dispatch declared the streams")
+	}
+}
+
+// The provisioner is not a back door. It can shape streams and do nothing else: a leaked
+// provisioning seed must not become a way to forge notifications or read recipients.
+func TestProvisioning_ProvisionerCannotTouchTraffic(t *testing.T) {
+	publishes := []string{
+		"notification.send",
+		"notification.events",
+		"delivery.email",
+		"delivery.sms",
+		"delivery.inbox",
+		"dlq.notification.send",
+		"centrifugo.client.user#usr_abc123",
+		// Consuming is how it would read traffic, and it has no consumer rights at all.
+		"$JS.API.CONSUMER.CREATE.DELIVERY.spy.delivery.email",
+		"$JS.API.CONSUMER.MSG.NEXT.DELIVERY.worker-email",
+		// Nor the destructive half. Provisioning means create and update, not delete.
+		"$JS.API.STREAM.DELETE.DELIVERY",
+		"$JS.API.STREAM.PURGE.DELIVERY",
+		"$JS.API.STREAM.LIST",
+		"$JS.API.DIRECT.GET.DELIVERY",
+		"$JS.API.STREAM.MSG.GET.DELIVERY",
+	}
+	for _, subject := range publishes {
+		t.Run("publish "+subject, func(t *testing.T) {
+			nc, errs := rawConnAs(t, messaging.ProvisionerService)
+			if err := nc.Publish(subject, []byte("{}")); err != nil {
+				t.Fatalf("publish returned an error before the server saw it: %v", err)
+			}
+			if err := nc.Flush(); err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			awaitPermissionError(t, errs, "provisioner publishing "+subject)
+		})
+	}
+
+	for _, subject := range []string{"delivery.email", "notification.send", ">", "_INBOX.>"} {
+		t.Run("subscribe "+subject, func(t *testing.T) {
+			nc, errs := rawConnAs(t, messaging.ProvisionerService)
+			if _, err := nc.SubscribeSync(subject); err != nil {
+				t.Fatalf("subscribe returned an error before the server saw it: %v", err)
+			}
+			if err := nc.Flush(); err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			awaitPermissionError(t, errs, "provisioner subscribing "+subject)
+		})
+	}
+}
+
+// STREAM.INFO replaces CREATE/UPDATE for services, so it has to be narrow too: a service may
+// read the configuration of the streams it depends on and no others. Derived from
+// StreamsForService so the assertion cannot drift from the map the code uses.
+func TestProvisioning_ServicesCannotReadStreamsTheyDoNotDependOn(t *testing.T) {
+	all := []string{"NOTIFICATIONS", "DELIVERY", "EVENTS", messaging.DLQStreamName}
+
+	for service, required := range messaging.StreamsForService {
+		needs := map[string]bool{}
+		for _, name := range required {
+			needs[name] = true
+		}
+		for _, stream := range all {
+			if needs[stream] {
+				continue
+			}
+			subject := "$JS.API.STREAM.INFO." + stream
+			t.Run(service+" "+subject, func(t *testing.T) {
+				nc, errs := rawConnAs(t, service)
+				if err := nc.Publish(subject, []byte("{}")); err != nil {
+					t.Fatalf("publish returned an error before the server saw it: %v", err)
+				}
+				if err := nc.Flush(); err != nil {
+					t.Fatalf("flush: %v", err)
+				}
+				awaitPermissionError(t, errs, service+" publishing "+subject)
+			})
+		}
+	}
+}
+
+// --- centrifugo (ADR 0005 phase 4) ----------------------------------------------------
+
+// rawConnAsCentrifugo dials the way centrifugo:v5 does: a password in the URL's userinfo, no
+// NKey, no client certificate. That is not a simplification for the test's convenience — it is
+// the only thing the image can present.
+func rawConnAsCentrifugo(t *testing.T) (*nats.Conn, <-chan error) {
+	t.Helper()
+	f := perms(t)
+	errs := make(chan error, 8)
+	nc, err := nats.Connect(f.url,
+		nats.UserInfo(centrifugoUser, f.centrifugoPassword),
+		nats.Name(centrifugoUser),
+		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+			select {
+			case errs <- err:
+			default:
+			}
+		}))
+	if err != nil {
+		t.Fatalf("centrifugo could not connect with its password: %v", err)
+	}
+	t.Cleanup(nc.Close)
+	return nc, errs
+}
+
+// The grant half. These three subjects are what a nats-server trace of a real two-node
+// Centrifugo fan-out actually showed, and all three are needed in both directions — a node
+// publishes to ANOTHER node's centrifugo.node.<id> subject, which a publish grant limited to
+// control and client would refuse.
+func TestCentrifugo_CanUseItsOwnSubjectsInBothDirections(t *testing.T) {
+	subjects := []string{
+		"centrifugo.control",
+		"centrifugo.node.04749b5f-6464-4217-838d-a59cd7403163",
+		"centrifugo.client.user#usr_abc123",
+	}
+
+	for _, subject := range subjects {
+		t.Run(subject, func(t *testing.T) {
+			nc, errs := rawConnAsCentrifugo(t)
+			sub, err := nc.SubscribeSync(subject)
+			if err != nil {
+				t.Fatalf("subscribe %s: %v", subject, err)
+			}
+			if err := nc.Publish(subject, []byte("x")); err != nil {
+				t.Fatalf("publish %s: %v", subject, err)
+			}
+			if err := nc.Flush(); err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			if _, err := sub.NextMsg(5 * time.Second); err != nil {
+				t.Errorf("%s: nothing round-tripped: %v", subject, err)
+			}
+			select {
+			case err := <-errs:
+				t.Errorf("%s: server refused an operation Centrifugo needs: %v", subject, err)
+			default:
+			}
+		})
+	}
+}
+
+// The denial half, and the point of giving Centrifugo its own user at all: it is a third-party
+// process reachable from the public internet, and a compromise of it must not reach the
+// notification pipeline. Every case is refused by the server, observed.
+func TestCentrifugo_CannotTouchThePipeline(t *testing.T) {
+	publishes := []string{
+		"notification.send",
+		"notification.events",
+		"delivery.email",
+		"delivery.sms",
+		"delivery.inbox",
+		"dlq.delivery.email",
+		"$JS.API.STREAM.CREATE.DELIVERY",
+		"$JS.API.CONSUMER.CREATE.DELIVERY.spy.delivery.email",
+		"$JS.API.CONSUMER.MSG.NEXT.DELIVERY.worker-email",
+	}
+	for _, subject := range publishes {
+		t.Run("publish "+subject, func(t *testing.T) {
+			nc, errs := rawConnAsCentrifugo(t)
+			if err := nc.Publish(subject, []byte("x")); err != nil {
+				t.Fatalf("publish returned an error before the server saw it: %v", err)
+			}
+			if err := nc.Flush(); err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			awaitPermissionError(t, errs, "centrifugo publishing "+subject)
+		})
+	}
+
+	subscribes := []string{
+		"delivery.email",
+		"delivery.*",
+		"notification.send",
+		"notification.events",
+		">",
+		"$JS.>",
+		// The inbox space is where pulled messages actually arrive, so this is the
+		// subscription that would hand Centrifugo every recipient address in flight.
+		"_INBOX.>",
+		"_INBOX.hermes-dispatch.>",
+	}
+	for _, subject := range subscribes {
+		t.Run("subscribe "+subject, func(t *testing.T) {
+			nc, errs := rawConnAsCentrifugo(t)
+			if _, err := nc.SubscribeSync(subject); err != nil {
+				t.Fatalf("subscribe returned an error before the server saw it: %v", err)
+			}
+			if err := nc.Flush(); err != nil {
+				t.Fatalf("flush: %v", err)
+			}
+			awaitPermissionError(t, errs, "centrifugo subscribing "+subject)
+		})
+	}
+}
+
+// And the reverse direction, which is the half that is easy to forget: no Hermes service may
+// reach into Centrifugo's subject space either. A worker that could publish
+// centrifugo.client.<channel> could push arbitrary payloads to any user's browser, bypassing
+// the inbox worker and the store entirely.
+func TestCentrifugo_SubjectSpaceIsClosedToHermesServices(t *testing.T) {
+	subjects := []string{
+		"centrifugo.control",
+		"centrifugo.client.user#usr_abc123",
+		"centrifugo.>",
+	}
+	for _, service := range []string{"hermes-dispatch", "hermes-worker-inbox", "hermes-send"} {
+		for _, subject := range subjects {
+			t.Run(service+" publish "+subject, func(t *testing.T) {
+				nc, errs := rawConnAs(t, service)
+				if err := nc.Publish(subject, []byte("x")); err != nil {
+					t.Fatalf("publish returned an error before the server saw it: %v", err)
+				}
+				if err := nc.Flush(); err != nil {
+					t.Fatalf("flush: %v", err)
+				}
+				awaitPermissionError(t, errs, service+" publishing "+subject)
+			})
+			t.Run(service+" subscribe "+subject, func(t *testing.T) {
+				nc, errs := rawConnAs(t, service)
+				if _, err := nc.SubscribeSync(subject); err != nil {
+					t.Fatalf("subscribe returned an error before the server saw it: %v", err)
+				}
+				if err := nc.Flush(); err != nil {
+					t.Fatalf("flush: %v", err)
+				}
+				awaitPermissionError(t, errs, service+" subscribing "+subject)
+			})
+		}
+	}
+}
+
+// A wrong password is nobody, and so is no password. Verified rather than assumed because it is
+// the property that makes the Centrifugo user worth having: phase 3 left the base ConfigMap
+// pointing at a plaintext URL, and this is what that would now meet.
+func TestCentrifugo_WrongOrMissingPasswordIsRejected(t *testing.T) {
+	f := perms(t)
+
+	for _, tc := range []struct {
+		name string
+		opts []nats.Option
+	}{
+		{"wrong password", []nats.Option{nats.UserInfo(centrifugoUser, "not-the-password")}},
+		{"no credential at all", nil},
+		{"right password, wrong user", []nats.Option{nats.UserInfo("centrifuge", f.centrifugoPassword)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			nc, err := nats.Connect(f.url, tc.opts...)
+			if err == nil {
+				nc.Close()
+				t.Fatal("the server accepted the connection")
+			}
+			if !strings.Contains(err.Error(), "Authorization Violation") {
+				t.Errorf("expected an authorization violation, got: %v", err)
+			}
+		})
+	}
+}
+
 // --- drift guard ----------------------------------------------------------------------
 
 // ADR 0005's Consequences section: "a service that gains a publish target and does not
@@ -554,6 +889,121 @@ func TestAccounts_ConfCoversEverySubjectTheCodeUses(t *testing.T) {
 		}
 		if !strings.Contains(conf, "$"+r.envVar) {
 			t.Errorf("%s has no user in %s (expected nkey: $%s)", r.service, accountsConfPath, r.envVar)
+		}
+	}
+}
+
+// userBlocks splits the permissions file into one text block per user, keyed by the $VARIABLE
+// naming that user. Crude but sufficient: the file lists users in a flat array and each block
+// starts at its own credential line, so "which user holds this grant" is answerable without a
+// HOCON parser — and answering it is the only way to assert that a grant belongs to exactly one
+// user rather than merely appearing somewhere in the file.
+func userBlocks(t *testing.T, conf string) map[string]string {
+	t.Helper()
+	const marker = "nkey: $"
+	blocks := map[string]string{}
+	idx := strings.Index(conf, marker)
+	for idx >= 0 {
+		rest := conf[idx+len(marker):]
+		name, _, _ := strings.Cut(rest, "\n")
+		next := strings.Index(rest, marker)
+		body := rest
+		if next >= 0 {
+			body = rest[:next]
+		}
+		blocks[strings.TrimSpace(name)] = body
+		if next < 0 {
+			break
+		}
+		idx = idx + len(marker) + next
+	}
+	if len(blocks) != len(natsRoles) {
+		t.Fatalf("parsed %d user blocks for %d roles; the parser or the file shape changed",
+			len(blocks), len(natsRoles))
+	}
+	return blocks
+}
+
+// ADR 0005 phase 4's central claim, checked at deploy time rather than only on the wire: stream
+// creation belongs to one identity. The in-cluster tests above prove the server refuses it for
+// everyone else; this proves the file cannot quietly grow the grant back for a service.
+func TestAccounts_OnlyTheProvisionerMayDeclareStreams(t *testing.T) {
+	raw, err := os.ReadFile(accountsConfPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", accountsConfPath, err)
+	}
+	blocks := userBlocks(t, string(raw))
+
+	provisionerVar := ""
+	for _, r := range natsRoles {
+		if r.service == messaging.ProvisionerService {
+			provisionerVar = r.envVar
+		}
+	}
+	if provisionerVar == "" {
+		t.Fatalf("%s is not in natsRoles", messaging.ProvisionerService)
+	}
+
+	streams := []string{"NOTIFICATIONS", "DELIVERY", "EVENTS", messaging.DLQStreamName}
+	for envVar, body := range blocks {
+		for _, stream := range streams {
+			for _, verb := range []string{"CREATE", "UPDATE"} {
+				grant := `"$JS.API.STREAM.` + verb + "." + stream + `"`
+				has := strings.Contains(body, grant)
+				if envVar == provisionerVar && !has {
+					t.Errorf("the provisioner is missing %s; it cannot declare %s without it",
+						grant, stream)
+				}
+				if envVar != provisionerVar && has {
+					t.Errorf("$%s holds %s — stream declaration must belong to the provisioner alone",
+						envVar, grant)
+				}
+			}
+		}
+	}
+}
+
+// STREAM.INFO is what services got in exchange, so it has to match messaging.StreamsForService
+// exactly in both directions: a stream a service waits for but cannot read makes EnsureStreams
+// fail forever, and a grant with no entry in the map is an over-grant nothing needs.
+func TestAccounts_StreamInfoGrantsMatchStreamsForService(t *testing.T) {
+	raw, err := os.ReadFile(accountsConfPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", accountsConfPath, err)
+	}
+	blocks := userBlocks(t, string(raw))
+
+	byService := map[string]string{}
+	for _, r := range natsRoles {
+		byService[r.service] = r.envVar
+	}
+
+	allStreams := []string{"NOTIFICATIONS", "DELIVERY", "EVENTS", messaging.DLQStreamName}
+	for service, required := range messaging.StreamsForService {
+		envVar, ok := byService[service]
+		if !ok {
+			t.Errorf("%s is in StreamsForService but has no user in natsRoles", service)
+			continue
+		}
+		body, ok := blocks[envVar]
+		if !ok {
+			t.Errorf("$%s has no user block in %s", envVar, accountsConfPath)
+			continue
+		}
+		needs := map[string]bool{}
+		for _, name := range required {
+			needs[name] = true
+		}
+		for _, stream := range allStreams {
+			grant := `"$JS.API.STREAM.INFO.` + stream + `"`
+			has := strings.Contains(body, grant)
+			switch {
+			case needs[stream] && !has:
+				t.Errorf("%s requires stream %s but $%s is not granted %s, so EnsureStreams cannot pass",
+					service, stream, envVar, grant)
+			case !needs[stream] && has:
+				t.Errorf("$%s holds %s but %s does not require stream %s", envVar, grant, service, stream)
+			}
 		}
 	}
 }

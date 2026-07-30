@@ -157,7 +157,7 @@ jobs:
       # On PRs, only smoke-test the admin image; on main, build every service.
       # The matrix is selected here so PRs spin up one runner instead of ten.
       matrix:
-        service: ${{ fromJSON(github.event_name == 'pull_request' && '["admin"]' || '["admin","send","dispatch","worker-events","worker-email","worker-sms","worker-inbox","inbox","user","migrate"]') }}
+        service: ${{ fromJSON(github.event_name == 'pull_request' && '["admin"]' || '["admin","send","dispatch","worker-events","worker-email","worker-sms","worker-inbox","inbox","user","migrate","natsprovision"]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 

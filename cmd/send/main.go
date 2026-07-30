@@ -28,7 +28,9 @@ func main() {
 	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
 		messaging.WithCABundle(cfg.NATSCABundlePath),
 		messaging.WithIdentity("hermes-send", cfg.NATSNKeySeedPath))
-	bootstrap.MustSetupStreams(ctx, natsClient, logger)
+	// ADR 0005 phase 4. Verify, do not declare: cmd/natsprovision owns stream creation, and
+	// this service holds no permission to create one. Exits if the streams are not there yet.
+	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-send", logger)
 	defer natsClient.Close()
 
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)

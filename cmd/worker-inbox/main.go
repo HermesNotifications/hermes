@@ -28,7 +28,8 @@ func main() {
 	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
 		messaging.WithCABundle(cfg.NATSCABundlePath),
 		messaging.WithIdentity("hermes-worker-inbox", cfg.NATSNKeySeedPath))
-	bootstrap.MustSetupStreams(ctx, natsClient, logger)
+	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
+	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-worker-inbox", logger)
 	defer natsClient.Close()
 
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)

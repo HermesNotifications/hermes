@@ -104,10 +104,13 @@ from the machine running the cluster.
   `imagePullPolicy: IfNotPresent`.
 - **NATS TLS.** `base/infra/nats-certificates.yaml` pins `dnsNames` to `nats.hermes`, and
   kustomize does not rewrite strings inside `dnsNames`, so per-namespace certificates need
-  per-namespace SANs. Sandboxes run plaintext NATS. To test TLS, create a namespaced
-  cert-manager `Issuer` (self-signed → CA → leaf) with SANs for your namespace — this is
-  how [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md) phase 2 was
-  verified.
+  per-namespace SANs. Sandboxes run plaintext NATS. To test TLS, issue a leaf with SANs for
+  your namespace — this is how
+  [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md) phase 2 was
+  verified. Note that phase 4 moved the CA itself to a **`ClusterIssuer`** whose signing Secret
+  lives in cert-manager's namespace (`deploy/k8s/pki/`), so a sandbox test should either
+  reference that ClusterIssuer or create its own distinctly-named one — do not add a namespaced
+  `ca` Issuer to a Hermes namespace, which is the shape `make verify` now rejects.
 - **A LoadBalancer of any kind.** Every Service is ClusterIP on purpose: a cluster may
   already publish Postgres or Redis on 5432/6379 via LoadBalancer, and a second one would
   contend for the same address.
