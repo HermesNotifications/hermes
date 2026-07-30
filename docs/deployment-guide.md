@@ -346,11 +346,26 @@ kubectl apply -f deploy/argocd/crossplane-infra.yaml
 # Crossplane resource claims for staging (Aurora, ElastiCache, Secrets Manager)
 kubectl apply -f deploy/argocd/crossplane-claims-staging.yaml
 
+# Secret plumbing — must exist BEFORE the Hermes app, see the warning below
+kubectl apply -f deploy/k8s/overlays/staging/secret-store.yaml
+kubectl apply -f deploy/k8s/overlays/staging/external-secrets.yaml
+kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_URL}' | base64 -d
+
 # Hermes application for staging
 kubectl apply -f deploy/argocd/staging.yaml
 ```
 
 > **Important:** Apply `crossplane-infra` first — it installs the XRDs and compositions that the claims depend on. Wait for it to sync before applying the claims app. The claims app provisions the actual AWS resources (Aurora cluster, ElastiCache, Secrets Manager secret), which takes 10-15 minutes for the initial creation.
+
+> **Do not apply `staging.yaml` before `hermes-secrets` is populated.** The migration Job is
+> an ArgoCD `PreSync` hook, so it runs *before* the `Sync` phase creates the ExternalSecret
+> that produces `hermes-secrets`. On a first sync into an empty namespace it therefore starts
+> with no `HERMES_DATABASE_URL`, exits with
+> `database-url is required (or set HERMES_DATABASE_URL)`, and — because a failed `PreSync`
+> hook blocks the `Sync` phase — the ExternalSecret is never created, so the bootstrap
+> deadlocks. Applying the two secret manifests out of band first, once the Crossplane claims
+> are Healthy, avoids it. Verified against real ArgoCD; see
+> [ADR 0006](adr/0006-migration-job-as-an-argocd-presync-hook.md).
 
 ArgoCD will immediately sync the staging overlay. Watch the sync:
 
@@ -440,6 +455,13 @@ CROSSPLANE_ROLE_ARN=$(cd infra/terraform && terraform output -raw crossplane_rol
 ```bash
 kubectl apply -f deploy/argocd/crossplane-infra.yaml
 kubectl apply -f deploy/argocd/crossplane-claims-production.yaml
+
+# Same ordering constraint as staging — hermes-secrets must be populated before the
+# Hermes Application exists, or the PreSync migration hook deadlocks the first sync.
+kubectl apply -f deploy/k8s/overlays/production/secret-store.yaml
+kubectl apply -f deploy/k8s/overlays/production/external-secrets.yaml
+kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_URL}' | base64 -d
+
 kubectl apply -f deploy/argocd/production.yaml
 kubectl apply -f deploy/kargo/  # Kargo resources are shared if on same cluster,
                                  # or re-apply if separate clusters
@@ -549,18 +571,82 @@ kubectl rollout restart deployment -n hermes
 Migrations are defined as a K8s Job in `deploy/k8s/base/migration-job.yaml`, which runs
 `cmd/migrate` with the database URL from Secrets Manager.
 
-> **They do not currently run automatically.** The `argocd.argoproj.io/hook: PreSync` and
-> `hook-delete-policy` annotations on that Job are commented out, so ArgoCD applies it as an
-> ordinary resource rather than a sync hook. A `Job`'s pod template is immutable, so the
-> second promotion that changes the image tag fails to apply. Until the hook is re-enabled,
-> run migrations manually using the command below. See finding 11 in the
-> [2026-07-27 architecture review](reviews/2026-07-27-architecture-review.md).
+**They run on every sync,** as an ArgoCD `PreSync` hook with
+`hook-delete-policy: BeforeHookCreation`. Each sync deletes the previous `hermes-migrate`
+Job and creates a fresh one, so a promotion that rewrites the image tag re-runs the
+migration instead of failing on `Job.spec.template` immutability. `cmd/migrate` calls
+golang-migrate's `Up()`, which is a no-op when the schema is already current.
 
-**Run migrations manually:**
+**A failing migration blocks the sync.** This is deliberate: no new pod rolls out against a
+schema the code does not expect. What an operator sees:
+
+- The Application sits at `Sync Status: OutOfSync` with
+  `operationState.phase: Running` and the message
+  `waiting for completion of hook batch/Job/hermes-migrate`, for as long as the Job keeps
+  retrying (`backoffLimit: 3`, so four pod attempts with exponential backoff).
+- ArgoCD then retries the whole sync per the Application's `retry` block (limit 3), and each
+  retry logs `waiting for deletion of hook batch/Job/hermes-migrate` before recreating it.
+- The terminal state is `phase: Failed`, message
+  `one or more synchronization tasks completed unsuccessfully (retried 3 times)`, with the
+  hook's own result recorded as `hookPhase: Failed`,
+  `message: Job has reached the specified backoff limit`.
+- **Nothing from the new revision is applied** — the `Sync` phase never runs, so the
+  previously deployed Deployments, ConfigMaps and Secrets are untouched and the old release
+  keeps serving.
+- Kargo's `argocd-update` promotion step fails with it, so the Freight does not advance.
+
+> **Read the migration error from Loki, not from `kubectl logs`.** `BeforeHookCreation`
+> deletes the failed Job — and with it the pod — at the start of the next sync attempt, and
+> once ArgoCD exhausts its retries the Job is gone entirely
+> (`Error from server (NotFound): jobs.batch "hermes-migrate" not found`). The Application
+> status tells you only that the Job hit its backoff limit. The actual reason
+> (`migration failed: ...`) is in the `migrate` container's stdout, which is why it must be
+> shipped. Query Loki for `{namespace="hermes", container="migrate"}`.
+
+**Re-run migrations on demand** by syncing the Application — the `PreSync` hook runs on
+every sync, so this is the supported path and it is idempotent:
+
+```bash
+argocd app sync hermes-staging
+```
+
+**Or run the Job by hand,** to watch a failure live before ArgoCD reaps it. Do *not*
+`kubectl apply -f deploy/k8s/base/migration-job.yaml`: the base manifest has no
+`metadata.namespace` and its image is the untagged kustomize placeholder `hermes-migrate`,
+so it lands in the wrong namespace and cannot pull. Render the overlay and take only that
+Job:
+
 ```bash
 kubectl delete job hermes-migrate -n hermes --ignore-not-found
-kubectl apply -f deploy/k8s/base/migration-job.yaml
+kubectl kustomize deploy/k8s/overlays/staging \
+  | python3 -c 'import sys,yaml; print(yaml.safe_dump_all(d for d in yaml.safe_load_all(sys.stdin) if d and d.get("kind")=="Job" and d["metadata"]["name"]=="hermes-migrate"))' \
+  | kubectl apply -f -
+kubectl logs -n hermes job/hermes-migrate -f
 ```
+
+**First sync of a new environment needs `hermes-secrets` to exist already.** The
+`PreSync` phase runs before the `Sync` phase, and the ExternalSecret that materialises
+`hermes-secrets` is an ordinary resource in the `Sync` phase — so on a first sync into an
+empty namespace the migration Job starts with no `HERMES_DATABASE_URL` (the `secretKeyRef`
+is `optional: true`) and exits with
+`database-url is required (or set HERMES_DATABASE_URL)`. Because the failed hook blocks the
+`Sync` phase, the ExternalSecret is then never created, and the bootstrap deadlocks.
+
+Before applying `deploy/argocd/staging.yaml` for the first time, apply the secret plumbing
+out of band and confirm the Secret has been populated:
+
+```bash
+kubectl apply -f deploy/k8s/overlays/staging/secret-store.yaml
+kubectl apply -f deploy/k8s/overlays/staging/external-secrets.yaml
+kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_URL}' | base64 -d
+```
+
+This is also where the original `TODO: re-enable once Crossplane has provisioned the
+database` bites: the database URL only appears in Secrets Manager after the Crossplane
+claims have finished (10-15 minutes), so wait for `crossplane-claims-staging` to be
+Healthy before applying the Hermes Application. See
+[ADR 0006](adr/0006-migration-job-as-an-argocd-presync-hook.md) for the ordering decision
+and the open question about folding the ExternalSecret into `PreSync`.
 
 **Rolling back a migration is not automated.** `cmd/migrate` takes only `-database-url` and
 `-migrations-path`, and calls `Up()` unconditionally — it has no direction, step count, or

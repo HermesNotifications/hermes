@@ -134,7 +134,11 @@ public IPs. Port 4317 to the `observability` namespace is denied, so traces and 
 never leave the pods. No policy allows Prometheus in `observability` to scrape Hermes
 either, so the ServiceMonitors do not work.
 
-**11. The migration Job cannot re-run, and will break every Kargo promotion.** The ArgoCD
+**11. The migration Job cannot re-run, and will break every Kargo promotion. RESOLVED
+2026-07-30** — reproduced against real ArgoCD, fixed, and the fix proved. See
+["finding 11 closed"](#resolved-2026-07-30--finding-11-closed-against-a-real-argocd) below and
+[ADR 0006](../adr/0006-migration-job-as-an-argocd-presync-hook.md); the original report
+follows. The ArgoCD
 hook annotations in `deploy/k8s/base/migration-job.yaml:5-8` are commented out behind a
 `TODO: re-enable once Crossplane has provisioned the database`, so the Job is a plain
 resource that runs once at first sync and never again — `deployment-guide.md:472`'s claim
@@ -858,7 +862,9 @@ example for a scenario that cannot occur.
   only by the 30-minute eviction sweep. Fixing this interacts with finding 3's enforcement work.
 - **11 / 31** — `deployment-guide.md:476` deletes a Job named `hermes-migration`; the Job is
   `hermes-migrate`, so the documented recovery step silently no-ops and the subsequent apply
-  fails identically.
+  fails identically. *(Resolved 2026-07-30 — and the corrected command was still wrong in a
+  second way: applying the base manifest directly uses no namespace and an untagged image. See
+  ["finding 11 closed"](#resolved-2026-07-30--finding-11-closed-against-a-real-argocd).)*
 - **35** — the health check has **two** independent blockers, not one: no ServiceAccount or
   Role grants it `rollout status` permission, *and* the AnalysisRun pod lands in `hermes`
   under `default-deny-all` with no matching allow rule, so it cannot reach the API server
@@ -1767,6 +1773,153 @@ are all unexercised. Certificate renewal through the new ClusterIssuer was not d
 expiry cycle. **Finding 41's second half is still open** — production's `centrifugo-env.yaml`
 still sets no `CENTRIFUGO_REDIS_PASSWORD` or Redis TLS variables, though the ExternalSecret does
 now carry the value.
+
+---
+
+## Resolved 2026-07-30 — finding 11 closed, against a real ArgoCD
+
+The triage could confirm only that the annotations were still commented and that the Kargo
+stages still rewrite the tag; it could not verify the failure or the fix, because no ArgoCD was
+available. One now is. **ArgoCD v3.4.5 is installed on the local k3s cluster in its own
+`argocd` namespace** and stays there for future verification work.
+
+**The defect, as actually observed.** A harness Application carrying the staging
+Application's own `syncPolicy` verbatim (`ServerSideApply=true`, `automated` with
+`prune`/`selfHeal`, `retry.limit: 3`) synced a kustomization containing the committed
+`migration-job.yaml`, a Secret, and a marker ConfigMap, against the **real `cmd/migrate`
+binary and a real Postgres**. First sync: `Synced`/`Healthy`, migrations applied. Then the tag
+was rewritten from `f11-v1` to `f11-v2` in the kustomization's `images:` block — exactly what
+`kustomize-set-image` does in `deploy/kargo/stages/{staging,production}.yaml:63-65` — and
+pushed. The second sync failed:
+
+```
+Job.batch "hermes-migrate" is invalid: spec.template: Invalid value:
+{"labels":{"batch.kubernetes.io/controller-uid":"1f61dbd5-…","job-name":"hermes-migrate"},
+ "Spec":{…"Containers":[{"Name":"migrate","Image":"hermes-migrate:f11-v2",…}]…}}:
+field is immutable (retried 3 times)
+```
+
+The Application settled at `OutOfSync` / `phase: Failed` and stayed there. **The finding
+understated it in one way that matters:** the failure is not atomic. The per-resource sync
+result was
+
+```
+Secret/hermes-secrets   Synced      Succeeded
+ConfigMap/f11-marker    Synced      Succeeded
+Job/hermes-migrate      SyncFailed  Failed
+```
+
+and the marker ConfigMap advanced to the new revision. So in production the promotion's new
+Deployments would roll out while the migration silently stayed at the old spec — new code
+against an unmigrated schema — with the Application red. The Job kept `image: …:f11-v1` and
+`succeeded: 1`; it never re-ran.
+
+**The fix.** `argocd.argoproj.io/hook: PreSync` and
+`hook-delete-policy: BeforeHookCreation` re-enabled. On the next sync ArgoCD deleted the
+tracked Job, recreated it as a `PreSync` hook at the new tag, ran it, and reported
+`Synced`/`Healthy`/`Succeeded` with `hookType: PreSync, hookPhase: Succeeded`. A **second**
+tag rewrite then also succeeded — new Job UID, migration re-run — which is the case that used
+to fail. The Job is no longer a tracked application resource; it appears only in the sync
+result as a hook.
+
+**`BeforeHookCreation` is not interchangeable with `HookSucceeded`, and the difference was
+measured.** `HookSucceeded` keeps a failed Job's logs, which is genuinely useful, but:
+
+- with `HookSucceeded` and a failing migration, the Job survives — and a forced re-sync with
+  git unchanged **never re-runs it** (the Job UID does not change) and the operation stays
+  `Failed`. The migration gets no second chance without a manual `kubectl delete job`.
+- the next promotion then reproduces **the original finding**:
+  `one or more objects failed to apply, reason: Job.batch "hermes-migrate" is invalid:
+  spec.template … field is immutable`. `HookSucceeded` reintroduces the exact bug.
+- switching back to `BeforeHookCreation` recovered that stuck namespace on the next sync,
+  unattended.
+
+**What an operator sees when a migration fails under `PreSync`** — the point the review said
+needed a staging soak, now observed rather than reasoned. With the Job pointed at an
+unreachable database:
+
+| Stage | Application state |
+|---|---|
+| Job retrying (`backoffLimit: 3`, four pod attempts) | `phase: Running`, `waiting for completion of hook batch/Job/hermes-migrate` |
+| Between ArgoCD's own retries | `waiting for deletion of hook batch/Job/hermes-migrate`, then the Job is recreated |
+| Terminal | `phase: Failed`, `one or more synchronization tasks completed unsuccessfully (retried 3 times)`; hook result `hookPhase: Failed`, `Job has reached the specified backoff limit` |
+
+**The `Sync` phase never ran.** The marker ConfigMap stayed at its previous revision and the
+Secret was untouched, so the old release keeps serving — which is the desired behaviour and
+the opposite of what happens today. Kargo's `argocd-update` step fails with it, so no Freight
+advances.
+
+**The operationally important cost: the failed Job's logs do not survive.**
+`BeforeHookCreation` deletes the Job and its pod before each retry — visible in the
+application-controller log as `waiting for deletion of hook batch/Job/hermes-migrate` — and
+once the retry budget is spent the Job is **gone**:
+`Error from server (NotFound): jobs.batch "hermes-migrate" not found`. The Application status
+says only "Job has reached the specified backoff limit". The real cause
+(`migration failed: create migrator: failed to open database: dial tcp …: connect: connection
+timed out`) exists only in the container's stdout. **Migration diagnosis therefore depends on
+log shipping, which makes finding 10 (OTLP egress blocked) a prerequisite for this decision
+being operable rather than an unrelated bug.** `deployment-guide.md` now says to read the
+error from Loki, not `kubectl logs`.
+
+**A second cost, named and deliberately not fixed:** the Job sets `backoffLimit: 3` but no
+`activeDeadlineSeconds`, and ArgoCD applies no timeout of its own to hook completion. A
+migration blocked on a lock pins the Application in `waiting for completion of hook` with no
+terminal state. The black-holed-connection variant took roughly two minutes per pod attempt
+and pushed a single sync past ten minutes. A deadline low enough to catch a hang could abort a
+legitimately long migration midway, so this is recorded in ADR 0006 as a follow-up rather than
+guessed at.
+
+**The `TODO: re-enable once Crossplane has provisioned the database` was a real concern, and
+it is broader than Crossplane.** Verified on a virgin namespace: the `PreSync` phase runs
+before the `Sync` phase, so it runs before the ExternalSecret that materialises
+`hermes-secrets` — which is an ordinary `Sync`-phase resource in
+`overlays/staging/external-secrets.yaml` with no hook or sync-wave annotation. The hook pod
+started with no `HERMES_DATABASE_URL` (the `secretKeyRef` is `optional: true`) and exited:
+
+```
+database-url is required (or set HERMES_DATABASE_URL)
+```
+
+Because the failed hook blocks the `Sync` phase, the ExternalSecret is then never created —
+**a bootstrap deadlock**, not a transient. Only `kube-root-ca.crt` ever appeared in the
+namespace. This is not a reason to keep the hook off: today's behaviour breaks on *every*
+promotion, whereas this breaks once, loudly, at first sync. It is handled by applying
+`secret-store.yaml` and `external-secrets.yaml` out of band, after the Crossplane claims are
+Healthy and before the Hermes Application exists — now an ordered step in
+`deployment-guide.md` for both staging and production.
+
+**Filed rather than chosen quietly.**
+[ADR 0006](../adr/0006-migration-job-as-an-argocd-presync-hook.md) records the decision, the
+rejected alternatives (status quo, `HookSucceeded`, revision-scoped Job names as the Helm
+chart already uses, sync-waves instead of a phase), and the open question about folding the
+secret plumbing into `PreSync`. The **mechanism** for that was verified — a Secret annotated
+`hook: PreSync` with `sync-wave: "-1"` made the same virgin-namespace bootstrap go straight to
+`Synced`/`Healthy` — but with a plain Secret, which is Healthy the moment it is applied. A
+real ExternalSecret is reconciled asynchronously, so it only works if ArgoCD blocks on the
+ExternalSecret's health; ESO is not installed on the verification cluster, so that is
+**unverified** and adopting it blind would trade a deterministic deadlock for a race.
+
+**Also re-checked, per the review's note.** `deployment-guide.md`'s manual-run block named the
+right Job (`hermes-migrate`) after the earlier correction, but was still wrong in a second way
+nobody had caught: `kubectl apply -f deploy/k8s/base/migration-job.yaml` applies a manifest
+with **no `metadata.namespace`** and the **untagged kustomize placeholder** `image:
+hermes-migrate`, so it lands in whatever namespace is current and cannot pull. Replaced with
+`argocd app sync` as the supported path plus a rendered-overlay extraction for running it by
+hand — the extraction command was executed against the staging overlay and emits exactly the
+one Job, with the hook annotations and the real ECR tag.
+
+**Egress checked, since a blocking hook makes it load-bearing.** The migration pod carries
+`app.kubernetes.io/part-of: hermes` on `spec.template.metadata.labels` (finding 47's
+`includeTemplates`), so `allow-egress-managed-services` permits 5432 into `10.0.0.0/8` and
+`default-deny-all` permits DNS. The hook can reach Aurora.
+
+**Unverified.** Everything above ran on k3s against a local Postgres and a locally-built
+`hermes-migrate` image, not against AWS, ECR, Aurora, ESO or Crossplane; no Kargo controller
+was involved, so the promotion was simulated by making the same `images:` edit and commit that
+`kustomize-set-image` makes. The ArgoCD version tested is the current `stable` manifest, which
+may not match the version the real clusters run. Whether ArgoCD's health assessment for
+`external-secrets.io/ExternalSecret` is strong enough to order a `PreSync` ExternalSecret
+ahead of the migration hook was not tested.
 
 ---
 

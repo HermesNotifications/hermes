@@ -3,9 +3,23 @@ kind: Job
 metadata:
   name: hermes-migrate
   annotations:
-    # TODO: re-enable once Crossplane has provisioned the database
-    # argocd.argoproj.io/hook: PreSync
-    # argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Finding 11. These were commented out behind a "re-enable once Crossplane has
+    # provisioned the database" TODO, which made the Job an ordinary tracked resource:
+    # it ran once at first sync and never again, and the *second* promotion — Kargo
+    # rewrites the hermes-migrate tag every time — hit
+    #   Job.batch "hermes-migrate" is invalid: spec.template: Invalid value: {...}:
+    #   field is immutable
+    # because Job.spec.template cannot be updated in place. Reproduced against real
+    # ArgoCD; see ADR 0006 and the 2026-07-27 review.
+    #
+    # BeforeHookCreation, not HookSucceeded. HookSucceeded leaves a *failed* Job behind,
+    # and the next sync then applies over it and reproduces the same immutable-field
+    # error — verified. BeforeHookCreation deletes the previous Job before recreating it,
+    # which is what makes the hook re-runnable. The cost is that the failed Job and its
+    # pod logs are destroyed on the next sync attempt, so the migration error text must be
+    # read from Loki, not from `kubectl logs`. See docs/deployment-guide.md.
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 3
   template:
