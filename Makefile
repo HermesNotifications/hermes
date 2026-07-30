@@ -98,6 +98,61 @@ sdk-dotnet:        ## Generate .NET server SDK
 		--global-property=skipFormModel=true
 sdk-generate: openapi sdk-ts-generate sdk-ts-build sdk-python sdk-java sdk-dotnet  ## Full pipeline: specs → types → build
 
+# --- Parallel development sandboxes (one namespace per worker) ---
+#
+# For running several agents or developers against one k3s cluster without them
+# colliding. Each worker gets its own namespace holding Postgres, Redis, NATS with
+# JetStream, and Mailpit. See docs/development.md.
+#
+# WORKER defaults to your username so `make devworker-up` is safe to type without
+# thinking; CI and agents should pass it explicitly.
+WORKER ?= $(USER)
+DEVWORKER_NS := hermes-dev-$(WORKER)
+
+.PHONY: devworker-up devworker-down devworker-list devworker-env
+devworker-up:      ## Create an isolated dev sandbox namespace (WORKER=name)
+	@kubectl create namespace $(DEVWORKER_NS) --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+	@# Labelled so devworker-list can find sandboxes without pattern-matching names, and
+	@# so a stray sandbox is identifiable as disposable rather than someone's real work.
+	@kubectl label namespace $(DEVWORKER_NS) hermes.io/devworker=true --overwrite >/dev/null
+	@# deploy/k8s/devworker deliberately sets no `namespace:` anywhere, so `-n` places
+	@# everything. That is what makes this parallel-safe: no shared file is edited, and
+	@# no throwaway overlay is needed (kustomize also rejects absolute `resources` paths).
+	kubectl kustomize deploy/k8s/devworker | kubectl apply -n $(DEVWORKER_NS) -f -
+	@echo "waiting for $(DEVWORKER_NS) to become ready..."
+	@kubectl -n $(DEVWORKER_NS) wait --for=condition=Ready pod --all --timeout=180s
+	@$(MAKE) --no-print-directory devworker-env WORKER=$(WORKER)
+
+devworker-down:    ## Delete a dev sandbox namespace and its volumes (WORKER=name)
+	kubectl delete namespace $(DEVWORKER_NS) --wait=false
+
+devworker-list:    ## List all dev sandbox namespaces
+	@kubectl get ns -l hermes.io/devworker=true --no-headers 2>/dev/null || \
+		kubectl get ns --no-headers | grep '^hermes-dev-' || echo "no sandboxes"
+
+devworker-env:     ## Print eval-able env vars pointing at a sandbox (WORKER=name)
+	@# Emits ClusterIPs, not .svc DNS names. Cluster DNS does not resolve from the host,
+	@# but on a k3s node the host CAN route to both service and pod CIDRs — verified. So
+	@# these URLs work directly from a shell, with no port-forward.
+	@#
+	@# Node-local by nature: these addresses are only reachable from this machine.
+	@set -e; ns=$(DEVWORKER_NS); \
+	ip() { kubectl -n $$ns get svc $$1 -o jsonpath='{.spec.clusterIP}'; }; \
+	nats_ip() { kubectl -n $$ns get pod nats-0 -o jsonpath='{.status.podIP}'; }; \
+	echo "# eval \"\$$(make devworker-env WORKER=$(WORKER))\""; \
+	echo "export HERMES_ENV=development"; \
+	echo "export HERMES_DATABASE_URL='postgres://hermes:hermes@$$(ip postgres):5432/hermes?sslmode=disable'"; \
+	echo "export HERMES_REDIS_URL='redis://$$(ip redis):6379'"; \
+	echo "# NATS is a headless Service (no ClusterIP), so this is the pod IP and it"; \
+	echo "# changes if nats-0 restarts. Re-run this target after a restart."; \
+	echo "export HERMES_NATS_URL='nats://$$(nats_ip):4222'"; \
+	echo "export HERMES_EMAIL_SMTP_HOST='$$(ip mailpit)'"; \
+	echo "export MAILPIT_SMTP_HOST='$$(ip mailpit)'"; \
+	echo "export MAILPIT_API_URL='http://$$(ip mailpit):8025'"; \
+	echo "export HERMES_DYNAMO_ENDPOINT='http://$$(ip dynamodb-local):8000'"; \
+	echo "export HERMES_DYNAMO_REGION=us-east-1"; \
+	echo "export AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy"
+
 # --- Infrastructure ---
 .PHONY: infra-up infra-down migrate seed
 infra-up:          ## Start local Postgres, NATS, Redis via Docker Compose
