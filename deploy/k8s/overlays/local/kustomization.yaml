@@ -80,6 +80,12 @@ configMapGenerator:
       # to "development" and config.Validate does not reject these.
       - HERMES_NATS_URL=nats://nats:4222
       - HERMES_NATS_CA_BUNDLE=
+      # ADR 0005 phase 3's dev opt-out, named for the same reason. Local NATS defines no
+      # accounts (patches/nats-local.yaml replaces args, so nats.conf and its
+      # `include "accounts.conf"` are never read), so there is nobody to authenticate as.
+      # An empty seed makes messaging.WithIdentity leave the credential off while still
+      # applying the per-service inbox prefix.
+      - HERMES_NATS_NKEY_SEED=
       - HERMES_EMAIL_SMTP_HOST=mailpit
       - HERMES_DYNAMO_ENDPOINT=http://dynamodb-local:8000
       - HERMES_DYNAMO_REGION=us-east-1

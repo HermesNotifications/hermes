@@ -94,14 +94,14 @@ func TestInbox_ReadPath(t *testing.T) {
 	notifIDs := make([]string, 3)
 	for i := 0; i < 3; i++ {
 		n := &models.Notification{
-			ID:         uuid.New().String(),
-			OrganizationID:   organizationID,
-			UserID:     userID,
-			CategoryID: categoryID,
-			Title:      fmt.Sprintf("Notification %d (%s)", i+1, runID),
-			Body:       fmt.Sprintf("Body %d", i+1),
-			Channels:   []string{"inbox"},
-			Status:     models.StatusDelivered,
+			ID:             uuid.New().String(),
+			OrganizationID: organizationID,
+			UserID:         userID,
+			CategoryID:     categoryID,
+			Title:          fmt.Sprintf("Notification %d (%s)", i+1, runID),
+			Body:           fmt.Sprintf("Body %d", i+1),
+			Channels:       []string{"inbox"},
+			Status:         models.StatusDelivered,
 		}
 		if _, err := st.CreateNotification(ctx, n); err != nil {
 			t.Fatalf("create notification %d: %v", i, err)
@@ -117,7 +117,7 @@ func TestInbox_ReadPath(t *testing.T) {
 			{Name: "test", Secret: []byte(testJWTSecret), Algorithm: "HS256", UserIDClaim: "sub", OrganizationIDClaim: "organization_id"},
 		}
 	})
-	srv := inbox.NewServer(st, nil, nil, nil, keyProvider, logger)
+	srv := inbox.NewServer(st, nil, nil, keyProvider, logger)
 	handler := srv.Handler()
 
 	jwtToken := makeJWT(t, userID, organizationID)
@@ -252,14 +252,14 @@ func TestInbox_ReadPath(t *testing.T) {
 		// Create 5 more notifications (total 8 non-archived)
 		for i := 0; i < 5; i++ {
 			n := &models.Notification{
-				ID:         uuid.New().String(),
-				OrganizationID:   organizationID,
-				UserID:     userID,
-				CategoryID: categoryID,
-				Title:      fmt.Sprintf("Paginated %d (%s)", i+1, runID),
-				Body:       fmt.Sprintf("Page body %d", i+1),
-				Channels:   []string{"inbox"},
-				Status:     models.StatusDelivered,
+				ID:             uuid.New().String(),
+				OrganizationID: organizationID,
+				UserID:         userID,
+				CategoryID:     categoryID,
+				Title:          fmt.Sprintf("Paginated %d (%s)", i+1, runID),
+				Body:           fmt.Sprintf("Page body %d", i+1),
+				Channels:       []string{"inbox"},
+				Status:         models.StatusDelivered,
 			}
 			if _, err := st.CreateNotification(ctx, n); err != nil {
 				t.Fatalf("create paginated notification %d: %v", i, err)

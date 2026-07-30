@@ -70,25 +70,14 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            # ADR 0005 phase 2. The private CA that signs the NATS server certificate; no
-            # system trust store has it. Only ca.crt is projected — the server's key and
-            # certificate stay out of client pods. optional: true keeps the pod startable
-            # in the local overlay, where NATS runs plaintext and this Secret does not
-            # exist; HERMES_NATS_CA_BUNDLE is empty there, so nothing looks for the file.
-            - name: nats-ca
-              mountPath: /etc/nats-certs
-              readOnly: true
+            # ADR 0005 phase 3. No NATS CA and no NKey seed here: this service does not
+            # connect to the bus. It used to — cmd/inbox opened a connection and handed it
+            # to a field nothing read — and phase 3 removed it, because a connection now
+            # costs an identity and a set of subject permissions.
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 10Mi
-        - name: nats-ca
-          secret:
-            secretName: nats-server-tls
-            optional: true
-            items:
-              - key: ca.crt
-                path: ca.crt
 ---
 apiVersion: v1
 kind: Service

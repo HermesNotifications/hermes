@@ -46,6 +46,21 @@ func TestLoad_NATSCABundle(t *testing.T) {
 	}
 }
 
+// ADR 0005 phase 3. Same shape as the CA bundle, and empty for the same reason: the local
+// overlay and `make infra-up` run NATS with no accounts, so there is nobody to
+// authenticate as. It is not a silent downgrade — a server that defines accounts refuses an
+// anonymous connection, so a deployment that forgets the seed fails to start.
+func TestLoad_NATSNKeySeed(t *testing.T) {
+	if got := config.Load().NATSNKeySeedPath; got != "" {
+		t.Fatalf("expected no NKey seed by default so make infra-up keeps working, got %q", got)
+	}
+
+	t.Setenv("HERMES_NATS_NKEY_SEED", "/etc/nats-nkey/seed.nk")
+	if got := config.Load().NATSNKeySeedPath; got != "/etc/nats-nkey/seed.nk" {
+		t.Fatalf("expected the NKey seed path from the environment, got %q", got)
+	}
+}
+
 func TestLoad_DispatchConcurrencyOverride(t *testing.T) {
 	t.Setenv("HERMES_DISPATCH_CONCURRENCY", "12")
 

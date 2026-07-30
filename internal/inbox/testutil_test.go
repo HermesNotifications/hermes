@@ -146,33 +146,33 @@ func newTestServer(t *testing.T) (*inbox.Server, *mockInboxStore) {
 	store := &mockInboxStore{
 		notifications: []models.Notification{
 			{
-				ID:         "notif-1",
-				OrganizationID:   "organization-1",
-				UserID:     testUserID,
-				CategoryID: "sct-1",
-				Title:      "Test Notification 1",
-				Body:       "Body 1",
-				Channels:   []string{"inbox"},
-				Status:     models.StatusDelivered,
-				CreatedAt:  time.Now(),
+				ID:             "notif-1",
+				OrganizationID: "organization-1",
+				UserID:         testUserID,
+				CategoryID:     "sct-1",
+				Title:          "Test Notification 1",
+				Body:           "Body 1",
+				Channels:       []string{"inbox"},
+				Status:         models.StatusDelivered,
+				CreatedAt:      time.Now(),
 			},
 			{
-				ID:         "notif-2",
-				OrganizationID:   "organization-1",
-				UserID:     testUserID,
-				CategoryID: "sct-1",
-				Title:      "Test Notification 2",
-				Body:       "Body 2",
-				Channels:   []string{"inbox"},
-				Status:     models.StatusDelivered,
-				CreatedAt:  time.Now(),
+				ID:             "notif-2",
+				OrganizationID: "organization-1",
+				UserID:         testUserID,
+				CategoryID:     "sct-1",
+				Title:          "Test Notification 2",
+				Body:           "Body 2",
+				Channels:       []string{"inbox"},
+				Status:         models.StatusDelivered,
+				CreatedAt:      time.Now(),
 			},
 		},
 		categories: []models.SubscriptionCategory{
 			{ID: "sct-1", Slug: "alerts", Name: "Alerts", DefaultChannels: []string{"inbox"}, DefaultState: "on"},
 		},
 	}
-	srv := inbox.NewServer(store, nil, nil, nil, nil, logger)
+	srv := inbox.NewServer(store, nil, nil, nil, logger)
 	srv.SetSkipAuth(true)
 	return srv, store
 }

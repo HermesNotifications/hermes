@@ -15,7 +15,9 @@ configuration at all.
 |---|---|---|
 | `HERMES_HTTP_PORT` | `8080` | Port the service's HTTP server binds. Each service sets its own default via deployment config (see [services.md](services.md)). |
 | `HERMES_DATABASE_URL` | `postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable` | Postgres DSN. |
-| `HERMES_NATS_URL` | `nats://localhost:4222` | NATS JetStream server. |
+| `HERMES_NATS_URL` | `nats://localhost:4222` | NATS JetStream server. Must be `tls://` outside development — see [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md). |
+| `HERMES_NATS_CA_BUNDLE` | _(empty)_ | PEM file of the roots that verify the NATS server certificate. cert-manager signs `nats.hermes.svc` with a private CA that is in no system trust store, so in a real deployment this is how the connection can be verified at all; the deployment mounts it at `/etc/nats-certs/ca.crt`. Empty means "use the system pool", which is the local setting — `make infra-up` runs NATS without TLS. A path that is set but missing **fails the connection** rather than downgrading it. |
+| `HERMES_NATS_NKEY_SEED` | _(empty)_ | File holding this service's NATS NKey seed. The seed selects the service's user in `deploy/k8s/base/infra/nats-accounts.conf`, and with it the subjects that service may publish and subscribe to (see [NATS authorization](#nats-authorization) below). The deployment mounts it at `/etc/nats-nkey/seed.nk`. Empty connects anonymously, which only works against a server with no accounts — the local overlay. It is not a silent downgrade: a server that defines accounts answers an unauthenticated connection with an authorization violation, so a deployment that forgets the seed fails to start. Re-read on every reconnect, so a rotated Secret needs no restart. |
 | `HERMES_REDIS_URL` | `redis://localhost:6379/0` | Redis (cache, idempotency, Centrifugo engine). |
 | `HERMES_JWT_SECRET` | `hermes-jwt-secret` | Secret used to sign/verify Hermes-issued JWTs. |
 | `HERMES_API_KEY_HMAC_SECRET` | `hermes-dev-hmac-secret` | HMAC key for hashing/verifying API-key secrets. |
@@ -39,6 +41,47 @@ flags, because two settings that can disagree are worse than one that cannot. Ou
 development, `HERMES_DATABASE_URL` needs `sslmode=require` or stricter (`allow` and `prefer`
 are rejected — both silently fall back to plaintext), `HERMES_REDIS_URL` must use `rediss://`,
 and `HERMES_NATS_URL` must use `tls://`.
+
+### NATS authorization
+
+TLS encrypts the bus; it authorises nothing. Authorization is a second layer, added in
+[ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md) phase 3: the server
+defines a single `HERMES` account with **one NKey user per service**, each scoped to the
+subjects that service actually uses. The permissions live in
+`deploy/k8s/base/infra/nats-accounts.conf`, which both the base and staging server
+configurations `include`.
+
+| Service | Publishes | Consumes (consumer name) |
+|---|---|---|
+| `hermes-send` | `notification.send` | — |
+| `hermes-dispatch` | `delivery.email`, `delivery.sms`, `delivery.inbox`, `notification.events`, `dlq.notification.send` | `notification.send` (`dispatch`) |
+| `hermes-worker-email` | `notification.events`, `dlq.delivery.email` | `delivery.email` (`worker-email`) |
+| `hermes-worker-sms` | `notification.events`, `dlq.delivery.sms` | `delivery.sms` (`worker-sms`) |
+| `hermes-worker-inbox` | `notification.events`, `dlq.delivery.inbox` | `delivery.inbox` (`worker-inbox`) |
+| `hermes-worker-events` | `dlq.notification.events` | `notification.events` (`event-writer`) |
+
+`hermes-admin`, `hermes-user` and `hermes-inbox` do not connect to NATS and have no credential.
+
+Three things follow that are easy to trip over:
+
+- **A subject added in code needs a permission added here**, or the service fails at runtime
+  rather than at deploy. `TestAccounts_ConfCoversEverySubjectTheCodeUses` in
+  `internal/messaging` is the guard: it fails if a subject in `messaging.Streams` has no grant.
+- **JetStream is a separate permission surface.** Publishing to a stream subject is not enough;
+  declaring a stream needs `$JS.API.STREAM.CREATE|UPDATE.<STREAM>`, and consuming needs
+  `$JS.API.CONSUMER.CREATE`, `$JS.API.CONSUMER.MSG.NEXT` and `$JS.ACK` for that one stream and
+  consumer name. A missing JetStream grant looks like a broken stream, not a permissions
+  problem — the request simply never gets a reply.
+- **Each connection's reply inbox is scoped to `_INBOX.<service>`** by
+  `messaging.WithIdentity`. JetStream delivers pulled messages to the client's inbox, so a user
+  permitted to subscribe to `_INBOX.>` would receive copies of every other service's messages
+  and read `delivery.*` without any `delivery.*` permission. The narrow subscribe lists and the
+  client-side prefix are one mechanism; changing either alone breaks it.
+
+Generate a matched key set with `go run ./cmd/natskeys` (`-format json` for the payload the
+staging and production ExternalSecrets read). Each key's public half becomes a
+`$HERMES_NKEY_*` variable in the NATS server's environment; the seed is mounted into that one
+service's pod. Rotating one half of a pair alone locks that service out of the bus.
 
 ### Email (`worker-email`)
 

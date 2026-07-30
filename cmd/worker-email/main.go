@@ -25,7 +25,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger, messaging.WithCABundle(cfg.NATSCABundlePath))
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
+		messaging.WithCABundle(cfg.NATSCABundlePath),
+		messaging.WithIdentity("hermes-worker-email", cfg.NATSNKeySeedPath))
 	bootstrap.MustSetupStreams(ctx, natsClient, logger)
 	defer natsClient.Close()
 

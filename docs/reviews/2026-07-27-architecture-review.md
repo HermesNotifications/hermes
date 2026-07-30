@@ -51,7 +51,10 @@ new numbered finding rather than quietly widening its own scope.
 
 ## P0 — Security, critical
 
-**1. NATS is completely unauthenticated and unencrypted.** `internal/messaging/nats.go:40`
+**1. NATS is completely unauthenticated and unencrypted. RESOLVED 2026-07-30** — TLS in ADR 0005
+phase 2, NKey accounts and per-service subject permissions in phase 3. See
+["finding 1 closed"](#resolved-2026-07-30--finding-1-closed-adr-0005-phase-3) below; the original
+report follows. `internal/messaging/nats.go:40`
 is a bare `nats.Connect(url)` — no token, NKey, credentials, or TLS, and no config field
 exists to supply one. The deployment starts NATS with no auth either
 (`deploy/k8s/base/infra/nats.yaml:23-30`), and monitoring port 8222 is reachable from every
@@ -1533,6 +1536,86 @@ namespace, so anything that can read Secrets there can mint a certificate every 
 
 ---
 
+## Resolved 2026-07-30 — finding 1 closed, ADR 0005 phase 3
+
+**1. NATS is completely unauthenticated and unencrypted — RESOLVED.** Phase 2 closed the
+encryption half; this closes the authentication and authorization half. The bus now defines a
+single `HERMES` account with one NKey user per service, each scoped to the subjects that
+service uses (`deploy/k8s/base/infra/nats-accounts.conf`), and
+`internal/messaging.WithIdentity` supplies the credential from `HERMES_NATS_NKEY_SEED`.
+
+**The subject map was derived from an observed protocol trace**, not from the subject list:
+running `internal/messaging` against a traced JetStream server showed that `SetupStreams` needs
+`$JS.API.STREAM.UPDATE.<S>` *as well as* `CREATE` (`CreateOrUpdateStream` tries UPDATE first),
+and that consuming needs `$JS.API.CONSUMER.CREATE`, `$JS.API.CONSUMER.MSG.NEXT` and `$JS.ACK`
+per stream and consumer name. A missing JetStream grant produces no error at all — the request
+gets no reply and times out — so it presents as a broken stream.
+
+**The finding this phase turned up on its own:** a JetStream pull consumer needs no `subscribe`
+permission on the stream subject, because messages arrive on the client's *reply inbox*. So
+`subscribe: _INBOX.>` — the obvious grant — would have let any service receive copies of every
+other service's pulled messages and read recipient addresses and rendered bodies out of
+`delivery.*` with no `delivery.*` permission. Each connection is now confined to
+`_INBOX.<service>` client-side and each user may subscribe only to its own prefix.
+
+**Also caught: staging would have silently lost all authorization.** Its `secretGenerator` used
+`behavior: replace`, which drops keys the base adds — so a `replace` plus a separate
+`accounts.conf` would have removed the whole permissions file from staging while leaving TLS in
+place. Changed to `merge`. This is the second time staging's NATS patch has been a silent
+downgrade (see finding 51).
+
+Verified — observed, not reasoned:
+
+- **`make test` runs a real nats-server from the committed permissions file.** The whole
+  pipeline runs under real per-service NKeys; 27 publish denials, 10 subscribe denials, an
+  anonymous connection, an unlisted-key connection and a missing-variable parse failure are all
+  asserted against the server's own `-ERR`.
+- **In-cluster on k3s with cert-manager v1.21.0**, from the repo's own rendered staging
+  manifest: `nats-0` Ready with the accounts config, `/jsz` showing all 4 streams and all 5
+  consumers created by their own services' credentials, and the pipeline running end to end
+  over TLS (`TestNKeyClusterPipeline`).
+- **Every denial named by the server**, with the offending user's public key and subject in
+  `nats-0`'s log: `delivery.email` publish by the email worker, `notification.send` publish by
+  dispatch, `$JS.API.CONSUMER.CREATE.DELIVERY.*` by dispatch and by the email worker,
+  `$JS.API.STREAM.LIST` and `$JS.API.STREAM.DELETE.DELIVERY` by dispatch,
+  `$JS.API.CONSUMER.INFO|MSG.NEXT.DELIVERY.worker-sms` by the email worker, and subscriptions
+  to `delivery.email`, `>` and `_INBOX.hermes-dispatch.>` by the email worker. An unauthenticated
+  `nats pub` gets `Authorization Violation`; the CA alone is no longer a credential.
+- **Fail-closed provisioning:** deleting the `nats-nkeys` Secret and restarting put NATS in
+  CrashLoopBackOff with `variable reference for 'HERMES_NKEY_SEND' ... can not be found`.
+- **Plaintext development still works** — the repo's own client against a bare
+  `nats:2-alpine`, with an empty CA bundle and an empty seed, connects, declares all four
+  streams, publishes and consumes. The local overlay renders with plaintext args, empty
+  `HERMES_NATS_CA_BUNDLE`, empty `HERMES_NATS_NKEY_SEED` and zero cert-manager resources.
+
+Mutation-checked: adding `delivery.sms` to the email worker fails
+`TestAccounts_DeniedPublishes/email_worker_cannot_publish_another_channel's`; removing send's
+`$JS.API.STREAM.UPDATE.NOTIFICATIONS` fails
+`TestAccounts_PipelineRunsUnderPerServiceCredentials` with the exact denied subject; collapsing
+`WithIdentity`'s inbox prefix to `_INBOX` fails three named tests including the pipeline.
+
+**Two things this does not close, both recorded in the ADR 0005 amendment:**
+
+- **A named over-grant.** Every service calls `SetupStreams` at boot, so every user can create
+  or update all four streams. Delete, purge, direct-get and list are granted to nobody, so the
+  residual is stream-config tampering, not reading or forging traffic.
+- **[P1, new] Centrifugo's NATS broker cannot use this bus.** `centrifugo:v5` (5.4.9) has
+  exactly one NATS setting — `--nats_url`, documented as `nats://user:pass@host:4222` — and no
+  NATS CA, TLS or NKey option. The base ConfigMap still sets `nats_url: nats://nats:4222`, and
+  neither overlay overrides it, so **this was already broken by phase 2** (plaintext against a
+  TLS-required server), not by phase 3. No Centrifugo user was invented, because what
+  credential form it can present was not verified. Multi-node Centrifugo fan-out is blocked in
+  staging and production until this is decided.
+
+**Unverified:** the production overlay was rendered, never applied — no AWS and no ESO here, so
+the two new `nats-nkeys` ExternalSecrets are structurally valid and untested against a real
+secret store. The in-cluster run used the staging shape (single node); route-level behaviour
+under a 3-node cluster with accounts was not exercised. Key **rotation** — replacing a seed and
+its public key while services run — is reasoned from nats.go re-reading the seed file per
+challenge, not observed.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is
@@ -1576,8 +1659,8 @@ step 4 above no longer applies.
    35's egress blocker, then decide explicitly whether to enable `enableNetworkPolicy` on the
    VPC CNI addon. Doing 8 or 10 alone is wasted work; doing 47 alone flips the namespace from
    inert to enforced-and-wrong. Validate with `kubectl kustomize` against both overlays.
-4. **The remaining security workstream.** 1 (NATS auth — the large one, entangled with 14 and
-   19), 3 (permission enforcement — note the Huma middleware shape is why `RequirePermission`
+4. **The remaining security workstream.** ~~1 (NATS auth — the large one, entangled with 14 and
+   19)~~ done 2026-07-30, all three ADR 0005 phases, 3 (permission enforcement — note the Huma middleware shape is why `RequirePermission`
    has no call sites), 14, 15, 16 (pin the actions, including the three workflows added since
    the review), 21.
 5. **Delivery correctness.** 9, which needs explicit sign-off that the two tests pinning

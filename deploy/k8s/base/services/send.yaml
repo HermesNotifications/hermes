@@ -78,6 +78,15 @@ spec:
             - name: nats-ca
               mountPath: /etc/nats-certs
               readOnly: true
+            # ADR 0005 phase 3. This service's NKey seed — the private half of the identity
+            # that selects its user, and so its subject permissions, in
+            # deploy/k8s/base/infra/nats-accounts.conf. Only this service's key is
+            # projected, so a compromised pod cannot read another service's seed out of its
+            # own filesystem. optional: true for the same reason as the CA above: local NATS
+            # has no accounts and HERMES_NATS_NKEY_SEED is empty there.
+            - name: nats-nkey
+              mountPath: /etc/nats-nkey
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir:
@@ -89,6 +98,14 @@ spec:
             items:
               - key: ca.crt
                 path: ca.crt
+        - name: nats-nkey
+          secret:
+            secretName: nats-nkeys
+            optional: true
+            defaultMode: 0400
+            items:
+              - key: hermes-send.nk
+                path: seed.nk
 ---
 apiVersion: v1
 kind: Service
