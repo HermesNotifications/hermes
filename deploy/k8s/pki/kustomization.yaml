@@ -1,0 +1,16 @@
+# ADR 0005 phase 4. Hermes' PKI, deliberately outside base/.
+#
+# base/kustomization.yaml sets `namespace: hermes`, and the kustomize namespace transformer
+# rewrites the namespace of every namespaced resource it covers. The CA Certificate here must
+# land in cert-manager's cluster-resource namespace, so it cannot be covered by that transformer
+# — putting it under base/ would silently move the CA private key back into `hermes`, which is
+# the exact thing this phase removes.
+#
+# Referenced as a sibling of ../../base by the staging and production overlays. Not referenced
+# by the local overlay: `make dev-up`'s k3d cluster has no cert-manager and local NATS runs
+# plaintext.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - hermes-internal-ca.yaml

@@ -63,6 +63,10 @@ spec:
               - image: hermes-migrate
                 newName: ${{ vars.registry }}/hermes-migrate
                 tag: ${{ imageFrom(vars.registry + "/hermes-migrate").Tag }}
+              # ADR 0005 phase 4 — the stream-provisioning Job.
+              - image: hermes-natsprovision
+                newName: ${{ vars.registry }}/hermes-natsprovision
+                tag: ${{ imageFrom(vars.registry + "/hermes-natsprovision").Tag }}
         - uses: git-commit
           config:
             path: ./src

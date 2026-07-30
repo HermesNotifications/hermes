@@ -39,6 +39,9 @@ jobs:
           - inbox
           - user
           - migrate
+          # ADR 0005 phase 4. Run-to-completion like migrate: the only bus identity that may
+          # declare a JetStream stream. Services fail closed without it, so it must ship.
+          - natsprovision
     env:
       # The exact commit CI validated. For workflow_run, github.sha is the branch
       # tip (which can race ahead), so we pin to the run's head_sha; for tag

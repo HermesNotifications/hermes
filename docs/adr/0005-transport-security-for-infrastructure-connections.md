@@ -284,6 +284,164 @@ password users alongside NKey users, so a password in `nats_url` is the likely p
 half has no evident answer short of a sidecar or a plaintext listener. This blocks multi-node
 Centrifugo fan-out in staging and production and is not a phase 3 regression.
 
+## Amendment 2026-07-30 — phase 4: the three things phases 1–3 left open
+
+Phase 3 closed finding 1 and named three residual items. All three are now settled. The
+decision stands; two of the three change details this record previously argued the other way,
+and both departures are set out below with what changed the answer. Verified against the same
+k3s cluster and cert-manager v1.21.0, plus the embedded `nats-server` in `make test`.
+
+### 1. Centrifugo can use the bus after all — TLS *and* a credential
+
+The phase 3 amendment recorded that `centrifugo:v5` "exposes exactly one NATS setting,
+`--nats_url`" and that "the TLS half has no evident answer short of a sidecar or a plaintext
+listener". **That was wrong, and wrong in a way worth recording: `--help` is not the
+configuration surface.** Centrifugo registers configuration keys that have no flag equivalent,
+and one of them is `nats_tls`. Established by reading the image's registered keys and struct
+tags and then executing every candidate against a TLS-required `nats-server`:
+
+```json
+"nats_url": "tls://nats:4222",
+"nats_tls": { "enabled": true, "server_ca_pem_file": "/etc/nats-certs/ca.crt" }
+```
+
+Three details are load-bearing and each was observed, not inferred:
+
+- **`nats_tls` is a map, not a bool.** `"nats_tls": true` is rejected with
+  `error configuring nats tls: extract TLS config: '' expected a map, got 'bool'`. The
+  overlays' existing `CENTRIFUGO_REDIS_TLS: "true"` *is* a bool, so the natural guess by
+  analogy is the wrong one — which is most likely why phase 3 concluded the option did not
+  exist.
+- **`"enabled": true` is required.** With it false the CA is ignored and the connection fails
+  `x509: certificate signed by unknown authority`.
+- **A plaintext `nats://` URL was never the actual failure.** nats.go upgrades to TLS when the
+  server advertises `tls_required`, so the pre-phase-4 base ConfigMap failed on *CA
+  verification*, not on a refused plaintext connection. The practical difference matters: there
+  was never a silent-plaintext path here either.
+
+**Centrifugo is a password user, not an NKey user.** No NKey setting exists in any form — no
+flag, no config key, no environment variable. The credential can only travel in `nats_url`'s
+userinfo, so `nats-accounts.conf` gains a `centrifugo` password user beside the six NKey users,
+which NATS supports natively. **A client certificate would have been possible**
+(`nats_tls.cert_pem_file`/`key_pem_file` exist) and was not used: this record already argues
+that mTLS without accounts authenticates a connection while granting every subject, and a
+password user with a subject scope is the thing that actually constrains Centrifugo.
+
+Its subject space is granted as the prefix `centrifugo.>` in both directions rather than as the
+three observed patterns. That restricts nothing further — all three of `centrifugo.control`,
+`centrifugo.node.<nodeID>` and `centrifugo.client.<channel>` are needed for publish *and*
+subscribe — while avoiding a trap: a subject added by a future Centrifugo version would fail
+**silently**. Observed with the subscribe grant narrowed: the server logs
+`Permissions Violation for Subscription`, the client stays connected, and publications simply
+never arrive. Nothing surfaces to the subscriber.
+
+Two consequences that are not obvious:
+
+- **The password is stored twice** — as `centrifugo_password` for nats-server and inside
+  `centrifugo_nats_url` for Centrifugo — because Centrifugo has no separate password setting.
+  Nothing in the cluster checks that they agree. `cmd/natskeys` therefore emits both from one
+  generated value, and a test asserts the URL round-trips the password through `url.Parse`.
+- **nats-server holds a plaintext password in its process environment.** NATS supports bcrypt
+  for password users, which would keep only a hash server-side; it is not used here because the
+  two halves would then need generating and rotating as a pair with no cross-check. Worth
+  revisiting if the NATS config Secret and the client Secret ever diverge in blast radius.
+
+### 2. Stream provisioning is one identity — reversing this record's earlier judgement
+
+Phase 3 judged a provisioning identity "the worse deal while `MustSetupStreams` exits
+non-zero", because self-declaration means any service can heal a missing stream at boot. **That
+trade was framed as a binary and it is not one.** The startup-ordering guarantee comes from
+services *failing closed on a stream they need*, not from their being able to create it. So
+services now **verify** instead of declaring:
+
+- `cmd/natsprovision` runs as a Job and is the only identity holding
+  `$JS.API.STREAM.CREATE.<S>` and `…UPDATE.<S>`.
+- Services hold `$JS.API.STREAM.INFO.<S>` — a read — for only the streams in
+  `messaging.StreamsForService`, and `MustEnsureStreams` exits non-zero if one is absent.
+
+The guarantee phase 3 wanted to keep is kept; what is given up is self-healing. That is the
+same bargain the repository already makes for the database: streams are schema, and schema is
+provisioned by a Job that runs first, with a crash-loop as the convergence mechanism. Verified
+by running the real binaries against a real TLS+NKey server: a worker on a fresh bus exits 1
+with `stream DELIVERY is not available to hermes-worker-email (has cmd/natsprovision run?)`,
+and starts normally once the Job's binary has run.
+
+`STREAM.INFO` is a new grant and does leak stream configuration and message counts to the
+services that depend on that stream. That is a read of metadata, not of traffic, and it is
+scoped per stream — `TestProvisioning_ServicesCannotReadStreamsTheyDoNotDependOn` asserts the
+refusals. **`STREAM.DELETE`, `STREAM.PURGE`, `CONSUMER.DELETE`, `DIRECT.GET`, `STREAM.MSG.GET`,
+`STREAM.LIST` and `$JS.API.INFO` remain granted to nobody, the provisioner included** — which
+is why removing streams during verification required a fresh server rather than a delete call.
+
+The cost is a new deployable: an image, a CI matrix entry, a Kargo subscription, a Job, and one
+more NKey. The Job inherits `hermes-migrate`'s unsolved problem — a Job's pod template is
+immutable, so re-applying a changed one needs an Argo PreSync hook, which is commented out for
+both.
+
+### 3. The CA private key is out of the application namespace — departing from amendment 1
+
+The phase 2 amendment chose a namespaced `Issuer` because "a namespaced issuer cannot be
+borrowed by a workload in another namespace", and accepted that the CA key therefore sat in
+`hermes`. The CA is now a `ClusterIssuer`, with the signing Secret in cert-manager's
+cluster-resource namespace (`--cluster-resource-namespace=$(POD_NAMESPACE)` = `cert-manager`,
+read off the running Deployment). Verified: a Certificate in an unrelated namespace issued from
+a `ca` ClusterIssuer whose Secret exists only in `cert-manager`, and only the leaf — `ca.crt`,
+`tls.crt`, `tls.key`, `CA:FALSE` — landed in the requesting namespace.
+
+**Phase 2's reasoning was not wrong, and its cost is real.** A ClusterIssuer can be used by a
+Certificate in *any* namespace; that was verified too, by minting a certificate with SAN
+`nats.hermes.svc` from a namespace that is not `hermes`. This is a trade, made deliberately:
+
+- The CA key is the ten-year root of the entire internal trust domain and is never rotated.
+  Reading it is silent, offline, untraceable, and yields unlimited certificates for any
+  identity — including identities that do not exist yet.
+- Requesting a leaf is a logged Kubernetes API write that leaves `Certificate` and
+  `CertificateRequest` objects behind, needs create permission on cert-manager CRDs, and yields
+  one 90-day certificate.
+- Secret-read in an application namespace is a common grant that tends to widen — this record's
+  own phase 2 amendment says "revisit if the namespace gains broader Secret readers".
+  Cluster-wide Certificate-create is rarer and is constrainable by admission policy or by
+  cert-manager's CertificateRequest approval RBAC.
+
+Trading an unbounded invisible compromise for a bounded auditable one is worth it. **The
+residual is not closed:** any namespace may still request a certificate this CA signs, and
+nothing in this repository constrains that. Closing it needs admission policy or approver RBAC,
+neither of which is in scope here.
+
+Two things this depends on that are easy to break:
+
+- **`deploy/k8s/pki` must not be reached from inside `base/`.** `base/kustomization.yaml` sets
+  `namespace: hermes`, and the kustomize namespace transformer would rewrite the CA
+  Certificate's `namespace: cert-manager` — putting the key straight back where this change
+  removes it from, with a manifest that applies cleanly and certificates that still issue.
+  Nothing about the failure is visible in behaviour, so
+  `scripts/check_ca_key_location.py` fails the build on it and runs in `make verify`.
+- **The hardcoded `cert-manager` namespace couples Hermes to where cert-manager runs.** If they
+  disagree the ClusterIssuer reports `Ready: False` with
+  `ErrGetKeyPair: ... secrets "hermes-internal-ca-tls" not found` and issues nothing — loud,
+  observed, but it is a coupling that did not exist before. Hermes' manifests now also write one
+  resource into a namespace they do not own.
+
+### What this phase could not check
+
+- **Nothing was applied to a real staging or production cluster.** No AWS, no ESO: the new
+  `HERMES_CENTRIFUGO_NATS_URL`, `HERMES_CENTRIFUGO_NATS_PASSWORD` and provisioner ExternalSecret
+  entries are structurally valid and untested against a real secret store.
+- **`hermes-natsprovision` has never been run as a Kubernetes Job.** The binary was verified
+  against a real TLS+NKey server in a container with the same configuration the Job supplies;
+  the Job manifest itself, its ordering against services, and its image tag reaching staging
+  through Kargo are unexercised.
+- **Two Hermes installs in one cluster would now collide** on the cluster-scoped ClusterIssuer
+  names and the CA Secret name. They already could not coexist — `base/kustomization.yaml` pins
+  both overlays to the `hermes` namespace — so this adds no new constraint today, but it removes
+  the option.
+- **Certificate renewal through the new ClusterIssuer was not exercised through an expiry
+  cycle**, and neither was the phase 2 note that NATS reloads certificates only on SIGHUP.
+- **Centrifugo's Redis auth in production** (finding 41's second half) was not touched. The
+  production ExternalSecret does now carry `HERMES_CENTRIFUGO_REDIS_PASSWORD`, but its
+  `centrifugo-env.yaml` patch still does not set `CENTRIFUGO_REDIS_PASSWORD` or the Redis TLS
+  variables that staging sets — a separate, still-open gap.
+
 ## Status history
 
 - 2026-07-29 — Accepted. Written before implementation, to unblock findings 1, 14 and 19,
@@ -298,3 +456,13 @@ Centrifugo fan-out in staging and production and is not a phase 3 regression.
   phases are now done**, and finding 1 is closed. One residual over-grant is named above
   (stream create/update for every service), and one blocker is surfaced rather than solved
   (Centrifugo's NATS broker cannot present TLS or a credential).
+- 2026-07-30 — Amended: **phase 4**, closing all three items phase 3 left open. Centrifugo now
+  reaches the bus over TLS as a password user — the phase 3 amendment's claim that
+  `centrifugo:v5` has no TLS option is **corrected**, it has an undocumented `nats_tls`
+  configuration key with no flag equivalent. Stream declaration moved to a single provisioning
+  identity (`cmd/natsprovision`), **reversing** phase 3's judgement that the trade was not worth
+  making, because services can fail closed on a stream without being able to create it. The CA
+  private key moved out of the `hermes` namespace into a `ClusterIssuer`, **departing** from the
+  phase 2 amendment's preference for a namespaced `Issuer`; that departure is a deliberate trade
+  and its residual — any namespace may request a certificate this CA signs — is named and not
+  closed.

@@ -23,3 +23,11 @@ spec:
                 secretKeyRef:
                   name: hermes-secrets
                   key: HERMES_CENTRIFUGO_REDIS_ADDRESS
+            # ADR 0005 phase 4. The full bus URL including Centrifugo's password — see the
+            # staging patch for why this cannot live in centrifugo-config.json and why the
+            # NATS TLS setting is a nested map there rather than a bool here.
+            - name: CENTRIFUGO_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_NATS_URL

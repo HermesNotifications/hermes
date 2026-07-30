@@ -23,6 +23,8 @@ resources:
   - services/
   - infra/
   - migration-job.yaml
+  # ADR 0005 phase 4. Streams are schema, so they are provisioned by a Job like the schema is.
+  - nats-provision-job.yaml
   - cleanup-cronjob.yaml
   - ingress.yaml
 

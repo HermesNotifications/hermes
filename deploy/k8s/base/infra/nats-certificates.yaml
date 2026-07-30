@@ -4,53 +4,16 @@
 # public ACME issuer: it proves control of a public domain and cannot sign for
 # nats.hermes.svc. It stays for ingress and is not reused here.
 #
-# These are namespaced Issuers rather than ClusterIssuers. Everything that needs an
-# internal certificate today lives in this namespace, and a namespaced issuer cannot be
-# borrowed by a workload in another namespace to mint a certificate our services trust.
----
-# Bootstrap issuer. Its only job is to sign the CA below; nothing else references it.
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: hermes-selfsigned-bootstrap
-  labels:
-    app.kubernetes.io/component: pki
-spec:
-  selfSigned: {}
----
-# The internal CA. Its private key lives in this Secret, in this namespace — so anything
-# that can read Secrets here can mint a certificate every Hermes service will trust.
-# Replacing this with an intermediate from a real PKI (cert-manager supports Vault and
-# AWS Private CA issuers) is the upgrade path; ADR 0005 does not settle which.
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: hermes-internal-ca
-  labels:
-    app.kubernetes.io/component: pki
-spec:
-  isCA: true
-  commonName: hermes-internal-ca
-  secretName: hermes-internal-ca-tls
-  duration: 87600h # 10y
-  renewBefore: 8760h # 1y
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  issuerRef:
-    name: hermes-selfsigned-bootstrap
-    kind: Issuer
-    group: cert-manager.io
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: hermes-internal-ca
-  labels:
-    app.kubernetes.io/component: pki
-spec:
-  ca:
-    secretName: hermes-internal-ca-tls
+# ADR 0005 phase 4 moved the CA itself out of this file and out of this namespace. It used
+# to be a namespaced Issuer here, which put the CA private key in the Secret
+# hermes-internal-ca-tls in `hermes` — so anything that could read Secrets in the
+# application namespace could mint a certificate every Hermes service trusts. The CA is now
+# a ClusterIssuer whose signing Secret lives in cert-manager's cluster-resource namespace;
+# see deploy/k8s/pki/hermes-internal-ca.yaml for the manifests, the verification and the
+# trade-off, including why this departs from phase 2's preference for a namespaced Issuer.
+#
+# What stays here is the leaf certificate, because its Secret has to be mounted by the NATS
+# pods in this namespace.
 ---
 # The NATS server certificate. cert-manager renews it in place and the kubelet
 # propagates the updated Secret into the mounted volume; NATS reloads certificates on
@@ -91,7 +54,10 @@ spec:
     - "*.nats.hermes"
     - "*.nats.hermes.svc"
     - "*.nats.hermes.svc.cluster.local"
+  # ADR 0005 phase 4. A ClusterIssuer, not a namespaced Issuer: that is what keeps the CA
+  # private key in cert-manager's namespace instead of this one. The name is cluster-scoped,
+  # so it resolves without a namespace here.
   issuerRef:
     name: hermes-internal-ca
-    kind: Issuer
+    kind: ClusterIssuer
     group: cert-manager.io

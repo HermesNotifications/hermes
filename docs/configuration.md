@@ -59,19 +59,40 @@ configurations `include`.
 | `hermes-worker-sms` | `notification.events`, `dlq.delivery.sms` | `delivery.sms` (`worker-sms`) |
 | `hermes-worker-inbox` | `notification.events`, `dlq.delivery.inbox` | `delivery.inbox` (`worker-inbox`) |
 | `hermes-worker-events` | `dlq.notification.events` | `notification.events` (`event-writer`) |
+| `hermes-natsprovision` | — (declares streams only) | — |
+| `centrifugo` | `centrifugo.>` | `centrifugo.>` |
 
 `hermes-admin`, `hermes-user` and `hermes-inbox` do not connect to NATS and have no credential.
+
+Two of those rows are not services:
+
+- **`hermes-natsprovision`** is a run-to-completion Job (ADR 0005 phase 4) and the **only**
+  identity that may create or update a stream. Services hold `$JS.API.STREAM.INFO.<STREAM>` for
+  the streams in `messaging.StreamsForService` and call `messaging.EnsureStreams` at boot, which
+  exits non-zero if a stream is missing. Streams are provisioned the way the database schema is:
+  by a Job that runs first. `STREAM.DELETE`, `STREAM.PURGE`, `CONSUMER.DELETE`, `DIRECT.GET`,
+  `STREAM.MSG.GET`, `STREAM.LIST` and `$JS.API.INFO` are granted to **nobody**.
+- **`centrifugo`** is the one **password** user on the bus, because `centrifugo:v5` exposes no
+  NKey setting in any form — the credential can only travel in `nats_url`'s userinfo. Its
+  password comes from `nats-nkeys/HERMES_CENTRIFUGO_NATS_PASSWORD` for the server and from
+  `hermes-secrets/HERMES_CENTRIFUGO_NATS_URL` for Centrifugo; `go run ./cmd/natskeys` emits both
+  from one value because nothing in the cluster checks they match. Centrifugo's TLS is configured
+  by `nats_tls` in `centrifugo-config.json` — a **map**, not a bool, and absent from
+  `centrifugo --help` entirely.
 
 Three things follow that are easy to trip over:
 
 - **A subject added in code needs a permission added here**, or the service fails at runtime
   rather than at deploy. `TestAccounts_ConfCoversEverySubjectTheCodeUses` in
   `internal/messaging` is the guard: it fails if a subject in `messaging.Streams` has no grant.
+  `TestAccounts_StreamInfoGrantsMatchStreamsForService` and
+  `TestAccounts_OnlyTheProvisionerMayDeclareStreams` guard the stream grants in both directions.
 - **JetStream is a separate permission surface.** Publishing to a stream subject is not enough;
-  declaring a stream needs `$JS.API.STREAM.CREATE|UPDATE.<STREAM>`, and consuming needs
-  `$JS.API.CONSUMER.CREATE`, `$JS.API.CONSUMER.MSG.NEXT` and `$JS.ACK` for that one stream and
-  consumer name. A missing JetStream grant looks like a broken stream, not a permissions
-  problem — the request simply never gets a reply.
+  declaring a stream needs `$JS.API.STREAM.CREATE|UPDATE.<STREAM>` (provisioner only), reading
+  one needs `$JS.API.STREAM.INFO.<STREAM>`, and consuming needs `$JS.API.CONSUMER.CREATE`,
+  `$JS.API.CONSUMER.MSG.NEXT` and `$JS.ACK` for that one stream and consumer name. A missing
+  JetStream grant looks like a broken stream, not a permissions problem — the request simply
+  never gets a reply.
 - **Each connection's reply inbox is scoped to `_INBOX.<service>`** by
   `messaging.WithIdentity`. JetStream delivers pulled messages to the client's inbox, so a user
   permitted to subscribe to `_INBOX.>` would receive copies of every other service's messages

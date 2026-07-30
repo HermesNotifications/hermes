@@ -1,5 +1,7 @@
 # --- Variables ---
-SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate seed cleanup
+# natsprovision is a Job like migrate, not a long-running service: ADR 0005 phase 4 made it
+# the only identity that may declare JetStream streams.
+SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate natsprovision seed cleanup
 DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 
 # --- Build ---
@@ -47,6 +49,10 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 	python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
 	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_networkpolicy_selectors.py -
 	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_networkpolicy_selectors.py -
+	@# ADR 0005 phase 4: the CA private key must not render into the application namespace.
+	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_ca_key_location.py - --namespace hermes
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_ca_key_location.py - --namespace hermes
 
 # --- Helm ---
 .PHONY: helm-lint
