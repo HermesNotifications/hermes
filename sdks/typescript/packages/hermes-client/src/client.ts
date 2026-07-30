@@ -152,9 +152,18 @@ export class HermesClient {
     this.realtime.disconnect();
   }
 
-  /** Close the socket and drop every handler. */
+  /**
+   * Close the socket and drop the handlers consumers registered.
+   *
+   * Deliberately leaves this client's *own* wiring into the realtime connection intact, so the client
+   * still works if it is used again. That is not a hypothetical: React's StrictMode invokes an
+   * effect's cleanup and then the effect again on the same instance, so a `dispose()` that tore down
+   * the internal wiring left a client which connected, subscribed and received publications — and
+   * delivered them to nobody. Silent, and invisible to every unit test, because the socket looked
+   * healthy the whole time.
+   */
   dispose(): void {
-    this.realtime.dispose();
+    this.realtime.disconnect();
     this.notificationHandlers = [];
     this.updateHandlers = [];
     this.unreadCountHandlers = [];

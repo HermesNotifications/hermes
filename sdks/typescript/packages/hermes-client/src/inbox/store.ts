@@ -39,6 +39,7 @@ export class InboxStore {
   private listeners = new Set<() => void>();
   private cleanups: Array<() => void> = [];
   private disposed = false;
+  private started = false;
 
   /**
    * Incremented on every load. A response tagged with a stale generation is dropped, so
@@ -94,9 +95,17 @@ export class InboxStore {
     for (const listener of this.listeners) listener();
   }
 
-  /** Load the first page, subscribe to realtime, and connect. */
+  /**
+   * Load the first page, subscribe to realtime, and connect.
+   *
+   * Safe to call again after {@link stop}, which is not a theoretical nicety: React's StrictMode
+   * deliberately runs an effect, its cleanup, and then the effect again on the same instance. A
+   * store that could not survive that cycle would end up permanently inert — loading nothing and
+   * receiving nothing — in every StrictMode app.
+   */
   async start(): Promise<void> {
-    if (this.disposed) return;
+    if (this.disposed || this.started) return;
+    this.started = true;
 
     this.cleanups.push(
       this.client.on("notification", (event: NewNotificationEvent) => {
@@ -115,6 +124,11 @@ export class InboxStore {
     );
 
     await this.refresh();
+
+    // Re-checked after the await: `stop()` may have run while the first page was in flight, and
+    // connecting afterwards would leave an orphaned socket delivering publications to a store that
+    // is no longer listening.
+    if (this.disposed || !this.started) return;
 
     try {
       await this.client.connect(this.userId);
@@ -226,14 +240,26 @@ export class InboxStore {
     this.dispatch({ type: "error/clear" });
   }
 
-  /** Unsubscribe from the client, close the socket, and stop accepting work. */
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
+  /**
+   * Unsubscribe from realtime and close the socket, leaving the store restartable.
+   *
+   * This is what a component's effect cleanup should call. Subscribers and loaded state are kept, so
+   * a StrictMode effect/cleanup/effect cycle — or a genuine unmount and remount — resumes correctly.
+   */
+  stop(): void {
+    if (!this.started) return;
+    this.started = false;
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups = [];
-    this.listeners.clear();
     this.client.disconnect();
+  }
+
+  /** Stop, drop every subscriber, and refuse all further work. Permanent. */
+  dispose(): void {
+    if (this.disposed) return;
+    this.stop();
+    this.disposed = true;
+    this.listeners.clear();
   }
 
   private asHermesError(cause: unknown): HermesError {

@@ -397,6 +397,101 @@ describe("InboxStore: subscription contract", () => {
   });
 });
 
+describe("InboxStore: stop and restart", () => {
+  it("resumes after a stop, as React StrictMode requires", async () => {
+    // This is not hypothetical. StrictMode deliberately runs an effect, its cleanup, and then the
+    // effect again on the same instance. Before `stop()` existed the cleanup called `dispose()`, so
+    // the second `start()` hit the disposed guard and returned — leaving the inbox permanently inert
+    // in every StrictMode app: no first page, no socket, no realtime. It reached a live browser
+    // before anything caught it, because Testing Library's renderHook does not use StrictMode.
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake, { userId: "usr_1" });
+
+    await inbox.start();
+    inbox.stop();
+    await inbox.start();
+
+    expect(fake.handlerCount()).toBe(3);
+    expect(fake.calls.filter((call) => call === "connect:usr_1")).toHaveLength(2);
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("delivers realtime events again after a restart", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake);
+    await inbox.start();
+    inbox.stop();
+    await inbox.start();
+
+    fake.emit("notification", {
+      type: "notification.new",
+      id: "b",
+      title: "After restart",
+      body: "body",
+      createdAt: NOW,
+    });
+
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["b", "a"]);
+  });
+
+  it("registers each handler exactly once across a stop/start cycle", async () => {
+    // A stop that forgot to unsubscribe would double every handler, so one arrival would increment
+    // the badge twice.
+    const fake = new FakeHermesClient(fakePage());
+    const inbox = store(fake);
+    await inbox.start();
+    inbox.stop();
+    await inbox.start();
+
+    fake.emit("notification", {
+      type: "notification.new",
+      id: "b",
+      title: "T",
+      body: "B",
+      createdAt: NOW,
+    });
+
+    expect(inbox.getSnapshot().unreadCount).toBe(1);
+  });
+
+  it("closes the socket on stop", async () => {
+    const fake = new FakeHermesClient(fakePage());
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+
+    inbox.stop();
+
+    expect(fake.calls).toContain("disconnect");
+    expect(fake.handlerCount()).toBe(0);
+  });
+
+  it("ignores a repeated start, so one mount cannot load twice", async () => {
+    const fake = new FakeHermesClient(fakePage());
+    const inbox = store(fake);
+
+    await inbox.start();
+    await inbox.start();
+
+    expect(fake.calls.filter((call) => call === "list")).toHaveLength(1);
+  });
+
+  it("does not connect when stopped while the first page was in flight", async () => {
+    // Otherwise the socket outlives the store: publications arrive on a connection nobody is
+    // listening to, which is exactly how a widget ends up connected and permanently empty.
+    const fake = new FakeHermesClient(fakePage());
+    const pending = deferred<ReturnType<typeof fakePage>>();
+    fake.inbox.list = async () => pending.promise;
+    const inbox = store(fake, { userId: "usr_1" });
+
+    const starting = inbox.start();
+    inbox.stop();
+    pending.resolve(fakePage());
+    await starting;
+
+    expect(fake.calls.some((call) => call.startsWith("connect"))).toBe(false);
+  });
+});
+
 describe("InboxStore: disposal", () => {
   it("unsubscribes from the client and closes the socket", async () => {
     const fake = new FakeHermesClient(fakePage());

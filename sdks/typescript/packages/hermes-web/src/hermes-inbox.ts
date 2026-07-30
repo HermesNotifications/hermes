@@ -78,9 +78,13 @@ export class HermesInbox extends LitElement {
     onUpdate: (event: InboxUpdatedEvent) => this.emit("hermes-update", event),
     onUnreadCountChange: (count: number) => this.emit("hermes-unread-count-change", count),
     onStatusChange: (status: RealtimeStatus) => {
-      // Emitted so a host — or a browser test — can wait for the inbox to actually be
-      // live, rather than guessing with a timer. Publications that land before the channel
-      // subscription completes would otherwise be missed.
+      // Every transition, so a host can show an accurate indicator. Reporting only the happy
+      // path leaves a UI that latches to "connected" and never tells the truth again — and any
+      // test gating on it silently stops gating.
+      this.emit("hermes-realtime-change", { status });
+      // Plus a dedicated signal for the common case: "publications will now reach me". Anything
+      // waiting for the inbox to be live should use this rather than a timer, because a
+      // publication landing before the channel subscription completes is lost.
       if (status === "connected") this.emit("hermes-connected", { status });
     },
     onError: (error: HermesError) => this.emit("hermes-error", error),

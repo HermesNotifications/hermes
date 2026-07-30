@@ -3,8 +3,8 @@
 
 import { randomUUID } from "node:crypto";
 import {
-  HERMES_URL,
   INBOX_URL,
+  REALTIME_HEALTH_URL,
   apiKey,
   listInbox,
   mintToken,
@@ -77,10 +77,10 @@ export default async function globalSetup(): Promise<void> {
   }
 
   // 3. Realtime ingress, its rewrite rule, and Centrifugo itself.
-  const realtime = await probe(`${HERMES_URL}/realtime/health`);
+  const realtime = await probe(REALTIME_HEALTH_URL);
   if (!realtime.ok) {
     fail(
-      `GET ${HERMES_URL}/realtime/health returned ${realtime.status}`,
+      `GET ${REALTIME_HEALTH_URL} returned ${realtime.status}`,
       "check Centrifugo is running and hermes-realtime-ingress rewrites /realtime/* correctly"
     );
   }

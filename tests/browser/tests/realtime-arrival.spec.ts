@@ -31,7 +31,10 @@ test.describe("realtime arrival", () => {
 
     await expect(badge(demoPage)).toHaveText("1");
     await openPanel(demoPage);
-    await expect(demoPage.getByText(title)).toBeVisible();
+    // Scoped to the widget on purpose. The demo's activity log echoes the title too, so an
+    // unscoped getByText matches two elements and fails strict mode — which says nothing about
+    // whether the widget rendered it.
+    await expect(demoPage.locator("hermes-inbox").getByText(title)).toBeVisible();
 
     // The whole point.
     expect(

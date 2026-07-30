@@ -38,36 +38,69 @@ export function App() {
     );
   }, []);
 
-  /** Establish (or re-establish) a session, then schedule the next renewal. */
+  /**
+   * Establish (or re-establish) a session and schedule the next renewal.
+   *
+   * Throws on failure. `refreshSession` below is the reporting wrapper; this one exists so the
+   * bootstrap can distinguish "no session yet" from a real error and act on it.
+   */
+  const applySession = useCallback(
+    async (identity?: { organizationId: string; externalUserId: string }) => {
+      if (identity) await login(identity);
+      const next = await fetchSession();
+      setSession(next);
+      setError(null);
+      append(`session for ${next.externalUserId} (sub ${next.hermesUserId})`);
+
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => {
+        void refreshSession();
+      }, refreshDelayMs(next.expiresAt));
+    },
+    // refreshSession is defined below and referenced only inside a timer callback, so it is read
+    // at fire time rather than captured here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [append]
+  );
+
+  /** As {@link applySession}, but surfaces failures in the UI instead of throwing. */
   const refreshSession = useCallback(
     async (identity?: { organizationId: string; externalUserId: string }) => {
       try {
-        if (identity) await login(identity);
-        const next = await fetchSession();
-        setSession(next);
-        setError(null);
-        append(`session for ${next.externalUserId} (sub ${next.hermesUserId})`);
-
-        if (refreshTimer.current) clearTimeout(refreshTimer.current);
-        refreshTimer.current = setTimeout(() => {
-          void refreshSession();
-        }, refreshDelayMs(next.expiresAt));
+        await applySession(identity);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
       }
     },
-    [append]
+    [applySession]
   );
 
   useEffect(() => {
-    void refreshSession({
-      organizationId: DEFAULT_ORGANIZATION,
-      externalUserId: DEFAULT_USER,
-    });
+    /**
+     * Adopt whatever session the browser already has, and only sign in as the default identity if
+     * there is none.
+     *
+     * Logging in unconditionally would be simpler and wrong: it clobbers an existing identity on
+     * every mount, so a second tab acting as another user — or a test that established its own —
+     * silently becomes `demo-user-1` instead. The notifications then go to an inbox nobody is
+     * looking at, which reads as "realtime is broken".
+     */
+    async function bootstrap() {
+      try {
+        await applySession();
+      } catch {
+        await refreshSession({
+          organizationId: DEFAULT_ORGANIZATION,
+          externalUserId: DEFAULT_USER,
+        });
+      }
+    }
+    void bootstrap();
+
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
-  }, [refreshSession]);
+  }, [applySession, refreshSession]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;

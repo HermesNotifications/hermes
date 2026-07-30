@@ -8,6 +8,7 @@ import type {
   InboxUpdatedEvent,
   NewNotificationEvent,
   Notification,
+  RealtimeStatus,
 } from "@hermes-notifications/client";
 // Type-only, and it must stay that way. `LitElement extends HTMLElement` is a class expression
 // evaluated on import, and Node has no HTMLElement — so any *runtime* reference to this class
@@ -84,6 +85,13 @@ export interface HermesInboxProps {
   onUnreadCountChange?: (count: number) => void;
   onOpenChange?: (open: boolean) => void;
   onConnected?: () => void;
+  /**
+   * Every realtime transition, for an accurate connection indicator.
+   *
+   * Prefer this over `onConnected` for a status display: a UI driven only by the happy path latches
+   * to "connected" and then never tells the truth again.
+   */
+  onRealtimeChange?: (status: RealtimeStatus) => void;
   onError?: (error: HermesError) => void;
   /**
    * A notification carrying an `action_url` was activated. Call `preventDefault()` on the
@@ -117,6 +125,7 @@ export function HermesInbox({
   onUnreadCountChange,
   onOpenChange,
   onConnected,
+  onRealtimeChange,
   onError,
   onAction,
   onNotificationClick,
@@ -150,6 +159,7 @@ export function HermesInbox({
     onUnreadCountChange,
     onOpenChange,
     onConnected,
+    onRealtimeChange,
     onError,
     onAction,
     onNotificationClick,
@@ -160,6 +170,7 @@ export function HermesInbox({
     onUnreadCountChange,
     onOpenChange,
     onConnected,
+    onRealtimeChange,
     onError,
     onAction,
     onNotificationClick,
@@ -185,6 +196,13 @@ export function HermesInbox({
           handlers.current.onOpenChange?.((event as CustomEvent<{ open: boolean }>).detail.open),
       ],
       ["hermes-connected", () => handlers.current.onConnected?.()],
+      [
+        "hermes-realtime-change",
+        (event) =>
+          handlers.current.onRealtimeChange?.(
+            (event as CustomEvent<{ status: RealtimeStatus }>).detail.status
+          ),
+      ],
       ["hermes-error", (event) => handlers.current.onError?.((event as CustomEvent).detail)],
       [
         "hermes-action",

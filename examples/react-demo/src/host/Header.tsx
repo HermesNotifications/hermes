@@ -74,7 +74,7 @@ export function Header({
           pageSize={20}
           onNotification={onNotification}
           onUnreadCountChange={onUnreadCountChange}
-          onConnected={() => onRealtimeChange("connected")}
+          onRealtimeChange={onRealtimeChange}
           onError={(error) => onError(error.message)}
           onAction={(notification, event) => {
             // A single-page app routes internally rather than losing its state to a full page

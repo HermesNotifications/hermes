@@ -27,6 +27,17 @@ export const INBOX_URL = process.env.HERMES_INBOX_URL ?? HERMES_URL;
 export const SOCKET_ENDPOINT =
   process.env.HERMES_WS_URL ?? `${HERMES_URL.replace(/^http/, "ws")}/realtime/connection/websocket`;
 
+/**
+ * Centrifugo's health endpoint.
+ *
+ * Derived from {@link SOCKET_ENDPOINT} rather than assuming the ingress path, so it follows the
+ * websocket wherever that actually is. Under an ingress that resolves to `/realtime/health`; talking
+ * to Centrifugo directly it is `/health` on its own port.
+ */
+export const REALTIME_HEALTH_URL =
+  process.env.HERMES_REALTIME_HEALTH_URL ??
+  `${SOCKET_ENDPOINT.replace(/^ws/, "http").replace(/\/connection\/websocket$/, "")}/health`;
+
 /** Read the dev API key from the environment, falling back to what `make seed` wrote. */
 export function apiKey(): string | undefined {
   if (process.env.HERMES_API_KEY) return process.env.HERMES_API_KEY;

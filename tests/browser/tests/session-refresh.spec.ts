@@ -21,8 +21,14 @@ test.describe("session refresh", () => {
       if (header) bearers.push(header);
     });
 
+    // The fixture has already loaded the first page by the time this listener is attached, so a
+    // reload is what gives it something to observe. Attaching earlier is not an option — the
+    // listener needs a page, and the page is what the fixture returns.
+    await demoPage.reload();
     await waitForRealtimeReady(demoPage);
-    expect(bearers.length).toBeGreaterThan(0);
+    await expect
+      .poll(() => bearers.length, { message: "no /v1/inbox request carried a bearer token" })
+      .toBeGreaterThan(0);
     const original = bearers[0];
 
     const sessionRequest = demoPage.waitForResponse(
@@ -81,20 +87,33 @@ test.describe("session refresh", () => {
     // consulted only on socket reconnect while every REST call kept failing.
     await waitForRealtimeReady(demoPage);
 
-    let rejected = false;
+    await hermesUser.send({ title: "Recovered", body: "r" });
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
+
+    let rejected = 0;
     await demoPage.route("**/v1/inbox?*", async (route) => {
-      if (!rejected) {
-        rejected = true;
-        await route.fulfill({ status: 401, body: JSON.stringify({ detail: "invalid token" }) });
+      if (rejected === 0) {
+        rejected = 1;
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "invalid token" }),
+        });
         return;
       }
-      await route.fallback();
+      await route.continue();
     });
 
-    await hermesUser.send({ title: "Recovered", body: "r" });
-    await demoPage.getByTestId("rotate-token").click();
+    // A reload, not the rotate button: rotating re-mints the token but does not re-read the inbox,
+    // so nothing would hit the intercepted route and the retry path would never run. This is the
+    // gap that mattered — `getToken` used to be consulted only on socket reconnect, so after expiry
+    // the inbox 401'd forever while realtime looked perfectly healthy.
+    await demoPage.reload();
 
-    expect(rejected).toBe(true);
+    await expect
+      .poll(() => rejected, { message: "the intercepted 401 never fired" })
+      .toBe(1);
+    // Recovered: the client refreshed and retried, so the row is on screen despite the first 401.
     await expect(badge(demoPage)).toHaveText("1");
   });
 });

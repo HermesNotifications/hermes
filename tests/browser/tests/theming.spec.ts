@@ -12,25 +12,45 @@ import { badge, expect, openPanel, test, waitForRealtimeReady } from "../fixture
  * An integrator needs both, and shipping one without the other is a plausible regression.
  */
 test.describe("theming", () => {
-  test("a host custom property changes the widget's internals", async ({
-    demoPage,
-    hermesUser,
-  }) => {
-    await waitForRealtimeReady(demoPage);
-    await hermesUser.send({ title: "Themed", body: "t" });
-    await expect(badge(demoPage)).toHaveText("1");
+  test("a host custom property changes the widget's internals", async ({ demoPage }) => {
+    // Asserted on the popover rather than the badge, so this test needs no notification to exist.
+    // Sending one would make a pure styling assertion depend on the whole async pipeline —
+    // slower, and flaky for a reason that has nothing to do with theming.
+    await openPanel(demoPage);
+    const popover = demoPage.getByRole("dialog");
 
-    const before = await badge(demoPage).evaluate((node) => getComputedStyle(node).backgroundColor);
+    const before = await popover.evaluate((node) => getComputedStyle(node).backgroundColor);
 
     await demoPage.evaluate(() => {
       document
         .querySelector("hermes-inbox")
-        ?.setAttribute("style", "--hermes-badge-bg: rgb(1, 2, 3)");
+        ?.setAttribute("style", "--hermes-popover-bg: rgb(1, 2, 3)");
     });
 
-    const after = await badge(demoPage).evaluate((node) => getComputedStyle(node).backgroundColor);
+    const after = await popover.evaluate((node) => getComputedStyle(node).backgroundColor);
     expect(after).toBe("rgb(1, 2, 3)");
     expect(after).not.toBe(before);
+  });
+
+  test("a host custom property restyles the badge once there is one", async ({
+    demoPage,
+    hermesUser,
+  }) => {
+    // The badge is conditionally rendered, so it needs a real notification — kept as its own test
+    // so a pipeline hiccup cannot be mistaken for a theming regression.
+    await waitForRealtimeReady(demoPage);
+    await hermesUser.send({ title: "Themed", body: "t" });
+    await expect(badge(demoPage)).toHaveText("1");
+
+    await demoPage.evaluate(() => {
+      document
+        .querySelector("hermes-inbox")
+        ?.setAttribute("style", "--hermes-badge-bg: rgb(4, 5, 6)");
+    });
+
+    expect(await badge(demoPage).evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(
+      "rgb(4, 5, 6)"
+    );
   });
 
   test("a ::part rule in the host stylesheet reaches inside the shadow root", async ({

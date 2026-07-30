@@ -75,8 +75,18 @@ export const test = base.extend<DemoFixtures>({
 
   demoPage: async ({ page, hermesUser }, use) => {
     await loginAs(page, hermesUser);
+
+    // Armed *before* navigating, because waitForResponse only sees responses that arrive after it
+    // is called. The widget fetches its first page as soon as the session resolves, which is
+    // comfortably before any post-navigation assertion settles — so waiting afterwards misses the
+    // response and then hangs until the test times out.
+    const firstLoad = page.waitForResponse(
+      (response) => response.url().includes("/v1/inbox") && response.request().method() === "GET"
+    );
     await page.goto("/");
-    await waitForInboxLoaded(page);
+    await expect(trigger(page)).toBeVisible();
+    await firstLoad;
+
     await use(page);
   },
 });
@@ -120,12 +130,24 @@ export function rows(page: Page): Locator {
   return page.locator("hermes-inbox").locator("css=.notification");
 }
 
-/** Wait for the widget's first page to land. */
+/**
+ * Wait for the widget to be mounted and its first page to have landed.
+ *
+ * Deliberately does *not* use `waitForResponse`: by the time a caller invokes this, the fetch has
+ * usually already happened, and `waitForResponse` only observes responses that arrive after it is
+ * called — so it would hang until the test timed out. Use the `demoPage` fixture where possible; it
+ * arms the waiter before navigating. This function polls observable state instead, so it is safe to
+ * call at any point.
+ */
 export async function waitForInboxLoaded(page: Page): Promise<void> {
   await expect(trigger(page)).toBeVisible();
-  await page.waitForResponse(
-    (response) => response.url().includes("/v1/inbox") && response.request().method() === "GET"
-  );
+  // The session panel fills in once the token has been minted, which is what unblocks the widget.
+  await expect(page.getByTestId("session-hermes-id")).not.toHaveText("—");
+  // And the widget's own state reports the load finished.
+  await page.waitForFunction(() => {
+    const element = document.querySelector("hermes-inbox") as { state?: { loading: boolean } } | null;
+    return Boolean(element?.state) && element!.state!.loading === false;
+  });
 }
 
 /**

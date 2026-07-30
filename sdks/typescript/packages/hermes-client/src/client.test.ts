@@ -290,7 +290,7 @@ describe("HermesClient: teardown", () => {
     expect(seen).toHaveLength(1);
   });
 
-  it("drops every handler on dispose", async () => {
+  it("drops the handlers consumers registered, on dispose", async () => {
     const { hermes, transports } = client();
     const seen: unknown[] = [];
     hermes.on("update", (event) => seen.push(event));
@@ -307,5 +307,49 @@ describe("HermesClient: teardown", () => {
 
     expect(seen).toEqual([]);
     expect(hermes.handlerCount()).toBe(0);
+  });
+
+  it("still delivers events after a dispose-then-reuse cycle", async () => {
+    // React's StrictMode runs an effect's cleanup and then the effect again on the same instance, so
+    // a client can be disposed and then used again. Before this, `dispose()` also tore down the
+    // client's own wiring into the realtime connection, and nothing re-established it — producing a
+    // client that connected, subscribed, received publications and delivered them to nobody. It took
+    // a live browser to find, because from the outside the socket looked perfectly healthy.
+    const { hermes, transports } = client();
+    await hermes.connect();
+
+    hermes.dispose();
+
+    const seen: unknown[] = [];
+    hermes.on("update", (event) => seen.push(event));
+    await hermes.connect();
+    transports[1].latest.publish({
+      type: "inbox.updated",
+      notification_id: "n1",
+      action: "read",
+      unread_count: 4,
+      timestamp: 1,
+    });
+
+    expect(seen).toHaveLength(1);
+  });
+
+  it("still reports the unread count after a dispose-then-reuse cycle", async () => {
+    const { hermes, transports } = client();
+    await hermes.connect();
+    hermes.dispose();
+
+    const counts: number[] = [];
+    hermes.on("unreadCountChange", (count) => counts.push(count));
+    await hermes.connect();
+    transports[1].latest.publish({
+      type: "inbox.updated",
+      notification_id: "n1",
+      action: "read",
+      unread_count: 7,
+      timestamp: 1,
+    });
+
+    expect(counts).toEqual([7]);
   });
 });

@@ -14,6 +14,11 @@ test.describe("inbox actions", () => {
   test("marking read round-trips to the server", async ({ demoPage, hermesUser }) => {
     await waitForRealtimeReady(demoPage);
     await hermesUser.send({ title: "Mark me", body: "m" });
+    // Waited for server-side and then reloaded, rather than waiting for the realtime push. This
+    // spec is about actions round-tripping; coupling it to delivery latency would make it fail for
+    // reasons that have nothing to do with what it asserts. Realtime arrival has its own spec.
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
+    await demoPage.reload();
     await expect(badge(demoPage)).toHaveText("1");
     await openPanel(demoPage);
 
@@ -31,6 +36,11 @@ test.describe("inbox actions", () => {
   }) => {
     await waitForRealtimeReady(demoPage);
     await hermesUser.send({ title: "Archive me", body: "a" });
+    // Waited for server-side and then reloaded, rather than waiting for the realtime push. This
+    // spec is about actions round-tripping; coupling it to delivery latency would make it fail for
+    // reasons that have nothing to do with what it asserts. Realtime arrival has its own spec.
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
+    await demoPage.reload();
     await expect(badge(demoPage)).toHaveText("1");
     await openPanel(demoPage);
 
@@ -50,6 +60,8 @@ test.describe("inbox actions", () => {
     await waitForRealtimeReady(demoPage);
     await hermesUser.send({ title: "One", body: "1" });
     await hermesUser.send({ title: "Two", body: "2" });
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 2);
+    await demoPage.reload();
     await expect(badge(demoPage)).toHaveText("2");
     await openPanel(demoPage);
 
@@ -63,6 +75,11 @@ test.describe("inbox actions", () => {
   test("clicking a row without an action marks it read", async ({ demoPage, hermesUser }) => {
     await waitForRealtimeReady(demoPage);
     await hermesUser.send({ title: "Clickable", body: "c" });
+    // Waited for server-side and then reloaded, rather than waiting for the realtime push. This
+    // spec is about actions round-tripping; coupling it to delivery latency would make it fail for
+    // reasons that have nothing to do with what it asserts. Realtime arrival has its own spec.
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
+    await demoPage.reload();
     await expect(badge(demoPage)).toHaveText("1");
     await openPanel(demoPage);
 
@@ -76,6 +93,11 @@ test.describe("inbox actions", () => {
     // Rows used to be plain divs with click handlers — entirely unreachable without a mouse.
     await waitForRealtimeReady(demoPage);
     await hermesUser.send({ title: "Keyboard", body: "k" });
+    // Waited for server-side and then reloaded, rather than waiting for the realtime push. This
+    // spec is about actions round-tripping; coupling it to delivery latency would make it fail for
+    // reasons that have nothing to do with what it asserts. Realtime arrival has its own spec.
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
+    await demoPage.reload();
     await expect(badge(demoPage)).toHaveText("1");
     await openPanel(demoPage);
 
@@ -129,6 +151,11 @@ test.describe("inbox actions", () => {
   }) => {
     await waitForRealtimeReady(demoPage);
     await hermesUser.send({ title: "Rollback", body: "r" });
+    // Waited for server-side and then reloaded, rather than waiting for the realtime push. This
+    // spec is about actions round-tripping; coupling it to delivery latency would make it fail for
+    // reasons that have nothing to do with what it asserts. Realtime arrival has its own spec.
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
+    await demoPage.reload();
     await expect(badge(demoPage)).toHaveText("1");
     await openPanel(demoPage);
 

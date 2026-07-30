@@ -14,9 +14,14 @@ const SEED_COUNT = 25;
 const PAGE_SIZE = 20;
 
 test.describe("pagination", () => {
-  test.describe.configure({ mode: "serial" });
-
-  test("shows one page, then loads the rest with a cursor", async ({ demoPage, hermesUser }) => {
+  // Deliberately one test rather than two. `hermesUser` and `demoPage` are per-test fixtures, so a
+  // second test would get a fresh user with an empty inbox — `mode: "serial"` orders tests, it does
+  // not share their fixtures. Seeding 25 notifications through the real pipeline is also the slowest
+  // thing in the suite, so doing it once is worth more than the finer-grained reporting.
+  test("pages through a seeded inbox with a cursor, without duplicating rows", async ({
+    demoPage,
+    hermesUser,
+  }) => {
     for (let index = 0; index < SEED_COUNT; index++) {
       await hermesUser.send({ title: `Seeded ${index + 1}`, body: `row ${index + 1}` });
     }
@@ -45,14 +50,8 @@ test.describe("pagination", () => {
 
     await expect(rows(demoPage)).toHaveCount(SEED_COUNT);
     await expect(loadMore).toHaveCount(0);
-  });
 
-  test("renders no duplicate rows across the two pages", async ({ demoPage }) => {
     // The classic cursor regression: an overlapping page appends rows already on screen.
-    await openPanel(demoPage);
-    await demoPage.getByRole("button", { name: "Load more" }).click();
-    await expect(rows(demoPage)).toHaveCount(SEED_COUNT);
-
     const titles = await rows(demoPage).allInnerTexts();
     expect(new Set(titles).size).toBe(titles.length);
   });
