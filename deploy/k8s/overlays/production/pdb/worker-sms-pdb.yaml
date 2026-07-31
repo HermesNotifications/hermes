@@ -1,0 +1,11 @@
+# Finding 36. See worker-email-pdb.yaml.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hermes-worker-sms
+  namespace: hermes
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-worker-sms

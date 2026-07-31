@@ -80,3 +80,16 @@ spec:
               - name: hermes-production
                 sources:
                   - repoURL: git@github.com:darylrobbins/hermes.git
+  # Finding 35's residue. This block did not exist, so nothing verified a production
+  # promotion: `argocd-update` returning success meant only that ArgoCD accepted the sync,
+  # and the Freight was marked promoted whether or not a single pod came up. Every other
+  # part of finding 35 — the ServiceAccount and RBAC, the digest pin, the egress
+  # NetworkPolicy, hermes-send in the checked list — fixed a health check whose result was
+  # then never consulted here.
+  #
+  # Same AnalysisTemplate as staging on purpose. It is namespaced to `hermes` and reads the
+  # workloads in whichever cluster the AnalysisRun executes in, so there is nothing
+  # environment-specific to diverge; a second copy would be a second thing to keep in step.
+  verification:
+    analysisTemplates:
+      - name: hermes-health-check

@@ -1,10 +1,11 @@
+# Finding 36. Was `minAvailable: 1` — see admin-pdb.yaml and README.md.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: hermes-dispatch
   namespace: hermes
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: hermes-dispatch

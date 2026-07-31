@@ -53,12 +53,28 @@ spec:
                           echo "Checking hermes-${deploy}..."
                           kubectl rollout status deployment/hermes-${deploy} -n hermes --timeout=120s
                         done
+                        # Centrifugo. Not prefixed hermes-, which is why it fell out of the
+                        # loop above and went unchecked — it is a Deployment in this
+                        # namespace like any other, and every WebSocket client depends on it.
+                        kubectl rollout status deployment/centrifugo -n hermes --timeout=120s
                         # Check NATS StatefulSet
                         kubectl rollout status statefulset/nats -n hermes --timeout=60s
-                        # Verify all pods are ready
-                        NOT_READY=$(kubectl get pods -n hermes --no-headers | grep -v "Running\|Completed" | wc -l)
-                        if [ "$NOT_READY" -gt 0 ]; then
-                          echo "Found $NOT_READY pods not in Running state"
+                        # Verify every remaining pod is READY, not merely Running.
+                        #
+                        # The previous sweep was `grep -v "Running\|Completed" | wc -l`, which
+                        # counts a CrashLoopBackOff pod as unhealthy but passes a pod sitting
+                        # at 0/1 Running with a failing readiness probe — the exact state a
+                        # bad promotion produces for anything the rollout checks above do not
+                        # own. Terminal Job pods (migrate, nats-provision, cleanup) are
+                        # excluded by phase; a pod with no Ready condition yet prints an empty
+                        # value and is therefore counted, not skipped.
+                        NOT_READY=$(kubectl get pods -n hermes \
+                          --field-selector=status.phase!=Succeeded,status.phase!=Failed \
+                          -o jsonpath='{range .items[*]}{.metadata.name}{"="}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' \
+                          | grep -v '=True$' || true)
+                        if [ -n "$NOT_READY" ]; then
+                          echo "Pods not Ready:"
+                          echo "$NOT_READY"
                           kubectl get pods -n hermes
                           exit 1
                         fi
