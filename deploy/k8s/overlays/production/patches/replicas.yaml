@@ -5,6 +5,18 @@ metadata:
 spec:
   replicas: 3
 ---
+# Finding 8's capacity half. hermes-send was absent from this file, so the one service every
+# write passes through ran at the base default of `replicas: 1` in production — a single pod
+# whose eviction, node loss or rolling update drops 100% of ingestion. Three, matching the
+# HPA's minReplicas in hpa/send-hpa.yaml, so a fresh deployment starts where the autoscaler
+# would immediately put it rather than scaling up from one under live traffic.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-send
+spec:
+  replicas: 3
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
