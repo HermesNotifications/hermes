@@ -2018,3 +2018,128 @@ cover the optional SigNoz fan-out from commit `55430f8`, and
 `observability/adr/001-lgtm-over-signoz.md:4` was properly amended (dated 2026-06-13) *ahead
 of* the code landing rather than silently rewritten — exactly the amend-versus-supersede
 discipline `adr/README.md:56-69` prescribes and the rest of the tree is missing.
+
+## Resolved 2026-07-31 — findings 8, 36 and 35 closed, against a real scheduler
+
+Three findings that share one shape: a production control that renders, applies, and does
+nothing. All three are now closed, and the parts that could be executed were executed against
+a live single-node k3s v1.34.6 cluster in a scratch namespace, using the **rendered production
+overlay** rather than a hand-written approximation.
+
+### Finding 8's capacity half
+
+`hermes-send` was absent from `patches/replicas.yaml`, `patches/resources.yaml`,
+`patches/anti-affinity.yaml` and had neither an HPA nor a PDB — confirmed, five omissions, all
+five fixed. In production the service every write passes through would have run as **one pod
+with no resource requests, no autoscaling, no disruption budget and no spread constraint**.
+
+The numbers are not admin's, and the reasoning is recorded in the files. Send is a thin
+ingestion layer — API-key HMAC, Redis idempotency check, NATS publish — so its per-request
+work is small and CPU-shaped, where admin's is IO-shaped and blocks on Postgres. What differs
+is the *rate*: the rate limiter admits 2000 req/s sustained with a 5000 burst per credential
+(finding 39), four times admin's 500/s. Hence `cpu: 300m` against admin's `200m`
+(CPU is both the binding resource and the autoscaling signal), the same `256Mi/512Mi` memory
+(the heap is set by concurrent in-flight bodies at burst, not by cached state), `maxReplicas:
+20` against admin's 10 (nothing shared caps the fan-out), and a scale-up policy with **no**
+stabilization window against admin's 60s ramp — ingestion spikes arrive in seconds and a
+scale-up that lands after the burst was rate-limited is not a scale-up.
+
+### Finding 36
+
+`patches/anti-affinity.yaml` now covers all ten Deployments plus the NATS StatefulSet, and
+PDBs exist for send, user and all four workers.
+
+Two *different* rules, deliberately. Every Deployment gets soft spread
+(`whenUnsatisfiable: ScheduleAnyway`) on hostname and zone: a hard rule would cap the workload
+at the node count and silently defeat the HPAs the moment the autoscaler asked for more
+replicas than there are nodes. NATS gets `requiredDuringSchedulingIgnoredDuringExecution` on
+hostname, because a soft rule there is worth nothing — it permits exactly the "all three on one
+node" arrangement that `pdb/nats-pdb.yaml` cannot survive. **The cost is explicit: production
+needs at least 3 schedulable nodes, and 4 to drain one without leaving a NATS pod Pending.**
+
+**The wedge in finding 36 was reproduced, not reasoned about.** On this single-node box, with
+the anti-affinity applied, the NATS PDB reports
+
+```
+currentHealthy: 1  desiredHealthy: 2  expectedPods: 3  disruptionsAllowed: 0
+reason: InsufficientPods
+```
+
+and an eviction of the surviving pod — the same API call `kubectl drain` makes — is refused:
+
+```
+Error from server (TooManyRequests): Cannot evict pod as it would violate the pod's
+disruption budget.
+```
+
+That is the finding's second clause verbatim: below quorum the budget blocks the drain that
+would fix the situation. The *pre-fix* arrangement was observed too — with the anti-affinity
+removed, all three NATS pods scheduled onto `vps01` and the PDB happily reported
+`disruptionsAllowed: 1`, i.e. it looked healthy while being one node loss away from total
+loss. With the rule in place the scheduler refuses:
+`0/1 nodes are available: 1 node(s) didn't match pod anti-affinity rules`.
+
+**PDBs were also changed from `minAvailable: 1` to `maxUnavailable: 1`** for every application
+workload — this goes slightly beyond the finding's text and is called out for that reason.
+`minAvailable: 1` on a Deployment the HPA has taken to ten replicas permits **nine**
+simultaneous evictions; it guarantees only that the service does not reach zero. The rationale,
+and which workloads deliberately get no PDB (the Jobs and the CronJob), is in
+`deploy/k8s/overlays/production/pdb/README.md`. `nats` keeps `minAvailable: 2` because quorum
+is an absolute of a fixed-size cluster, not a fraction of an elastic one.
+
+### Finding 35's residue
+
+`deploy/kargo/stages/production.yaml` had no `verification` block, so `argocd-update` returning
+success was the whole of "production promotion verified" — every other part of finding 35's fix
+(ServiceAccount, RBAC, digest pin, egress policy, `hermes-send` in the checked list) repaired a
+check whose result was never read. The block now exists and references the same
+`hermes-health-check` template staging uses.
+
+Reviewing the check against the current service set found **`centrifugo` was never checked** —
+it is the one Deployment in the namespace not named `hermes-*`, so it fell out of the loop.
+It is now checked by name.
+
+A second, quieter gap: the readiness sweep was
+`kubectl get pods | grep -v "Running\|Completed" | wc -l`, which **passes a pod sitting at 0/1
+Running with a failing readiness probe.** Measured, not assumed — against a namespace holding
+two Pending pods and one deliberately-never-Ready pod, the old expression returned `2` and did
+not see the canary; the replacement, which reads the `Ready` condition and excludes only
+terminal Job pods by phase, returned all three.
+
+### What was verified, and what was not
+
+Applied into a scratch namespace on the live cluster: all 52 objects accepted; every one of the
+eleven PDBs reports `expectedPods` equal to its workload's replica count (so no selector
+selects nothing or over-selects) and `disruptionsAllowed: 1` when healthy; all five HPAs
+resolve their `scaleTargetRef` and the send HPA reaches
+`AbleToScale=True, ScalingActive=True (ValidMetricFound)` against a real metrics-server; all
+ten Deployments carry the spread constraints.
+
+Two deliberate mutations confirmed the assertions bite. Removing send's resource requests
+flipped its HPA to `ScalingActive=False, FailedGetResourceMetric` — so `resources.yaml` and
+`send-hpa.yaml` are coupled, and the HPA alone would have existed without ever scaling.
+Introducing a one-character typo in the send PDB's selector (`hermes-sned`) dropped
+`expectedPods` from 3 to 0 with no error from any tool — which is why `expectedPods` is the
+assertion that pins a selector, and why "kustomize renders" proves nothing here.
+
+Not verified, and stated rather than implied:
+
+- **The Kargo half was not exercised.** There is no Kargo controller and no Argo Rollouts CRD
+  on this cluster. `production.yaml` parses and matches staging's structure; that a promotion
+  actually blocks on a failed AnalysisRun is unproven here.
+- **Real spreading cannot be demonstrated on one node.** The cluster is single-node, so the
+  soft `ScheduleAnyway` constraints on the Deployments were confirmed present on every pod spec
+  but never had a second domain to spread into. The node also carries no
+  `topology.kubernetes.io/zone` label, so the zone constraints matched no domain at all.
+- The workloads ran under `registry.k8s.io/pause` with probes stripped, because the ECR images
+  are unreachable from this box. Scheduling, selectors, PDB arithmetic and HPA metric plumbing
+  are unaffected by that; anything depending on the services' own behaviour was not tested.
+
+### Follow-up this change could not make
+
+`docs/deployment-guide.md:382` applies `deploy/kargo/analysis/health-check.yaml` by name, and
+line 466's `kubectl apply -f deploy/kargo/` is not recursive — so **`analysis/rbac.yaml` is
+applied by neither path.** The ServiceAccount, Role, RoleBinding and egress NetworkPolicy that
+finding 35's earlier fix added never reach the cluster, and the health check that production now
+blocks on would 403. The fix is one character on line 382 (`.../analysis/` instead of
+`.../analysis/health-check.yaml`); that file was outside this change's ownership boundary.
