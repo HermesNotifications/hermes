@@ -1,3 +1,4 @@
+{{- include "hermes.validateEnvironment" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -5,6 +6,18 @@ metadata:
   labels:
     {{- include "hermes.labels" . | nindent 4 }}
 data:
+  {{/*
+  internal/config/config.go defaults HERMES_ENV to "development" when it is unset, and
+  Config.Validate() short-circuits to nil in that environment. A chart that never sets it
+  therefore runs every self-hoster in development mode — placeholder secrets accepted,
+  plaintext datastores accepted — without ever saying so. Setting it explicitly is the
+  point; `hermes.env` defaults to the same value, so nothing changes for an evaluator.
+
+  It goes in the shared ConfigMap rather than per-Deployment env because the migration
+  Job, the cleanup CronJob and the stream provisioning Job all call config.MustLoad too,
+  and Validate() applies to them identically.
+  */}}
+  HERMES_ENV: {{ .Values.hermes.env | quote }}
   {{- $natsUrl := include "hermes.natsUrl" . }}
   {{- if $natsUrl }}
   HERMES_NATS_URL: {{ $natsUrl | quote }}

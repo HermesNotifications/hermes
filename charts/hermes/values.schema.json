@@ -3,9 +3,61 @@
   "title": "Hermes Helm Chart Values",
   "description": "JSON Schema for validating Hermes Helm chart values at install time",
   "type": "object",
+  "$comment": "additionalProperties:false is applied to the Hermes-owned objects only. The postgresql/redis/nats/centrifugo keys are forwarded wholesale to sub-charts that have their own schemas, so constraining them here would reject every legitimate sub-chart override — including the per-image `registry` pins values.yaml sets to stop the NATS chart inheriting global.image.registry. Top-level additionalProperties is false so a misspelled section (services:, networkPolicies:, replicaCount:, cleanup:, a top-level image:) is rejected at install time instead of silently falling back to chart defaults. That means every key values.yaml sets must appear below; scripts/check_helm_render.py is what keeps the two in step, because it renders the chart rather than reading the schema.",
+  "additionalProperties": false,
+  "required": ["global", "hermes"],
+  "definitions": {
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "image": { "$ref": "#/definitions/serviceImage" },
+        "resources": { "type": "object" },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "targetMemoryUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" },
+        "topologySpreadConstraints": { "type": "array" }
+      }
+    },
+    "serviceImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" }
+      }
+    },
+    "externalConnection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" }
+      }
+    }
+  },
   "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+
     "global": {
       "type": "object",
+      "$comment": "Deliberately NOT closed. Helm merges `global` into every sub-chart, so this object legitimately carries keys this chart never reads — global.imageRegistry, global.storageClass and global.security.allowInsecureImages for the Bitnami charts, global.image.pullSecretNames for the NATS chart. Closing it rejects all of them, which was found the direct way: an install overriding global.security.allowInsecureImages was refused by the schema.",
       "required": ["domain"],
       "properties": {
         "domain": {
@@ -15,61 +67,93 @@
         },
         "image": {
           "type": "object",
+          "$comment": "Also not closed: the NATS sub-chart reads global.image.pullPolicy and global.image.pullSecretNames from this same object.",
           "properties": {
             "registry": {
-              "type": "string"
+              "type": "string",
+              "description": "Registry for Hermes' own images. Note that Helm merges `global` into every sub-chart and the NATS chart reads this same key, which is why values.yaml pins nats.*.image.registry explicitly."
             },
-            "tag": {
-              "type": "string"
-            }
+            "tag": { "type": "string" }
           }
         }
       }
     },
+
     "hermes": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["jwt", "apiKey"],
       "properties": {
+        "env": {
+          "type": "string",
+          "enum": ["development", "production"],
+          "description": "Deployment environment, published as HERMES_ENV. internal/config/config.go treats ONLY the literal \"development\" as relaxed, so any other value — including a typo like \"prod\" or \"staging\" — takes the strict path in Config.Validate() and every workload exits unless all three datastores use TLS and all three secrets are real. The enum exists to turn such a typo into a clear install-time rejection rather than nine pods in CrashLoopBackOff with a validation error in their logs. If you genuinely need a third environment name, widen this enum and remember it will behave exactly like \"production\"."
+        },
+        "existingSecret": { "type": "string" },
         "jwt": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "secret": {
-              "type": "string"
-            },
-            "existingSecret": {
-              "type": "string"
-            },
-            "existingSecretKey": {
-              "type": "string"
-            }
+            "secret": { "type": "string" },
+            "existingSecret": { "type": "string" },
+            "existingSecretKey": { "type": "string" }
           }
         },
         "apiKey": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "hmacSecret": {
-              "type": "string"
-            },
-            "existingSecret": {
-              "type": "string"
-            },
-            "existingSecretKey": {
-              "type": "string"
-            }
+            "hmacSecret": { "type": "string" },
+            "existingSecret": { "type": "string" },
+            "existingSecretKey": { "type": "string" }
+          }
+        },
+        "centrifugo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "apiKey": { "type": "string" }
           }
         },
         "email": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "provider": {
               "type": "string",
               "enum": ["smtp", "ses"],
               "description": "Email delivery provider. Only smtp and ses are implemented: templates/configmap.yaml branches on exactly these two, and internal/email/email.go rejects anything else at startup. 'sendgrid' was previously accepted here, which passed helm install and then crash-looped the worker with 'unknown email provider'."
+            },
+            "from": { "type": "string" },
+            "smtp": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "host": { "type": "string" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "username": { "type": "string" },
+                "password": { "type": "string" }
+              }
+            },
+            "ses": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "region": { "type": "string" }
+              }
             }
+          }
+        },
+        "sms": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "webhookUrl": { "type": "string" }
           }
         },
         "events": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "retentionDays": {
               "type": "integer",
@@ -77,17 +161,87 @@
               "description": "Number of days to retain notification events"
             }
           }
+        },
+        "cleanup": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schedule": { "type": "string", "minLength": 1 }
+          }
         }
       }
     },
-    "observability": {
+
+    "admin": { "$ref": "#/definitions/service" },
+    "send": { "$ref": "#/definitions/service" },
+    "dispatch": { "$ref": "#/definitions/service" },
+    "inbox": { "$ref": "#/definitions/service" },
+    "user": { "$ref": "#/definitions/service" },
+    "workerEmail": { "$ref": "#/definitions/service" },
+    "workerSms": { "$ref": "#/definitions/service" },
+    "workerInbox": { "$ref": "#/definitions/service" },
+    "workerEvents": { "$ref": "#/definitions/service" },
+
+    "adminPortal": {
       "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "image": { "$ref": "#/definitions/serviceImage" },
+        "resources": { "type": "object" },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    },
+
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": { "$ref": "#/definitions/serviceImage" },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "resources": { "type": "object" }
+      }
+    },
+
+    "natsProvision": {
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Run the JetStream stream provisioning Job (ADR 0005 phase 4). Send, dispatch and all four workers verify their streams at boot via messaging.EnsureStreams, which cannot create them, and exit non-zero if one is missing. Setting this to false without provisioning streams out of band leaves six deployments in CrashLoopBackOff."
         },
+        "image": { "$ref": "#/definitions/serviceImage" },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "resources": { "type": "object" }
+      }
+    },
+
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object" },
+        "tls": { "type": "array" }
+      }
+    },
+
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
         "otel": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "endpoint": {
               "type": "string",
@@ -106,115 +260,66 @@
         },
         "serviceMonitor": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "enabled": {
-              "type": "boolean"
-            }
+            "enabled": { "type": "boolean" }
           }
         }
       }
     },
-    "ingress": {
+
+    "networkPolicy": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
+        "enabled": { "type": "boolean" }
       }
     },
+
+    "externalPostgresql": { "$ref": "#/definitions/externalConnection" },
+    "externalNats": { "$ref": "#/definitions/externalConnection" },
+    "externalRedis": { "$ref": "#/definitions/externalConnection" },
+
+    "externalCentrifugo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiUrl": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" },
+        "ingressServiceName": { "type": "string" }
+      }
+    },
+
     "postgresql": {
       "type": "object",
+      "$comment": "Forwarded to the bitnami/postgresql sub-chart, which has its own schema. Deliberately not closed.",
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
-      }
-    },
-    "externalPostgresql": {
-      "type": "object",
-      "properties": {
-        "url": {
-          "type": "string"
-        },
-        "existingSecret": {
-          "type": "string"
-        },
-        "existingSecretKey": {
-          "type": "string"
-        }
-      }
-    },
-    "nats": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
-      }
-    },
-    "externalNats": {
-      "type": "object",
-      "properties": {
-        "url": {
-          "type": "string"
-        },
-        "existingSecret": {
-          "type": "string"
-        },
-        "existingSecretKey": {
-          "type": "string"
-        }
+        "enabled": { "type": "boolean" }
       }
     },
     "redis": {
       "type": "object",
+      "$comment": "Forwarded to the bitnami/redis sub-chart. Deliberately not closed.",
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
+        "enabled": { "type": "boolean" }
       }
     },
-    "externalRedis": {
+    "nats": {
       "type": "object",
+      "$comment": "Forwarded to the nats sub-chart. Deliberately not closed.",
       "properties": {
-        "url": {
-          "type": "string"
-        },
-        "existingSecret": {
-          "type": "string"
-        },
-        "existingSecretKey": {
-          "type": "string"
-        }
+        "enabled": { "type": "boolean" }
       }
     },
     "centrifugo": {
       "type": "object",
+      "$comment": "Forwarded to the centrifugo sub-chart. Deliberately not closed.",
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
-      }
-    },
-    "externalCentrifugo": {
-      "type": "object",
-      "properties": {
-        "apiUrl": {
-          "type": "string"
-        },
-        "existingSecret": {
-          "type": "string"
-        },
-        "existingSecretKey": {
-          "type": "string"
-        },
-        "ingressServiceName": {
-          "type": "string"
-        }
+        "enabled": { "type": "boolean" }
       }
     }
   },
-  "required": ["global", "hermes"],
   "allOf": [
     {
       "if": {

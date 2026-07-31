@@ -1,0 +1,89 @@
+Hermes {{ .Chart.AppVersion }} is installing as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+API host: {{ .Values.global.domain }}
+{{ if .Values.ingress.enabled }}Routes: /v1/send, /v1/auth, /v1/notifications, /v1/templates, /v1/apikeys,
+        /v1/organizations, /v1/subscriptions, /v1/users (admin API)
+        /v1/users/me (user service), /v1/inbox (inbox service){{ if .Values.centrifugo.enabled }}, /realtime (websocket){{ end }}
+{{ else }}Ingress is disabled. Reach the services directly at {{ include "hermes.fullname" . }}-<service>.
+{{ end }}
+Watch the rollout:
+
+    kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=hermes -w
+
+Expect a minute or two of CrashLoopBackOff on the first install. That is normal and it
+converges. Two Jobs run as post-install/post-upgrade hooks:
+
+  {{ include "hermes.fullname" . }}-migrate-{{ .Release.Revision }} (database schema){{ if .Values.natsProvision.enabled }}
+  {{ include "hermes.fullname" . }}-natsprovision-{{ .Release.Revision }} (JetStream streams){{ end }}
+
+They run after the release's resources are applied, because with the bundled sub-charts
+the datastores they provision do not exist any earlier. The services start at the same
+time and restart until the schema and the streams are there. `helm` still fails loudly if
+either Job fails.
+{{ if not .Values.natsProvision.enabled }}
+  WARNING: natsProvision.enabled=false. Send, dispatch and all four workers verify their
+  JetStream streams at boot and exit non-zero if one is missing — messaging.EnsureStreams
+  cannot create them. Unless you run cmd/natsprovision against this bus yourself, those
+  six deployments will stay in CrashLoopBackOff indefinitely. Admin, inbox and user do
+  not use streams and will come up normally, which makes this easy to misread as a
+  partial outage rather than a missing provisioning step.
+{{ end }}
+
+===============================================================================
+{{ if eq .Values.hermes.env "development" }}
+THIS INSTALL IS IN DEVELOPMENT MODE (hermes.env=development).
+
+That is the chart's default and it is the right setting for evaluating Hermes. It is not
+a setting to run a production system on. In development mode internal/config skips every
+startup check, which means this install will happily run with:
+
+  * plaintext Postgres (sslmode=disable), Redis (redis://) and NATS (nats://) —
+    credentials and notification content cross the network unencrypted;
+  * the built-in placeholder values for HERMES_JWT_SECRET, HERMES_API_KEY_HMAC_SECRET and
+    HERMES_CENTRIFUGO_API_KEY, all of which are committed to a public repository, so
+    anyone can mint a valid token for this install.
+
+To run Hermes for real, set hermes.env=production. Config.Validate() then REQUIRES all of
+the following, and every service, the migration Job, the cleanup CronJob and the stream
+provisioning Job exit at startup if any is missing:
+
+  1. HERMES_DATABASE_URL with sslmode=require, verify-ca or verify-full.
+     ("prefer" and "allow" are rejected: libpq falls back to plaintext without saying so.)
+  2. HERMES_REDIS_URL beginning rediss://
+  3. HERMES_NATS_URL beginning tls://
+  4. hermes.jwt.secret, hermes.apiKey.hmacSecret and hermes.centrifugo.apiKey set to real
+     values — not left unset, and not set to the built-in defaults.
+
+The bundled postgresql, redis, nats and centrifugo sub-charts cannot provide 1-3: this
+chart deliberately does not carry ADR 0005's NKey/TLS configuration for the bundled bus.
+So a production install disables all four sub-charts and points the external* values at
+TLS endpoints you operate:
+
+    --set hermes.env=production \
+    --set postgresql.enabled=false --set externalPostgresql.url='postgres://...?sslmode=verify-full' \
+    --set redis.enabled=false      --set externalRedis.url='rediss://...' \
+    --set nats.enabled=false       --set externalNats.url='tls://...' \
+    --set centrifugo.enabled=false --set externalCentrifugo.apiUrl='https://...'
+
+The chart refuses to render hermes.env=production with a bundled sub-chart still enabled,
+rather than letting nine workloads crash-loop.
+{{ else }}
+This install is in {{ .Values.hermes.env | quote }} mode, so Config.Validate() runs in full.
+Every workload will refuse to start unless the datastore URLs carry TLS and the three
+secrets are real. If pods do not become Ready, read one service's logs first — Validate()
+reports every problem it finds at once, not just the first:
+
+    kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "hermes.fullname" . }}-admin
+{{ end }}
+===============================================================================
+
+Known gaps in this chart, so you do not discover them in production:
+
+  * There is no way to set HERMES_NATS_CA_BUNDLE or HERMES_NATS_NKEY_SEED. Connecting to
+    an external NATS bus that uses ADR 0005's TLS + NKey authentication is therefore not
+    supported by this chart; externalNats.url can carry tls:// but the client presents no
+    NKey identity. Use deploy/k8s/ for that topology.
+  * The bundled Centrifugo runs the in-memory engine. Realtime push does not fan out
+    across replicas, so scaling Centrifugo past one pod silently delivers each message to
+    only the subset of users connected to one pod. Use an external Centrifugo with the
+    Redis engine for anything beyond evaluation.

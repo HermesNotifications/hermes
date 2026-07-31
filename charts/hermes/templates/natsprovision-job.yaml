@@ -1,0 +1,79 @@
+{{- if .Values.natsProvision.enabled }}
+{{/*
+ADR 0005 phase 4. Without this Job a chart install crash-loops six services at boot.
+
+PR #71 replaced MustSetupStreams with messaging.EnsureStreams, which *verifies* streams and
+cannot create them (internal/messaging/provision.go). Stream creation moved to
+cmd/natsprovision. deploy/k8s/base got nats-provision-job.yaml; this chart got nothing, so
+send, dispatch and all four workers exited at startup with
+"stream NOTIFICATIONS is not available ... (has cmd/natsprovision run?)".
+
+Modelled on migration-job.yaml because it is the same kind of thing: streams are schema.
+Same hook phase, same revision-scoped name (a Job's pod template is immutable, so a stable
+name fails on the second install), same securityContext.
+
+post-install/post-upgrade, not pre-install: with `nats.enabled` (the chart default) the bus
+is a regular release resource, so at pre-install time there is nothing to provision against
+— exactly the failure the migration Job hit with Postgres. See migration-job.yaml for the
+two symptoms and how installing the chart surfaced them.
+
+hook-weight -4 puts this after the migration Job (-5). They are genuinely independent —
+one touches Postgres, one touches NATS — but an ordering that merely happens to work is
+the kind that breaks once and is never reproducible.
+
+Re-running is safe: SetupStreams is CreateOrUpdate, so this is idempotent by construction.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "hermes.fullname" . }}-natsprovision-{{ .Release.Revision }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "-4"
+spec:
+  backoffLimit: {{ .Values.natsProvision.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "hermes.labels" . | nindent 8 }}
+        {{- /* app.kubernetes.io/name is messaging.ProvisionerService: the identity
+               cmd/natsprovision presents on the bus, and what the render gate keys on
+               to find this Job. */}}
+        app.kubernetes.io/name: hermes-natsprovision
+        app.kubernetes.io/component: provisioning
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: natsprovision
+          image: {{ include "hermes.image" (dict "root" . "service" .Values.natsProvision) }}
+          imagePullPolicy: IfNotPresent
+          {{- if .Values.externalNats.existingSecret }}
+          env:
+            - name: HERMES_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalNats.existingSecret }}
+                  key: {{ .Values.externalNats.existingSecretKey | default "nats-url" }}
+          {{- end }}
+          envFrom:
+            {{- /* Safe to read the release ConfigMap and Secret because this is a
+                   post-install hook: both exist by the time it runs. */}}
+            - configMapRef:
+                name: {{ include "hermes.configMapName" . }}
+            - secretRef:
+                name: {{ include "hermes.secretName" . }}
+          resources:
+            {{- toYaml .Values.natsProvision.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+{{- end }}

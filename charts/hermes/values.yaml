@@ -15,6 +15,19 @@ fullnameOverride: ""
 
 # -- Hermes application-level configuration
 hermes:
+  # -- Deployment environment, published to every service as HERMES_ENV.
+  #
+  # `development` is the evaluation posture and the chart default: internal/config
+  # tolerates plaintext Postgres/Redis/NATS and the built-in placeholder secrets, which is
+  # what the bundled sub-charts provide. Only the literal string "development" is relaxed —
+  # any other value, including a typo, takes the strict path in Config.Validate().
+  #
+  # `production` requires TLS on all three datastores and real secrets, so it is only
+  # usable with the external* connection settings below. The chart refuses to render a
+  # production install that still uses a bundled sub-chart rather than letting it
+  # crash-loop; see NOTES.txt.
+  env: "development"
+
   # -- Name of an existing Kubernetes Secret containing all sensitive values.
   # When set, the chart will not create its own Secret.
   existingSecret: ""
@@ -294,6 +307,29 @@ migration:
   resources: {}
 
 # ---------------------------------------------------------------------------
+# NATS stream provisioning job
+# ---------------------------------------------------------------------------
+
+# -- JetStream stream provisioning job (ADR 0005 phase 4).
+# Declares the NOTIFICATIONS, DELIVERY, EVENTS and DLQ streams before the services start.
+# Send, dispatch and all four workers verify their streams at boot and exit non-zero if one
+# is missing, so disabling this without provisioning streams some other way crash-loops
+# six deployments. Idempotent — SetupStreams is CreateOrUpdate.
+natsProvision:
+  # -- Run the stream provisioning job. Disable only if you provision JetStream streams
+  # out of band (e.g. cmd/natsprovision run by your own pipeline).
+  enabled: true
+  image:
+    # -- Provisioning job image repository
+    repository: hermes-natsprovision
+    # -- Image tag override
+    tag: ""
+  # -- Number of retries before marking the job as failed
+  backoffLimit: 6
+  # -- Resource requests and limits for the provisioning job
+  resources: {}
+
+# ---------------------------------------------------------------------------
 # Ingress
 # ---------------------------------------------------------------------------
 
@@ -405,6 +441,25 @@ redis:
 # -- NATS sub-chart configuration
 nats:
   enabled: true
+  # Helm merges the parent chart's `global` into every sub-chart, and the NATS chart reads
+  # `global.image.registry` — the same key Hermes uses for its own images. Left alone, the
+  # bundled bus renders as ghcr.io/hermesnotifications/nats:2.10.26-alpine and two more
+  # images nobody publishes, and every NATS pod is ImagePullBackOff. `helm template` is
+  # perfectly happy with it. Pinning each registry explicitly overrides the inherited
+  # global, because a per-image registry beats the global one in that chart.
+  container:
+    image:
+      registry: docker.io
+  reloader:
+    image:
+      registry: docker.io
+  promExporter:
+    image:
+      registry: docker.io
+  natsBox:
+    container:
+      image:
+        registry: docker.io
   config:
     jetstream:
       enabled: true

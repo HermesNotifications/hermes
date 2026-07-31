@@ -10,6 +10,10 @@ mechanics (branches, hooks, CI) see [CONTRIBUTING.md](../CONTRIBUTING.md).
 - **Docker** — runs the local infrastructure
 - For the full Kubernetes dev loop: **[k3d](https://k3d.io)**,
   **[Tilt](https://docs.tilt.dev/install)**, **kubectl**
+- For `make verify`: **[Helm](https://helm.sh/docs/intro/install/) v3** — `make verify-chart`
+  renders `charts/hermes/` and checks it against the Go source. It fails rather than skips
+  when Helm is missing, because a gate that quietly does not run is what let the chart
+  drift in the first place.
 - For the admin portal: **pnpm**
 
 ## Two ways to run locally
