@@ -1,4 +1,22 @@
-# Spread pods across zones and nodes for high availability
+# Spread pods across zones and nodes for high availability.
+#
+# Finding 36. This file previously covered admin, dispatch, inbox and user only. Centrifugo,
+# send, the four workers and — the one that actually costs quorum — the NATS StatefulSet had
+# no spread constraint of any kind, so nothing stopped the scheduler stacking every replica of
+# a workload onto one node.
+#
+# Two different rules are used here on purpose, and the difference is not cosmetic:
+#
+#   * Horizontally scalable stateless tiers (every Deployment below) get soft spread —
+#     `whenUnsatisfiable: ScheduleAnyway`. A hard rule would cap the workload's replica count
+#     at the node count, which would silently defeat the HPAs in ../hpa/ the moment the
+#     autoscaler asked for more replicas than there are nodes. A degraded spread beats a
+#     Pending pod for a tier whose availability comes from having many replicas.
+#
+#   * NATS gets a HARD rule, because its availability comes from a quorum of exactly three,
+#     and a soft rule is worth nothing there: it is precisely the "all three on one node" case
+#     that the PDB in ../pdb/nats-pdb.yaml cannot survive, and `ScheduleAnyway` permits it.
+#     See the NATS block at the end of this file for the cost that choice carries.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -82,3 +100,172 @@ spec:
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: hermes-user
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-send
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-send
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-send
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-events
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-events
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-events
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-email
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-email
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-email
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-sms
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-sms
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-sms
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-inbox
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-inbox
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-inbox
+---
+# Centrifugo holds no durable state of its own — presence and history live in Redis and the
+# broker is NATS — so a soft spread is enough. It is in the request path for every WebSocket
+# client, which is why it is here at all.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: centrifugo
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: centrifugo
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: centrifugo
+---
+# Finding 36, the part that costs data availability rather than capacity.
+#
+# NATS is a 3-replica JetStream cluster whose meta layer needs 2 of 3 to elect a leader, and
+# ../pdb/nats-pdb.yaml sets `minAvailable: 2` to protect exactly that. With all three pods on
+# one node the PDB protects nothing and actively makes things worse: losing that node takes
+# JetStream below quorum, and because only 1 of 3 pods is then healthy the same PDB reports
+# `disruptionsAllowed: 0` and blocks the voluntary eviction that would let the survivors
+# reschedule. The control and the failure it was meant to survive are the same event.
+#
+# `requiredDuringSchedulingIgnoredDuringExecution` on hostname is the only rule that makes the
+# PDB's premise true. The cost is explicit and accepted: **the production cluster must have at
+# least 3 schedulable nodes, and at least 4 for a node to be drained without leaving a NATS pod
+# Pending.** Below that a NATS pod stays Pending rather than co-locating — loud and diagnosable,
+# versus a cluster that looks healthy until the node it all sits on goes away.
+#
+# Zone spread stays soft. A hard zone rule would pin the cluster to exactly one pod per zone
+# and make a single zone's capacity shortage an unschedulable pod, which is a worse trade than
+# a temporarily uneven zone distribution over nodes that are already guaranteed distinct.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: nats
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats

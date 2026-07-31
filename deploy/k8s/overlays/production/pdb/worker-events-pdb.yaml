@@ -1,0 +1,13 @@
+# Finding 36. The Event Writer is the only writer of notification status; with both replicas
+# gone every notification's status freezes at its last recorded event, which is what the inbox
+# renders. Events are durable in the EVENTS WorkQueue, so this protects latency, not data.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hermes-worker-events
+  namespace: hermes
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-worker-events

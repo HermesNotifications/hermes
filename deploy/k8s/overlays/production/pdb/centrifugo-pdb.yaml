@@ -1,10 +1,13 @@
+# Finding 36. Numerically identical to the previous `minAvailable: 1` at replicas: 2; stated
+# as maxUnavailable for the same reason as the rest of this directory — the invariant is "one
+# at a time", not "not zero". See README.md.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: centrifugo
   namespace: hermes
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: centrifugo
