@@ -274,10 +274,24 @@ has a single value and whoever writes it owns all of it. Mixing the two is how a
 | Secret | Owner | Contents |
 |---|---|---|
 | `hermes/<env>/app` | You, seeded once | `jwt_secret`, `api_key_hmac_secret`, `centrifugo_token_secret`, `centrifugo_api_key` |
-| `hermes/<env>/connection` | Crossplane | `database_url`, `redis_url`, `centrifugo_redis_address`, `centrifugo_redis_password` |
+| `hermes/<env>/connection` | You, re-seeded on rotation | `database_url`, `redis_url`, `centrifugo_redis_address`, `centrifugo_redis_password` |
+| `hermes/<env>/nats-nkeys` | You, seeded once | `go run ./cmd/natskeys -format json` |
 
-Crossplane creates both containers but writes a version only for `/connection`, so anything
-you put in `/app` is permanent.
+> **Crossplane creates all three containers and puts a value in none of them.** The
+> `HermesSecretsBundle` XRD declares seven connection keys, but the composition
+> (`infra/crossplane/compositions/aws/secrets.yaml`) emits no `connectionDetails` — it
+> provisions the empty Secrets Manager shell and stops. Every `ExternalSecret` in
+> `deploy/k8s/overlays/*/external-secrets.yaml` reads from those keys, so until a human seeds
+> them **every key fails to resolve and no Hermes pod can start**.
+>
+> This is [finding 12](reviews/2026-07-27-architecture-review.md) and it is **open, not
+> fixed**. Automating it inside the composition is possible but was rejected for now: it
+> needs a Crossplane function that returns nothing *silently* on versions below 1.20, and the
+> chart is installed unpinned — which would trade a visible gap for an invisible one. The
+> seeding below is the supported route, not a temporary hack awaiting a patch.
+
+So all three secrets are yours to seed. Nothing you write to any of them is overwritten by a
+reconcile.
 
 Seed `/app` before the first deploy. `centrifugo_token_secret` **must equal** `jwt_secret` —
 Centrifugo validates the same Hermes-issued tokens the services do:
@@ -293,20 +307,46 @@ aws secretsmanager put-secret-value --secret-id "hermes/$ENV/app" --secret-strin
   '{jwt_secret: $jwt, api_key_hmac_secret: $hmac, centrifugo_token_secret: $jwt, centrifugo_api_key: $capi}')"
 ```
 
-> **`/connection` must currently be seeded by hand as well.** The composition creates the
-> container but does not yet assemble its contents — see the note in
-> `infra/crossplane/compositions/aws/secrets.yaml` and finding 12. Read the values from the
-> Crossplane-written connection secrets in `crossplane-system`, and note the two constraints
-> the services enforce at startup (ADR 0005): `database_url` must carry `sslmode=require` or
-> stricter, and `redis_url` must use `rediss://`. A service given a plaintext URL refuses to
-> start rather than connecting in the clear.
+### Seed `/connection`
+
+**This is a required step, not a footnote.** Wait until the Crossplane database and cache
+claims report Ready — they write their connection details into the cluster only once the
+underlying AWS resources exist — then run:
 
 ```bash
-DB=$(kubectl get secret -n crossplane-system hermes-database-conn -o jsonpath='{.data}')
+./infra/scripts/seed-connection-secret.sh staging us-east-1 --dry-run   # inspect first
+./infra/scripts/seed-connection-secret.sh staging us-east-1
+```
+
+It reads the Crossplane-written secrets `hermes-database-conn` and `hermes-cache-conn` from
+the **`hermes`** namespace — the same namespace as the claims, not `crossplane-system` —
+assembles the connection URLs, and merges them over `hermes/<env>/connection`. Merging
+matters: `centrifugo_nats_url` comes from `cmd/natskeys` rather than from these claims, and a
+replace would silently drop it.
+
+Re-run it after anything that rotates the Aurora master password or the ElastiCache auth
+token. It is idempotent.
+
+The two constraints the services enforce at startup (ADR 0005) are why the script builds the
+URLs rather than leaving you to paste them: `database_url` must carry `sslmode=require` or
+stricter, and `redis_url` must use `rediss://`. A service given a plaintext URL refuses to
+start rather than connecting in the clear.
+
+If you seed by hand instead, the shapes are:
+
+```bash
+# Source secrets live in the hermes namespace, written by the Crossplane claims.
+kubectl get secret -n hermes hermes-database-conn -o jsonpath='{.data}'
+kubectl get secret -n hermes hermes-cache-conn -o jsonpath='{.data}'
+
 # database_url:  postgres://<username>:<password>@<endpoint>:<port>/hermes?sslmode=require
 # redis_url:     rediss://:<auth_token>@<endpoint>:6379/0
 # centrifugo_redis_address / centrifugo_redis_password: the same endpoint and auth_token
 ```
+
+The script does **not** seed `hermes/<env>/app` or `hermes/<env>/nats-nkeys` — neither is
+derivable from infrastructure. Seed `/app` as above and the NKeys with
+`go run ./cmd/natskeys -format json`.
 
 ### Webhook URLs
 
@@ -582,10 +622,11 @@ and rehearse it in staging first:
 ```bash
 # 1. Trigger regeneration of the master password via the Crossplane-managed resource,
 #    NOT via `aws rds modify-db-cluster`, which will be reverted.
-# 2. Wait for the claim to report Ready and for the connection secret in
-#    crossplane-system to carry the new password.
-# 3. Re-derive hermes/<env>/connection from it — until the composition assembles that
-#    secret automatically (finding 12), this step is manual.
+# 2. Wait for the claim to report Ready and for the hermes-database-conn secret in the
+#    hermes namespace to carry the new password.
+# 3. Re-seed hermes/<env>/connection from it. The composition never assembles that secret
+#    (finding 12, open), so this step is always manual:
+#      ./infra/scripts/seed-connection-secret.sh <env> <region>
 
 # Force ESO to resync rather than waiting up to an hour.
 kubectl annotate externalsecret hermes-secrets -n hermes force-sync=$(date +%s) --overwrite
@@ -674,9 +715,12 @@ kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_
 ```
 
 This is also where the original `TODO: re-enable once Crossplane has provisioned the
-database` bites: the database URL only appears in Secrets Manager after the Crossplane
-claims have finished (10-15 minutes), so wait for `crossplane-claims-staging` to be
-Healthy before applying the Hermes Application. See
+database` bites, and it bites harder than it reads: the database URL does **not** appear in
+Secrets Manager on its own at all. The Crossplane claims take 10-15 minutes to finish, and
+then you must run `infra/scripts/seed-connection-secret.sh` to populate
+`hermes/<env>/connection` (finding 12, open — see [Application secrets](#application-secrets)).
+Wait for `crossplane-claims-staging` to be Healthy, seed the secret, confirm
+`hermes-secrets` has resolved, and only then apply the Hermes Application. See
 [ADR 0006](adr/0006-migration-job-as-an-argocd-presync-hook.md) for the ordering decision
 and the open question about folding the ExternalSecret into `PreSync`.
 
@@ -796,8 +840,15 @@ kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_
    silent, and this is a disaster-recovery path, so it would not be noticed until the first
    promotion. (`deploy/argocd/` is flat, so it needs no `-R` — verified, not assumed.)
 4. ArgoCD syncs `crossplane-infra` (XRDs/compositions) then `crossplane-claims-<env>` (data services) — Aurora and ElastiCache are recreated from the claim specs
-5. ArgoCD auto-syncs the application — all K8s resources are defined in git
-6. Migration job runs automatically, seed data may need to be re-applied
+5. **Re-seed `hermes/<env>/connection`** once those claims report Ready:
+   `./infra/scripts/seed-connection-secret.sh <env> <region>`. Rebuilt data services get new
+   endpoints and new credentials, and nothing populates that secret automatically
+   (finding 12, open). Skipping this leaves the stale values in place and every pod fails to
+   connect. `hermes/<env>/app` and `hermes/<env>/nats-nkeys` survive in Secrets Manager and
+   do not need re-seeding — unless the Secrets Manager entries themselves were lost, in which
+   case re-seed all three and note that a new `jwt_secret` invalidates every issued JWT.
+6. ArgoCD auto-syncs the application — all K8s resources are defined in git
+7. Migration job runs automatically, seed data may need to be re-applied
 
 ---
 
