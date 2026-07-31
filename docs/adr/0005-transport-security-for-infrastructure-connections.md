@@ -15,7 +15,9 @@ source: docs/reviews/2026-07-27-architecture-review.md — findings 1, 14 and 19
 
 # ADR 0005: Transport security for infrastructure connections
 
-**Status:** Accepted (2026-07-29)  
+**Status:** Accepted (2026-07-29; amended 2026-07-31: the Centrifugo password's first character
+must be an ASCII letter — a cross-component contract binding `cmd/natskeys`, `nats-accounts.conf`
+and anyone setting the Secret by hand)  
 **Date:** 2026-07-29  
 **Author:** Daryl Robbins
 
@@ -442,6 +444,64 @@ Two things this depends on that are easy to break:
   `centrifugo-env.yaml` patch still does not set `CENTRIFUGO_REDIS_PASSWORD` or the Redis TLS
   variables that staging sets — a separate, still-open gap.
 
+## Amendment 2026-07-31 — the Centrifugo password's first character is a cross-component contract
+
+Phase 4 introduced `centrifugo` as a password user (amendment item 1 above) and left the
+password's *shape* unstated, on the reasonable assumption that a password is an opaque string.
+It is not, and the gap is recorded here because it binds three components that have no other
+contact with each other.
+
+**The constraint.** The generated Centrifugo NATS password **must begin with an ASCII letter**.
+
+**Why.** `nats-accounts.conf` carries the credential as an unquoted variable reference,
+`password: $HERMES_CENTRIFUGO_NATS_PASSWORD`. nats-server does not substitute such a reference:
+`conf/parse.go`'s `lookupVariable` resolves it by **re-parsing the environment value as a fresh
+configuration document**. The password therefore has to lex as a bare conf value. Enumerated
+against the real parser (nats-server v2.12.6) rather than modelled, the failing shapes are a
+leading `-`, a leading digit whose first non-digit is `-`, and a leading digit followed by a
+size suffix and another digit. A leading ASCII letter is always safe whatever follows.
+Unconstrained 43-character base64url hits a failing shape in **2.33%** of draws (465 of 20,000
+through the real parser), which is why it presented as an intermittent, differently-worded test
+failure rather than as a configuration bug.
+
+**Why this is an ADR amendment and not just a code comment.** The constraint is currently
+enforced in `cmd/natskeys` and described in `docs/configuration.md`, and that is the whole of
+it — but it binds:
+
+- **the generator** (`cmd/natskeys`), which must redraw until the first character is a letter;
+- **the config file** (`deploy/k8s/base/infra/nats-accounts.conf`), whose reference must stay
+  **unquoted** — quoting is not a fix and must never be applied. NATS reaches `isVariable()`
+  only from `lexString`, so both `"$HERMES_…"` and `'$…'` resolve Centrifugo's password to the
+  *literal* variable name: no parse error, no log line, a credential published in git, and
+  Centrifugo unable to authenticate. Strictly worse than the bug;
+- **any human** who sets `HERMES_CENTRIFUGO_NATS_PASSWORD` by hand with
+  `kubectl create secret` or by editing Secrets Manager, who has no other way to learn this.
+
+A rule that three independent parties must honour, where violating it stops the whole bus
+starting, is a cross-component contract — and one that is invisible in each component
+separately, which is exactly the kind this record exists to hold.
+
+**Scope.** The `$HERMES_NKEY_*` references have identical exposure and are safe **by luck, not
+by design**: an nkeys user public key is `U` followed by base32 `[A-Z2-7]`, so it always begins
+with a letter and never contains `-`. That is now asserted
+(`TestAccounts_NKeyVariablesCannotHitTheFailingShapes`) rather than assumed, so a key-format
+change becomes a red test rather than a cluster that will not start.
+
+**Still open, and not closed by this amendment (finding 39).** An *empty*
+`HERMES_CENTRIFUGO_NATS_PASSWORD` parses cleanly, starts the server, and lets a client connect
+as `centrifugo` with no credential at all — verified on the wire. The conf language cannot
+express "must be non-empty", so it cannot be closed in the file that documents the guarantee.
+The owner is now determined: an initContainer on the NATS StatefulSet
+(`deploy/k8s/base/infra/nats.yaml`), which is the only candidate that can deliver "a
+half-provisioned cluster fails to start" rather than reporting the problem after nats-server is
+already serving. `internal/config` cannot (no Hermes process reads the variable) and
+`cmd/natsprovision` should not (it would have to impersonate `centrifugo` with an empty
+credential on every deploy). The complication a fix must handle is that the local overlay drops
+`-c nats.conf` and legitimately has no password, so the guard needs a matching removal patch
+there. The behaviour is pinned meanwhile by
+`TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`, which is deliberately **not**
+flipped: it characterises nats-server's parser, which is upstream and unchanged.
+
 ## Status history
 
 - 2026-07-29 — Accepted. Written before implementation, to unblock findings 1, 14 and 19,
@@ -466,3 +526,12 @@ Two things this depends on that are easy to break:
   phase 2 amendment's preference for a namespaced `Issuer`; that departure is a deliberate trade
   and its residual — any namespace may request a certificate this CA signs — is named and not
   closed.
+- 2026-07-31 — Amended (clarification, no decision changed): the Centrifugo password's **first
+  character must be an ASCII letter**, because `nats-accounts.conf` references it unquoted and
+  nats-server resolves such a reference by re-parsing the value as a configuration document.
+  ~2.3% of unconstrained base64url draws otherwise stop the server starting. Recorded here
+  rather than left in `cmd/natskeys` alone because it binds the generator, the config file (whose
+  reference must stay **unquoted** — quoting silently publishes the literal variable name as the
+  password) and any human creating the Secret by hand. Finding 39 — an *empty* password
+  authenticates — remains open, but its owner is now determined: an initContainer on the NATS
+  StatefulSet, not `internal/config` and not `cmd/natsprovision`, with reasons recorded above.
