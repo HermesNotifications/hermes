@@ -1,0 +1,137 @@
+{{/*
+Bundled evaluation Redis.
+
+Plain manifests rather than a sub-chart, for the reason recorded in ADR 0009: the
+bitnami/redis chart that used to sit here can no longer pull an image, and adopting another
+vendor's chart would re-acquire the same exposure. `docker.io/library/redis` is a Docker
+Official Image with versioned tags.
+
+Hermes uses this Redis for three things, none of which is a system of record: the Centrifugo
+engine, the notification-type config cache, and idempotency-key dedup. Losing it costs a
+cache rebuild and a window in which a retried send could be processed twice. Persistence is
+therefore on by default (so a pod restart does not reopen that window) but deliberately
+modest.
+
+No authentication. That is not an oversight: HERMES_REDIS_URL lives in a ConfigMap, so a
+password set here would be written to it in plaintext and buy nothing. The bundled instance
+is reachable only inside the cluster, and networkpolicy.yaml restricts it to Hermes pods
+when network policies are enabled. Anyone who needs an authenticated Redis is by definition
+past the evaluation posture and should set `redis.enabled=false` with `externalRedis.url`,
+which _validate.tpl already forces for `hermes.env=production`.
+*/}}
+{{- if .Values.redis.enabled }}
+{{- $fullName := include "hermes.fullname" . -}}
+{{- $name := printf "%s-redis" $fullName -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "hermes.name" . }}-redis
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "hermes.name" . }}-redis
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "hermes.name" . }}-redis
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-redis
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "hermes.labels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ include "hermes.name" . }}-redis
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      securityContext:
+        # The official redis image runs as uid 999; fsGroup makes the PVC writable to it.
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
+      containers:
+        - name: redis
+          image: {{ printf "%s:%s" .Values.redis.image.repository .Values.redis.image.tag | quote }}
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          args:
+            - "--dir"
+            - "/data"
+            {{- if .Values.redis.persistence.enabled }}
+            # appendonly gives a bounded replay window on restart. The default RDB
+            # snapshotting alone can silently drop the last few minutes of idempotency keys.
+            - "--appendonly"
+            - "yes"
+            {{- else }}
+            - "--save"
+            - ""
+            - "--appendonly"
+            - "no"
+            {{- end }}
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      {{- if not .Values.redis.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.redis.persistence.storageClass }}
+        storageClassName: {{ .Values.redis.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size | quote }}
+  {{- end }}
+{{- end }}

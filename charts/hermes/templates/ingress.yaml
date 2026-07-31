@@ -1,5 +1,37 @@
 {{- if .Values.ingress.enabled }}
 {{- $fullName := include "hermes.fullname" . -}}
+{{/*
+The API route table. It is a list rather than seven copies of the same eleven lines
+because the copies are what rotted: /v1/types and /v1/groups survived the group/type
+rename here long after no handler served them, and /v1/templates, /v1/apikeys,
+/v1/organizations and /v1/subscriptions were never added at all — those admin endpoints
+were unreachable through a chart install.
+
+Order does not matter to Kubernetes: an Ingress with pathType Prefix resolves by longest
+match, which is what lets /v1/users and /v1/users/me go to different services. It is kept
+in the order below purely so a human diff reads well.
+
+The last two entries are the longest-prefix split deploy/k8s/base/ingress.yaml already
+performs and the chart did not. internal/admin serves GET /v1/users (the operator-facing
+listing) and internal/userservice serves everything under /v1/users/me. Routing all of
+/v1/users to the user service, as this chart did, makes the admin listing unreachable.
+
+scripts/check_helm_render.py checks this table against the `Path:` fields of the huma
+operations in internal/{admin,inbox,userservice,send}, in both directions — an endpoint
+with no rule and a rule with no endpoint both fail the build.
+*/}}
+{{- $routes := list
+  (dict "path" "/v1/send"          "service" "send"  "port" .Values.send.port)
+  (dict "path" "/v1/auth"          "service" "admin" "port" .Values.admin.port)
+  (dict "path" "/v1/notifications" "service" "admin" "port" .Values.admin.port)
+  (dict "path" "/v1/templates"     "service" "admin" "port" .Values.admin.port)
+  (dict "path" "/v1/apikeys"       "service" "admin" "port" .Values.admin.port)
+  (dict "path" "/v1/organizations" "service" "admin" "port" .Values.admin.port)
+  (dict "path" "/v1/subscriptions" "service" "admin" "port" .Values.admin.port)
+  (dict "path" "/v1/inbox"         "service" "inbox" "port" .Values.inbox.port)
+  (dict "path" "/v1/users/me"      "service" "user"  "port" .Values.user.port)
+  (dict "path" "/v1/users"         "service" "admin" "port" .Values.admin.port)
+-}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -18,55 +50,15 @@ spec:
     - host: {{ .Values.global.domain | quote }}
       http:
         paths:
-          - path: /v1/send
+          {{- range $routes }}
+          - path: {{ .path }}
             pathType: Prefix
             backend:
               service:
-                name: {{ $fullName }}-send
+                name: {{ $fullName }}-{{ .service }}
                 port:
-                  number: {{ .Values.send.port }}
-          - path: /v1/types
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}-admin
-                port:
-                  number: {{ .Values.admin.port }}
-          - path: /v1/groups
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}-admin
-                port:
-                  number: {{ .Values.admin.port }}
-          - path: /v1/notifications
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}-admin
-                port:
-                  number: {{ .Values.admin.port }}
-          - path: /v1/auth
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}-admin
-                port:
-                  number: {{ .Values.admin.port }}
-          - path: /v1/inbox
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}-inbox
-                port:
-                  number: {{ .Values.inbox.port }}
-          - path: /v1/users
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}-user
-                port:
-                  number: {{ .Values.user.port }}
+                  number: {{ .port }}
+          {{- end }}
   {{- with .Values.ingress.tls }}
   tls:
     {{- toYaml . | nindent 4 }}
