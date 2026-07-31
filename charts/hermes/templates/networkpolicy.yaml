@@ -97,6 +97,62 @@ spec:
     - ports:
         - port: {{ .Values.user.port }}
           protocol: TCP
+{{- if .Values.postgresql.enabled }}
+---
+# Allow ingress to the bundled Postgres from Hermes pods.
+#
+# Required by ADR 0007, not optional hardening. While Postgres was the bitnami sub-chart its
+# pods carried no `app.kubernetes.io/part-of: hermes` label, so the default-deny policy above
+# never selected them and traffic reached them by virtue of no policy applying at all. The
+# bundled manifests use hermes.labels and therefore *are* selected, so without this rule
+# every Hermes service fails to connect to its database — with the chart rendering perfectly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-postgresql
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-postgresql
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: hermes
+      ports:
+        - port: 5432
+          protocol: TCP
+{{- end }}
+{{- if .Values.redis.enabled }}
+---
+# Allow ingress to the bundled Redis from Hermes pods. Same reasoning as Postgres above.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-allow-ingress-redis
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-redis
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: hermes
+      ports:
+        - port: 6379
+          protocol: TCP
+{{- end }}
 ---
 # Allow egress to infrastructure services
 apiVersion: networking.k8s.io/v1
