@@ -250,6 +250,20 @@ func TestAccounts_CentrifugoPasswordReferenceMustNotBeQuoted(t *testing.T) {
 // so the behaviour is visible, and it is closed upstream by whatever populates the Secret.
 // If a future nats-server rejects an empty password user, this test goes red and the
 // workaround can be deleted.
+//
+// DO NOT "fix" this test to assert that an empty password is rejected. It pins nats-server's
+// PARSER, which is upstream and unchanged; the fix for finding 39 prevents an empty value
+// from ever reaching it and does not alter what nats-server does when one does. Inverting
+// the assertion would make this test state something false about a dependency, which is
+// worse than not testing it — the failure would then be silent in the direction that
+// matters.
+//
+// The fix's owner is determined (ADR 0005, amended 2026-07-31): an initContainer on the NATS
+// StatefulSet in deploy/k8s/base/infra/nats.yaml, which is the only place that can deliver
+// what nats-accounts.conf's header promises — a half-provisioned cluster failing to START,
+// rather than being told about it once nats-server is already serving. It needs a matching
+// removal patch in deploy/k8s/overlays/local/patches/nats-local.yaml, because the local
+// overlay drops `-c nats.conf` and legitimately has no password.
 func TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates(t *testing.T) {
 	if err := parseWithCentrifugoPassword(t, ""); err != nil {
 		t.Fatalf("an empty password variable is now a parse error — good news, update this test: %v", err)

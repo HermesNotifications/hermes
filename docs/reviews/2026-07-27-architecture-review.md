@@ -2501,3 +2501,138 @@ The conf language cannot express "must be non-empty", so this cannot be closed i
 documents the guarantee. Pinned as a labelled characterisation test
 (`TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`), which flips to reporting the
 good news if a future nats-server rejects it.
+
+---
+
+## Resolved 2026-07-31 — the controls that existed and did not run
+
+The single most repeated defect across the six remediation units was not a wrong control but an
+**inert** one: NetworkPolicies selecting zero pods, a permission check with no call sites,
+`helm template` piped to `/dev/null`, a migration hook that had never executed, a comment
+claiming parity with a file that had since changed, and `make verify` in no CI workflow. Each
+looked correct in review and did nothing. Four units filed the gaps below and could not close
+them, because `scripts/`, `Makefile` and `.github/` were outside their boundaries.
+
+Three new gates now exist, and **each was watched failing against the real rendered overlay
+before it was made to pass** — a gate only ever seen green is the thing this section exists to
+prevent.
+
+### `scripts/check_job_hooks.py` — every Job must be a usable ArgoCD hook
+
+Reproduced against `main` itself rather than a fixture: at the time of writing,
+`deploy/k8s/base/nats-provision-job.yaml` still carries its hook annotations as YAML comments,
+and the gate names it exactly — `Job/hermes-natsprovision has no argocd.argoproj.io/hook
+annotation`. Re-running with PR #80's version of that file substituted into the render passes.
+That substitution also confirms the gate does **not** pin the phase: it accepts `Sync`, which is
+what #80 uses and what a gate demanding `PreSync` would have wrongly rejected — `PostSync` and a
+lone later sync-wave were both measured to deadlock.
+
+The phase and delete policy are checked against ArgoCD's recognised values, because an
+unrecognised phase (`presync`) is ignored silently and the Job reverts to an ordinary tracked
+resource: the annotation is visibly present in review and does nothing.
+
+### `scripts/check_pdb_selectors.py` — every PDB must protect something
+
+Three mutants introduced into the rendered production overlay, all three named:
+
+| Mutant | What the gate says |
+|---|---|
+| the `hermes-sned` typo from this review's own finding-36 verification | `selector matches none of the 14 workloads; expectedPods would be 0` |
+| nats PDB `minAvailable: 2 → 3` | `disruptionsAllowed: 0 permanently — the budget blocks every node drain instead of pacing it` |
+| a PDB pointed at the `hermes-natsprovision` Job | `matches only pods that are never replaced` |
+
+The second and third go beyond the filed gap and were added because
+`deploy/k8s/overlays/production/pdb/README.md` names both as live hazards in prose — "it would
+the moment someone adds a workload at `replicas: 1`" — with nothing enforcing either.
+Label-selector semantics are **imported** from `check_networkpolicy_selectors.py`, not
+reimplemented; a test asserts the identity, because two copies would drift while each kept
+passing its own tests.
+
+### `scripts/check_workload_resources.py` — requests, and HPAs that can read their metric
+
+The mutation this review measured directly — removing `hermes-send`'s resource requests, which
+flipped its HPA to `ScalingActive=False, FailedGetResourceMetric` — now produces three named
+failures, one for the missing requests and one per affected HPA metric. A `scaleTargetRef` typo
+and a StatefulSet losing its memory limit are also caught.
+
+**The `local` overlay is exempt, and this is stated rather than filtered silently.** Run against
+it, the gate fails on exactly three workloads: `postgres`, `redis` and `mailpit` — laptop
+conveniences that reach no cluster. Local also renders zero HPAs, zero PDBs and zero Jobs, so
+there is no autoscaling to disable and no drain to survive. Running the gate on local while
+skipping non-`hermes-*` workloads was considered and rejected as the kind of special case that
+hides the next omission.
+
+### Gates that existed and ran nowhere
+
+- **`check_ca_key_location.py`** was in `make verify` and in **no CI workflow** — the same gap
+  the NetworkPolicy step closed one release earlier, missed on the identical file. Now a step in
+  `kustomize-validate`.
+- **`infra/scripts/test-lib.sh`** shipped with 17 passing tests that nothing ran, because
+  `verify-manifests` discovers only `scripts/`. Now in `make verify` and its own CI job.
+- **Terraform was in neither.** ADR 0007 records that `terraform validate` and `fmt -check`
+  *were* executed during that work — by hand, once. `make tf-check` now runs both
+  credential-free (`-backend=false`) and fails loudly when terraform is absent. It is
+  deliberately **not** in `make verify`: that target is documented as needing no cloud
+  credentials and is the completion gate every unit runs, and a hard failure on a missing binary
+  would have made it red for all six units in this batch, none of which had terraform installed.
+  The predictable response to that is that people stop running `verify`. CI has terraform
+  unconditionally, which is the half that was actually missing.
+
+### The chart's `helm test` now runs
+
+`ci.yml` had no `helm test`, `kind` or `k3s` step, so the chart test that reads
+`HERMES_DATABASE_URL` and `HERMES_REDIS_URL` out of the chart's own rendered Secret and
+ConfigMap — the only thing that can catch a connection-URL helper naming no Service — ran only
+when an agent invoked it by hand. A `chart-install` job installs the chart on kind and runs it.
+
+Executed end to end on a local kind v1.36.1 cluster before being written into CI: Postgres,
+Redis, a three-node NATS and Centrifugo all reach Running, and `helm test --filter
+name=hermes-test-datastores` reports `Phase: Succeeded` with
+`postgres: connected via HERMES_DATABASE_URL` / `redis: connected via HERMES_REDIS_URL`.
+
+**What the job does not cover, said on its face rather than implied.**
+`ghcr.io/hermesnotifications/hermes-*:0.1.0` is unpublished and returns `403 Forbidden` to an
+anonymous pull — confirmed from the kubelet event, not assumed — so no Hermes service can start.
+The nine Deployments install at `replicas=0` rather than being left in `ImagePullBackOff`, and
+`templates/tests/test-connection.yaml`, which curls the services' `/healthz`, is **excluded by
+`--filter`**. It cannot pass until a release is cut, and a job that appeared to run it would
+claim coverage it does not have. The job name says "datastores only".
+
+That the wiring bites was checked rather than assumed: running the excluded
+`test-connection` pod deliberately exits `helm test` with `1` and
+`Error: 1 error occurred: * pod hermes-test-connection failed`.
+
+### Finding 39 — owner determined, not closed
+
+The claim in `nats-accounts.conf`'s header was corrected: it asserted that a half-provisioned
+cluster fails to start, which is true for an unset variable and **false for an empty one**.
+
+The owner is now named rather than left as "whoever populates the Secret": **an initContainer on
+the NATS StatefulSet** (`deploy/k8s/base/infra/nats.yaml`). Two candidates were evaluated and
+rejected on evidence. `internal/config` cannot work — **no Hermes Go process reads
+`HERMES_CENTRIFUGO_NATS_PASSWORD` at all**; nats-server consumes it directly from its own
+environment, so a check there would sit in a process that never sees the value and pass forever.
+`cmd/natsprovision` runs on every deploy and already fails the sync, but it would have to open a
+second connection deliberately impersonating `centrifugo` with an empty credential — emitting an
+authorization-violation event on every deploy and degrading the one signal that would show a real
+intrusion — and a rejection is anyway indistinguishable from a not-yet-ready server, a TLS
+failure, or a missing account. Decisively, both can only observe the problem *after* nats-server
+is already serving; only a guard on the NATS pod delivers the "fails to start" the header claims.
+
+**Not implemented, for a stated reason.** The local overlay drops `-c nats.conf` and legitimately
+has no password, so the guard needs a matching removal patch in
+`overlays/local/patches/nats-local.yaml` or it blocks `make dev-up`. That is two files outside
+this change's ownership.
+
+The characterisation test is kept **unflipped on purpose**. It pins nats-server's parser
+behaviour, which is upstream and unchanged; the fix prevents an empty value from reaching it.
+Flipping it would make it assert something false about nats-server.
+
+### Not done, and why
+
+The IAM-policy harness driven through `terraform console` (ADR 0007) was **not recovered**. It
+was never committed, so there is nothing in git to restore — it would be written from scratch,
+for `infra/terraform/` code this change does not own, and, decisively, terraform is not installed
+on this machine by default, so it could not be watched failing. A harness written blind is the
+defect this section is about. `terraform validate` now runs in CI, which gives it somewhere to
+plug in; it is left to the unit that owns those modules.
