@@ -33,6 +33,9 @@ lint:              ## Run golangci-lint
 # The completion gate for parallel agent work (.claude/ownership.json). Everything
 # here must run without cluster or cloud credentials, so it proves manifests and
 # compositions are well-formed -- not that they are correct against a live API.
+#
+# `tf-check` is deliberately NOT part of this target; it runs in CI instead. The
+# reasoning is recorded in full above that target, under "Terraform".
 .PHONY: verify verify-manifests
 verify:            ## Full local verification gate (no infra needed)
 	go build ./...
@@ -53,6 +56,25 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
 	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_ca_key_location.py - --namespace hermes
 	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_ca_key_location.py - --namespace hermes
+	@# ADR 0006. A Job's spec.template is immutable and Kargo rewrites its image tag on every
+	@# promotion, so a Job that is not an ArgoCD hook applies once and fails the SECOND
+	@# promotion with `field is immutable` -- while the Application still reports Healthy.
+	@# Established by stashing the fix rather than assuming: every other step in this target
+	@# passes identically with that defect present and absent.
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_job_hooks.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_job_hooks.py -
+	@# Finding 36. A one-character typo in a PDB selector (`hermes-sned`) took expectedPods
+	@# from 3 to 0 with no error from kustomize, kubectl or the API server.
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_pdb_selectors.py -
+	@# Finding 8. hermes-send rendered with no resource requests, no HPA and no PDB and
+	@# nothing objected. An HPA whose target declares no request for the resource it measures
+	@# reports ScalingActive=False / FailedGetResourceMetric and silently never scales.
+	@# The local overlay is deliberately exempt -- see the module docstring for why.
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_workload_resources.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_workload_resources.py - --require-hpa
+	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
+	@# or rejects. It shipped with 17 passing tests that nothing ran.
+	./infra/scripts/test-lib.sh
 	$(MAKE) verify-chart
 
 # The chart's only previous control was `helm template ... > /dev/null` in CI, which
@@ -323,7 +345,42 @@ dev-ui:
 # Terraform (requires AWS credentials)
 # =============================================================================
 
-.PHONY: tf-plan tf-apply tf-destroy tf-bootstrap
+.PHONY: tf-plan tf-apply tf-destroy tf-bootstrap tf-check
+
+# Credential-free Terraform checks. ADR 0007 records that `terraform validate`,
+# `terraform fmt -check` and variable-validation truth tables WERE executed during that
+# work -- by hand, once, and then never again, because Terraform appeared in neither
+# `make verify` nor CI. That is this repository's signature defect: a control that ran
+# once and does not run.
+#
+# This target is called by the `terraform` job in .github/workflows/ci.yml, so it now runs
+# on every merge. It fails loudly when terraform is absent rather than skipping: a gate
+# that goes quiet when its tool is missing is the same defect as no gate at all, and it is
+# the reason `verify-chart` has the identical guard for helm.
+#
+# WHY THIS IS NOT IN `make verify`, deliberately and against the usual rule that every
+# gate belongs in both. `verify` is the completion gate every agent and developer runs, and
+# it is documented above as needing no cluster and no cloud credentials. `terraform init`
+# needs neither of those but does need the network and a ~700MB provider download, and a
+# hard failure on a missing binary would have made `verify` red for every unit in this
+# remediation batch -- none of which had terraform installed, and none of which touched
+# infra/terraform. The predictable response to that is that people stop running `verify`,
+# which costs more than the gap it closes. CI has terraform unconditionally, so the check
+# genuinely runs on the merge path, which is the half that was actually missing.
+#
+# Run it locally with `make tf-check` when you touch infra/terraform.
+tf-check:        ## Credential-free terraform fmt/validate (runs in CI; needs terraform)
+	@command -v terraform >/dev/null 2>&1 || { \
+	  echo "ERROR: terraform not found on PATH."; \
+	  echo "  This gate cannot run without it, and skipping it is how infra/terraform came"; \
+	  echo "  to have no automated check at all. Install Terraform:"; \
+	  echo "    https://developer.hashicorp.com/terraform/install"; \
+	  exit 1; }
+	terraform -chdir=infra/terraform fmt -check -recursive
+	@# -backend=false: no S3 backend, no credentials, no state. This still resolves the
+	@# module graph and the provider schemas, which is what makes `validate` mean anything.
+	terraform -chdir=infra/terraform init -backend=false -input=false
+	terraform -chdir=infra/terraform validate
 
 tf-plan:         ## Plan infra changes (usage: make tf-plan ENV=staging)
 	@test -n "$(ENV)" || { echo "Usage: make tf-plan ENV=staging"; exit 1; }
