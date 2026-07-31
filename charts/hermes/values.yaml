@@ -423,20 +423,57 @@ externalCentrifugo:
 # Sub-chart overrides
 # ---------------------------------------------------------------------------
 
-# -- Bitnami PostgreSQL sub-chart configuration
+# -- Bundled evaluation Postgres. Plain manifests, not a sub-chart — see templates/postgresql.yaml.
 postgresql:
+  # -- Run the bundled evaluation Postgres (templates/postgresql.yaml). Set false and use
+  # externalPostgresql.url for anything you care about; hermes.env=production requires it.
   enabled: true
+  image:
+    # -- Docker Official Image. Not bitnami/postgresql: Broadcom withdrew Bitnami's free
+    # catalogue from Docker Hub, so every versioned docker.io/bitnami tag now 404s. ADR 0007.
+    repository: docker.io/library/postgres
+    # -- Tracks the major that docker-compose.yml and the integration suite test against, so
+    # the bundled datastore is the one Hermes is actually exercised on. Floating within the
+    # major to pick up patch releases; pin harder here if you need a reproducible redeploy.
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
   auth:
+    # -- These are placeholder credentials for an evaluation install and are committed to a
+    # public repository. They are embedded in HERMES_DATABASE_URL in the ConfigMap.
     username: hermes
     password: hermes
     database: hermes
+  persistence:
+    # -- With persistence off the database is an emptyDir and every pod restart starts empty.
+    enabled: true
+    # -- Matches the storage the bitnami/postgresql chart requested by default, so replacing
+    # it does not silently change what a fresh install provisions.
+    size: 8Gi
+    # -- Empty uses the cluster default StorageClass.
+    storageClass: ""
+  resources: {}
 
-# -- Bitnami Redis sub-chart configuration
+# -- Bundled evaluation Redis. See templates/redis.yaml; no authentication by design.
 redis:
+  # -- Run the bundled evaluation Redis (templates/redis.yaml). Set false and use
+  # externalRedis.url for anything you care about; hermes.env=production requires it.
   enabled: true
-  architecture: standalone
-  auth:
-    enabled: false
+  image:
+    # -- Docker Official Image, for the same reason as Postgres above. ADR 0007.
+    repository: docker.io/library/redis
+    # -- Matches docker-compose.yml.
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  persistence:
+    # -- Redis holds the Centrifugo engine state, the type-config cache and idempotency-key
+    # dedup. None is a system of record, but losing the dedup keys on restart reopens a
+    # window where a retried send is delivered twice, so this defaults on.
+    enabled: true
+    # -- Matches the storage the bitnami/redis chart requested by default.
+    size: 8Gi
+    # -- Empty uses the cluster default StorageClass.
+    storageClass: ""
+  resources: {}
 
 # -- NATS sub-chart configuration
 nats:

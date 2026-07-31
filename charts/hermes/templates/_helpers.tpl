@@ -89,12 +89,19 @@ Return the configmap name.
 
 {{/*
 Build the database URL.
-When the bundled postgresql sub-chart is enabled, construct a DSN from its auth values.
-Otherwise, use the external URL.
+When the bundled Postgres is enabled, construct a DSN from its auth values. Otherwise, use
+the external URL.
+
+The host must match the Service rendered by templates/postgresql.yaml. It is built from
+hermes.fullname, not .Release.Name: those differ whenever the release name does not already
+contain the chart name (release `hv` gives fullname `hv-hermes`), and the bundled Postgres
+was a sub-chart until ADR 0007, which named its Service after the release instead. Getting
+this wrong produces a URL pointing at nothing, which renders and lints perfectly and fails
+only at connect time.
 */}}
 {{- define "hermes.databaseUrl" -}}
 {{- if .Values.postgresql.enabled -}}
-{{- $host := printf "%s-postgresql" .Release.Name -}}
+{{- $host := printf "%s-postgresql" (include "hermes.fullname" .) -}}
 {{- $port := "5432" -}}
 {{- $user := .Values.postgresql.auth.username -}}
 {{- $pass := .Values.postgresql.auth.password -}}
@@ -118,10 +125,15 @@ Return the NATS URL.
 
 {{/*
 Return the Redis URL.
+
+`-redis`, not `-redis-master`: the `-master` suffix was the bitnami/redis chart's naming for
+a replication topology this chart never used. templates/redis.yaml renders a single Service
+named after hermes.fullname (see hermes.databaseUrl for why fullname rather than the release
+name).
 */}}
 {{- define "hermes.redisUrl" -}}
 {{- if .Values.redis.enabled -}}
-{{- printf "redis://%s-redis-master:6379/0" .Release.Name -}}
+{{- printf "redis://%s-redis:6379/0" (include "hermes.fullname" .) -}}
 {{- else -}}
 {{- .Values.externalRedis.url -}}
 {{- end -}}

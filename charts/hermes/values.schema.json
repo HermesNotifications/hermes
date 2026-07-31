@@ -293,16 +293,68 @@
 
     "postgresql": {
       "type": "object",
-      "$comment": "Forwarded to the bitnami/postgresql sub-chart, which has its own schema. Deliberately not closed.",
+      "$comment": "Bundled evaluation Postgres, rendered by templates/postgresql.yaml. Closed, unlike the bitnami sub-chart block it replaced (ADR 0007): there is no longer a downstream schema to forward unknown keys to, so an unrecognised key here is a silent no-op rather than someone else's validation error. auth.* is required because hermes.databaseUrl builds HERMES_DATABASE_URL from it.",
+      "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag"]
+        },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "username": { "type": "string", "minLength": 1 },
+            "password": { "type": "string", "minLength": 1 },
+            "database": { "type": "string", "minLength": 1 }
+          },
+          "required": ["username", "password", "database"]
+        },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$" },
+            "storageClass": { "type": "string" }
+          }
+        },
+        "resources": { "type": "object" }
       }
     },
     "redis": {
       "type": "object",
-      "$comment": "Forwarded to the bitnami/redis sub-chart. Deliberately not closed.",
+      "$comment": "Bundled evaluation Redis, rendered by templates/redis.yaml. No auth block, deliberately: HERMES_REDIS_URL is a ConfigMap value, so a password set here would be written beside it in plaintext. Use externalRedis for an authenticated instance.",
+      "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag"]
+        },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$" },
+            "storageClass": { "type": "string" }
+          }
+        },
+        "resources": { "type": "object" }
       }
     },
     "nats": {

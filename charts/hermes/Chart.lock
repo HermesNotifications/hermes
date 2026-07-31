@@ -1,15 +1,9 @@
 dependencies:
-- name: postgresql
-  repository: oci://registry-1.docker.io/bitnamicharts
-  version: 16.0.6
-- name: redis
-  repository: oci://registry-1.docker.io/bitnamicharts
-  version: 20.0.5
 - name: nats
   repository: https://nats-io.github.io/k8s/helm/charts/
   version: 1.2.11
 - name: centrifugo
   repository: https://centrifugal.github.io/helm-charts
   version: 13.0.1
-digest: sha256:5dee4a0c292a97be0d865cbff3fdbfc631549a28e81aba3e91d488e5113bb121
-generated: "2026-04-04T19:54:38.731122-04:00"
+digest: sha256:fb243cf49e6711f69aafdc2cba0994608d6b15af307f0b2275c082a0c5da14a5
+generated: "2026-07-31T00:53:14.92430524Z"

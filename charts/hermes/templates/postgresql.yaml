@@ -1,0 +1,146 @@
+{{/*
+Bundled evaluation Postgres.
+
+This is a plain StatefulSet rather than a sub-chart dependency, and that is a decision with
+a reason behind it (ADR 0007). The bitnami/postgresql chart that used to sit here became
+uninstallable when Broadcom withdrew Bitnami's free image catalogue from Docker Hub: every
+versioned tag under docker.io/bitnami now 404s, and only the moving `:latest` survives.
+Depending on a chart means depending on whatever image its maintainer points it at, which is
+exactly the exposure that broke this chart once already. `docker.io/library/postgres` is a
+Docker Official Image with versioned tags and no such vendor.
+
+Scope: this exists so `helm install hermes` gives someone a working system to evaluate. It
+is a single replica with no backups, no replication and no TLS, which is why
+_validate.tpl refuses to render it alongside `hermes.env=production`. Production installs
+set `postgresql.enabled=false` and point `externalPostgresql.url` at a managed instance.
+*/}}
+{{- if .Values.postgresql.enabled }}
+{{- $fullName := include "hermes.fullname" . -}}
+{{- $name := printf "%s-postgresql" $fullName -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "hermes.name" . }}-postgresql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+type: Opaque
+stringData:
+  # The same credentials hermes.databaseUrl builds HERMES_DATABASE_URL from. The URL itself
+  # is assembled in the ConfigMap, where the password is already visible; this Secret exists
+  # so the server process does not additionally take it from a ConfigMap-sourced env var.
+  POSTGRES_USER: {{ .Values.postgresql.auth.username | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgresql.auth.password | quote }}
+  POSTGRES_DB: {{ .Values.postgresql.auth.database | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "hermes.name" . }}-postgresql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "hermes.name" . }}-postgresql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "hermes.name" . }}-postgresql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "hermes.name" . }}-postgresql
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "hermes.labels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ include "hermes.name" . }}-postgresql
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      securityContext:
+        # The official postgres image runs as uid 999 and needs to own its data directory.
+        # fsGroup is what makes the mounted PVC writable to it; without this the server
+        # exits with "could not create lock file" on any storage class that does not
+        # happen to mount world-writable.
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
+      containers:
+        - name: postgresql
+          image: {{ printf "%s:%s" .Values.postgresql.image.repository .Values.postgresql.image.tag | quote }}
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - secretRef:
+                name: {{ $name }}
+          env:
+            # The official image refuses to initialise into a non-empty directory, and
+            # every PVC arrives with a lost+found. A subdirectory is the documented way out.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -h 127.0.0.1"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -h 127.0.0.1"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      {{- if not .Values.postgresql.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.postgresql.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.postgresql.persistence.storageClass }}
+        storageClassName: {{ .Values.postgresql.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size | quote }}
+  {{- end }}
+{{- end }}
