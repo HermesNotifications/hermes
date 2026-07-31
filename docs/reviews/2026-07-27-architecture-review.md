@@ -1923,6 +1923,198 @@ ahead of the migration hook was not tested.
 
 ---
 
+## Resolved 2026-07-31 — findings 38, 5, 6, 7 and 12, with no AWS account
+
+**Read the verification caveat first, because it is unlike every other section here.** Every
+prior batch was proven against something running — a real k3s cluster, a real ArgoCD, a real
+Postgres. **This one was not, and could not be. No AWS account is reachable from this work.**
+Nothing below has been applied, no API call was made, and no cluster exists to observe.
+
+What *was* executed, and should be read as the ceiling on these claims:
+
+- `terraform` 1.9.8 downloaded to `/tmp` (deliberately not added as a repo dependency),
+  `terraform init -backend=false` against the real registry, then `validate` and
+  `fmt -check` — both clean. Note `fmt` also corrected a pre-existing violation in
+  `modules/eks/main.tf` that predates this batch.
+- `terraform plan` far enough to hit the provider credential wall, which is enough to prove
+  variable requirements and validations fire and that nothing earlier in the graph objects.
+- `terraform console` for subnet arithmetic and for precondition truth tables.
+- A harness that extracts the IAM policy expression **from the real file text**, renders it
+  through `terraform console`, and asserts on the result — including two deliberate mutants,
+  both caught.
+- `infra/scripts/test-lib.sh`, 17 cases, watched red first and mutation-checked.
+- The bootstrap role guard run end to end, in both the rejecting and accepting directions.
+- The `make verify` YAML gate over all 16 Crossplane files, plus a template-render smoke test.
+
+What was **not** verified: that any of it applies; that the Crossplane IAM policy is
+*sufficient* rather than merely well-formed; that the CloudWatch log-group ordering avoids
+the collision it is designed to avoid; that the generated `DeploymentRuntimeConfig` is
+accepted by a real Crossplane; that the seed script's `kubectl` and `aws` calls work; or that
+the connection-secret key names match what Crossplane actually writes — those were read from
+the compositions' `connectionDetails` blocks, not observed.
+
+### Finding 38 — closed
+
+`staging = 10.20.0.0/16`, `production = 10.30.0.0/16`. `10.0.0.0/16` is deliberately left
+unallocated because it is the default in most module examples and console wizards, so a
+future peer that took the default still does not collide. `10.10.0.0/16` is reserved for a
+dev environment. The register is in `infra/terraform/variables.tf` beside the variable.
+
+The root `vpc_cidr` **default is removed**, not changed. The defect was never the value; it
+was that a missing override was silent. Demonstrated: an unset `vpc_cidr` now fails with
+*"No value for required variable"*, and a `/20` is rejected by a validation rule.
+
+Both ranges stay inside `10.0.0.0/8`, so the `allow-egress-managed-services` NetworkPolicy
+verified in the finding 11 section above still covers Aurora.
+
+**Adjacent, and flagged as adjacent rather than folded in:** private subnets were `/24`,
+about 250 usable addresses per AZ. Under the VPC CNI every *pod* consumes a VPC address, so
+that is a hard per-AZ pod ceiling that production's node group could reach on its own, and
+`aws_subnet.cidr_block` is `ForceNew` exactly like the VPC CIDR. Now `/20`. Public stays
+`/24` and sits inside a `/20` the private allocation never uses; the two sets were checked in
+`terraform console` for 1–6 AZs and do not intersect.
+
+### Finding 5 — closed, and the finding's premise was wrong on one point
+
+`public_access_cidrs` loses its `0.0.0.0/0` default and becomes **required, and deliberately
+unset in both tfvars files**, so `terraform plan` refuses until an operator decides. No range
+was invented: ArgoCD, Kargo and Crossplane are all in-cluster and never touch the public
+endpoint, which leaves an operator and possibly CI, and GitHub runner egress is not
+allowlistable. Two resource preconditions guard it.
+
+**One of those preconditions exists because of something the finding did not know.** Verified
+in AWS provider 5.100.0 source: both the create and update paths guard on a non-empty set,
+so `public_access_cidrs = []` sends *nothing* to the EKS API and EKS applies its own default
+of `0.0.0.0/0`. Setting `[]` reads as "allow nothing" and means "allow everything", silently,
+with no diff. Anyone hardening this the obvious way would have made it worse.
+`endpoint_public_access = false` is the only expression of "no public access", and is now a
+variable.
+
+Control plane logging: all five types on, with a Terraform-owned log group created before the
+cluster, 30 days staging / 365 production.
+
+**The finding's KMS claim is incorrect and the correction matters.** It says envelope
+encryption "cannot be added to a live cluster", and ranked it as the irreversible piece for
+that reason. It can: AWS `AssociateEncryptionConfig` exists precisely to enable encryption on
+existing clusters, the provider models absent → present as an **in-place update** (asserted
+by its own acceptance test `TestAccEKSCluster_Encryption_update`, which checks the cluster is
+not recreated), and from Kubernetes 1.28 EKS already envelope-encrypts with an AWS-owned key
+by default — this cluster is on 1.35. So this is a customer-managed KEK replacing an
+AWS-owned one, not encryption replacing none.
+
+It was still done now, for reasons the finding did not name: AWS cannot *disable* encryption
+once enabled; **removing** the block from configuration forces a full cluster replacement;
+and changing `key_arn` afterwards is a **silent no-op** that reports success and does nothing
+(the update handler only calls the API for the 0 → 1 transition). Treat the key as permanent.
+
+### Finding 6 — closed for secrets, partially for the rest, and the boundary is stated
+
+`secretsmanager` → `secret:hermes/*` and `ssm` → `parameter/hermes/*`, the same shape as the
+ESO role. That closes the read-every-secret-in-the-account hole, which was the substance.
+
+`rds` and `elasticache` are scoped by resource **type** and account, not by name, because
+Crossplane derives those external names and there is no stable prefix. Prefix-scoping needs a
+naming convention enforced in the compositions first — recorded as a follow-up rather than
+smuggled in.
+
+**The EC2 statement is unchanged and still broad, on purpose.** Narrowing it wants an
+`aws:ResourceTag` condition, and whether upjet tags a security group at creation or in a
+follow-up call decides whether that condition wedges provisioning outright. With no cluster
+to find out on, a policy that deadlocks the provider would be worse than the one being
+replaced.
+
+The policy is proven well-formed and nothing more. The first apply with a live claim is what
+establishes sufficiency; expect `AccessDenied` to name any gap. Likely candidates:
+`iam:CreateServiceLinkedRole` in an account that has never used RDS or ElastiCache, and
+`kms:DescribeKey`.
+
+### Finding 7 — closed, plus the discarded-argument half
+
+`infra/crossplane/provider/runtime-config.yaml` is **deleted**. The `DeploymentRuntimeConfig`
+is generated by `bootstrap-cluster.sh` from the ARN the operator passes — the value the script
+previously required and then threw away — and applied before `aws-provider.yaml`.
+
+Deleting rather than templating is deliberate: `deploy/argocd/crossplane-infra.yaml` syncs
+`infra/crossplane` recursively, so any `*.yaml` left in that directory would be applied over
+the generated object. A `kubectl`-created object carries no ArgoCD tracking metadata and is
+neither overwritten nor pruned. This needed **no** change in `deploy/argocd/`, which this unit
+does not own — deliberately, so the fix does not merely look complete.
+
+All three role ARNs are now checked against the cluster name before anything installs.
+Demonstrated: staging's Crossplane ARN against `hermes-production` aborts with exit 1 and
+prints the expected name and the `terraform output` command, before any `kubectl` or `helm`
+call; correct ARNs pass and the script proceeds.
+
+The account ID is out of this file. It remains in git history and six other checked-in files
+outside this unit. It is an account ID, not a credential — worth parameterising for
+portability, not worth calling a breach.
+
+### Finding 12 — deliberately NOT closed, and now loud instead of silent
+
+The composition still writes no values. What changed is that this is no longer invisible.
+
+- `bootstrap-cluster.sh` ends with a **REQUIRED MANUAL STEP** banner naming the empty
+  secrets, the `CreateContainerConfigError` that results, and the command that fixes it.
+- `infra/scripts/seed-connection-secret.sh` derives `database_url`, `redis_url`,
+  `centrifugo_redis_address` and `centrifugo_redis_password` from the Crossplane connection
+  secrets and **merges** them into `hermes/<env>/connection` — merging because
+  `centrifugo_nats_url` lives in the same secret, comes from `cmd/natskeys`, and a wholesale
+  put would silently delete it.
+- `hermes/<env>/nats-nkeys` was **missing entirely**. The overlays' ExternalSecret reads
+  fourteen properties from it and nothing created even the container. Added.
+- The dead `email_webhook_url` SSM parameter is removed (no Go code ever read it).
+  `sms_webhook_url` is genuinely used and is untouched, with a comment saying so.
+
+**The automated route exists and was verified against pinned upstream source, so nobody has
+to redo the research.** `function-extra-resources` v0.3.0 *can* fetch a core `v1/Secret` by
+name; `function-go-templating` v0.7.0 *can* emit `CompositeConnectionDetails`; and
+`provider-aws-secretsmanager` v1.18.0's `SecretVersion` has **no literal `secretString` field
+at all**, only `secretStringSecretRef` — so the objection that this would render an Aurora
+password into a managed-resource spec in etcd turns out not to apply.
+
+It was not shipped for three blockers, recorded in full in the composition:
+
+1. It cannot be rendered or tested here — no cluster and no container runtime, so
+   `crossplane render` cannot run. Unrendered pipeline YAML would reproduce the exact defect
+   being fixed: reconciles green, delivers nothing.
+2. `bootstrap-cluster.sh` installs Crossplane **unpinned**, and `function-extra-resources`
+   v0.3.0 returns nothing at all, *silently*, on anything older than 1.20.
+3. Once Crossplane owns `hermes/<env>/connection` it reverts hand-edits on the next reconcile,
+   including `centrifugo_nats_url`, which it cannot derive.
+
+### Also fixed, unrelated to the five
+
+`bootstrap-cluster.sh` told operators `kubectl apply -f deploy/kargo/`, which is **not
+recursive** (`-R` defaults to false), so it silently skipped both promotion stages and the
+health-check AnalysisTemplate with its ServiceAccount, Role, RoleBinding and NetworkPolicy —
+now load-bearing, since production promotions are actually verified. Replaced with
+`project.yaml` first (the Kargo Project owns the `hermes` namespace everything else is
+namespaced into, and a recursive apply walks `analysis/` first alphabetically) then
+`kubectl apply -R -f deploy/kargo/`. `deploy/argocd/` is flat and was checked, not assumed.
+
+### Filed rather than chosen quietly
+
+[ADR 0007](../adr/0007-aws-network-and-control-plane-posture.md) records the allocation
+register, the decision to make the API allowlist a required input, the KMS correction, and
+the two rejected alternatives most likely to be re-proposed —
+`endpoint_public_access = false` outright (the better posture; rejected only because this repo
+ships no bastion or VPN) and keeping the runtime config in git behind an ArgoCD exclusion
+(more consistent, but it would have made the fix depend on an unmade edit elsewhere).
+
+### Follow-ups this unit could not make
+
+- `docs/deployment-guide.md:438` claims the composition assembles connection details. **It
+  does not.** The guide needs correcting and should point at `seed-connection-secret.sh`.
+- `Makefile` — nothing statically checks the IAM policy for a reintroduced service wildcard.
+  A harness proved it during this change but was not committed: it needs a `terraform` binary
+  that neither this box nor CI has, and a gate that silently skips is worse than none.
+- `bootstrap-cluster.sh` installs Crossplane unpinned; pinning `--version` is a prerequisite
+  for anything depending on `function-extra-resources`.
+- The account ID is hardcoded in `deploy/k8s/overlays/*/images/kustomization.yaml` and three
+  `deploy/kargo/` files.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is

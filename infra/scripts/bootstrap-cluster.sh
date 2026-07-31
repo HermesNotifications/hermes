@@ -7,11 +7,31 @@
 
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "${HERE}/lib.sh"
+
 CLUSTER="${1:?Usage: $0 <cluster-name> [region] [eso-role-arn] [kargo-role-arn] [crossplane-role-arn]}"
 REGION="${2:-us-east-1}"
 ESO_ROLE_ARN="${3:?Provide the External Secrets Operator IAM role ARN}"
 KARGO_ROLE_ARN="${4:?Provide the Kargo controller IAM role ARN}"
 CROSSPLANE_ROLE_ARN="${5:?Provide the Crossplane AWS provider IAM role ARN}"
+
+# Finding 7. CROSSPLANE_ROLE_ARN was a required argument that this script then never
+# used — operators were told to pass a value that was silently discarded, while the
+# Crossplane providers picked up a hardcoded staging ARN from a checked-in manifest
+# instead. Production therefore authenticated as staging, successfully, forever.
+#
+# All three ARNs are now checked against the cluster being bootstrapped before anything
+# is installed. Terraform names every one of these roles "<cluster-name>-<purpose>", so
+# passing another environment's ARN is detectable here and is caught in under a second,
+# rather than surfacing as Crossplane quietly reconciling the wrong environment's
+# database.
+echo "==> Checking the supplied IAM role ARNs belong to ${CLUSTER}"
+hermes_require_role_arn "External Secrets Operator" "$ESO_ROLE_ARN" "${CLUSTER}-external-secrets"
+hermes_require_role_arn "Kargo controller" "$KARGO_ROLE_ARN" "${CLUSTER}-kargo-controller"
+hermes_require_role_arn "Crossplane AWS provider" "$CROSSPLANE_ROLE_ARN" "${CLUSTER}-crossplane"
+echo "    all three match"
 
 echo "==> Configuring kubectl for cluster: $CLUSTER"
 aws eks update-kubeconfig --name "$CLUSTER" --region "$REGION"
@@ -92,9 +112,39 @@ echo "    Kargo admin password: ${KARGO_ADMIN_PASSWORD}"
 echo "    Access Kargo via: kubectl port-forward svc/kargo-api -n kargo 8443:443"
 
 echo "==> Installing Crossplane"
+# NOTE: this install is unpinned. function-extra-resources v0.3.0, which any future
+# automation of the connection secret depends on, returns nothing at all — silently — on
+# Crossplane older than 1.20. Pinning --version is a follow-up worth doing before that
+# automation is attempted.
 helm upgrade --install crossplane crossplane-stable/crossplane \
   --namespace crossplane-system --create-namespace \
   --wait
+
+# Finding 7. This DeploymentRuntimeConfig used to be a checked-in manifest,
+# infra/crossplane/provider/runtime-config.yaml, carrying a literal
+# arn:aws:iam::<acct>:role/hermes-staging-crossplane. deploy/argocd/crossplane-infra.yaml
+# syncs infra/crossplane recursively to EVERY cluster, so that one staging ARN was applied
+# to production too and the production providers authenticated as staging.
+#
+# It is now generated here from the ARN the operator passes, which is cluster-specific by
+# construction and has just been checked against $CLUSTER above. This mirrors what the
+# script already does for the EnvironmentConfig below, and — because the object is created
+# by kubectl rather than tracked by ArgoCD — ArgoCD will not overwrite or prune it.
+#
+# It must exist BEFORE aws-provider.yaml, whose Providers all reference
+# runtimeConfigRef.name = default.
+echo "==> Creating Crossplane DeploymentRuntimeConfig (IRSA) for ${CLUSTER}"
+kubectl apply -f - <<RUNTIMEEOF
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: default
+spec:
+  serviceAccountTemplate:
+    metadata:
+      annotations:
+        eks.amazonaws.com/role-arn: ${CROSSPLANE_ROLE_ARN}
+RUNTIMEEOF
 
 echo "==> Installing Crossplane functions and AWS provider"
 kubectl apply -f infra/crossplane/compositions/aws/functions.yaml
@@ -138,10 +188,48 @@ echo "==> Applying Crossplane XRDs and compositions"
 kubectl apply -f infra/crossplane/xrds/
 kubectl apply -f infra/crossplane/compositions/aws/
 
+ENVIRONMENT="${CLUSTER##hermes-}"
+
 echo "==> Bootstrap complete for cluster: $CLUSTER"
 echo ""
 echo "Next steps:"
 echo "  1. Configure DNS to point to the NLB created by ingress-nginx"
 echo "  2. Apply ArgoCD Applications: kubectl apply -f deploy/argocd/"
-echo "  3. Apply Kargo resources: kubectl apply -f deploy/kargo/"
+echo "  3. Apply Kargo resources — BOTH commands, in this order:"
+echo "       kubectl apply -f deploy/kargo/project.yaml"
+echo "       kubectl apply -R -f deploy/kargo/"
+echo "     -R because deploy/kargo/ has subdirectories (analysis/, stages/) and a bare"
+echo "     'kubectl apply -f <dir>' is NOT recursive — it would silently skip the"
+echo "     promotion stages and the health-check AnalysisTemplate and its RBAC, so the"
+echo "     production promotion gate would 403 with nothing saying why."
+echo "     project.yaml first because the Kargo Project owns the hermes namespace that"
+echo "     everything under analysis/ and stages/ is namespaced into, and a recursive"
+echo "     apply walks analysis/ before project.yaml alphabetically."
 echo "  4. Crossplane claims are managed by ArgoCD — they deploy automatically"
+echo ""
+echo "###############################################################################"
+echo "# REQUIRED MANUAL STEP - THE CLUSTER WILL NOT START WITHOUT IT (finding 12)"
+echo "###############################################################################"
+echo ""
+echo "  The Crossplane secrets composition creates hermes/${ENVIRONMENT}/connection and"
+echo "  hermes/${ENVIRONMENT}/app as EMPTY containers. It writes no values into either."
+echo "  Every ExternalSecret in deploy/k8s/overlays/${ENVIRONMENT}/ reads keys out of"
+echo "  them, so until they are seeded every one fails to resolve, the hermes-secrets"
+echo "  Secret is never created, and every pod stays in CreateContainerConfigError."
+echo ""
+echo "  Nothing else in this repository will tell you that. Seed them:"
+echo ""
+echo "    a) Wait for the database and cache claims to report Ready:"
+echo "         kubectl -n hermes get hermesdatabaseclaim,hermescacheclaim"
+echo ""
+echo "    b) Derive and write the connection values:"
+echo "         ./infra/scripts/seed-connection-secret.sh ${ENVIRONMENT} ${REGION} --dry-run"
+echo "         ./infra/scripts/seed-connection-secret.sh ${ENVIRONMENT} ${REGION}"
+echo ""
+echo "    c) Seed the values no infrastructure can derive, by hand:"
+echo "         hermes/${ENVIRONMENT}/app        jwt_secret, api_key_hmac_secret,"
+echo "                                          centrifugo_token_secret, centrifugo_api_key"
+echo "         hermes/${ENVIRONMENT}/nats-nkeys  go run ./cmd/natskeys -format json"
+echo "         centrifugo_nats_url, into hermes/${ENVIRONMENT}/connection, same source"
+echo ""
+echo "###############################################################################"
