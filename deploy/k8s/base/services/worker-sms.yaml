@@ -2,6 +2,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hermes-worker-sms
+  annotations:
+    # ADR 0006, amended 2026-07-31. Calls bootstrap.MustEnsureStreams and exits non-zero
+    # without the JetStream streams, so it is applied only after wave 0 (NATS plus the
+    # hermes-natsprovision Sync hook) is healthy. See services/dispatch.yaml for the
+    # measurement and the cost.
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app.kubernetes.io/name: hermes-worker-sms
     app.kubernetes.io/component: worker
