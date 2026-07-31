@@ -173,7 +173,7 @@ resource "aws_iam_role_policy" "external_secrets" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
+        Effect = "Allow"
         # Finding 21. DescribeSecret added: External Secrets calls it to read metadata
         # and version stages, and without it ESO fails on secrets it can otherwise read
         # — an error that surfaces as a sync failure rather than a permissions message.
@@ -332,6 +332,53 @@ resource "aws_iam_role" "crossplane" {
   })
 }
 
+# Finding 6. This policy was rds:*, elasticache:*, secretsmanager:* and ssm:* on
+# Resource = "*". The worst of those was secretsmanager:* on *, which let an in-cluster
+# controller read or overwrite every secret in the AWS account — including the ones this
+# very cluster's ESO role is carefully scoped away from, three resources up in this file.
+#
+# The action lists below are derived from what the compositions in infra/crossplane
+# actually create:
+#
+#   rds          SubnetGroup, ClusterParameterGroup, Cluster, ClusterInstance
+#                (compositions/aws/database.yaml)
+#   elasticache  SubnetGroup, ReplicationGroup
+#                (compositions/aws/cache.yaml)
+#   secretsmanager  Secret, under the name prefix hermes/<env>/
+#                (compositions/aws/secrets.yaml)
+#   ssm          Parameter, under the path /hermes/<env>/
+#                (compositions/aws/secrets.yaml)
+#   ec2          SecurityGroup, SecurityGroupIngressRule
+#                (both of the above)
+#
+# Scoping honestly, and where it stops:
+#
+#   secretsmanager and ssm ARE prefix-scoped — secret:hermes/* and parameter/hermes/* —
+#   the same shape as aws_iam_role_policy.external_secrets above. That closes the
+#   read-every-secret hole, which was the substance of the finding.
+#
+#   rds and elasticache are scoped by resource TYPE and account, not by name, because
+#   Crossplane derives external names for those resources and there is no stable prefix
+#   to match on. Making them prefix-scopable means enforcing a naming convention in the
+#   compositions first; that is a larger change than this one and is recorded as a
+#   follow-up rather than smuggled in here.
+#
+#   Describe/List actions sit on "*" because AWS does not support resource-level
+#   permissions for most of them (rds:DescribeDBEngineVersions and
+#   ssm:DescribeParameters among them). They are read-only metadata.
+#
+#   The ec2 statement is UNCHANGED and still broad. Narrowing it wants a tag condition
+#   (aws:ResourceTag/managed-by), and whether upjet tags a security group at creation or
+#   in a follow-up call decides whether such a condition wedges provisioning entirely.
+#   There is no cluster here to find that out on, and a policy that deadlocks the
+#   provider is worse than the one being replaced. Left alone deliberately; recorded as a
+#   follow-up.
+#
+# UNVERIFIED: no AWS account is reachable from this work, so this policy has been proven
+# to be well-formed IAM and nothing more. It has NOT been proven sufficient — the first
+# `terraform apply` plus a Crossplane claim is what will establish whether an action is
+# missing. Expect AccessDenied on the first run to name the gap precisely; that is a far
+# better failure than the account-wide grant this replaces.
 resource "aws_iam_role_policy" "crossplane" {
   name = "${local.cluster_name}-crossplane"
   role = aws_iam_role.crossplane.id
@@ -340,16 +387,127 @@ resource "aws_iam_role_policy" "crossplane" {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid    = "RdsRead"
         Effect = "Allow"
         Action = [
-          "rds:*",
-          "elasticache:*",
-          "secretsmanager:*",
-          "ssm:*",
+          "rds:Describe*",
+          "rds:ListTagsForResource",
         ]
         Resource = "*"
       },
       {
+        Sid    = "RdsWrite"
+        Effect = "Allow"
+        Action = [
+          "rds:CreateDBSubnetGroup",
+          "rds:ModifyDBSubnetGroup",
+          "rds:DeleteDBSubnetGroup",
+          "rds:CreateDBClusterParameterGroup",
+          "rds:ModifyDBClusterParameterGroup",
+          "rds:ResetDBClusterParameterGroup",
+          "rds:DeleteDBClusterParameterGroup",
+          "rds:CreateDBCluster",
+          "rds:ModifyDBCluster",
+          "rds:DeleteDBCluster",
+          "rds:CreateDBInstance",
+          "rds:ModifyDBInstance",
+          "rds:DeleteDBInstance",
+          "rds:CreateDBClusterSnapshot",
+          "rds:DeleteDBClusterSnapshot",
+          "rds:AddTagsToResource",
+          "rds:RemoveTagsFromResource",
+        ]
+        Resource = [
+          "arn:aws:rds:*:${data.aws_caller_identity.current.account_id}:cluster:*",
+          "arn:aws:rds:*:${data.aws_caller_identity.current.account_id}:db:*",
+          "arn:aws:rds:*:${data.aws_caller_identity.current.account_id}:subgrp:*",
+          "arn:aws:rds:*:${data.aws_caller_identity.current.account_id}:cluster-pg:*",
+          "arn:aws:rds:*:${data.aws_caller_identity.current.account_id}:pg:*",
+          "arn:aws:rds:*:${data.aws_caller_identity.current.account_id}:cluster-snapshot:*",
+        ]
+      },
+      {
+        Sid    = "ElastiCacheRead"
+        Effect = "Allow"
+        Action = [
+          "elasticache:Describe*",
+          "elasticache:ListTagsForResource",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ElastiCacheWrite"
+        Effect = "Allow"
+        Action = [
+          "elasticache:CreateCacheSubnetGroup",
+          "elasticache:ModifyCacheSubnetGroup",
+          "elasticache:DeleteCacheSubnetGroup",
+          "elasticache:CreateReplicationGroup",
+          "elasticache:ModifyReplicationGroup",
+          "elasticache:ModifyReplicationGroupShardConfiguration",
+          "elasticache:DeleteReplicationGroup",
+          "elasticache:IncreaseReplicaCount",
+          "elasticache:DecreaseReplicaCount",
+          "elasticache:CreateSnapshot",
+          "elasticache:DeleteSnapshot",
+          "elasticache:AddTagsToResource",
+          "elasticache:RemoveTagsFromResource",
+        ]
+        Resource = [
+          "arn:aws:elasticache:*:${data.aws_caller_identity.current.account_id}:replicationgroup:*",
+          "arn:aws:elasticache:*:${data.aws_caller_identity.current.account_id}:subnetgroup:*",
+          "arn:aws:elasticache:*:${data.aws_caller_identity.current.account_id}:cluster:*",
+          "arn:aws:elasticache:*:${data.aws_caller_identity.current.account_id}:snapshot:*",
+        ]
+      },
+      {
+        # The statement finding 6 was really about. `secret:hermes/*` matches the
+        # six-character suffix AWS appends to a secret ARN, which is why CreateSecret
+        # can be scoped here at all — the same assumption the ESO policy above makes.
+        Sid    = "SecretsManagerHermesPrefixOnly"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:CreateSecret",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:UpdateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:RestoreSecret",
+          "secretsmanager:ListSecretVersionIds",
+          "secretsmanager:TagResource",
+          "secretsmanager:UntagResource",
+        ]
+        Resource = "arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:hermes/*"
+      },
+      {
+        Sid    = "SsmHermesPrefixOnly"
+        Effect = "Allow"
+        Action = [
+          "ssm:PutParameter",
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParameterHistory",
+          "ssm:DeleteParameter",
+          "ssm:DeleteParameters",
+          "ssm:LabelParameterVersion",
+          "ssm:AddTagsToResource",
+          "ssm:RemoveTagsFromResource",
+          "ssm:ListTagsForResource",
+        ]
+        Resource = "arn:aws:ssm:*:${data.aws_caller_identity.current.account_id}:parameter/hermes/*"
+      },
+      {
+        # ssm:DescribeParameters does not support resource-level permissions. It returns
+        # parameter metadata only, never values.
+        Sid      = "SsmDescribeParametersNoResourceLevelSupport"
+        Effect   = "Allow"
+        Action   = "ssm:DescribeParameters"
+        Resource = "*"
+      },
+      {
+        # Unchanged from before this commit. See the note above on why.
+        Sid    = "Ec2SecurityGroups"
         Effect = "Allow"
         Action = [
           "ec2:CreateSecurityGroup",
