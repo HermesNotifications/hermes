@@ -392,12 +392,25 @@ kubectl get applications -n argocd
 ### Apply Kargo resources
 
 ```bash
+# The Project creates the hermes namespace everything else is in, so it goes first.
 kubectl apply -f deploy/kargo/project.yaml
-kubectl apply -f deploy/kargo/warehouse.yaml
-kubectl apply -f deploy/kargo/analysis/health-check.yaml
-kubectl apply -f deploy/kargo/stages/staging.yaml
-kubectl apply -f deploy/kargo/stages/production.yaml
+
+# Then everything else, recursively.
+kubectl apply -R -f deploy/kargo/
 ```
+
+> **`-R` is load-bearing.** `deploy/kargo/` has two subdirectories — `analysis/` and
+> `stages/` — and **`kubectl apply -f <dir>` is not recursive**: it applies only the files at
+> the top level and says nothing about the rest. Without `-R` you get the Project,
+> ProjectConfig and Warehouse, and silently no Stages and no AnalysisTemplate.
+>
+> Enumerating the files individually is what this command used to do, and it had drifted:
+> it applied `analysis/health-check.yaml` but not `analysis/rbac.yaml`, and not
+> `project-config.yaml` at all. The missing `rbac.yaml` is the expensive one — it holds the
+> ServiceAccount, Role and RoleBinding the health-check AnalysisRun needs, plus the
+> NetworkPolicy that lets its pod reach the services. Without it a promotion's verification
+> step fails with a 403 rather than a health signal, which reads as a failing deployment.
+> Applying the directory means a file added later is picked up without editing this guide.
 
 ### Trigger first build
 
@@ -478,8 +491,12 @@ kubectl apply -f deploy/k8s/overlays/production/external-secrets.yaml
 kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_URL}' | base64 -d
 
 kubectl apply -f deploy/argocd/production.yaml
-kubectl apply -f deploy/kargo/  # Kargo resources are shared if on same cluster,
-                                 # or re-apply if separate clusters
+
+# Kargo resources are shared if on the same cluster; re-apply if separate clusters.
+# -R is required: analysis/ and stages/ are subdirectories, and a plain -f on a
+# directory would silently skip both. Project first — it owns the namespace.
+kubectl apply -f deploy/kargo/project.yaml
+kubectl apply -R -f deploy/kargo/
 ```
 
 ### First production promotion
@@ -771,7 +788,13 @@ kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_
 **Full cluster recovery:**
 1. `make tf-apply ENV=<environment>` recreates VPC, EKS, ECR, and IAM from state
 2. `./infra/scripts/bootstrap-cluster.sh` reinstalls platform components including Crossplane, the AWS provider, and the EnvironmentConfig from Terraform outputs — this must complete before ArgoCD can reconcile Crossplane claims
-3. `kubectl apply -f deploy/argocd/` + `kubectl apply -f deploy/kargo/` restores GitOps
+3. `kubectl apply -f deploy/argocd/`, then `kubectl apply -f deploy/kargo/project.yaml`
+   followed by `kubectl apply -R -f deploy/kargo/`, restores GitOps.
+   **The `-R` is required** — `deploy/kargo/` has `analysis/` and `stages/` subdirectories and
+   `kubectl apply -f <dir>` is not recursive, so the non-recursive form restores neither the
+   promotion stages nor the health-check AnalysisTemplate and its RBAC. That failure is
+   silent, and this is a disaster-recovery path, so it would not be noticed until the first
+   promotion. (`deploy/argocd/` is flat, so it needs no `-R` — verified, not assumed.)
 4. ArgoCD syncs `crossplane-infra` (XRDs/compositions) then `crossplane-claims-<env>` (data services) — Aurora and ElastiCache are recreated from the claim specs
 5. ArgoCD auto-syncs the application — all K8s resources are defined in git
 6. Migration job runs automatically, seed data may need to be re-applied
