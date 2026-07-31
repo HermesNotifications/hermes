@@ -2,6 +2,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hermes-dispatch
+  annotations:
+    # ADR 0006, amended 2026-07-31. This service calls bootstrap.MustEnsureStreams and
+    # exits non-zero when the JetStream streams are missing (ADR 0005 phase 4), so at the
+    # default wave it crash-loops through every first sync until hermes-natsprovision
+    # happens to finish. Wave 1 makes ArgoCD apply it only after wave 0 — NATS and the
+    # provisioning Job — is healthy. Verified on a virgin namespace: zero restarts, where
+    # the same bootstrap without the wave produced five each and counting. The six
+    # services that fail closed on streams carry this; admin, inbox and user do not.
+    #
+    # The cost is a real one: anything else at wave 0 that cannot go healthy now blocks
+    # this Deployment too, so the blast radius of a stuck NATS or Centrifugo is wider than
+    # it was. That is the trade — a deploy that always shows crash-looping pods teaches
+    # operators to ignore crash-looping pods.
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app.kubernetes.io/name: hermes-dispatch
     app.kubernetes.io/component: dispatch
