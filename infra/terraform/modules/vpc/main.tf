@@ -8,6 +8,37 @@ locals {
 }
 
 # ------------------------------------------------------------------------------
+# Subnet layout
+# ------------------------------------------------------------------------------
+#
+# Adjacent to finding 38 rather than part of it. The private subnets were
+# cidrsubnet(vpc_cidr, 8, i + 10) — a /24, so 251 usable addresses per AZ. With the
+# VPC CNI every *pod* consumes a VPC address, not just every node, so a /24 per AZ is a
+# hard ceiling of roughly 250 pods in that AZ no matter how many nodes are added. Hitting
+# it does not degrade gracefully: pods stop scheduling with InsufficientFreeAddresses and
+# the only fix is new subnets, which means a new EKS cluster.
+#
+# aws_subnet.cidr_block is ForceNew, exactly like the VPC CIDR, and neither environment
+# exists yet. This is the last moment it is free.
+#
+# Layout, for a /16 (enforced by the validation on var.vpc_cidr):
+#
+#   public[i]   cidrsubnet(cidr, 8, i)      /24    x.y.0.0/24  .. x.y.5.0/24
+#   private[i]  cidrsubnet(cidr, 4, i + 1)  /20    x.y.16.0/20 .. x.y.96.0/20
+#
+# Public subnets stay /24 because they hold only NAT gateway and load balancer ENIs —
+# a handful of addresses each. They all live inside x.y.0.0/20, which is private index 0
+# and is deliberately never allocated, so public and private cannot collide for any
+# az_count the module accepts (var.az_count is capped at 6; the public /24s would in fact
+# stay inside that first /20 up to 16 AZs).
+#
+# Everything from x.y.112.0/20 upwards is unallocated and available for a later tier
+# (isolated database subnets, a transit attachment) without disturbing what exists.
+#
+# Verified with `terraform console` against both allocated ranges for az_count 1..6:
+# the two sets do not intersect. Not verified against AWS — nothing has been applied.
+
+# ------------------------------------------------------------------------------
 # VPC
 # ------------------------------------------------------------------------------
 
@@ -29,7 +60,7 @@ resource "aws_subnet" "public" {
   count = length(local.azs)
 
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index)
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index) # /24 — see "Subnet layout" above
   availability_zone       = local.azs[count.index]
   map_public_ip_on_launch = true
 
@@ -44,7 +75,7 @@ resource "aws_subnet" "private" {
   count = length(local.azs)
 
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 10)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index + 1) # /20 — see "Subnet layout" above
   availability_zone = local.azs[count.index]
 
   tags = {
