@@ -29,6 +29,98 @@ resource "aws_iam_role_policy_attachment" "cluster_policy" {
 }
 
 # ------------------------------------------------------------------------------
+# Secrets encryption key (finding 5)
+# ------------------------------------------------------------------------------
+#
+# A correction to the review's framing, because it changes how urgent this is. Finding 5
+# says envelope encryption "cannot be added to a live cluster". That is not right, and it
+# was worth checking rather than acting on:
+#
+#   - AWS AssociateEncryptionConfig exists precisely to "enable encryption on existing
+#     clusters that don't already have encryption enabled".
+#   - Provider v5.100.0 models absent -> present as an IN-PLACE update
+#     (internal/service/eks/cluster.go; its own acceptance test
+#     TestAccEKSCluster_Encryption_update asserts the cluster is not recreated).
+#   - From Kubernetes 1.28 onward EKS already envelope-encrypts API data with an
+#     AWS-owned key by default. This cluster is on 1.35. So this is not "encryption
+#     versus none", it is a customer-managed KEK instead of an AWS-owned one.
+#
+# What IS irreversible, and is the real reason to do it now:
+#
+#   - AWS cannot disable secrets encryption once enabled.
+#   - REMOVING this block from the config makes the provider force a full cluster
+#     REPLACEMENT (a ForceNewIfChange on 1 -> 0). A reviewer skimming a plan could miss
+#     that on a production control plane.
+#   - Changing key_arn on an existing cluster is a SILENT NO-OP: the update handler only
+#     calls the API for the 0 -> 1 transition, so a key swap reports success and does
+#     nothing (upstream issue 34883, still open behaviour at v5.100.0). Treat this key as
+#     permanent for the life of the cluster.
+#
+# Deleting this key degrades the cluster beyond recovery, hence the long deletion window.
+resource "aws_kms_key" "eks_secrets" {
+  description             = "Envelope encryption key for ${local.cluster_name} Kubernetes secrets"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+
+  tags = {
+    Name = "${local.cluster_name}-secrets"
+  }
+}
+
+resource "aws_kms_alias" "eks_secrets" {
+  name          = "alias/${local.cluster_name}-secrets"
+  target_key_id = aws_kms_key.eks_secrets.key_id
+}
+
+# AmazonEKSClusterPolicy already grants kms:DescribeKey, and the provider's own acceptance
+# test associates a key with nothing but that attached, so this is defence in depth rather
+# than a requirement. It is what terraform-aws-modules/eks attaches by default
+# (attach_cluster_encryption_policy, default true) and it costs nothing to match.
+resource "aws_iam_role_policy" "cluster_encryption" {
+  name = "${local.cluster_name}-cluster-encryption"
+  role = aws_iam_role.cluster.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:ListGrants",
+        "kms:DescribeKey",
+      ]
+      Resource = aws_kms_key.eks_secrets.arn
+    }]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# Control plane logs (finding 5)
+# ------------------------------------------------------------------------------
+#
+# EKS auto-creates /aws/eks/<cluster>/cluster the first time logging is enabled, and
+# aws_cloudwatch_log_group has no tolerance for an existing group — it calls CreateLogGroup
+# and returns ResourceAlreadyExistsException verbatim. So the group must be created by
+# Terraform BEFORE the cluster that would otherwise create it. That ordering is the
+# documented pattern in terraform-aws-modules/eks, which does exactly this and has the
+# cluster depend_on the group.
+#
+# Nothing has been applied here, so the ordering is reasoned from the provider source and
+# that module, not observed. If a group already exists in the account, import it:
+#   terraform import module.eks.aws_cloudwatch_log_group.cluster /aws/eks/<name>/cluster
+resource "aws_cloudwatch_log_group" "cluster" {
+  count = length(var.enabled_cluster_log_types) > 0 ? 1 : 0
+
+  name              = "/aws/eks/${local.cluster_name}/cluster"
+  retention_in_days = var.cluster_log_retention_days
+
+  tags = {
+    Name = "${local.cluster_name}-control-plane"
+  }
+}
+
+# ------------------------------------------------------------------------------
 # EKS Cluster
 # ------------------------------------------------------------------------------
 
@@ -37,15 +129,40 @@ resource "aws_eks_cluster" "main" {
   version  = var.cluster_version
   role_arn = aws_iam_role.cluster.arn
 
+  enabled_cluster_log_types = var.enabled_cluster_log_types
+
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks_secrets.arn
+    }
+    resources = ["secrets"]
+  }
+
   vpc_config {
     subnet_ids              = var.private_subnet_ids
-    endpoint_public_access  = true
+    endpoint_public_access  = var.endpoint_public_access
     endpoint_private_access = true
-    public_access_cidrs     = var.public_access_cidrs
+    public_access_cidrs     = var.endpoint_public_access ? var.public_access_cidrs : null
+  }
+
+  # Cross-variable checks live here rather than in `variable ... validation` blocks
+  # because referring to another variable from a validation rule needs Terraform >= 1.9
+  # and versions.tf declares >= 1.5. Preconditions have worked since 1.2.
+  lifecycle {
+    precondition {
+      condition     = !var.endpoint_public_access || length(var.public_access_cidrs) > 0
+      error_message = "endpoint_public_access is true but public_access_cidrs is empty. An empty list does NOT block access — the provider omits the field and EKS defaults the endpoint to 0.0.0.0/0. Either set the CIDRs that should reach the API server, or set endpoint_public_access = false, which is the only way to express 'no public access'."
+    }
+    precondition {
+      condition     = !var.endpoint_public_access || var.allow_public_access_from_anywhere || !contains(var.public_access_cidrs, "0.0.0.0/0")
+      error_message = "public_access_cidrs contains 0.0.0.0/0, which exposes the Kubernetes API server to the entire internet. Replace it with the ranges that actually need to reach the API server (operator egress, CI egress), or set endpoint_public_access = false. If exposing it really is intended, set allow_public_access_from_anywhere = true so the choice is explicit and greppable."
+    }
   }
 
   depends_on = [
     aws_iam_role_policy_attachment.cluster_policy,
+    aws_iam_role_policy.cluster_encryption,
+    aws_cloudwatch_log_group.cluster,
   ]
 
   tags = {

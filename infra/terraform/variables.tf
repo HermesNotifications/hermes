@@ -73,6 +73,49 @@ variable "eks_node_desired_size" {
   type        = number
 }
 
+# Finding 5. Who may reach the Kubernetes API server.
+#
+# NO DEFAULT, AND DELIBERATELY NOT SET IN EITHER tfvars FILE. Terraform will refuse to
+# plan until this is supplied. That is the point: the previous default was 0.0.0.0/0, and
+# a value invented here to make the plan run would be the same defect wearing a number.
+#
+# Nothing in this repository determines the answer. ArgoCD, Kargo and the Crossplane
+# providers all run inside the cluster and talk to kubernetes.default.svc, so they never
+# touch the public endpoint. That leaves a human operator running
+# infra/scripts/bootstrap-cluster.sh, and CI if it ever runs kubectl — and GitHub-hosted
+# runner egress is a large, frequently-changing published list that is not worth
+# allowlisting. Supply it deliberately, per environment:
+#
+#   TF_VAR_eks_public_access_cidrs='["203.0.113.10/32"]' terraform plan ...
+#   terraform plan -var-file=environments/staging.tfvars -var 'eks_public_access_cidrs=["203.0.113.10/32"]'
+#   or an untracked *.auto.tfvars alongside the checked-in ones
+#
+# If the answer is genuinely "nobody, over the public internet", set
+# eks_endpoint_public_access = false and reach the API through a bastion or VPN in the
+# VPC. Note that this repository provides neither, so bootstrap would need one first.
+variable "eks_public_access_cidrs" {
+  description = "CIDR blocks allowed to reach the EKS public API endpoint. Required unless eks_endpoint_public_access is false. Must be network addresses."
+  type        = list(string)
+}
+
+variable "eks_endpoint_public_access" {
+  description = "Whether the EKS API server has a public endpoint. False is the only way to allow no public access — an empty CIDR list means unrestricted, not blocked."
+  type        = bool
+  default     = true
+}
+
+variable "eks_allow_public_access_from_anywhere" {
+  description = "Escape hatch permitting 0.0.0.0/0 in eks_public_access_cidrs. Off by default so internet exposure is an explicit, reviewable choice."
+  type        = bool
+  default     = false
+}
+
+variable "eks_cluster_log_retention_days" {
+  description = "CloudWatch retention for EKS control plane logs, audit logs included."
+  type        = number
+  default     = 90
+}
+
 variable "github_org" {
   description = "GitHub organization or user for OIDC trust"
   type        = string

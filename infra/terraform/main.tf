@@ -20,6 +20,13 @@ module "eks" {
   node_max_size       = var.eks_node_max_size
   node_desired_size   = var.eks_node_desired_size
   ecr_repository_arns = values(module.ecr.repository_arns)
+
+  # Finding 5. The root module previously passed none of these, so the eks module's
+  # public_access_cidrs default of ["0.0.0.0/0"] applied to both environments.
+  endpoint_public_access            = var.eks_endpoint_public_access
+  public_access_cidrs               = var.eks_public_access_cidrs
+  allow_public_access_from_anywhere = var.eks_allow_public_access_from_anywhere
+  cluster_log_retention_days        = var.eks_cluster_log_retention_days
 }
 
 module "ecr" {
