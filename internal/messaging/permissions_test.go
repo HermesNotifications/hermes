@@ -5,8 +5,6 @@ package messaging_test
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -111,12 +109,14 @@ func startPermFixture() (*permFixture, error) {
 
 	// ADR 0005 phase 4. Centrifugo's password reaches the server the same way the public keys
 	// do — as a variable the configuration resolves — so an unset one is a parse error here
-	// exactly as it is in the cluster. Generated per run so no test can depend on a constant.
-	pw := make([]byte, 32)
-	if _, err := rand.Read(pw); err != nil {
+	// exactly as it is in the cluster. Generated per run so no test can depend on a constant —
+	// but of the shape cmd/natskeys guarantees, because an unconstrained base64url draw fails
+	// to parse about 2.3% of the time. See generateCentrifugoPassword.
+	pw, err := generateCentrifugoPassword()
+	if err != nil {
 		return nil, err
 	}
-	f.centrifugoPassword = base64.RawURLEncoding.EncodeToString(pw)
+	f.centrifugoPassword = pw
 	if err := os.Setenv(centrifugoPasswordVar, f.centrifugoPassword); err != nil {
 		return nil, err
 	}

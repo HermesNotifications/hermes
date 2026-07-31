@@ -21,6 +21,10 @@
 //
 // The seeds are printed to stdout in the clear, which is the point of a tool you run
 // deliberately rather than a step buried in a deployment. Do not commit the output.
+//
+// If you set HERMES_CENTRIFUGO_NATS_PASSWORD by hand instead of taking what this tool emits,
+// its FIRST CHARACTER MUST BE AN ASCII LETTER, or nats-server will refuse to start. See
+// newPassword below for why, and docs/configuration.md for the operator-facing version.
 package main
 
 import (
@@ -29,6 +33,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -109,13 +114,62 @@ func (c credentials) CentrifugoURL() string {
 	return scheme + "://" + centrifugoUser + ":" + c.CentrifugoPassword + "@" + host
 }
 
-// newPassword returns 32 random bytes rendered as 43 base64url characters.
+// passwordDraws bounds the redraw in newPasswordFrom. Each draw has a 52/64 chance of
+// being accepted, so reaching this limit against a working entropy source has probability
+// (12/64)^64 — it exists to turn a broken reader into an error rather than a hang.
+const passwordDraws = 64
+
+// newPassword returns 32 random bytes rendered as 43 base64url characters, whose first
+// character is an ASCII letter.
+//
+// That last clause is load-bearing and not cosmetic. nats-accounts.conf carries this value
+// as an unquoted variable reference, and nats-server resolves such a reference by
+// RE-PARSING the environment value as a conf document (conf/parse.go lookupVariable feeds
+// it back through the lexer as `pk=<value>`). So the password has to lex as a bare conf
+// value. Roughly 2.3% of unconstrained 43-character base64url draws do not, and the server
+// then refuses to start — a cluster that cannot come up, not merely a red test.
+//
+// The failing shapes are enumerated against the real parser in
+// internal/messaging/centrifugopassword_test.go. They are stranger than they look: a
+// leading '-' starts a negative number, a leading digit starts a number that a later '-'
+// turns into an attempted ISO8601 date, a size suffix followed by a digit ends the number
+// early, and an all-digit value parses as an integer and reaches the server as the wrong
+// Go type. A leading LETTER short-circuits every one of those, because the lexer then goes
+// straight to its string state and consumes the whole value.
+//
+// The reference in the conf cannot be quoted to escape this. NATS only treats an UNQUOTED
+// token as a variable, so `password: "$HERMES_CENTRIFUGO_NATS_PASSWORD"` does not escape
+// the value — it stops the lookup happening and hands nats-server the literal text as
+// Centrifugo's password, with no parse error and no log line. Proven by
+// TestAccounts_CentrifugoPasswordReferenceMustNotBeQuoted. Constraining what is generated
+// is therefore the fix, not a mitigation for one.
+//
+// Cost: conditioning on 52 of 64 possible first characters spends about 0.3 bits of the
+// 256, leaving ~255.7. Not a security-relevant amount.
 func newPassword() (string, error) {
+	return newPasswordFrom(rand.Reader)
+}
+
+// newPasswordFrom is newPassword against an injectable entropy source, so the redraw can be
+// tested by feeding it a block that encodes to a rejected shape rather than by sampling
+// until one turns up.
+func newPasswordFrom(src io.Reader) (string, error) {
 	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("read random bytes: %w", err)
+	for attempt := 0; attempt < passwordDraws; attempt++ {
+		if _, err := io.ReadFull(src, buf); err != nil {
+			return "", fmt.Errorf("read random bytes: %w", err)
+		}
+		pw := base64.RawURLEncoding.EncodeToString(buf)
+		if isASCIILetter(pw[0]) {
+			return pw, nil
+		}
 	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
+	return "", fmt.Errorf("no password starting with a letter in %d draws; the entropy source "+
+		"is not behaving like one", passwordDraws)
+}
+
+func isASCIILetter(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
 }
 
 func generate() (credentials, error) {

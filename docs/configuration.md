@@ -104,6 +104,38 @@ staging and production ExternalSecrets read). Each key's public half becomes a
 `$HERMES_NKEY_*` variable in the NATS server's environment; the seed is mounted into that one
 service's pod. Rotating one half of a pair alone locks that service out of the bus.
 
+#### Setting `HERMES_CENTRIFUGO_NATS_PASSWORD` by hand
+
+**The first character must be an ASCII letter.** If you rotate this password yourself rather
+than taking what `cmd/natskeys` emits, this is not a style preference — get it wrong and
+**nats-server will not start**.
+
+`nats-accounts.conf` reads the password as an unquoted `$VARIABLE`, and nats-server resolves
+such a reference by *re-parsing the value as a configuration document*. So the value has to
+lex as a bare conf value, and these do not:
+
+| Password | What nats-server does |
+|---|---|
+| `-Xk3f…` | `Parse error: 'Expected a digit but got 'X''` — a leading `-` starts a negative number |
+| `12-Xk3f…` | `All ISO8601 dates must be in full Zulu form` — a leading digit starts a number, and a later `-` makes it a date |
+| `2p2Xk3f…` | `Expected a top-level value to end…` — a size suffix (`kKmMgGtTpPeE`) then a digit ends the number early |
+| `1234567890`, `true`, `false` | No parse error at all: the value reaches the server as an integer or a bool instead of a string |
+
+A leading letter avoids every one of these, whatever follows it — `-` and `_` later in the
+value are fine. `cmd/natskeys` guarantees it by redrawing; nothing stops a hand-written
+`kubectl create secret` from ignoring it. About 2.3% of unconstrained 43-character base64url
+values hit a failing shape, which is intermittent enough to look like anything but the cause.
+
+Do **not** try to fix this by quoting the reference in `nats-accounts.conf`. NATS only treats
+an *unquoted* token as a variable, so quoting stops the lookup happening and sets Centrifugo's
+password to the literal string `$HERMES_CENTRIFUGO_NATS_PASSWORD` — no parse error, no log
+line, and a credential that is committed in git.
+`TestAccounts_CentrifugoPasswordReferenceMustNotBeQuoted` fails if anyone tries.
+
+Also: an **unset** variable is a parse error, but an **empty** one is not. Setting this to `""`
+starts the server and lets anyone connect as the `centrifugo` user with no credential. Verified
+on the wire; see `TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`.
+
 ### Email (`worker-email`)
 
 | Variable | Default | Purpose |
