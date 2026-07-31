@@ -15,6 +15,44 @@ spec:
             limits:
               memory: 512Mi
 ---
+# Finding 8's capacity half. hermes-send had no production resources block at all, so it ran
+# on the base request of 50m/64Mi.
+#
+# Its load profile is deliberately NOT admin's, and the numbers differ in both directions.
+# Send is a thin ingestion layer: authenticate the API key (HMAC-SHA256), dedupe on the
+# idempotency key in Redis, publish to NATS. No template resolution, no notification record,
+# no channel fan-out — dispatch does all of that. So per request the work is small but almost
+# entirely CPU-shaped (hash, JSON decode, publish), where admin's is IO-shaped (Postgres round
+# trips) and spends its time blocked rather than running.
+#
+# What differs is the rate. The rate limiter admits 2000 req/s sustained with a 5000 burst per
+# credential (internal/send/server.go:94), four times admin's 500/s and 1000
+# (internal/admin/server.go:161) — and admin's ceiling is really Postgres, not the limiter. CPU is
+# therefore both the binding resource and the right autoscaling signal, which is why the
+# request is 300m rather than admin's 200m: the HPA targets 70% of it, so a higher request
+# means each replica absorbs more before a scale-up, and the committed floor is honest about
+# what a busy send pod actually reserves.
+#
+# Memory matches admin at 256Mi/512Mi despite the lighter per-request work, because the thing
+# that sets send's heap is concurrent in-flight request bodies at burst, not retained state.
+# There is no CPU limit here, matching every other service in this file — a CPU limit on the
+# ingestion path converts a burst into throttling and queueing rather than into a scale-up.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-send
+spec:
+  template:
+    spec:
+      containers:
+        - name: send
+          resources:
+            requests:
+              cpu: 300m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:

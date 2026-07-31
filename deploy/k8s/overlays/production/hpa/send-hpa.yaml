@@ -1,0 +1,66 @@
+# Finding 8's capacity half. hermes-send had no HPA, so the platform's ingestion tier was the
+# one service that could not absorb a traffic spike by growing — it could only shed load
+# through the rate limiter or fall over.
+#
+# The shape differs from admin-hpa.yaml in two deliberate ways:
+#
+#   * maxReplicas is 20, not 10. Send is where a customer's batch send lands, and its work per
+#     request is small and perfectly parallel (hash, dedupe, publish); there is no shared
+#     resource that stops it scaling out, unlike admin whose ceiling is really Postgres.
+#     20 x 300m is 6 CPU at full stretch, which is a bounded and affordable ceiling.
+#
+#   * scaleUp is aggressive: no stabilization window, and up to 100% or 4 pods per 30s,
+#     whichever is larger. Admin's 2-pods-per-60s ramp is fine for a management API whose
+#     load moves on human timescales. Ingestion spikes arrive in seconds, and a scale-up that
+#     lands after the burst has already been rate-limited or dropped is not a scale-up.
+#
+# scaleDown stays as conservative as the other services: a 5 minute stabilization window and
+# one pod per minute, so a lull between bursts does not remove the capacity the next burst
+# needs.
+#
+# Note the committed `replicas: 3` in ../patches/replicas.yaml does not fight this. The
+# production ArgoCD Application ignores /spec/replicas on every apps/Deployment
+# (deploy/argocd/production.yaml) — finding 34 — so the committed value is the initial count
+# only and the HPA owns it thereafter.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hermes-send
+  namespace: hermes
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hermes-send
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 4
+          periodSeconds: 30
+      selectPolicy: Max

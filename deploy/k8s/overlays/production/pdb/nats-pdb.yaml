@@ -1,3 +1,11 @@
+# The one PDB in this directory that stays `minAvailable`, and deliberately so: JetStream's
+# meta layer needs an absolute quorum of 2 out of a fixed 3, not a fraction of an elastic
+# replica count. There is no HPA for NATS.
+#
+# Finding 36. This budget was inert until ../patches/anti-affinity.yaml gained a hard
+# hostname anti-affinity rule for NATS — with all three pods free to land on one node, losing
+# that node broke quorum AND drove disruptionsAllowed to 0, so the budget blocked the drain
+# that would have recovered it.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

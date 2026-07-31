@@ -5,4 +5,5 @@ resources:
   - admin-hpa.yaml
   - dispatch-hpa.yaml
   - inbox-hpa.yaml
+  - send-hpa.yaml
   - worker-email-hpa.yaml

@@ -1,10 +1,13 @@
+# Finding 36. Was `minAvailable: 1`, which allows nine simultaneous evictions once the HPA in
+# ../hpa/admin-hpa.yaml has taken this to ten replicas — a budget that only prevents going to
+# zero. See README.md in this directory.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: hermes-admin
   namespace: hermes
 spec:
-  minAvailable: 1
+  maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: hermes-admin

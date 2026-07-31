@@ -53,6 +53,60 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
 	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_ca_key_location.py - --namespace hermes
 	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_ca_key_location.py - --namespace hermes
+	$(MAKE) verify-chart
+
+# The chart's only previous control was `helm template ... > /dev/null` in CI, which
+# proves the templates parse and asserts nothing about what they produce. That is how the
+# chart reached main missing the natsprovision Job (six services crash-loop at boot),
+# routing /v1/types and /v1/groups (no handler since the rename), having no rule at all
+# for /v1/templates, /v1/apikeys, /v1/organizations or /v1/subscriptions, and rendering
+# the bundled NATS images under the Hermes registry. All of it renders cleanly.
+.PHONY: verify-chart
+verify-chart:      ## Check the rendered Helm chart against the Go source it deploys
+	@# Absent helm must fail loudly. A gate that skips when its tool is missing is the
+	@# same class of defect as the one this target exists to close.
+	@command -v helm >/dev/null 2>&1 || { \
+	  echo "ERROR: helm not found on PATH."; \
+	  echo "  The Helm chart gate cannot run without it, and skipping it is how the chart"; \
+	  echo "  drifted in the first place. Install Helm v3:"; \
+	  echo "    https://helm.sh/docs/intro/install/"; \
+	  exit 1; }
+	helm dependency build charts/hermes/
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  | python3 scripts/check_helm_render.py - --source-root=.
+	@# Optional features render into workloads the default install never produces, so they
+	@# need their own pass -- hermes-cleanup was missing from the cd.yml publish matrix and
+	@# only shows up when the CronJob renders.
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
+	  --set observability.enabled=true \
+	  | python3 scripts/check_helm_render.py - --source-root=.
+	@# The production posture must be refused at render time, not discovered as a
+	@# crash-loop. Bundled sub-charts cannot satisfy config.Validate(), so this must fail.
+	@if helm template verify charts/hermes/ \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set global.domain=verify.example.com --set hermes.env=production >/dev/null 2>&1; then \
+	  echo "ERROR: hermes.env=production rendered with the bundled sub-charts."; \
+	  echo "  It must fail: _validate.tpl should refuse a combination whose workloads all"; \
+	  echo "  exit at startup on config.Validate()."; \
+	  exit 1; \
+	fi
+	@echo "ok: production install with bundled sub-charts is refused at render time"
+	@# No hermes-admin-portal image exists and nothing here can build one, so enabling it
+	@# on chart defaults must be refused rather than deferred to ImagePullBackOff.
+	@if helm template verify charts/hermes/ \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set global.domain=verify.example.com --set adminPortal.enabled=true >/dev/null 2>&1; then \
+	  echo "ERROR: adminPortal.enabled=true rendered against the unpublished default image."; \
+	  echo "  It must fail: _validate.tpl should require adminPortal.image.repository to be"; \
+	  echo "  overridden with an image the operator built themselves."; \
+	  exit 1; \
+	fi
+	@echo "ok: admin portal on the unpublished default image is refused at render time"
 
 # --- Helm ---
 .PHONY: helm-lint

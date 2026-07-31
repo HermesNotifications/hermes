@@ -1,0 +1,11 @@
+# Finding 36. hermes-user runs at replicas: 2 in production and had no budget.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hermes-user
+  namespace: hermes
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-user

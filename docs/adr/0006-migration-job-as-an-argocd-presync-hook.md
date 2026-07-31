@@ -356,6 +356,33 @@ healthy — NATS, Centrifugo, the migration's downstream effects — now also bl
 services from being applied at all, where previously they would have been applied and left to
 crash-loop. This is the deliberate trade: a deterministic stop instead of an ambiguous one.
 
+### Relationship to ADR 0008 — why the two deployment paths differ
+
+[ADR 0008](0008-helm-chart-provisioning-jobs-are-not-hooks.md) reached the *opposite-looking*
+answer for `charts/hermes/` on the same day: both provisioning Jobs there are **plain tracked
+resources with revision-scoped names, not hooks in any phase**, and the services crash-loop and
+converge behind them. A reader comparing the two could reasonably ask which one is wrong.
+Neither is, and the difference is not stylistic.
+
+The shared root cause is identical, and both ADRs refuse the same shortcut: services fail closed
+at boot (ADR 0005 phase 4) and neither Helm nor ArgoCD can order a provisioner between two
+things it deploys in one shot without splitting the deployment. **Neither path weakens
+`MustEnsureStreams` to make the ordering easier** — that is not on the table in either record.
+
+What differs is what each tool gives you to split with:
+
+| | Helm (ADR 0008) | ArgoCD (here) |
+|---|---|---|
+| Ordering primitive | hook phases only — `pre-install` runs before the release's own resources exist, `post-install` (with `--wait`) blocks on Deployments that cannot go Ready | `sync-wave`, which orders *within* the Sync phase and gates on health |
+| Both hook phases | deadlock | `PreSync` and `PostSync` both deadlock |
+| Escape | none — so: plain resources, revision-scoped names, converge by crash-loop | waves — so: order the consumers a wave behind the provisioner |
+| Immutability handled by | a new Job name per release revision | `hook-delete-policy: BeforeHookCreation` |
+
+ArgoCD has a third option; Helm does not. Where ADR 0008 accepts crash-loop convergence because
+nothing better exists, this ADR spends eleven annotations to remove it, because something better
+does. The `backoffLimit: 6` reasoning is the same in both records and was arrived at
+independently: Kubernetes doubles from 10s, so 3 buys only ~70 seconds.
+
 ### Correction to *Alternatives considered*
 
 The rejection of "order the migration behind the ExternalSecret with
