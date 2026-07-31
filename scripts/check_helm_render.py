@@ -369,7 +369,7 @@ def check_provisioner(docs, stream_services, provisioner_identity):
     messaging.EnsureStreams cannot create a stream and exits non-zero when one is missing
     (ADR 0005 phase 4), so the chart needs a Job that declares them.
 
-    It must be a plain tracked resource, not a Helm hook — ADR 0007. Neither phase works:
+    It must be a plain tracked resource, not a Helm hook — ADR 0008. Neither phase works:
 
       * pre-install runs before the release's regular resources exist, so with the bundled
         sub-charts there is no bus to provision against, and no ConfigMap/Secret to read
@@ -400,7 +400,7 @@ def check_provisioner(docs, stream_services, provisioner_identity):
         if hook:
             return [
                 f"{provisioner_identity} Job {name} carries helm.sh/hook={hook!r}; it must "
-                "be a plain tracked resource (ADR 0007). A pre- phase runs before the bus "
+                "be a plain tracked resource (ADR 0008). A pre- phase runs before the bus "
                 "and the ConfigMap exist; a post- phase never runs at all under `--wait` "
                 "or `--atomic`, because Helm is blocked waiting for the very services this "
                 "Job unblocks."

@@ -388,7 +388,7 @@ class TestCheckProvisioner(unittest.TestCase):
         self.assertTrue(any("helm.sh/hook" in f for f in failures), failures)
 
     def test_a_post_install_hook_is_rejected(self):
-        # ADR 0007, and the reason this invariant is phrased as "not a hook" rather than
+        # ADR 0008, and the reason this invariant is phrased as "not a hook" rather than
         # "the right hook". Helm waits for every regular resource to be Ready BEFORE
         # running post-install hooks, and the six stream consumers cannot become Ready
         # until this Job has run. Measured: `helm install --wait --timeout 4m` failed with

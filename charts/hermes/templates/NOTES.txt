@@ -17,7 +17,7 @@ debugging yet. Two Jobs provision what the services refuse to start without:
   {{ include "hermes.fullname" . }}-natsprovision-{{ .Release.Revision }} (JetStream streams){{ end }}
 
 They are ordinary resources, not Helm hooks, and they run alongside the services rather
-than before them — neither hook phase can work here (see ADR 0007). The services exit at
+than before them — neither hook phase can work here (see ADR 0008). The services exit at
 boot until the schema and the streams exist, then come up. Typically three restarts each.
 
   IF YOU USE `--wait` OR `--atomic`, THEY WORK, and they are what you want.
@@ -104,7 +104,7 @@ Known gaps in this chart, so you do not discover them in production:
     only the subset of users connected to one pod. Use an external Centrifugo with the
     Redis engine for anything beyond evaluation.
   * A flagless `helm install` cannot fail on a failed migration or stream provisioning —
-    see the `--wait` note above. This is a consequence of ADR 0007 and is the one thing
+    see the `--wait` note above. This is a consequence of ADR 0008 and is the one thing
     that decision gave up.
   * `adminPortal.enabled` needs an image you build yourself. There is no Dockerfile for
     web/admin in the Hermes repository and no published hermes-admin-portal image, so the

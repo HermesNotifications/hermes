@@ -1,5 +1,5 @@
 {{/*
-An ordinary tracked resource, deliberately NOT a Helm hook. See ADR 0007, which records
+An ordinary tracked resource, deliberately NOT a Helm hook. See ADR 0008, which records
 this decision and the measurements behind it. The short version, because the annotations
 that are absent here are the kind of thing someone will helpfully "fix":
 

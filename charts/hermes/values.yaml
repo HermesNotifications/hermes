@@ -326,7 +326,7 @@ migration:
 # this without provisioning streams some other way crash-loops six deployments.
 # Idempotent — SetupStreams is CreateOrUpdate.
 #
-# This Job and the migration Job are ordinary resources, NOT Helm hooks (ADR 0007). Neither
+# This Job and the migration Job are ordinary resources, NOT Helm hooks (ADR 0008). Neither
 # hook phase works: pre-install runs before the bundled datastores exist, and post-install
 # never runs at all under `--wait`/`--atomic` because Helm is blocked waiting for the very
 # services these Jobs unblock. As plain resources they run alongside the services, which

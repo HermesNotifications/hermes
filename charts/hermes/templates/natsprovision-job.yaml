@@ -10,7 +10,7 @@ send, dispatch and all four workers exited at startup with
 
 Modelled on migration-job.yaml because it is the same kind of thing: streams are schema.
 An ordinary tracked resource, deliberately NOT a Helm hook, for exactly the reasons set
-out there and recorded in ADR 0007 — a pre-install hook cannot see the bundled NATS it
+out there and recorded in ADR 0008 — a pre-install hook cannot see the bundled NATS it
 provisions, and a post-install hook never runs at all under `--wait`/`--atomic` because
 Helm is blocked waiting for the very services this Job unblocks.
 

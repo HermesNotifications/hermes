@@ -1,4 +1,4 @@
-# ADR 0007: Run the Helm chart's provisioning Jobs as plain resources, not Helm hooks
+# ADR 0008: Run the Helm chart's provisioning Jobs as plain resources, not Helm hooks
 
 **Status:** Accepted
 **Date:** 2026-07-31
