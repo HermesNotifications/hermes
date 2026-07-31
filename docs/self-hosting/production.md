@@ -121,12 +121,26 @@ Hermes services do not create JetStream streams. `EnsureStreams`
 and refuses to start otherwise, which is what allows the runtime identities to hold read-only
 JetStream grants rather than `STREAM.CREATE`. The chart ships a provisioner Job
 (`natsProvision.*`) that declares `NOTIFICATIONS`, `DELIVERY`, `EVENTS` and `DLQ` as a Helm
-`pre-install`/`pre-upgrade` hook, so ordering is automatic.
+`post-install`/`post-upgrade` hook. You do not run it by hand.
 
-If you disable it against a bus where the streams have not been declared some other way,
-every service crash-loops with `stream NOTIFICATIONS is not available to hermes-send (has
-cmd/natsprovision run?)`. That is the intended failure — a service never runs against a bus
-that is not ready.
+Because it is a `post` hook, it runs *after* the service Deployments are created — Helm has
+to create the release ConfigMap and Secret, and the bundled datastores, before the Job has
+anything to connect to. So on a **first install the services will `CrashLoopBackOff` for a
+minute or two** with:
+
+```
+stream NOTIFICATIONS is not available to hermes-send (has cmd/natsprovision run?)
+```
+
+**That is expected and self-correcting**, not a failed install. The services fail closed
+rather than running against a bus that is not ready, and Kubernetes' restart backoff carries
+them across until the Job finishes. Wait before you start debugging. The same message is a
+real failure only if it persists — for example if you disabled `natsProvision` against a bus
+where the streams were never declared some other way.
+
+Both this Job and the migration Job are named per release revision
+(`<release>-natsprovision-<revision>`). Kubernetes Jobs are immutable, so a stable name would
+fail on the second `helm upgrade`.
 
 ## External Centrifugo
 

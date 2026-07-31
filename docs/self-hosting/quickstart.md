@@ -25,9 +25,16 @@ helm install hermes oci://ghcr.io/hermesnotifications/charts/hermes \
 ingress rule is bound to that hostname. (There is no `ingress.host`.)
 
 This deploys all Hermes services along with bundled PostgreSQL, NATS, Redis and Centrifugo
-sub-charts. Two Jobs run first as Helm `pre-install` hooks — the database migration and the
-NATS stream provisioner — so nothing has to be run by hand and the services do not start
-before the schema and the JetStream streams exist.
+sub-charts. Two Jobs — the database migration and the NATS stream provisioner — run as Helm
+`post-install` hooks, so nothing has to be run by hand.
+
+> **Expect a minute or two of `CrashLoopBackOff` on a first install.** Being `post-install`
+> hooks, those two Jobs run *after* the service Deployments are created, so the services come
+> up before the database schema and the JetStream streams exist and exit rather than run
+> against infrastructure that is not ready. Kubernetes restarts them, the Jobs finish, and
+> the pods settle on their own. Give it a couple of minutes before concluding anything is
+> wrong. A message like `stream NOTIFICATIONS is not available to hermes-send (has
+> cmd/natsprovision run?)` in the logs during that window is normal.
 
 > **This is an evaluation environment, and only that.** The bundled PostgreSQL, Redis and
 > NATS are unauthenticated and unencrypted, the Postgres password is the committed string
@@ -39,13 +46,17 @@ before the schema and the JetStream streams exist.
 
 ## Verify
 
-Run the built-in Helm test to confirm all services are healthy:
+Wait for the pods to stop restarting first — see the note above — then run the built-in Helm
+test to confirm all services are healthy:
 
 ```bash
+kubectl get pods -n hermes -w    # wait until every pod is Running and Ready
 helm test hermes -n hermes
 ```
 
 You should see all tests pass, confirming that each service's health endpoint is reachable.
+Running `helm test` while the migration and provisioner Jobs are still finishing will fail
+for that reason rather than a real one.
 
 ## Access the API
 

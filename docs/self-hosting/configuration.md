@@ -239,8 +239,22 @@ With external Centrifugo, the realtime Ingress is only rendered if you set
 
 ## Install ordering: migrations and NATS streams
 
-Two Jobs run as Helm `pre-install`/`pre-upgrade` hooks with explicit hook weights, so
-ordering is automatic — you do not run anything by hand.
+Two Jobs prepare the database schema and the JetStream streams. You do not run either by
+hand — they are Helm `post-install`/`post-upgrade` hooks, with explicit hook weights so the
+migration runs before the provisioner.
+
+**`post`, not `pre`, and the difference is visible on a first install.** Helm creates
+ordinary resources *after* pre-install hooks but *before* post-install hooks. A pre-install
+Job could not work here: it consumes the release ConfigMap and Secret, which do not exist
+yet at that point, and with the bundled sub-charts enabled the database itself is an ordinary
+resource that has not been created either. Running the Jobs afterwards is what makes them
+able to reach anything.
+
+The visible consequence is that the service Deployments are created *before* the schema and
+the streams exist, so on a first install they will `CrashLoopBackOff` for a minute or two
+until the two Jobs finish. **That is expected, not a broken install.** The services fail
+closed by design — `EnsureStreams` refuses to start against a bus that is not ready — and
+Kubernetes' restart backoff is the convergence mechanism. They settle on their own.
 
 ```yaml
 migration:
@@ -260,6 +274,10 @@ natsProvision:
 ```
 
 There is **no `migration.enabled`** — the migration Job always runs.
+
+Both Jobs are named per release revision (`<release>-migrate-<revision>`,
+`<release>-natsprovision-<revision>`). Kubernetes Jobs are immutable, so a stable name would
+fail on the second `helm upgrade`; the revision suffix is what makes repeat upgrades work.
 
 The NATS provisioner declares the four JetStream streams (`NOTIFICATIONS`, `DELIVERY`,
 `EVENTS`, `DLQ`). Services no longer create streams themselves: `EnsureStreams`

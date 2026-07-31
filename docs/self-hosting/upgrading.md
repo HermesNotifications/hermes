@@ -6,6 +6,11 @@
 
 2. **Back up your database** before upgrading. The migration job runs automatically during `helm upgrade`, and migrations are not reversible.
 
+   It and the NATS stream provisioner are `post-upgrade` hooks, so they run *after* the new
+   pods are rolled out. Expect brief restarts while they complete, the same as on a first
+   install. Both Jobs are named per release revision (`<release>-migrate-<revision>`), because
+   a Job's pod template is immutable and a stable name would fail on the second upgrade.
+
    ```bash
    pg_dump -h your-db-host -U hermes hermes > hermes-backup-$(date +%Y%m%d).sql
    ```

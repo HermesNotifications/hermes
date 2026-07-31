@@ -755,7 +755,12 @@ kubectl get secret hermes-secrets -n hermes -o jsonpath='{.data.HERMES_DATABASE_
 **NATS JetStream:**
 - Data stored on EBS PVCs
 - Stream retention is 7 days
-- If all NATS pods are lost, streams are recreated automatically by services on startup
+- **Streams are not self-healing.** Services verify the streams they depend on and exit if
+  any is missing (`messaging.EnsureStreams`, ADR 0005 phase 4); only the
+  `hermes-natsprovision` Job holds `STREAM.CREATE`. If all NATS pods are lost with their
+  PVCs, re-run that Job — until it completes, the services crash-loop rather than come up
+  Ready and fail every request. (This bullet previously said streams were recreated
+  automatically by services on startup. That was true under phase 3 and is not true now.)
 - Unacknowledged messages are redelivered via durable consumers with explicit ack
 
 **Valkey:**
