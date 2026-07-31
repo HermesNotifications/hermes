@@ -120,13 +120,17 @@ Hermes services do not create JetStream streams. `EnsureStreams`
 (`internal/messaging/provision.go`) only verifies that the streams a service depends on exist
 and refuses to start otherwise, which is what allows the runtime identities to hold read-only
 JetStream grants rather than `STREAM.CREATE`. The chart ships a provisioner Job
-(`natsProvision.*`) that declares `NOTIFICATIONS`, `DELIVERY`, `EVENTS` and `DLQ` as a Helm
-`post-install`/`post-upgrade` hook. You do not run it by hand.
+(`natsProvision.*`) that declares `NOTIFICATIONS`, `DELIVERY`, `EVENTS` and `DLQ`. You do not
+run it by hand.
 
-Because it is a `post` hook, it runs *after* the service Deployments are created — Helm has
-to create the release ConfigMap and Secret, and the bundled datastores, before the Job has
-anything to connect to. So on a **first install the services will `CrashLoopBackOff` for a
-minute or two** with:
+It is an ordinary tracked resource, **not a Helm hook** — as a `pre-install` hook it could
+not see the release ConfigMap or the bundled NATS it provisions, and as a `post-install` hook
+it would never run at all under `--wait` or `--atomic`, because Helm blocks waiting for the
+very services this Job unblocks. [ADR 0008](../adr/0008-helm-chart-provisioning-jobs-are-not-hooks.md)
+records the decision and the measurements behind it.
+
+Being applied alongside the Deployments rather than before them, on a **first install the
+services will `CrashLoopBackOff` for a minute or two** with:
 
 ```
 stream NOTIFICATIONS is not available to hermes-send (has cmd/natsprovision run?)
@@ -139,8 +143,15 @@ real failure only if it persists — for example if you disabled `natsProvision`
 where the streams were never declared some other way.
 
 Both this Job and the migration Job are named per release revision
-(`<release>-natsprovision-<revision>`). Kubernetes Jobs are immutable, so a stable name would
-fail on the second `helm upgrade`.
+(`<release>-natsprovision-<revision>`). A Job's pod template is immutable, so a stable name
+would fail on the second install; with no hook machinery to delete the previous one, the
+revision suffix is what makes repeat upgrades work.
+
+For a production install, use `helm install --wait` (or `--atomic`, which additionally rolls
+back on failure). Both are supported, and `--wait` is what makes the install fail on a broken
+migration rather than returning successfully and leaving you to notice later. On subsequent
+upgrades add `--wait-for-jobs` as well — see
+[the flag notes](configuration.md#--wait-and---atomic) for why that is upgrade-specific.
 
 ## External Centrifugo
 

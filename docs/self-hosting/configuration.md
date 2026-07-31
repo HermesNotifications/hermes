@@ -240,21 +240,27 @@ With external Centrifugo, the realtime Ingress is only rendered if you set
 ## Install ordering: migrations and NATS streams
 
 Two Jobs prepare the database schema and the JetStream streams. You do not run either by
-hand — they are Helm `post-install`/`post-upgrade` hooks, with explicit hook weights so the
-migration runs before the provisioner.
+hand.
 
-**`post`, not `pre`, and the difference is visible on a first install.** Helm creates
-ordinary resources *after* pre-install hooks but *before* post-install hooks. A pre-install
-Job could not work here: it consumes the release ConfigMap and Secret, which do not exist
-yet at that point, and with the bundled sub-charts enabled the database itself is an ordinary
-resource that has not been created either. Running the Jobs afterwards is what makes them
-able to reach anything.
+**Neither is a Helm hook**, and that is deliberate — see
+[ADR 0008](../adr/0008-helm-chart-provisioning-jobs-are-not-hooks.md). They are ordinary
+tracked resources, applied in the same pass as everything else. Both hook phases were tried
+and both are broken here:
 
-The visible consequence is that the service Deployments are created *before* the schema and
-the streams exist, so on a first install they will `CrashLoopBackOff` for a minute or two
-until the two Jobs finish. **That is expected, not a broken install.** The services fail
-closed by design — `EnsureStreams` refuses to start against a bus that is not ready — and
-Kubernetes' restart backoff is the convergence mechanism. They settle on their own.
+- A **`pre-install`** hook cannot see what it needs. Helm creates a release's regular
+  resources only *after* pre-install hooks finish, so the Job finds neither the release
+  ConfigMap and Secret it takes its configuration from, nor — with the bundled sub-charts
+  enabled — the Postgres it is supposed to migrate.
+- A **`post-install`** hook never runs at all under `--wait` or `--atomic`. Helm waits for
+  every regular resource to become Ready *before* running post-install hooks, and the
+  services cannot become Ready until these Jobs have run. That is a deadlock, and it is the
+  path most self-hosters are on, since Flux's `HelmRelease` and ArgoCD's Helm integration
+  both effectively wait.
+
+As plain resources the Jobs are applied alongside the Deployments and retry until the
+datastores are reachable, while the services crash-loop behind them and converge. **A minute
+or two of `CrashLoopBackOff` on a first install is expected, not a broken install** — the
+services fail closed by design rather than serving against a bus that is not ready.
 
 ```yaml
 migration:
@@ -276,8 +282,28 @@ natsProvision:
 There is **no `migration.enabled`** — the migration Job always runs.
 
 Both Jobs are named per release revision (`<release>-migrate-<revision>`,
-`<release>-natsprovision-<revision>`). Kubernetes Jobs are immutable, so a stable name would
-fail on the second `helm upgrade`; the revision suffix is what makes repeat upgrades work.
+`<release>-natsprovision-<revision>`). A Job's pod template is immutable, so a stable name
+would fail on the second install — and without hook machinery to delete the previous one,
+the revision suffix is what makes repeat upgrades work at all. Helm prunes the previous
+revision's Job on upgrade, because it is absent from the new manifest.
+
+### `--wait` and `--atomic`
+
+Both work, and so do `--wait-for-jobs` and `helm upgrade --wait`. A full bundled install
+under `--wait` completes in around 70 seconds. Two things are worth knowing before you choose
+flags:
+
+**A flagless `helm install` cannot fail on a broken migration.** It returns once the
+resources are created, which is before the Jobs have necessarily succeeded. If you want the
+install to fail when the migration fails, pass `--wait`: the services cannot become Ready
+until the schema and the streams exist, so waiting on the Deployments is an indirect but
+reliable signal that both Jobs got there.
+
+**On upgrade that signal disappears, and `--wait` does not wait for Jobs.** The services are
+already Ready before the upgrade starts, so `helm upgrade --wait` can return while the new
+migration Job is still `ContainerCreating`. Add `--wait-for-jobs` **for upgrades** if you
+need the command to block until migrations have actually completed. It is not needed on a
+fresh install, where `--wait` already covers it through the Deployments.
 
 The NATS provisioner declares the four JetStream streams (`NOTIFICATIONS`, `DELIVERY`,
 `EVENTS`, `DLQ`). Services no longer create streams themselves: `EnsureStreams`
