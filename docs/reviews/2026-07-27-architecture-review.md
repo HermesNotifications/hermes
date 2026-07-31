@@ -2112,6 +2112,102 @@ ships no bastion or VPN) and keeping the runtime config in git behind an ArgoCD 
   for anything depending on `function-extra-resources`.
 - The account ID is hardcoded in `deploy/k8s/overlays/*/images/kustomization.yaml` and three
   `deploy/kargo/` files.
+## Resolved 2026-07-31 — finding 11's twin, in the Job nobody cross-checked
+
+Closing finding 11 created a second instance of finding 11. PR #71 added
+`deploy/k8s/base/nats-provision-job.yaml` with its hook annotations commented out and this
+reason:
+
+> Left commented to match hermes-migrate rather than enabling it for one Job and not the other.
+
+PR #72 then made `hermes-migrate` a `PreSync` hook. The two PRs were developed in parallel and
+neither saw the other, so the justification was **stale the moment #72 merged** — the Jobs no
+longer matched, and `hermes-natsprovision` was left as an ordinary tracked resource with the
+same immutable-`spec.template` defect, on the same Kargo promotion path. Nothing detected this:
+`make verify` renders the overlays and both Jobs render fine, and no gate compares a comment to
+the thing it claims parity with.
+
+**Reproduced, not inferred.** Same ArgoCD v3.4.5, same harness shape, real `cmd/natsprovision`
+binary against a real NATS with JetStream. First sync clean; the second, with the tag rewritten
+the way `kustomize-set-image` rewrites it:
+
+```
+Job.batch "hermes-natsprovision" is invalid: spec.template: Invalid value: {...}:
+field is immutable
+```
+
+Terminal at `OutOfSync` / `phase: Failed` / `retryCount: 3`, and — as with the migration — not
+atomic: the StatefulSet and both Deployments in the same sync reported `serverside-applied`.
+
+**One way this is worse than finding 11.** Throughout, the Application reported
+`health: Healthy`. A failed migration eventually shows up as an unhealthy workload; a failed
+stream provisioning on a cluster whose streams already exist shows up as nothing. New images
+roll out, streams are never re-declared, and the only signal is a red sync status on an
+application that calls itself healthy.
+
+**The fix is not the same fix, and both wrong answers were tested rather than reasoned about.**
+
+- `PreSync` cannot work: `hermes-migrate` targets Aurora, which exists before any sync, whereas
+  this Job targets the NATS StatefulSet *this same Application creates in the `Sync` phase*.
+- `PostSync` deadlocks. Verified on a virgin namespace: the provisioning Job **was never
+  created at all**, the six stream-consuming services (which `os.Exit(1)` without streams) sat
+  in `CrashLoopBackOff`, and the Application went terminal at `Degraded` / `phase: Failed` with
+  `exceeded its progress deadline`. The services cannot go healthy without the streams; the
+  hook that creates the streams cannot run until they are healthy.
+- `hook: Sync` with the Job **alone** at wave 1 deadlocks identically — wave 0 then holds the
+  services, which never go healthy, so wave 1 never starts. Also verified: no Job pod in three
+  minutes.
+
+**What shipped.** `hook: Sync` at `sync-wave: "0"` with `hook-delete-policy: BeforeHookCreation`
+on the Job, and `sync-wave: "1"` on the six services that fail closed on streams (`send`,
+`dispatch`, `worker-email`, `worker-sms`, `worker-inbox`, `worker-events`). `admin`, `inbox` and
+`user` do not call `MustEnsureStreams` and stay at the default wave. The NATS StatefulSet is
+deliberately not moved: its config Secret and TLS certificate are themselves wave-0 resources,
+so an earlier wave would strand it.
+
+Two consecutive tag rewrites both synced clean — the case that used to fail. A virgin-namespace
+bootstrap went from **2 restarts per service to 0**, with service pods created only after the
+Job completed, which settles the assumption the whole design rests on: **ArgoCD does wait for
+wave 0, including a `Sync`-phase hook Job's completion, before applying wave 1.**
+
+**And this is a detection-gap story, not just a defect.** Under the old shape, a failed
+provisioner and a healthy one look the same for the first minute — crash-looping pods either
+way. Under the new one, a failed provisioner shows as *no service pods at all* plus
+`waiting for completion of hook batch/Job/hermes-natsprovision`, which no operator will mistake
+for normal. Verified by pointing the Job at an unreachable bus and letting it run to the end:
+the Job exhausted `backoffLimit: 6` at **10m38s** (`BackoffLimitExceeded`) and the Application
+went terminal at **22m23s** with `phase: Failed` / `retryCount: 3`. **It terminates — it does
+not hang.** At that point the namespace held only the NATS pod: no service Deployment was ever
+created, and the failed Job was gone, so its logs are Loki's problem exactly as ADR 0006 says.
+The one trap is that `health` reads `Healthy` at the terminal state, because nothing unhealthy
+exists — nothing exists. Sync status is the signal, not health.
+
+Recorded as an **amendment to ADR 0006** rather than a new ADR: it is the same decision class
+for the same class of Job, it reverses nothing (`hermes-migrate` stays `PreSync`), and it
+corrects one sentence in that ADR's *Alternatives considered* which reads as "waves do not gate
+anything" — measured, a failing wave-0 hook does stop wave 1 from being applied at all.
+
+**Two things found on the way that were not the finding.** Neither is fixed here.
+
+1. ArgoCD excludes hook resources from the desired-state diff, so a commit that changes *only*
+   a hook Job's image tag leaves the Application `Synced` at the new revision and triggers no
+   sync. Masked in practice because a Kargo promotion rewrites all eleven tags and then runs
+   `argocd-update`. **This applies equally to `hermes-migrate` and was not noticed when that
+   hook landed.**
+2. On the single sync where the annotations are first added, ArgoCD **prunes** the
+   previously-tracked Job (`status: Pruned`) and the hook runs on the *next* sync, not that one.
+   Harmless where the streams already exist, but "deploy the change" and "re-provision" are two
+   syncs.
+
+**Unverified.** Everything ran on k3s against a locally built `hermes-natsprovision` image and a
+single-node plaintext NATS — not against AWS, ECR, ESO, cert-manager-issued NATS certificates or
+a three-node JetStream cluster, and no Kargo controller was involved. The six services were
+represented by **stand-in Deployments** that exit non-zero when a stream is absent, not by the
+real service images; they reproduce the property that matters for sync ordering (fail closed at
+boot, never become Available) but not the services' full startup sequence, which also touches
+Postgres and Redis. `progressDeadlineSeconds` was lowered to 120 in the stand-ins to keep the
+deadlock runs tractable — the real default is 600, so a real `PostSync` deadlock takes
+correspondingly longer to reach its terminal state, not less long.
 
 ---
 

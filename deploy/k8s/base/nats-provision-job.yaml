@@ -5,10 +5,13 @@
 # That was the residual over-grant phase 3 named and accepted. This Job holds those rights
 # now, and no service does.
 #
-# It is deliberately shaped like hermes-migrate, because it is the same kind of thing: streams
-# are schema. Services verify rather than declare (messaging.EnsureStreams) and exit non-zero
-# if a stream is missing, so a deploy where this Job has not finished is a crash-loop that
-# converges once it does — not a service that comes up Ready and fails every request.
+# It is the same kind of thing as hermes-migrate — streams are schema — but it is deliberately
+# NOT shaped identically, and the earlier version of this comment claiming otherwise is how the
+# defect below survived. Services verify rather than declare (messaging.EnsureStreams) and exit
+# non-zero if a stream is missing; ADR 0006's 2026-07-31 amendment stops that from being a
+# crash-loop that "converges", by ordering the six stream-consuming services a sync-wave behind
+# this Job instead of letting them race it. hermes-migrate is a PreSync hook because Aurora is
+# external; this cannot be, because the bus it provisions is created in the Sync phase.
 #
 # Re-running is safe: SetupStreams is CreateOrUpdate.
 apiVersion: batch/v1
@@ -19,16 +22,53 @@ metadata:
     app.kubernetes.io/name: hermes-natsprovision
     app.kubernetes.io/component: provisioning
   annotations:
-    # A Job's pod template is immutable, so re-applying a changed one fails. The same is
-    # true of hermes-migrate, and the fix is the same: an Argo PreSync hook that deletes
-    # the previous Job first. Left commented to match hermes-migrate rather than enabling
-    # it for one Job and not the other.
-    # argocd.argoproj.io/hook: PreSync
-    # argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # ADR 0006, amended 2026-07-31. A Job's pod template is immutable, so re-applying a
+    # changed one fails, and Kargo rewrites this image tag on every promotion
+    # (deploy/kargo/stages/{staging,production}.yaml). Left as an ordinary tracked resource
+    # the second promotion failed with
+    #   Job.batch "hermes-natsprovision" is invalid: spec.template: Invalid value: {...}:
+    #   field is immutable
+    # while every other resource in the same sync applied — reproduced against ArgoCD
+    # v3.4.5, Application terminal at OutOfSync / phase: Failed (retried 3 times) and,
+    # worse than the hermes-migrate case, health: Healthy throughout. So the steady state
+    # was: new images roll out, streams are never re-declared, nothing looks broken.
+    #
+    # Sync, not PreSync. hermes-migrate can be PreSync because Aurora is external and
+    # already exists; this Job's dependency — the NATS StatefulSet — is created by this
+    # same Application during the Sync phase, so a PreSync hook has nothing to connect to
+    # on a virgin bootstrap.
+    #
+    # Sync, not PostSync. PostSync runs only once the Sync phase is healthy, and the six
+    # stream-consuming services exit non-zero at boot when the streams are missing
+    # (internal/bootstrap.MustEnsureStreams, ADR 0005 phase 4), so they never go healthy
+    # and the hook that would create the streams never runs. Verified: on a virgin
+    # namespace no provisioning Job was ever created, the services reached
+    # CrashLoopBackOff, and the Application settled at Degraded / phase: Failed with
+    # "exceeded its progress deadline". That is a permanent deadlock, not a slow start.
+    #
+    # sync-wave 0 is the wave the NATS StatefulSet is also in, so this Job races NATS
+    # coming up rather than being ordered behind it — see backoffLimit below. The six
+    # services carry sync-wave "1" and are applied only after this wave is healthy.
+    #
+    # BeforeHookCreation, not HookSucceeded, for exactly the reason ADR 0006 gives for
+    # hermes-migrate: HookSucceeded leaves a failed Job behind and the next sync
+    # reproduces the immutable-field error. It carries the same cost — the failed Job and
+    # its pod logs are destroyed before each retry, so the error text is only in Loki.
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
     kubernetes.io/description: >-
       Declares the NOTIFICATIONS, DELIVERY, EVENTS and DLQ JetStream streams. The only
       bus identity holding STREAM.CREATE/UPDATE (ADR 0005 phase 4).
 spec:
+  # This is the whole bootstrap budget, and it is load-bearing rather than a round number.
+  # cmd/natsprovision has no connect retry of its own — bootstrap.MustConnectNATS exits on
+  # the first failure — so the Job's backoff is the only thing that lets it start before
+  # NATS does. Measured on a virgin namespace: the first pod exited 2s in with
+  #   nats connect: dial tcp: lookup nats on 10.43.0.10:53: no such host
+  # and the second, ~10s later, succeeded. Kubernetes doubles the delay from 10s, so 6
+  # gives 7 attempts across roughly 10.5 minutes of wall clock. Do not lower it without
+  # re-measuring how long a cold three-node JetStream cluster takes to publish DNS.
   backoffLimit: 6
   template:
     metadata:
@@ -73,6 +113,16 @@ spec:
             limits:
               memory: 64Mi
       volumes:
+        # optional: true on both of these was re-examined when the hook annotations went in,
+        # because "the pod starts and then fails at connect" sounds strictly worse than "the
+        # pod will not start". Measured, it is not. Both failures already name the missing
+        # file on one line and exit non-zero immediately:
+        #   nats nkey seed /etc/nats-nkey/seed.nk: nats: open ...: no such file or directory
+        #   nats connect: nats: error loading or parsing rootCA file: open ...: no such file
+        # Dropping optional would instead pin the pod in ContainerCreating indefinitely,
+        # which consumes none of the backoffLimit above and leaves the ArgoCD sync waiting
+        # for a hook that will never complete or fail — the one cost ADR 0006 calls its
+        # worst. Fast and terminal with a precise message beats hung and precise.
         - name: nats-ca
           secret:
             secretName: nats-server-tls
