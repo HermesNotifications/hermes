@@ -16,6 +16,7 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0004](0004-ownership-manifest-for-review-remediation.md) | Ownership manifest for the review-remediation batch, with auth owned by a unit rather than escalated | Accepted | 2026-07-29 |
 | [0005](0005-transport-security-for-infrastructure-connections.md) | Authenticate and encrypt connections to NATS, Postgres and Redis, with a config surface rather than connection-string archaeology | Accepted | 2026-07-29 |
 | [0006](0006-migration-job-as-an-argocd-presync-hook.md) | Run the migration Job as an ArgoCD `PreSync` hook, and gate the sync on it | Accepted | 2026-07-30 |
+| [0007](0007-aws-network-and-control-plane-posture.md) | Fix the AWS network address plan and the EKS control-plane posture before either environment exists | Accepted | 2026-07-31 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 
