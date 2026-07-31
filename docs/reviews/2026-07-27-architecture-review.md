@@ -1985,7 +1985,13 @@ wave 0, including a `Sync`-phase hook Job's completion, before applying wave 1.*
 provisioner and a healthy one look the same for the first minute — crash-looping pods either
 way. Under the new one, a failed provisioner shows as *no service pods at all* plus
 `waiting for completion of hook batch/Job/hermes-natsprovision`, which no operator will mistake
-for normal. Verified by pointing the Job at an unreachable bus.
+for normal. Verified by pointing the Job at an unreachable bus and letting it run to the end:
+the Job exhausted `backoffLimit: 6` at **10m38s** (`BackoffLimitExceeded`) and the Application
+went terminal at **22m23s** with `phase: Failed` / `retryCount: 3`. **It terminates — it does
+not hang.** At that point the namespace held only the NATS pod: no service Deployment was ever
+created, and the failed Job was gone, so its logs are Loki's problem exactly as ADR 0006 says.
+The one trap is that `health` reads `Healthy` at the terminal state, because nothing unhealthy
+exists — nothing exists. Sync status is the signal, not health.
 
 Recorded as an **amendment to ADR 0006** rather than a new ADR: it is the same decision class
 for the same class of Job, it reverses nothing (`hermes-migrate` stays `PreSync`), and it

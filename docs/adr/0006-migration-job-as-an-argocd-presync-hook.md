@@ -287,15 +287,21 @@ long run of defects that survived because a broken thing looked like the usual t
 **When the provisioner fails, the operator sees an unambiguous signal.** Verified by pointing
 the Job at an unreachable bus on a virgin namespace:
 
-| What | Value |
+| Stage | What the Application shows |
 |---|---|
-| Application | `sync: OutOfSync`, `phase: Running`, `health: Healthy` |
-| Message | `waiting for completion of hook batch/Job/hermes-natsprovision` |
-| Service Deployments | `OutOfSync` — **never created, zero pods** |
-| Provisioner pods | one per backoff attempt, all `Error`, logs readable |
+| Job in backoff (`backoffLimit: 6`) | `sync: OutOfSync`, `phase: Running`, `health: Healthy`, `waiting for completion of hook batch/Job/hermes-natsprovision`; service Deployments `OutOfSync` — **never created, zero pods**; one provisioner pod per attempt, all `Error`, logs readable |
+| Job exhausted, at **10m38s** | Job condition `Failed` / `BackoffLimitExceeded`, hook result `hookPhase: Failed`, `Job has reached the specified backoff limit` |
+| Terminal, at **22m23s** | `sync: OutOfSync`, `phase: Failed`, `retryCount: 3`; namespace contains **only** the NATS pod — no service Deployments were ever created, and the failed Job is gone |
+
+**It does reach a terminal state** — it does not hang. 10m38s is the `backoffLimit: 6` budget
+spending itself, and it matches the computed 10.5 minutes closely enough to trust the
+arithmetic; the rest is ArgoCD's own retries.
 
 "No service pods at all, plus *waiting for completion of hook*" is distinguishable from a real
-application fault at a glance, which "six pods in CrashLoopBackOff" is not.
+application fault at a glance, which "six pods in CrashLoopBackOff" is not. The one thing an
+operator must not read too fast is `health: Healthy` at the terminal state — it means "nothing
+unhealthy exists", because nothing exists. The sync status is the signal here, not the health
+status.
 
 **`backoffLimit: 6` is now load-bearing, not a round number.** `cmd/natsprovision` has no
 connect retry — `bootstrap.MustConnectNATS` exits on first failure — so the Job's backoff is
