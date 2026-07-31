@@ -274,9 +274,15 @@ workerEvents:
 # Admin Portal (web UI)
 # ---------------------------------------------------------------------------
 
-# -- Admin Portal web application
+# -- Admin Portal web application.
+# NOTE: no hermes-admin-portal image is published, and this repository contains no
+# Dockerfile that could build one — web/admin is a Next.js app, the Tiltfile runs it as a
+# local pnpm process, and .github/workflows/cd.yml builds Go services only. Enabling this
+# without overriding image.repository to an image you built yourself is refused at render
+# time rather than left to become an ImagePullBackOff.
 adminPortal:
-  # -- Deploy the admin portal
+  # -- Deploy the admin portal. Requires adminPortal.image.repository to point at your own
+  # image; see the note above.
   enabled: false
   image:
     repository: hermes-admin-portal
@@ -301,8 +307,12 @@ migration:
     repository: hermes-migrate
     # -- Image tag override
     tag: ""
-  # -- Number of retries before marking the job as failed
-  backoffLimit: 3
+  # -- Number of retries before marking the job as failed.
+  # 6, not 3: the Job is applied in the same pass as the database it migrates, so on a
+  # first install it retries while Postgres starts. Kubernetes backs off 10s, 20s, 40s...
+  # between attempts, so 3 gave roughly 70 seconds — less than a bundled Postgres takes to
+  # accept connections.
+  backoffLimit: 6
   # -- Resource requests and limits for the migration job
   resources: {}
 
@@ -311,10 +321,22 @@ migration:
 # ---------------------------------------------------------------------------
 
 # -- JetStream stream provisioning job (ADR 0005 phase 4).
-# Declares the NOTIFICATIONS, DELIVERY, EVENTS and DLQ streams before the services start.
-# Send, dispatch and all four workers verify their streams at boot and exit non-zero if one
-# is missing, so disabling this without provisioning streams some other way crash-loops
-# six deployments. Idempotent — SetupStreams is CreateOrUpdate.
+# Declares the NOTIFICATIONS, DELIVERY, EVENTS and DLQ streams. Send, dispatch and all four
+# workers verify their streams at boot and exit non-zero if one is missing, so disabling
+# this without provisioning streams some other way crash-loops six deployments.
+# Idempotent — SetupStreams is CreateOrUpdate.
+#
+# This Job and the migration Job are ordinary resources, NOT Helm hooks (ADR 0008). Neither
+# hook phase works: pre-install runs before the bundled datastores exist, and post-install
+# never runs at all under `--wait`/`--atomic` because Helm is blocked waiting for the very
+# services these Jobs unblock. As plain resources they run alongside the services, which
+# crash-loop for about a minute and then converge.
+#
+# Practical consequence for your install command:
+#   * `--wait` and `--atomic` work, and are recommended. A flagless `helm install` returns
+#     before these Jobs have necessarily succeeded, so it cannot fail on a failed migration.
+#   * On `helm upgrade`, add `--wait-for-jobs` — `--wait` alone does not wait for Jobs, and
+#     on an upgrade the services are already Ready so it can return too early.
 natsProvision:
   # -- Run the stream provisioning job. Disable only if you provision JetStream streams
   # out of band (e.g. cmd/natsprovision run by your own pipeline).
@@ -430,7 +452,7 @@ postgresql:
   enabled: true
   image:
     # -- Docker Official Image. Not bitnami/postgresql: Broadcom withdrew Bitnami's free
-    # catalogue from Docker Hub, so every versioned docker.io/bitnami tag now 404s. ADR 0007.
+    # catalogue from Docker Hub, so every versioned docker.io/bitnami tag now 404s. ADR 0009.
     repository: docker.io/library/postgres
     # -- Tracks the major that docker-compose.yml and the integration suite test against, so
     # the bundled datastore is the one Hermes is actually exercised on. Floating within the
@@ -459,7 +481,7 @@ redis:
   # externalRedis.url for anything you care about; hermes.env=production requires it.
   enabled: true
   image:
-    # -- Docker Official Image, for the same reason as Postgres above. ADR 0007.
+    # -- Docker Official Image, for the same reason as Postgres above. ADR 0009.
     repository: docker.io/library/redis
     # -- Matches docker-compose.yml.
     tag: "7-alpine"

@@ -1,7 +1,7 @@
 {{/*
 Bundled evaluation Redis.
 
-Plain manifests rather than a sub-chart, for the reason recorded in ADR 0007: the
+Plain manifests rather than a sub-chart, for the reason recorded in ADR 0009: the
 bitnami/redis chart that used to sit here can no longer pull an image, and adopting another
 vendor's chart would re-acquire the same exposure. `docker.io/library/redis` is a Docker
 Official Image with versioned tags.

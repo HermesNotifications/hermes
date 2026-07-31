@@ -2,7 +2,7 @@
 Bundled evaluation Postgres.
 
 This is a plain StatefulSet rather than a sub-chart dependency, and that is a decision with
-a reason behind it (ADR 0007). The bitnami/postgresql chart that used to sit here became
+a reason behind it (ADR 0009). The bitnami/postgresql chart that used to sit here became
 uninstallable when Broadcom withdrew Bitnami's free image catalogue from Docker Hub: every
 versioned tag under docker.io/bitnami now 404s, and only the moving `:latest` survives.
 Depending on a chart means depending on whatever image its maintainer points it at, which is

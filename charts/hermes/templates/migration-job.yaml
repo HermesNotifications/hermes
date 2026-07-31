@@ -1,30 +1,33 @@
 {{/*
-post-install, not pre-install. This Job has never been able to run as a pre-install hook
-and it took installing the chart to find out — twice, with two different symptoms:
+An ordinary tracked resource, deliberately NOT a Helm hook. See ADR 0008, which records
+this decision and the measurements behind it. The short version, because the annotations
+that are absent here are the kind of thing someone will helpfully "fix":
 
-  1. It read the release Secret via envFrom. Helm creates a release's regular resources
-     only *after* its pre-install hooks finish, so the pod sat in
-     CreateContainerConfigError until `helm install` gave up with
-     "failed pre-install: timed out waiting for the condition".
-  2. With that fixed by hook-scoped copies of the config, the pod started and then failed
-     with `lookup hv-postgresql: no such host` — because the bundled Postgres sub-chart is
-     also a regular resource, so at pre-install time the database it migrates does not
-     exist either. BackoffLimitExceeded, install failed.
+  * As a PRE-install hook it cannot work. Helm creates a release's regular resources only
+    after pre-install hooks finish, so this Job could see neither the release
+    ConfigMap/Secret (pod stuck in CreateContainerConfigError, install timed out) nor the
+    bundled Postgres it migrates (`lookup hv-postgresql: no such host`). Both observed.
+    It has been in this state since the file was written, so a fresh `helm install` of
+    this chart had never once run its migrations.
 
-The second is not fixable while staying in the pre-install phase: with `postgresql.enabled`
-(the chart default and the evaluation posture the owner asked for) there is nothing to
-migrate against until the release's resources are applied.
+  * As a POST-install hook it deadlocks under `--wait` and `--atomic`. Helm waits for
+    every regular resource to become Ready *before* running post-install hooks. The
+    services cannot become Ready without the schema and the streams. Measured on this
+    chart: `helm install --wait --timeout 4m` failed with `context deadline exceeded`,
+    NO Job was ever created, no streams existed, and all nine services were in
+    CrashLoopBackOff. `--atomic` additionally rolled the release back and uninstalled it.
+    Flux's HelmRelease and ArgoCD's Helm integration both effectively wait, so this is
+    the path most self-hosters are on.
 
-post-install/post-upgrade keeps what the hook was for — a failed migration fails the
-`helm` command loudly instead of leaving a half-working install — and works in both
-postures. What it gives up is that the services are created at the same time as this Job
-rather than after it, so on a first install they will error briefly until the schema
-exists. That is the same convergence deploy/k8s/base already relies on for both Jobs, and
-the same one ADR 0005 phase 4 names for stream provisioning.
+As a plain resource the Job is applied alongside everything else and retries until the
+datastore is reachable, while the services crash-loop and converge behind it. `--wait`
+then blocks on the Deployments, which do become Ready, because this Job is running rather
+than queued behind them. `--wait` does not itself wait for Jobs unless you pass
+`--wait-for-jobs`.
 
-hook-weight is explicit on both Jobs so migrate runs before natsprovision. They are
-independent, but an order that merely happens to work is the kind that breaks once and is
-never reproducible.
+The revision-scoped name is what makes this safe to re-apply: a Job's pod template is
+immutable, so a stable name fails on the second install. Helm prunes the previous
+revision's Job on upgrade because it is absent from the new manifest.
 */}}
 apiVersion: batch/v1
 kind: Job
@@ -32,10 +35,8 @@ metadata:
   name: {{ include "hermes.fullname" . }}-migrate-{{ .Release.Revision }}
   labels:
     {{- include "hermes.labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-delete-policy": hook-succeeded
-    "helm.sh/hook-weight": "-5"
+    app.kubernetes.io/name: hermes-migrate
+    app.kubernetes.io/component: migration
 spec:
   backoffLimit: {{ .Values.migration.backoffLimit }}
   template:
@@ -62,9 +63,9 @@ spec:
                   key: {{ .Values.externalPostgresql.existingSecretKey }}
             {{- end }}
           envFrom:
-            {{- /* Safe to read the release ConfigMap and Secret because this is a
-                   post-install hook: both exist by the time it runs. It was not safe as a
-                   pre-install hook, which is half of why the phase changed. */}}
+            {{- /* Safe because this Job is a regular resource, applied in the same pass as
+                   the ConfigMap and Secret. It was NOT safe as a pre-install hook, which
+                   is half of why this is no longer one. */}}
             - configMapRef:
                 name: {{ include "hermes.configMapName" . }}
             - secretRef:

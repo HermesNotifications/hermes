@@ -10,16 +10,32 @@ Watch the rollout:
 
     kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=hermes -w
 
-Expect a minute or two of CrashLoopBackOff on the first install. That is normal and it
-converges. Two Jobs run as post-install/post-upgrade hooks:
+EXPECT ABOUT A MINUTE OF CrashLoopBackOff ON A FIRST INSTALL. It converges; do not start
+debugging yet. Two Jobs provision what the services refuse to start without:
 
   {{ include "hermes.fullname" . }}-migrate-{{ .Release.Revision }} (database schema){{ if .Values.natsProvision.enabled }}
   {{ include "hermes.fullname" . }}-natsprovision-{{ .Release.Revision }} (JetStream streams){{ end }}
 
-They run after the release's resources are applied, because with the bundled sub-charts
-the datastores they provision do not exist any earlier. The services start at the same
-time and restart until the schema and the streams are there. `helm` still fails loudly if
-either Job fails.
+They are ordinary resources, not Helm hooks, and they run alongside the services rather
+than before them — neither hook phase can work here (see ADR 0008). The services exit at
+boot until the schema and the streams exist, then come up. Typically three restarts each.
+
+  IF YOU USE `--wait` OR `--atomic`, THEY WORK, and they are what you want.
+  A flagless `helm install` returns as soon as the resources are applied — before these
+  Jobs have necessarily succeeded — so a failed migration leaves the release reporting
+  `deployed` with crash-looping pods. `--wait` turns that into a non-zero exit.
+
+      helm install ... --wait --timeout 10m
+
+  On an UPGRADE, add `--wait-for-jobs`. `--wait` alone does not wait for Jobs, and on an
+  upgrade the services are already Ready — so `helm upgrade --wait` can return while the
+  new migration is still starting. On a first install this does not arise, because the
+  services cannot become Ready until the Jobs have done their work.
+
+      helm upgrade ... --wait --wait-for-jobs --timeout 10m
+
+Completed and failed Job pods are left in place on purpose, so `kubectl logs` still works
+after a failure. They are cleaned up by the next upgrade.
 {{ if not .Values.natsProvision.enabled }}
   WARNING: natsProvision.enabled=false. Send, dispatch and all four workers verify their
   JetStream streams at boot and exit non-zero if one is missing — messaging.EnsureStreams
@@ -87,3 +103,10 @@ Known gaps in this chart, so you do not discover them in production:
     across replicas, so scaling Centrifugo past one pod silently delivers each message to
     only the subset of users connected to one pod. Use an external Centrifugo with the
     Redis engine for anything beyond evaluation.
+  * A flagless `helm install` cannot fail on a failed migration or stream provisioning —
+    see the `--wait` note above. This is a consequence of ADR 0008 and is the one thing
+    that decision gave up.
+  * `adminPortal.enabled` needs an image you build yourself. There is no Dockerfile for
+    web/admin in the Hermes repository and no published hermes-admin-portal image, so the
+    chart refuses to render with it enabled unless you override
+    adminPortal.image.repository.

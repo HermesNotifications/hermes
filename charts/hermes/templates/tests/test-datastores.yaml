@@ -1,7 +1,7 @@
 {{/*
 Connect to the bundled datastores using the exact URLs the chart generates.
 
-This closes the failure mode ADR 0007 calls out as silent: hermes.databaseUrl and
+This closes the failure mode ADR 0009 calls out as silent: hermes.databaseUrl and
 hermes.redisUrl build a hostname by string-formatting, and a hostname that names no Service
 renders, lints, and passes `helm template` and scripts/check_helm_render.py without a
 murmur. It is only wrong at connect time. That is not hypothetical — the Service names

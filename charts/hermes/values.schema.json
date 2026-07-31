@@ -293,7 +293,7 @@
 
     "postgresql": {
       "type": "object",
-      "$comment": "Bundled evaluation Postgres, rendered by templates/postgresql.yaml. Closed, unlike the bitnami sub-chart block it replaced (ADR 0007): there is no longer a downstream schema to forward unknown keys to, so an unrecognised key here is a silent no-op rather than someone else's validation error. auth.* is required because hermes.databaseUrl builds HERMES_DATABASE_URL from it.",
+      "$comment": "Bundled evaluation Postgres, rendered by templates/postgresql.yaml. Closed, unlike the bitnami sub-chart block it replaced (ADR 0009): there is no longer a downstream schema to forward unknown keys to, so an unrecognised key here is a silent no-op rather than someone else's validation error. auth.* is required because hermes.databaseUrl builds HERMES_DATABASE_URL from it.",
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },

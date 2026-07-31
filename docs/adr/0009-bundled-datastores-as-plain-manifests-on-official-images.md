@@ -1,4 +1,4 @@
-# ADR 0007: Ship the bundled evaluation Postgres and Redis as plain manifests on Docker Official Images
+# ADR 0009: Ship the bundled evaluation Postgres and Redis as plain manifests on Docker Official Images
 
 **Status:** Accepted
 **Date:** 2026-07-31

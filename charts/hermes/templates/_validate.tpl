@@ -18,6 +18,30 @@ than six crash-looping pods and a log dive. Production installs use the external
 
 Called from configmap.yaml, which always renders.
 */}}
+{{/*
+The admin portal image does not exist anywhere.
+
+`web/admin` is a Next.js app with no Dockerfile in this repository. The Tiltfile runs it as
+a `local_resource` (`pnpm dev`), and .github/workflows/cd.yml builds Go services only —
+every entry in its matrix goes through `deploy/docker/Dockerfile` with `--build-arg
+SERVICE`, which has no meaning for a pnpm workspace. So `adminPortal.enabled=true` on chart
+defaults produces a Deployment referencing ghcr.io/hermesnotifications/hermes-admin-portal,
+which nobody publishes and nothing in this repository can build.
+
+Unlike hermes-cleanup — which was the same defect and was fixable by adding one line to the
+cd.yml matrix — this one needs a Dockerfile that does not exist. Rather than ship a value
+that guarantees ImagePullBackOff, the chart refuses it and tells you what to override. If
+you have built and pushed your own portal image, point adminPortal.image.repository at it
+and this passes.
+*/}}
+{{- define "hermes.validateAdminPortal" -}}
+{{- if .Values.adminPortal.enabled -}}
+{{-   if eq .Values.adminPortal.image.repository "hermes-admin-portal" -}}
+{{-     fail "adminPortal.enabled=true, but no hermes-admin-portal image is published and this repository contains no Dockerfile that could build one (web/admin is a Next.js app; .github/workflows/cd.yml builds Go services only). Build and push your own portal image, then set adminPortal.image.repository to it." -}}
+{{-   end -}}
+{{- end -}}
+{{- end }}
+
 {{- define "hermes.validateEnvironment" -}}
 {{- if ne .Values.hermes.env "development" -}}
 {{-   $bundled := list -}}

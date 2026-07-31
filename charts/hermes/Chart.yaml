@@ -21,7 +21,7 @@ keywords:
   - event-driven
 
 # The bundled Postgres and Redis are plain manifests in templates/, not sub-charts — see
-# ADR 0007. Bitnami withdrew its free image catalogue from Docker Hub, leaving the charts
+# ADR 0009. Bitnami withdrew its free image catalogue from Docker Hub, leaving the charts
 # that used to be listed here unable to pull an image at all. NATS and Centrifugo are
 # unaffected: both publish their own images and neither depends on Bitnami.
 dependencies:

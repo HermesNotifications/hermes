@@ -367,13 +367,22 @@ def check_provisioner(docs, stream_services, provisioner_identity):
     """A stream-consuming service without a provisioner Job is a guaranteed crash-loop.
 
     messaging.EnsureStreams cannot create a stream and exits non-zero when one is missing
-    (ADR 0005 phase 4), so the chart needs the same lifecycle-hook Job the schema gets.
+    (ADR 0005 phase 4), so the chart needs a Job that declares them.
 
-    post-install rather than pre-install, and that is not a stylistic choice. With
-    `nats.enabled` — the chart default and the evaluation posture — the bus is a regular
-    release resource, so a pre-install hook has nothing to provision against. Found by
-    installing: the equivalent pre-install migration Job failed with
-    "lookup hv-postgresql: no such host", BackoffLimitExceeded.
+    It must be a plain tracked resource, not a Helm hook — ADR 0008. Neither phase works:
+
+      * pre-install runs before the release's regular resources exist, so with the bundled
+        sub-charts there is no bus to provision against, and no ConfigMap/Secret to read
+        credentials from. Both observed in-cluster.
+      * post-install runs only after Helm has waited for every regular resource to be
+        Ready, and under `--wait`/`--atomic` the stream consumers can never become Ready
+        until this Job has run. Measured: `helm install --wait --timeout 4m` failed with
+        `context deadline exceeded`, no Job was ever created, no streams existed, and all
+        nine services were in CrashLoopBackOff.
+
+    A render-time check cannot see the deadlock itself. It can see the annotation that
+    causes it, which is the whole reason this is phrased as "must not be a hook" rather
+    than "must be the right hook".
     """
     enabled = {
         _app_name(labels)
@@ -388,20 +397,15 @@ def check_provisioner(docs, stream_services, provisioner_identity):
             continue
         annotations = _annotations_for(docs, name)
         hook = annotations.get("helm.sh/hook", "")
-        failures = []
-        for phase in ("post-install", "post-upgrade"):
-            if phase not in hook:
-                failures.append(
-                    f"{provisioner_identity} Job {name} is not a {phase} hook "
-                    f"(helm.sh/hook={hook!r}); without it `helm` reports success on a "
-                    "release whose JetStream streams were never declared"
-                )
-        if "helm.sh/hook-weight" not in annotations:
-            failures.append(
-                f"{provisioner_identity} Job {name} has no explicit helm.sh/hook-weight; "
-                "ordering against the migration Job would be incidental rather than declared"
-            )
-        return failures
+        if hook:
+            return [
+                f"{provisioner_identity} Job {name} carries helm.sh/hook={hook!r}; it must "
+                "be a plain tracked resource (ADR 0008). A pre- phase runs before the bus "
+                "and the ConfigMap exist; a post- phase never runs at all under `--wait` "
+                "or `--atomic`, because Helm is blocked waiting for the very services this "
+                "Job unblocks."
+            ]
+        return []
 
     return [
         f"no {provisioner_identity} Job, but {', '.join(sorted(enabled))} "

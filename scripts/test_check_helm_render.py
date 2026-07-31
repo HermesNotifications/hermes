@@ -374,10 +374,8 @@ class TestCheckProvisioner(unittest.TestCase):
                                   "spec": {"containers": [{"image": "x:1"}]}}},
         }
 
-    HOOK = {"helm.sh/hook": "post-install,post-upgrade", "helm.sh/hook-weight": "-10"}
-
-    def test_passes_when_the_job_is_present_as_a_lifecycle_hook(self):
-        docs = [_deployment("d", "hermes-send"), self._job(self.HOOK)]
+    def test_passes_when_the_job_is_a_plain_tracked_resource(self):
+        docs = [_deployment("d", "hermes-send"), self._job({})]
         self.assertEqual(check.check_provisioner(docs, self.CONSUMERS, self.IDENTITY), [])
 
     def test_a_pre_install_hook_is_rejected(self):
@@ -385,8 +383,26 @@ class TestCheckProvisioner(unittest.TestCase):
         # resource, so at pre-install time there is nothing to provision against. Found by
         # installing — the migration Job failed with "lookup hv-postgresql: no such host".
         docs = [_deployment("d", "hermes-send"),
-                self._job({"helm.sh/hook": "pre-install,pre-upgrade",
-                           "helm.sh/hook-weight": "-10"})]
+                self._job({"helm.sh/hook": "pre-install,pre-upgrade"})]
+        failures = check.check_provisioner(docs, self.CONSUMERS, self.IDENTITY)
+        self.assertTrue(any("helm.sh/hook" in f for f in failures), failures)
+
+    def test_a_post_install_hook_is_rejected(self):
+        # ADR 0008, and the reason this invariant is phrased as "not a hook" rather than
+        # "the right hook". Helm waits for every regular resource to be Ready BEFORE
+        # running post-install hooks, and the six stream consumers cannot become Ready
+        # until this Job has run. Measured: `helm install --wait --timeout 4m` failed with
+        # `context deadline exceeded`, no Job was ever created, and all nine services sat
+        # in CrashLoopBackOff. `--atomic` rolled the release back on top of that.
+        docs = [_deployment("d", "hermes-send"),
+                self._job({"helm.sh/hook": "post-install,post-upgrade",
+                           "helm.sh/hook-weight": "-4"})]
+        failures = check.check_provisioner(docs, self.CONSUMERS, self.IDENTITY)
+        self.assertTrue(any("--wait" in f for f in failures), failures)
+
+    def test_the_rejection_names_the_phase_that_was_used(self):
+        docs = [_deployment("d", "hermes-send"),
+                self._job({"helm.sh/hook": "post-install"})]
         failures = check.check_provisioner(docs, self.CONSUMERS, self.IDENTITY)
         self.assertTrue(any("post-install" in f for f in failures), failures)
 
@@ -396,26 +412,6 @@ class TestCheckProvisioner(unittest.TestCase):
         self.assertEqual(len(failures), 1)
         self.assertIn("hermes-send", failures[0])
         self.assertIn("hermes-natsprovision", failures[0])
-
-    def test_reports_a_plain_job_that_is_not_a_hook(self):
-        # A plain Job means `helm install` reports success on a release whose streams were
-        # never declared. The hook is what makes the failure loud.
-        docs = [_deployment("d", "hermes-send"), self._job({})]
-        failures = check.check_provisioner(docs, self.CONSUMERS, self.IDENTITY)
-        self.assertTrue(any("post-install" in f for f in failures), failures)
-
-    def test_reports_a_hook_missing_post_upgrade(self):
-        # Installing works, upgrading silently skips provisioning. A new stream added in a
-        # later release would then never be declared.
-        docs = [_deployment("d", "hermes-send"), self._job({"helm.sh/hook": "post-install"})]
-        failures = check.check_provisioner(docs, self.CONSUMERS, self.IDENTITY)
-        self.assertTrue(any("post-upgrade" in f for f in failures), failures)
-
-    def test_reports_a_hook_with_no_explicit_weight(self):
-        docs = [_deployment("d", "hermes-send"),
-                self._job({"helm.sh/hook": "post-install,post-upgrade"})]
-        failures = check.check_provisioner(docs, self.CONSUMERS, self.IDENTITY)
-        self.assertTrue(any("hook-weight" in f for f in failures), failures)
 
     def test_no_job_needed_when_no_stream_consumer_is_enabled(self):
         # An install of only the read-path services (inbox, user) touches no stream.
@@ -652,8 +648,7 @@ class TestEvaluate(unittest.TestCase):
                         ["ghcr.io/hermesnotifications/hermes-admin:0.1.0"]),
             _deployment("rel-hermes-send", "hermes-send",
                         ["ghcr.io/hermesnotifications/hermes-send:0.1.0"]),
-            {"kind": "Job", "metadata": {"name": "p", "annotations": {
-                "helm.sh/hook": "post-install,post-upgrade", "helm.sh/hook-weight": "-10"}},
+            {"kind": "Job", "metadata": {"name": "p"},
              "spec": {"template": {"metadata": {"labels": {"app.kubernetes.io/name": "hermes-natsprovision"}},
                                    "spec": {"containers": [{"image": "ghcr.io/hermesnotifications/hermes-natsprovision:0.1.0"}]}}}},
             _configmap("rel-hermes-config", {"HERMES_ENV": "development", "HERMES_EMAIL_PROVIDER": "smtp"}),

@@ -101,7 +101,7 @@ spec:
 ---
 # Allow ingress to the bundled Postgres from Hermes pods.
 #
-# Required by ADR 0007, not optional hardening. While Postgres was the bitnami sub-chart its
+# Required by ADR 0009, not optional hardening. While Postgres was the bitnami sub-chart its
 # pods carried no `app.kubernetes.io/part-of: hermes` label, so the default-deny policy above
 # never selected them and traffic reached them by virtue of no policy applying at all. The
 # bundled manifests use hermes.labels and therefore *are* selected, so without this rule

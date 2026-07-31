@@ -204,6 +204,16 @@ jobs:
             --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
             --set global.domain=test.example.com \
             | python3 scripts/check_helm_render.py - --source-root=.
+      # Optional features render workloads the default install never produces. hermes-cleanup
+      # was missing from the cd.yml publish matrix and only surfaces when the CronJob renders.
+      - name: Check the optional-feature render too
+        run: |
+          helm template test charts/hermes/ \
+            --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+            --set global.domain=test.example.com \
+            --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
+            --set observability.enabled=true \
+            | python3 scripts/check_helm_render.py - --source-root=.
       - name: A production install on bundled sub-charts must be refused at render time
         run: |
           if helm template test charts/hermes/ \
@@ -211,6 +221,15 @@ jobs:
                --set global.domain=test.example.com --set hermes.env=production \
                > /dev/null 2>&1; then
             echo "::error::hermes.env=production rendered with bundled sub-charts; every workload would exit on config.Validate()"
+            exit 1
+          fi
+      - name: The admin portal on its unpublished default image must be refused
+        run: |
+          if helm template test charts/hermes/ \
+               --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+               --set global.domain=test.example.com --set adminPortal.enabled=true \
+               > /dev/null 2>&1; then
+            echo "::error::adminPortal.enabled=true rendered against hermes-admin-portal, which nothing in this repository builds"
             exit 1
           fi
 

@@ -95,7 +95,7 @@ the external URL.
 The host must match the Service rendered by templates/postgresql.yaml. It is built from
 hermes.fullname, not .Release.Name: those differ whenever the release name does not already
 contain the chart name (release `hv` gives fullname `hv-hermes`), and the bundled Postgres
-was a sub-chart until ADR 0007, which named its Service after the release instead. Getting
+was a sub-chart until ADR 0009, which named its Service after the release instead. Getting
 this wrong produces a URL pointing at nothing, which renders and lints perfectly and fails
 only at connect time.
 */}}
