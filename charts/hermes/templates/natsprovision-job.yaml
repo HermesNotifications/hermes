@@ -9,19 +9,14 @@ send, dispatch and all four workers exited at startup with
 "stream NOTIFICATIONS is not available ... (has cmd/natsprovision run?)".
 
 Modelled on migration-job.yaml because it is the same kind of thing: streams are schema.
-Same hook phase, same revision-scoped name (a Job's pod template is immutable, so a stable
-name fails on the second install), same securityContext.
-
-post-install/post-upgrade, not pre-install: with `nats.enabled` (the chart default) the bus
-is a regular release resource, so at pre-install time there is nothing to provision against
-— exactly the failure the migration Job hit with Postgres. See migration-job.yaml for the
-two symptoms and how installing the chart surfaced them.
-
-hook-weight -4 puts this after the migration Job (-5). They are genuinely independent —
-one touches Postgres, one touches NATS — but an ordering that merely happens to work is
-the kind that breaks once and is never reproducible.
+An ordinary tracked resource, deliberately NOT a Helm hook, for exactly the reasons set
+out there and recorded in ADR 0007 — a pre-install hook cannot see the bundled NATS it
+provisions, and a post-install hook never runs at all under `--wait`/`--atomic` because
+Helm is blocked waiting for the very services this Job unblocks.
 
 Re-running is safe: SetupStreams is CreateOrUpdate, so this is idempotent by construction.
+That is what makes running it on every install and upgrade the intended usage rather than
+something to guard.
 */}}
 apiVersion: batch/v1
 kind: Job
@@ -29,10 +24,10 @@ metadata:
   name: {{ include "hermes.fullname" . }}-natsprovision-{{ .Release.Revision }}
   labels:
     {{- include "hermes.labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-delete-policy": hook-succeeded
-    "helm.sh/hook-weight": "-4"
+    {{- /* app.kubernetes.io/name is messaging.ProvisionerService here too, so the render
+           gate can find this Job from its metadata as well as its pod template. */}}
+    app.kubernetes.io/name: hermes-natsprovision
+    app.kubernetes.io/component: provisioning
 spec:
   backoffLimit: {{ .Values.natsProvision.backoffLimit }}
   template:
@@ -62,8 +57,8 @@ spec:
                   key: {{ .Values.externalNats.existingSecretKey | default "nats-url" }}
           {{- end }}
           envFrom:
-            {{- /* Safe to read the release ConfigMap and Secret because this is a
-                   post-install hook: both exist by the time it runs. */}}
+            {{- /* Safe because this Job is a regular resource, applied in the same pass as
+                   the ConfigMap and Secret. */}}
             - configMapRef:
                 name: {{ include "hermes.configMapName" . }}
             - secretRef:

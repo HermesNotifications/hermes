@@ -76,6 +76,15 @@ verify-chart:      ## Check the rendered Helm chart against the Go source it dep
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  | python3 scripts/check_helm_render.py - --source-root=.
+	@# Optional features render into workloads the default install never produces, so they
+	@# need their own pass -- hermes-cleanup was missing from the cd.yml publish matrix and
+	@# only shows up when the CronJob renders.
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
+	  --set observability.enabled=true \
+	  | python3 scripts/check_helm_render.py - --source-root=.
 	@# The production posture must be refused at render time, not discovered as a
 	@# crash-loop. Bundled sub-charts cannot satisfy config.Validate(), so this must fail.
 	@if helm template verify charts/hermes/ \
@@ -87,6 +96,17 @@ verify-chart:      ## Check the rendered Helm chart against the Go source it dep
 	  exit 1; \
 	fi
 	@echo "ok: production install with bundled sub-charts is refused at render time"
+	@# No hermes-admin-portal image exists and nothing here can build one, so enabling it
+	@# on chart defaults must be refused rather than deferred to ImagePullBackOff.
+	@if helm template verify charts/hermes/ \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set global.domain=verify.example.com --set adminPortal.enabled=true >/dev/null 2>&1; then \
+	  echo "ERROR: adminPortal.enabled=true rendered against the unpublished default image."; \
+	  echo "  It must fail: _validate.tpl should require adminPortal.image.repository to be"; \
+	  echo "  overridden with an image the operator built themselves."; \
+	  exit 1; \
+	fi
+	@echo "ok: admin portal on the unpublished default image is refused at render time"
 
 # --- Helm ---
 .PHONY: helm-lint
