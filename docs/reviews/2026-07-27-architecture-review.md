@@ -2143,3 +2143,73 @@ applied by neither path.** The ServiceAccount, Role, RoleBinding and egress Netw
 finding 35's earlier fix added never reach the cluster, and the health check that production now
 blocks on would 403. The fix is one character on line 382 (`.../analysis/` instead of
 `.../analysis/health-check.yaml`); that file was outside this change's ownership boundary.
+
+---
+
+## Finding 38 — an unquoted `$VARIABLE` in `nats-accounts.conf` is re-lexed, and ~2.3% of generated Centrifugo passwords stop nats-server starting
+
+**Real, was on `main`, now fixed.** Reported originally as an intermittent `internal/messaging`
+failure naming a different offending character each run (`'R'`, `'7'`, `'Z'`), which is what
+made it look like anything but a config bug.
+
+**Mechanism.** `nats-accounts.conf:242` carries Centrifugo's credential as
+`password: $HERMES_CENTRIFUGO_NATS_PASSWORD`. nats-server does not substitute such a reference
+— `conf/parse.go` `lookupVariable` resolves it by **re-parsing the environment value as a fresh
+configuration document** (`pk=<value>`). The password must therefore lex as a bare conf value,
+and `cmd/natskeys` was emitting unconstrained 43-character base64url.
+
+**The rule, enumerated against the real parser rather than modelled** (nats-server v2.12.6, the
+committed file, `server.ProcessConfigFile`). Both standing hypotheses were wrong:
+
+| Shape | Result |
+|---|---|
+| leading `-` | `Expected a digit but got 'X'` — `lexNegNumberStart` demands a digit. **This is the error that names a letter**, not a leading digit. |
+| leading digit, first non-digit is `-` | ISO8601 date path; this is the variant that names a **digit** as offending |
+| leading digit, size suffix (`kKmMgGtTpPeE`), digit — `2p2…` | integer ends early, rest is trailing junk. Neither reviewer predicted this one. |
+| all digits, or exactly `true`/`false` | **no parse error**: reaches the server as `int64`/`bool` |
+| leading letter | always safe, whatever follows — `-` and `_` later are harmless |
+| `_` anywhere | harmless |
+
+A leading digit is *usually fine* (`7Rabcdefgh` parses), so "starts with a digit" was not it.
+
+**Rate.** 465 failures in 20,000 draws through the real parser = **2.33%** (analytic prediction
+from the rule above: 2.34%). Confirmed end-to-end at the process level: with the constraint
+removed, 6 of 300 test-binary processes failed (2.0%); with it, **0 of 500**.
+
+Note for anyone repeating the measurement: `permFixtureOnce` is a package-level
+`sync.OnceValues`, so there is exactly **one draw per test-binary process** regardless of
+`-run` filtering. An earlier explanation that filtered runs take fewer draws is wrong; a 0/40
+sample was simply consistent with 2.3% (P ≈ 0.39) and too small to see it.
+
+**Fix.** The reference stays **unquoted** and `cmd/natskeys` redraws until the first character
+is an ASCII letter (costing ~0.3 bits of 256).
+
+**Quoting the reference is not a fix and must never be applied.** NATS reaches `isVariable()`
+only from `lexString`, i.e. only for unquoted tokens (`conf/lex.go:958-971`). Both
+`"$HERMES_CENTRIFUGO_NATS_PASSWORD"` and `'$…'` were observed to resolve Centrifugo's password
+to the **literal 32-character string** — no parse error, no log line, a credential published in
+git, and Centrifugo unable to authenticate. Strictly worse than the bug.
+`TestAccounts_CentrifugoPasswordReferenceMustNotBeQuoted` fails if anyone tries.
+
+**The `$HERMES_NKEY_*` references have the same exposure and are safe by luck, not design.** An
+nkeys user public key is `U` + base32 `[A-Z2-7]`: always a leading letter, never a `-`. Now
+asserted (`TestAccounts_NKeyVariablesCannotHitTheFailingShapes`) rather than assumed, so a key
+format change is a red test rather than a cluster that will not start.
+
+### Open finding 39 — an empty `HERMES_CENTRIFUGO_NATS_PASSWORD` authenticates
+
+**Not fixed here; belongs to whoever owns the Secret/ESO path.** `nats-accounts.conf` claims:
+
+> An unset variable is a parse error, so a half-provisioned cluster fails to start rather than
+> starting without the account.
+
+That is true for **unset** and false for **empty**. `HERMES_CENTRIFUGO_NATS_PASSWORD=""` parses
+cleanly, the server starts, the `centrifugo` user exists with password `""`, and a connection as
+that user **with no credential succeeds** — verified on the wire against an embedded server, not
+inferred. A half-provisioned cluster therefore accepts an unauthenticated Centrifugo connection
+while appearing healthy.
+
+The conf language cannot express "must be non-empty", so this cannot be closed in the file that
+documents the guarantee. Pinned as a labelled characterisation test
+(`TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`), which flips to reporting the
+good news if a future nats-server rejects it.
