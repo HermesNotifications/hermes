@@ -252,7 +252,7 @@ func TestAccounts_CentrifugoPasswordReferenceMustNotBeQuoted(t *testing.T) {
 // workaround can be deleted.
 //
 // DO NOT "fix" this test to assert that an empty password is rejected. It pins nats-server's
-// PARSER, which is upstream and unchanged; the fix for finding 39 prevents an empty value
+// PARSER, which is upstream and unchanged; the fix for finding 53 prevents an empty value
 // from ever reaching it and does not alter what nats-server does when one does. Inverting
 // the assertion would make this test state something false about a dependency, which is
 // worse than not testing it — the failure would then be silent in the direction that
