@@ -17,7 +17,8 @@ source: docs/reviews/2026-07-27-architecture-review.md — findings 1, 14 and 19
 
 **Status:** Accepted (2026-07-29; amended 2026-07-31: the Centrifugo password's first character
 must be an ASCII letter — a cross-component contract binding `cmd/natskeys`, `nats-accounts.conf`
-and anyone setting the Secret by hand)  
+and anyone setting the Secret by hand; amended 2026-08-05: review findings 38/39 referenced
+below renumbered to 52/53, references only)  
 **Date:** 2026-07-29  
 **Author:** Daryl Robbins
 
@@ -487,7 +488,7 @@ with a letter and never contains `-`. That is now asserted
 (`TestAccounts_NKeyVariablesCannotHitTheFailingShapes`) rather than assumed, so a key-format
 change becomes a red test rather than a cluster that will not start.
 
-**Still open, and not closed by this amendment (finding 39).** An *empty*
+**Still open, and not closed by this amendment (finding 53, issue #82).** An *empty*
 `HERMES_CENTRIFUGO_NATS_PASSWORD` parses cleanly, starts the server, and lets a client connect
 as `centrifugo` with no credential at all — verified on the wire. The conf language cannot
 express "must be non-empty", so it cannot be closed in the file that documents the guarantee.
@@ -532,6 +533,9 @@ flipped: it characterises nats-server's parser, which is upstream and unchanged.
   ~2.3% of unconstrained base64url draws otherwise stop the server starting. Recorded here
   rather than left in `cmd/natskeys` alone because it binds the generator, the config file (whose
   reference must stay **unquoted** — quoting silently publishes the literal variable name as the
-  password) and any human creating the Secret by hand. Finding 39 — an *empty* password
+  password) and any human creating the Secret by hand. Finding 53 — an *empty* password
   authenticates — remains open, but its owner is now determined: an initContainer on the NATS
   StatefulSet, not `internal/config` and not `cmd/natsprovision`, with reasons recorded above.
+- 2026-08-05 — Amended (correction, no decision changed): the two review findings referenced
+  above were filed as 38 and 39, numbers already held by other findings, and are now **52**
+  (the unquoted `$VARIABLE`) and **53** (the empty password). Only the references changed.

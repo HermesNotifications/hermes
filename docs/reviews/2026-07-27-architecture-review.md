@@ -4,8 +4,10 @@ Findings from a full review of the architecture documentation, the code it descr
 the deployment/infrastructure configuration.
 
 **Reviewed at:** `68f0996` (main)  
-**Last updated:** 2026-07-29, after a full triage sweep re-verified every open finding
-against the tree — see [Triage 2026-07-29](#triage-2026-07-29--all-open-findings-re-verified)  
+**Last updated:** 2026-08-05, correcting a finding-number collision — the two NATS-password
+findings filed as 38 and 39 are now **52** and **53**. The last full re-verification of every
+open finding was the sweep on 2026-07-29 — see
+[Triage 2026-07-29](#triage-2026-07-29--all-open-findings-re-verified)  
 **Scope:** `docs/` (all), `internal/`, `cmd/`, `migrations/`, `deploy/`, `infra/`,
 `charts/`, `.github/workflows/`  
 **Method:** every claim below was verified against source, migrations, or manifests — not
@@ -42,7 +44,9 @@ intended behaviour and the implementation does not deliver it — the fix belong
 not prose. Findings marked **[docs]** are the reverse.
 
 **This is a living document.** Finding numbers are stable and are never reused or
-renumbered, so earlier references stay valid. As findings are withdrawn or fixed they are
+renumbered, so earlier references stay valid. That rule was broken once: two findings added on
+2026-07-31 were filed as 38 and 39, numbers already in use, and were corrected to **52** and
+**53** on 2026-08-05 — the only renumbering in this document, recorded rather than done quietly. As findings are withdrawn or fixed they are
 marked in place — **WITHDRAWN** for a false positive, **RESOLVED** for a landed fix, with
 the resolving commit — rather than deleted. A resolved finding that leaves residue spawns a
 new numbered finding rather than quietly widening its own scope.
@@ -421,7 +425,8 @@ indefinitely.
 
 **38. Both environments use the same VPC CIDR.** `vpc_cidr` defaults to `10.0.0.0/16` and
 neither tfvars file overrides it, so the staging and production VPCs overlap and can never be
-peered.
+peered. *(Resolved — see [finding 38 closed](#finding-38--closed). Not the NATS password-shape
+defect, which was briefly misnumbered 38 and is now [52](#added-and-resolved-2026-07-31--finding-52-the-unquoted-variable-in-nats-accountsconf).)*
 
 **39. Rate limiting is undocumented and not configurable.** `internal/middleware/ratelimit.go`
 is live on all four HTTP services with hardcoded limits — send 5000 burst / 2000 per second
@@ -430,7 +435,9 @@ and user 50/20 per user — returning HTTP 429. Nothing in `docs/` mentions rate
 these numbers, so integrators get no documented retry contract. Two properties matter
 especially and appear nowhere: the limiter is **in-process with no Redis backing**, so the
 effective cluster limit multiplies by replica count (silently interacting with the HPA
-guidance at `deployment-guide.md:420-422`), and **no env var tunes it**.
+guidance at `deployment-guide.md:420-422`), and **no env var tunes it**. *(Still open. Not the
+empty-Centrifugo-password defect, which was briefly misnumbered 39 and is now
+[53](#open-finding-53--an-empty-hermes_centrifugo_nats_password-authenticates).)*
 
 **40. Missing documentation coverage.** PII and retention — only `notification_events`
 retention is documented (`data-model.md:102-106`), with no guidance on deleting a user's
@@ -2434,7 +2441,19 @@ blocks on would 403. The fix is one character on line 382 (`.../analysis/` inste
 
 ---
 
-## Finding 38 — an unquoted `$VARIABLE` in `nats-accounts.conf` is re-lexed, and ~2.3% of generated Centrifugo passwords stop nats-server starting
+## Added and resolved 2026-07-31 — finding 52, the unquoted `$VARIABLE` in `nats-accounts.conf`
+
+> **Renumbered 2026-08-05.** This finding and the one below it were filed as "38" and "39" —
+> numbers already held by the shared VPC CIDR and the rate-limiter findings, both of which are
+> still referenced under those numbers elsewhere in this document and in
+> `internal/middleware/ratelimit.go:29`. Finding numbers are stable and never reused (see
+> [How to read this](#how-to-read-this)), so these two are now **52** and **53**, and every
+> reference in the tree was updated with them: `deploy/k8s/base/infra/nats-accounts.conf`,
+> `internal/messaging/centrifugopassword_test.go`, ADR 0005 and issue #82. The merge commit for
+> PR #81 names 38 and 39 and cannot be rewritten; there it means 52 and 53.
+
+**52. [P0] An unquoted `$VARIABLE` in `nats-accounts.conf` is re-lexed, and ~2.3% of generated
+Centrifugo passwords stop nats-server starting. RESOLVED 2026-07-31.**
 
 **Real, was on `main`, now fixed.** Reported originally as an intermittent `internal/messaging`
 failure naming a different offending character each run (`'R'`, `'7'`, `'Z'`), which is what
@@ -2484,7 +2503,10 @@ nkeys user public key is `U` + base32 `[A-Z2-7]`: always a leading letter, never
 asserted (`TestAccounts_NKeyVariablesCannotHitTheFailingShapes`) rather than assumed, so a key
 format change is a red test rather than a cluster that will not start.
 
-### Open finding 39 — an empty `HERMES_CENTRIFUGO_NATS_PASSWORD` authenticates
+### Open finding 53 — an empty `HERMES_CENTRIFUGO_NATS_PASSWORD` authenticates
+
+**53. [P0] An empty `HERMES_CENTRIFUGO_NATS_PASSWORD` parses cleanly and authenticates on the
+wire.** Tracked as issue #82. *(Filed as "39" — renumbered 2026-08-05, see the note above.)*
 
 **Not fixed here; belongs to whoever owns the Secret/ESO path.** `nats-accounts.conf` claims:
 
@@ -2602,7 +2624,7 @@ That the wiring bites was checked rather than assumed: running the excluded
 `test-connection` pod deliberately exits `helm test` with `1` and
 `Error: 1 error occurred: * pod hermes-test-connection failed`.
 
-### Finding 39 — owner determined, not closed
+### Finding 53 — owner determined, not closed
 
 The claim in `nats-accounts.conf`'s header was corrected: it asserted that a half-provisioned
 cluster fails to start, which is true for an unset variable and **false for an empty one**.
