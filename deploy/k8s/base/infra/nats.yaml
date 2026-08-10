@@ -50,6 +50,64 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            # ADR 0005 phase 3. nats-accounts.conf names its users as $VARIABLES so the
+            # permissions stay reviewable in git while the identities stay per-environment.
+            # These are PUBLIC keys — the matching seeds go to the service pods and are
+            # deliberately not injected here, which is why this is six explicit entries
+            # rather than an envFrom over the whole Secret.
+            #
+            # optional: true is what keeps the local overlay working: it replaces args to
+            # drop `-c nats.conf`, so the server never reads the accounts block and needs
+            # none of these. Everywhere else an unset variable is a parse error and the
+            # server refuses to start, which is the intended fail-closed behaviour for a
+            # cluster whose nats-nkeys Secret did not land.
+            - name: HERMES_NKEY_SEND
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_NKEY_SEND
+                  optional: true
+            - name: HERMES_NKEY_DISPATCH
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_NKEY_DISPATCH
+                  optional: true
+            - name: HERMES_NKEY_WORKER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_NKEY_WORKER_EMAIL
+                  optional: true
+            - name: HERMES_NKEY_WORKER_SMS
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_NKEY_WORKER_SMS
+                  optional: true
+            - name: HERMES_NKEY_WORKER_INBOX
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_NKEY_WORKER_INBOX
+                  optional: true
+            - name: HERMES_NKEY_WORKER_EVENTS
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_NKEY_WORKER_EVENTS
+                  optional: true
+            # ADR 0005 phase 4. Centrifugo's credential. Unlike the six above this is a
+            # PASSWORD, not a public key, because centrifugo:v5 can present nothing else —
+            # so this one variable is a secret the server holds in plaintext in its process
+            # environment. It lives in the same Secret and follows the same fail-closed
+            # rule: unset is a configuration parse error, not a server without accounts.
+            - name: HERMES_CENTRIFUGO_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_CENTRIFUGO_NATS_PASSWORD
+                  optional: true
           ports:
             - containerPort: 4222
               name: client

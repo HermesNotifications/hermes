@@ -1,0 +1,12 @@
+# Finding 36. See worker-email-pdb.yaml. This worker also drives the Centrifugo push, so its
+# absence is the one a connected user notices first.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hermes-worker-inbox
+  namespace: hermes
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-worker-inbox

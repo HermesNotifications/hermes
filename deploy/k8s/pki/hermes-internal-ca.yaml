@@ -1,0 +1,103 @@
+# ADR 0005 phase 4 — Hermes' internal CA, with its private key outside the application
+# namespace.
+#
+# WHAT CHANGED AND WHY. Phase 2 put this CA in a namespaced `Issuer` in `hermes`, which meant
+# the CA private key lived in the Secret `hermes-internal-ca-tls` in `hermes`. ADR 0005 recorded
+# that as accepted-but-wrong: anything able to read Secrets in `hermes` could mint a certificate
+# every Hermes service trusts, silently and offline, for the CA's full ten-year life.
+#
+# A cert-manager `ClusterIssuer` of type `ca` resolves its signing Secret in cert-manager's
+# own cluster-resource namespace, NOT in the namespace of the Certificate requesting from it.
+# Verified on this cluster (cert-manager v1.21.0, `--cluster-resource-namespace=$(POD_NAMESPACE)`
+# = `cert-manager`): a Certificate in an unrelated namespace issued successfully from a `ca`
+# ClusterIssuer whose signing Secret exists only in `cert-manager`, and only the leaf — ca.crt,
+# tls.crt, tls.key — landed in the requesting namespace. No CA private key.
+#
+# WHY THIS DEPARTS FROM PHASE 2's REASONING. Phase 2 preferred a namespaced Issuer because a
+# namespaced Issuer cannot be borrowed from another namespace, whereas a ClusterIssuer can be
+# used by a Certificate in ANY namespace. That reasoning is correct and the cost is real: it was
+# also verified here, by minting a certificate with SAN nats.hermes.svc from a namespace that is
+# not `hermes`. So this is a trade, not a free win, and the trade is deliberate:
+#
+#   * The CA key is the ten-year root of the whole internal trust domain and is never rotated.
+#     Reading it is silent, offline, leaves no trace, and yields unlimited certificates for any
+#     identity, forever — including ones that do not exist yet.
+#   * Requesting a leaf from the ClusterIssuer is a logged Kubernetes API write that leaves a
+#     Certificate and CertificateRequest object behind, requires create permission on
+#     cert-manager CRDs, and yields one 90-day certificate.
+#   * Secret-read in an application namespace is a common grant that tends to widen (ADR 0005
+#     phase 2 itself says "revisit if the namespace gains broader Secret readers"). Cluster-wide
+#     Certificate-create is rarer and is constrainable by admission policy or by cert-manager's
+#     CertificateRequest approval RBAC.
+#
+# Trading an unbounded, invisible compromise for a bounded, auditable one is worth it. The
+# residual — any namespace may request a certificate this CA signs — is NOT closed here and is
+# recorded in ADR 0005 as the remaining gap.
+#
+# THIS DIRECTORY IS NOT UNDER base/. base/kustomization.yaml sets `namespace: hermes`, and the
+# kustomize namespace transformer would rewrite the `namespace: cert-manager` below — putting
+# the CA key straight back where this change removes it from. Overlays reference ../../pki as a
+# sibling of ../../base for exactly that reason. The local overlay does not reference it at all:
+# `make dev-up`'s k3d cluster has no cert-manager, and local NATS is plaintext.
+---
+# Bootstrap issuer. Its only job is to sign the CA below; nothing else references it. It has to
+# be a ClusterIssuer rather than a namespaced Issuer because the Certificate it signs lives in
+# cert-manager's namespace, and a namespaced Issuer there would be a resource Hermes owns inside
+# another component's namespace for no benefit.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: hermes-selfsigned-bootstrap
+  labels:
+    app.kubernetes.io/part-of: hermes
+    app.kubernetes.io/component: pki
+spec:
+  selfSigned: {}
+---
+# The internal CA certificate and key.
+#
+# `namespace: cert-manager` is load-bearing and must equal cert-manager's
+# --cluster-resource-namespace, which defaults to the namespace cert-manager runs in. If they
+# disagree the ClusterIssuer below reports `Ready: False` with a "secret not found" message
+# rather than failing silently — a ClusterIssuer that cannot load its key issues nothing.
+#
+# Hermes declares its own CA rather than reusing a platform ClusterIssuer that may already exist
+# on the cluster: the trust domain of the Hermes bus should be Hermes', and staging and
+# production run in separate clusters, so nothing is shared across environments. Two Hermes
+# installs in ONE cluster would collide on these cluster-scoped names — but they already could
+# not coexist, because base/kustomization.yaml pins both to the `hermes` namespace.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hermes-internal-ca
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/part-of: hermes
+    app.kubernetes.io/component: pki
+spec:
+  isCA: true
+  commonName: hermes-internal-ca
+  secretName: hermes-internal-ca-tls
+  duration: 87600h # 10y
+  renewBefore: 8760h # 1y
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: hermes-selfsigned-bootstrap
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# The issuer every internal Hermes certificate references. Only the cert-manager controller
+# reads hermes-internal-ca-tls, and it reads it from its own namespace — which is the whole
+# point: no Secret reader in `hermes` can reach the CA key.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: hermes-internal-ca
+  labels:
+    app.kubernetes.io/part-of: hermes
+    app.kubernetes.io/component: pki
+spec:
+  ca:
+    secretName: hermes-internal-ca-tls

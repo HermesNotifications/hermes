@@ -2,6 +2,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - ../../base
+# ADR 0005 phase 4. Hermes' internal CA. A sibling of ../../base, not part of it: base sets
+# `namespace: hermes` and the transformer would rewrite the CA Certificate's
+# `namespace: cert-manager`, moving the CA private key back into the application namespace.
+- ../../pki
 - external-secrets.yaml
 - secret-store.yaml
 - parameter-store.yaml
@@ -18,8 +22,13 @@ secretGenerator:
 # ADR 0005 phase 2. Staging is single-node, and the base configuration's three cluster
 # routes leave a one-peer JetStream meta layer without quorum forever. Same TLS, no
 # cluster block. See overlays/staging/nats-server.conf.
+#
+# ADR 0005 phase 3 changed this from `replace` to `merge`: replace would drop the
+# accounts.conf key the base generator adds, silently taking the per-service permissions —
+# and with them all authorisation — out of staging while leaving TLS in place. Merge
+# overrides nats.conf and keeps accounts.conf.
 - name: nats-server-config
-  behavior: replace
+  behavior: merge
   files:
   - nats.conf=nats-server.conf
 configMapGenerator:

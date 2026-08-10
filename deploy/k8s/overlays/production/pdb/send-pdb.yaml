@@ -1,0 +1,13 @@
+# Finding 8's capacity half. hermes-send — the ingestion path for every write — had no
+# disruption budget, so a node drain could evict every replica at once.
+# See README.md in this directory for why maxUnavailable rather than minAvailable.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hermes-send
+  namespace: hermes
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes-send

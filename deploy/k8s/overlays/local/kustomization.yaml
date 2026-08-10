@@ -24,15 +24,10 @@ patches:
       kind: Certificate
       metadata:
         name: unused
-  - target:
-      group: cert-manager.io
-      kind: Issuer
-    patch: |
-      $patch: delete
-      apiVersion: cert-manager.io/v1
-      kind: Issuer
-      metadata:
-        name: unused
+  # ADR 0005 phase 4 removed the namespaced Issuer that used to be deleted here: the CA is a
+  # ClusterIssuer now, and it lives in deploy/k8s/pki, which this overlay does not reference at
+  # all. Nothing left to delete — the Certificate patch above is still needed because the leaf
+  # certificate stays in base/infra.
   # Relax readOnlyRootFilesystem for Tilt live_update (restart wrapper needs writes)
   - path: patches/security-dev.yaml
     target:
@@ -48,6 +43,19 @@ patches:
       kind: Job
       metadata:
         name: hermes-migrate
+  # ADR 0005 phase 4. Same treatment for stream provisioning, for the same reason: Tilt runs
+  # it as a local_resource against the port-forwarded NATS, so there is no image to build and
+  # nothing waiting on an in-cluster Job. Local NATS is plaintext with no accounts block, so
+  # the provisioner connects anonymously there — see overlays/local/patches/nats-local.yaml.
+  - target:
+      kind: Job
+      name: hermes-natsprovision
+    patch: |
+      $patch: delete
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: hermes-natsprovision
   # The dev image (Dockerfile.dev) bakes no ENTRYPOINT — services get theirs from
   # Tilt's restart wrapper, but the cleanup CronJob uses a plain build, so set the
   # container command explicitly. (The prod image bakes ENTRYPOINT ["/service"].)
@@ -80,6 +88,12 @@ configMapGenerator:
       # to "development" and config.Validate does not reject these.
       - HERMES_NATS_URL=nats://nats:4222
       - HERMES_NATS_CA_BUNDLE=
+      # ADR 0005 phase 3's dev opt-out, named for the same reason. Local NATS defines no
+      # accounts (patches/nats-local.yaml replaces args, so nats.conf and its
+      # `include "accounts.conf"` are never read), so there is nobody to authenticate as.
+      # An empty seed makes messaging.WithIdentity leave the credential off while still
+      # applying the per-service inbox prefix.
+      - HERMES_NATS_NKEY_SEED=
       - HERMES_EMAIL_SMTP_HOST=mailpit
       - HERMES_DYNAMO_ENDPOINT=http://dynamodb-local:8000
       - HERMES_DYNAMO_REGION=us-east-1

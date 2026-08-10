@@ -1,0 +1,233 @@
+# Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+# See LICENSE and NOTICE in the project root for full terms and restrictions.
+#
+# Infrastructure for one isolated development sandbox: Postgres, Redis, NATS with
+# JetStream, and Mailpit. One namespace per worker, so parallel agents cannot collide.
+#
+# Deliberately self-contained rather than reusing deploy/k8s/overlays/local: kustomize
+# refuses file resources above the kustomization root, and a sandbox wants different
+# properties anyway — resource limits so one worker cannot starve another, no Tilt
+# assumptions, and no image references, since there is no registry on this cluster.
+#
+# Deliberately NOT included:
+#   - the Hermes services. There is no image registry here and containerd is separate
+#     from docker, so service images would need `k3s ctr images import` per worker. Every
+#     verification task so far needed only infrastructure plus lightweight stand-ins.
+#     See docs/development.md for the import path if you do need them.
+#   - NATS TLS. base/infra/nats-certificates.yaml pins dnsNames to `nats.hermes`, and
+#     kustomize does not rewrite strings inside dnsNames, so per-namespace certificates
+#     need per-namespace SANs. Plaintext here; docs/development.md has the TLS recipe.
+#
+# Every Service is ClusterIP. This is not incidental: the `dev` namespace on this node
+# already publishes Postgres and Redis via LoadBalancer on 5432/6379, and a second
+# LoadBalancer on those ports would contend for the same shared address.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels: { app.kubernetes.io/name: postgres }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: postgres }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_USER, value: hermes }
+            - { name: POSTGRES_PASSWORD, value: hermes }
+            - { name: POSTGRES_DB, value: hermes }
+            # local-path volumes are not empty on re-use; without a subdir initdb refuses.
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "hermes"] }
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels: { app.kubernetes.io/name: redis }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: redis }
+  ports: [{ port: 6379, targetPort: 6379 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: redis }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: redis }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports: [{ containerPort: 6379 }]
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+---
+# Headless, so `nats` resolves to the pod directly — matches how the real deployment
+# addresses it, and keeps client URLs identical to production apart from the scheme.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  labels: { app.kubernetes.io/name: nats }
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: nats }
+  ports:
+    - { name: client, port: 4222, targetPort: 4222 }
+    - { name: monitor, port: 8222, targetPort: 8222 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+spec:
+  serviceName: nats
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: nats }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: nats }
+    spec:
+      containers:
+        - name: nats
+          image: nats:2-alpine
+          # Single node, so no --cluster/--routes: finding 51 established that three
+          # routes with one replica never reaches quorum and JetStream stays unavailable.
+          args: ["--jetstream", "--store_dir=/data", "-m", "8222"]
+          ports:
+            - { containerPort: 4222 }
+            - { containerPort: 8222 }
+          readinessProbe:
+            # Full /healthz, not js-server-only: finding 51 found the latter returns 200
+            # while every stream add fails indefinitely.
+            httpGet: { path: /healthz, port: 8222 }
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          volumeMounts: [{ name: data, mountPath: /data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+# DynamoDB-local. Included because the dual store is a supported deployment option
+# (finding 25) and roughly a third of the integration suite — internal/store/dynamo —
+# skips or fails without it. A sandbox that cannot run the whole suite is a sandbox that
+# sends people back to ad-hoc containers.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamodb-local
+  labels: { app.kubernetes.io/name: dynamodb-local }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: dynamodb-local }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamodb-local
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: dynamodb-local }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: dynamodb-local }
+    spec:
+      containers:
+        - name: dynamodb-local
+          image: amazon/dynamodb-local:latest
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            tcpSocket: { port: 8000 }
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 25m, memory: 128Mi }
+            # A JVM; it will use what it is given, so the ceiling is deliberate.
+            limits: { cpu: 500m, memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  labels: { app.kubernetes.io/name: mailpit }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: mailpit }
+  ports:
+    - { name: smtp, port: 1025, targetPort: 1025 }
+    - { name: http, port: 8025, targetPort: 8025 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: mailpit }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: mailpit }
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:latest
+          ports:
+            - { containerPort: 1025 }
+            - { containerPort: 8025 }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8025 }
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }

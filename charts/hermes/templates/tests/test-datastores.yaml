@@ -1,0 +1,90 @@
+{{/*
+Connect to the bundled datastores using the exact URLs the chart generates.
+
+This closes the failure mode ADR 0009 calls out as silent: hermes.databaseUrl and
+hermes.redisUrl build a hostname by string-formatting, and a hostname that names no Service
+renders, lints, and passes `helm template` and scripts/check_helm_render.py without a
+murmur. It is only wrong at connect time. That is not hypothetical — the Service names
+moved when the Bitnami sub-charts were replaced, and nothing short of connecting would have
+caught a helper left on the old name.
+
+So this test does not reconstruct the URLs. It reads HERMES_DATABASE_URL and
+HERMES_REDIS_URL out of the rendered Secret and ConfigMap — the same values the Hermes
+services consume — and connects to them.
+
+The pod carries hermes.labels, so with networkPolicy.enabled it is subject to the same
+default-deny policy a real service is. A pass therefore also demonstrates the datastore
+ingress rules work, rather than demonstrating that policies are not enforced.
+
+Only covers the bundled datastores. With postgresql.enabled=false and redis.enabled=false
+there is nothing here to check and the pod is not rendered.
+*/}}
+{{- if or .Values.postgresql.enabled .Values.redis.enabled }}
+{{- $fullName := include "hermes.fullname" . -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullName }}-test-datastores
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    {{- if .Values.postgresql.enabled }}
+    - name: postgresql
+      image: {{ printf "%s:%s" .Values.postgresql.image.repository .Values.postgresql.image.tag | quote }}
+      env:
+        - name: DBURL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "hermes.secretName" . }}
+              key: HERMES_DATABASE_URL
+      command:
+        - /bin/sh
+        - -c
+        - |
+          # Retry rather than connect once. A test pod can be scheduled before the CNI has
+          # finished programming its NetworkPolicy rules, and the first connect is then
+          # rejected by the default-deny policy before the allow rules land — which looks
+          # exactly like a misaddressed Service. Observed on k3s.
+          i=0
+          while [ $i -lt 60 ]; do
+            if psql "$DBURL" -c 'select 1' >/dev/null 2>&1; then
+              echo "postgres: connected via HERMES_DATABASE_URL"
+              exit 0
+            fi
+            i=$((i+1)); sleep 2
+          done
+          echo "postgres: could not connect using HERMES_DATABASE_URL" >&2
+          psql "$DBURL" -c 'select 1'
+          exit 1
+    {{- end }}
+    {{- if .Values.redis.enabled }}
+    - name: redis
+      image: {{ printf "%s:%s" .Values.redis.image.repository .Values.redis.image.tag | quote }}
+      env:
+        - name: REDISURL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "hermes.configMapName" . }}
+              key: HERMES_REDIS_URL
+      command:
+        - /bin/sh
+        - -c
+        - |
+          i=0
+          while [ $i -lt 60 ]; do
+            if [ "$(redis-cli -u "$REDISURL" ping 2>/dev/null)" = "PONG" ]; then
+              echo "redis: connected via HERMES_REDIS_URL"
+              exit 0
+            fi
+            i=$((i+1)); sleep 2
+          done
+          echo "redis: could not connect using HERMES_REDIS_URL" >&2
+          redis-cli -u "$REDISURL" ping
+          exit 1
+    {{- end }}
+{{- end }}

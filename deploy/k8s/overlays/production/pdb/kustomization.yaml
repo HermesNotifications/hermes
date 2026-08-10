@@ -1,9 +1,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# README.md in this directory records which workloads get a budget, which deliberately do not,
+# and why these are maxUnavailable rather than minAvailable.
 resources:
   - admin-pdb.yaml
   - dispatch-pdb.yaml
   - inbox-pdb.yaml
+  - send-pdb.yaml
+  - user-pdb.yaml
+  - worker-events-pdb.yaml
+  - worker-email-pdb.yaml
+  - worker-sms-pdb.yaml
+  - worker-inbox-pdb.yaml
   - nats-pdb.yaml
   - centrifugo-pdb.yaml

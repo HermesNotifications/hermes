@@ -4,8 +4,10 @@ Findings from a full review of the architecture documentation, the code it descr
 the deployment/infrastructure configuration.
 
 **Reviewed at:** `68f0996` (main)  
-**Last updated:** 2026-07-29, after a full triage sweep re-verified every open finding
-against the tree — see [Triage 2026-07-29](#triage-2026-07-29--all-open-findings-re-verified)  
+**Last updated:** 2026-08-05, correcting a finding-number collision — the two NATS-password
+findings filed as 38 and 39 are now **52** and **53**. The last full re-verification of every
+open finding was the sweep on 2026-07-29 — see
+[Triage 2026-07-29](#triage-2026-07-29--all-open-findings-re-verified)  
 **Scope:** `docs/` (all), `internal/`, `cmd/`, `migrations/`, `deploy/`, `infra/`,
 `charts/`, `.github/workflows/`  
 **Method:** every claim below was verified against source, migrations, or manifests — not
@@ -42,7 +44,9 @@ intended behaviour and the implementation does not deliver it — the fix belong
 not prose. Findings marked **[docs]** are the reverse.
 
 **This is a living document.** Finding numbers are stable and are never reused or
-renumbered, so earlier references stay valid. As findings are withdrawn or fixed they are
+renumbered, so earlier references stay valid. That rule was broken once: two findings added on
+2026-07-31 were filed as 38 and 39, numbers already in use, and were corrected to **52** and
+**53** on 2026-08-05 — the only renumbering in this document, recorded rather than done quietly. As findings are withdrawn or fixed they are
 marked in place — **WITHDRAWN** for a false positive, **RESOLVED** for a landed fix, with
 the resolving commit — rather than deleted. A resolved finding that leaves residue spawns a
 new numbered finding rather than quietly widening its own scope.
@@ -51,7 +55,10 @@ new numbered finding rather than quietly widening its own scope.
 
 ## P0 — Security, critical
 
-**1. NATS is completely unauthenticated and unencrypted.** `internal/messaging/nats.go:40`
+**1. NATS is completely unauthenticated and unencrypted. RESOLVED 2026-07-30** — TLS in ADR 0005
+phase 2, NKey accounts and per-service subject permissions in phase 3. See
+["finding 1 closed"](#resolved-2026-07-30--finding-1-closed-adr-0005-phase-3) below; the original
+report follows. `internal/messaging/nats.go:40`
 is a bare `nats.Connect(url)` — no token, NKey, credentials, or TLS, and no config field
 exists to supply one. The deployment starts NATS with no auth either
 (`deploy/k8s/base/infra/nats.yaml:23-30`), and monitoring port 8222 is reachable from every
@@ -131,7 +138,11 @@ public IPs. Port 4317 to the `observability` namespace is denied, so traces and 
 never leave the pods. No policy allows Prometheus in `observability` to scrape Hermes
 either, so the ServiceMonitors do not work.
 
-**11. The migration Job cannot re-run, and will break every Kargo promotion.** The ArgoCD
+**11. The migration Job cannot re-run, and will break every Kargo promotion. RESOLVED
+2026-07-30** — reproduced against real ArgoCD, fixed, and the fix proved. See
+["finding 11 closed"](#resolved-2026-07-30--finding-11-closed-against-a-real-argocd) below and
+[ADR 0006](../adr/0006-migration-job-as-an-argocd-presync-hook.md); the original report
+follows. The ArgoCD
 hook annotations in `deploy/k8s/base/migration-job.yaml:5-8` are commented out behind a
 `TODO: re-enable once Crossplane has provisioned the database`, so the Job is a plain
 resource that runs once at first sync and never again — `deployment-guide.md:472`'s claim
@@ -414,7 +425,8 @@ indefinitely.
 
 **38. Both environments use the same VPC CIDR.** `vpc_cidr` defaults to `10.0.0.0/16` and
 neither tfvars file overrides it, so the staging and production VPCs overlap and can never be
-peered.
+peered. *(Resolved — see [finding 38 closed](#finding-38--closed). Not the NATS password-shape
+defect, which was briefly misnumbered 38 and is now [52](#added-and-resolved-2026-07-31--finding-52-the-unquoted-variable-in-nats-accountsconf).)*
 
 **39. Rate limiting is undocumented and not configurable.** `internal/middleware/ratelimit.go`
 is live on all four HTTP services with hardcoded limits — send 5000 burst / 2000 per second
@@ -423,7 +435,9 @@ and user 50/20 per user — returning HTTP 429. Nothing in `docs/` mentions rate
 these numbers, so integrators get no documented retry contract. Two properties matter
 especially and appear nowhere: the limiter is **in-process with no Redis backing**, so the
 effective cluster limit multiplies by replica count (silently interacting with the HPA
-guidance at `deployment-guide.md:420-422`), and **no env var tunes it**.
+guidance at `deployment-guide.md:420-422`), and **no env var tunes it**. *(Still open. Not the
+empty-Centrifugo-password defect, which was briefly misnumbered 39 and is now
+[53](#open-finding-53--an-empty-hermes_centrifugo_nats_password-authenticates).)*
 
 **40. Missing documentation coverage.** PII and retention — only `notification_events`
 retention is documented (`data-model.md:102-106`), with no guidance on deleting a user's
@@ -855,7 +869,9 @@ example for a scenario that cannot occur.
   only by the 30-minute eviction sweep. Fixing this interacts with finding 3's enforcement work.
 - **11 / 31** — `deployment-guide.md:476` deletes a Job named `hermes-migration`; the Job is
   `hermes-migrate`, so the documented recovery step silently no-ops and the subsequent apply
-  fails identically.
+  fails identically. *(Resolved 2026-07-30 — and the corrected command was still wrong in a
+  second way: applying the base manifest directly uses no namespace and an untagged image. See
+  ["finding 11 closed"](#resolved-2026-07-30--finding-11-closed-against-a-real-argocd).)*
 - **35** — the health check has **two** independent blockers, not one: no ServiceAccount or
   Role grants it `rollout status` permission, *and* the AnalysisRun pod lands in `hermes`
   under `default-deny-all` with no matching allow rule, so it cannot reach the API server
@@ -1533,6 +1549,675 @@ namespace, so anything that can read Secrets there can mint a certificate every 
 
 ---
 
+## Resolved 2026-07-30 — finding 1 closed, ADR 0005 phase 3
+
+**1. NATS is completely unauthenticated and unencrypted — RESOLVED.** Phase 2 closed the
+encryption half; this closes the authentication and authorization half. The bus now defines a
+single `HERMES` account with one NKey user per service, each scoped to the subjects that
+service uses (`deploy/k8s/base/infra/nats-accounts.conf`), and
+`internal/messaging.WithIdentity` supplies the credential from `HERMES_NATS_NKEY_SEED`.
+
+**The subject map was derived from an observed protocol trace**, not from the subject list:
+running `internal/messaging` against a traced JetStream server showed that `SetupStreams` needs
+`$JS.API.STREAM.UPDATE.<S>` *as well as* `CREATE` (`CreateOrUpdateStream` tries UPDATE first),
+and that consuming needs `$JS.API.CONSUMER.CREATE`, `$JS.API.CONSUMER.MSG.NEXT` and `$JS.ACK`
+per stream and consumer name. A missing JetStream grant produces no error at all — the request
+gets no reply and times out — so it presents as a broken stream.
+
+**The finding this phase turned up on its own:** a JetStream pull consumer needs no `subscribe`
+permission on the stream subject, because messages arrive on the client's *reply inbox*. So
+`subscribe: _INBOX.>` — the obvious grant — would have let any service receive copies of every
+other service's pulled messages and read recipient addresses and rendered bodies out of
+`delivery.*` with no `delivery.*` permission. Each connection is now confined to
+`_INBOX.<service>` client-side and each user may subscribe only to its own prefix.
+
+**Also caught: staging would have silently lost all authorization.** Its `secretGenerator` used
+`behavior: replace`, which drops keys the base adds — so a `replace` plus a separate
+`accounts.conf` would have removed the whole permissions file from staging while leaving TLS in
+place. Changed to `merge`. This is the second time staging's NATS patch has been a silent
+downgrade (see finding 51).
+
+Verified — observed, not reasoned:
+
+- **`make test` runs a real nats-server from the committed permissions file.** The whole
+  pipeline runs under real per-service NKeys; 27 publish denials, 10 subscribe denials, an
+  anonymous connection, an unlisted-key connection and a missing-variable parse failure are all
+  asserted against the server's own `-ERR`.
+- **In-cluster on k3s with cert-manager v1.21.0**, from the repo's own rendered staging
+  manifest: `nats-0` Ready with the accounts config, `/jsz` showing all 4 streams and all 5
+  consumers created by their own services' credentials, and the pipeline running end to end
+  over TLS (`TestNKeyClusterPipeline`).
+- **Every denial named by the server**, with the offending user's public key and subject in
+  `nats-0`'s log: `delivery.email` publish by the email worker, `notification.send` publish by
+  dispatch, `$JS.API.CONSUMER.CREATE.DELIVERY.*` by dispatch and by the email worker,
+  `$JS.API.STREAM.LIST` and `$JS.API.STREAM.DELETE.DELIVERY` by dispatch,
+  `$JS.API.CONSUMER.INFO|MSG.NEXT.DELIVERY.worker-sms` by the email worker, and subscriptions
+  to `delivery.email`, `>` and `_INBOX.hermes-dispatch.>` by the email worker. An unauthenticated
+  `nats pub` gets `Authorization Violation`; the CA alone is no longer a credential.
+- **Fail-closed provisioning:** deleting the `nats-nkeys` Secret and restarting put NATS in
+  CrashLoopBackOff with `variable reference for 'HERMES_NKEY_SEND' ... can not be found`.
+- **Plaintext development still works** — the repo's own client against a bare
+  `nats:2-alpine`, with an empty CA bundle and an empty seed, connects, declares all four
+  streams, publishes and consumes. The local overlay renders with plaintext args, empty
+  `HERMES_NATS_CA_BUNDLE`, empty `HERMES_NATS_NKEY_SEED` and zero cert-manager resources.
+
+Mutation-checked: adding `delivery.sms` to the email worker fails
+`TestAccounts_DeniedPublishes/email_worker_cannot_publish_another_channel's`; removing send's
+`$JS.API.STREAM.UPDATE.NOTIFICATIONS` fails
+`TestAccounts_PipelineRunsUnderPerServiceCredentials` with the exact denied subject; collapsing
+`WithIdentity`'s inbox prefix to `_INBOX` fails three named tests including the pipeline.
+
+**Two things this does not close, both recorded in the ADR 0005 amendment:**
+
+- **A named over-grant.** Every service calls `SetupStreams` at boot, so every user can create
+  or update all four streams. Delete, purge, direct-get and list are granted to nobody, so the
+  residual is stream-config tampering, not reading or forging traffic.
+- **[P1, new] Centrifugo's NATS broker cannot use this bus.** `centrifugo:v5` (5.4.9) has
+  exactly one NATS setting — `--nats_url`, documented as `nats://user:pass@host:4222` — and no
+  NATS CA, TLS or NKey option. The base ConfigMap still sets `nats_url: nats://nats:4222`, and
+  neither overlay overrides it, so **this was already broken by phase 2** (plaintext against a
+  TLS-required server), not by phase 3. No Centrifugo user was invented, because what
+  credential form it can present was not verified. Multi-node Centrifugo fan-out is blocked in
+  staging and production until this is decided.
+
+  > **Resolved 2026-07-30 by ADR 0005 phase 4, and the claim above is half wrong.** Centrifugo
+  > has no NKey option — that part holds — but it does have a TLS option: an undocumented
+  > `nats_tls` configuration key with no flag equivalent. `--help` is not the configuration
+  > surface. See the phase 4 section below.
+
+**Unverified:** the production overlay was rendered, never applied — no AWS and no ESO here, so
+the two new `nats-nkeys` ExternalSecrets are structurally valid and untested against a real
+secret store. The in-cluster run used the staging shape (single node); route-level behaviour
+under a 3-node cluster with accounts was not exercised. Key **rotation** — replacing a seed and
+its public key while services run — is reasoned from nats.go re-reading the seed file per
+challenge, not observed.
+
+---
+
+## Resolved 2026-07-30 — ADR 0005 phase 4, the three items phase 3 left open
+
+Phase 3 closed finding 1 and named three residuals. All three are closed. Two of them reverse a
+judgement an earlier ADR 0005 amendment made, and both reversals are recorded there rather than
+quietly applied.
+
+### Centrifugo's NATS broker — a wrong premise, not a missing feature
+
+Phase 3 reported `centrifugo:v5` as having "no NATS CA, TLS or NKey option" and correctly
+declined to guess at a credential. Establishing it empirically shows **the option exists and is
+simply not in `--help`**: Centrifugo registers configuration keys with no flag equivalent, and
+`nats_tls` is one of them.
+
+```json
+"nats_url": "tls://nats:4222",
+"nats_tls": { "enabled": true, "server_ca_pem_file": "/etc/nats-certs/ca.crt" }
+```
+
+Found by reading the image's registered keys and struct tags, then executing every candidate.
+The trail, in order, is the evidence:
+
+| attempt | result |
+|---|---|
+| base ConfigMap as shipped (`nats://nats:4222`, no TLS config) | `tls: failed to verify certificate: x509: certificate signed by unknown authority` |
+| `"nats_tls": true` | `error configuring nats tls: extract TLS config: '' expected a map, got 'bool'` |
+| `"nats_tls": {enabled, server_ca_pem_file}`, no credential | `nats: Authorization Violation` — TLS satisfied |
+| the above plus `tls://centrifugo:<pass>@nats:4222` | `Nats Broker connected` |
+
+Three things this corrects or pins down:
+
+- **The live failure was never a refused plaintext connection.** nats.go upgrades to TLS when
+  the server advertises `tls_required`, so the shipped ConfigMap failed on CA *verification*.
+  There was no silent-plaintext path here either.
+- **`nats_tls` is a map while the overlays' `CENTRIFUGO_REDIS_TLS` is a bool.** Centrifugo is
+  inconsistent, and the guess by analogy is the one that fails — most likely why phase 3
+  concluded the setting did not exist.
+- **No NKey option exists in any form**, so Centrifugo is a *password* user beside the six NKey
+  users. The environment form works too, which is what keeps the password out of git:
+  `CENTRIFUGO_NATS_URL` from a Secret, `nats_tls` in the ConfigMap.
+
+`centrifugo.>` is granted in both directions rather than the three observed subjects
+(`centrifugo.control`, `centrifugo.node.<nodeID>`, `centrifugo.client.<channel>`), because all
+three are needed both ways and an exact list would fail **silently** on a future Centrifugo
+version. Observed with the subscribe grant narrowed: the server logs
+`Permissions Violation for Subscription`, Centrifugo logs it, the client stays connected, and
+publications never arrive. Nothing reaches the subscriber.
+
+Verified — observed, not reasoned:
+
+- **Two-node cross-node fan-out**, the exact capability that was down: a subscriber attached to
+  node A received a publication entered through node B's API, over TLS, authenticated, with zero
+  permission violations.
+- **Against the repository's own artifacts**: staging's `nats-server.conf` and the committed
+  `nats-accounts.conf`, served with a certificate cert-manager issued from the new
+  ClusterIssuer, with Centrifugo configured from the base ConfigMap's `nats_tls` block.
+- **Denials**: wrong password, no credential, and right password with a wrong username all get
+  `Authorization Violation`. `"enabled": false` with the CA still supplied falls back to
+  `unknown authority`, so the flag is load-bearing.
+- **`make test`** runs the committed permissions file with a `centrifugo` password user: the
+  three subjects round-trip, and 9 publish and 8 subscribe denials against pipeline subjects
+  (including `_INBOX.>`) are asserted against the server's `-ERR`, plus the reverse direction —
+  no Hermes service may touch `centrifugo.>`.
+
+**A new coupling worth knowing about:** the password is stored twice, as `centrifugo_password`
+for nats-server and inside `centrifugo_nats_url` for Centrifugo, because Centrifugo has no
+separate password setting. Nothing in the cluster checks they agree; `cmd/natskeys` emits both
+from one value and a test asserts the URL round-trips it through `url.Parse`.
+
+### The stream over-grant — closed by reversing phase 3's own judgement
+
+Phase 3 called a provisioning identity "the worse deal while `MustSetupStreams` exits non-zero".
+That framed a binary that is not one: the startup guarantee comes from a service **failing
+closed on a stream it needs**, not from its being able to create one. So `cmd/natsprovision`
+runs as a Job holding `$JS.API.STREAM.CREATE/UPDATE` alone, and services hold
+`$JS.API.STREAM.INFO.<S>` — a read — for only the streams in `messaging.StreamsForService`.
+
+Verified with the real binaries against a real TLS+NKey server:
+
+- provisioner seed → all four streams created, exit 0; run again → `STREAM.UPDATE` path, exit 0;
+- **worker-email's seed → `Permissions Violation for Publish to "$JS.API.STREAM.UPDATE.NOTIFICATIONS"`, exit 1**;
+  dispatch's seed → the same. Both also hit
+  `Permissions Violation for Subscription to "_INBOX.hermes-natsprovision..."`, because
+  `WithIdentity` gives the connection the provisioner's inbox prefix, which no service may use;
+- fresh bus, provisioning not run → worker-email exits 1 with
+  `stream DELIVERY is not available to hermes-worker-email (has cmd/natsprovision run?)`, and
+  starts normally after the Job's binary runs. That is the loud-failure property phase 3 was
+  right to want and wrong to think required the create grant.
+
+Removing streams to set that test up **required a fresh server**, because `STREAM.DELETE` and
+`STREAM.PURGE` are granted to nobody — provisioner included. `$JS.API.INFO`, `STREAM.LIST`,
+`DIRECT.GET`, `STREAM.MSG.GET` and `CONSUMER.DELETE` likewise.
+
+`STREAM.INFO` is a new grant. It leaks stream configuration and message counts — metadata, not
+traffic — and only for streams the service depends on;
+`TestProvisioning_ServicesCannotReadStreamsTheyDoNotDependOn` asserts each refusal.
+
+Mutation-checked: granting send `$JS.API.STREAM.CREATE/UPDATE.NOTIFICATIONS` back fails
+`TestAccounts_OnlyTheProvisionerMayDeclareStreams` *and*
+`TestProvisioning_NoServiceCanCreateOrUpdateAnyStream/hermes-send_...`; removing DLQ from
+worker-email's stream list fails `TestAccounts_StreamInfoGrantsMatchStreamsForService` and the
+matching in-cluster denial.
+
+### The CA private key — out of `hermes`, and why that departs from phase 2
+
+Phase 2 chose a namespaced `Issuer` so it "cannot be borrowed by a workload in another
+namespace", accepting that the CA key sat in `hermes` where anything with Secret-read could mint
+a certificate every service trusts. The CA is now a `ClusterIssuer` whose signing Secret lives in
+cert-manager's cluster-resource namespace.
+
+Verified — including the negative:
+
+- **cert-manager v1.21.0 runs with `--cluster-resource-namespace=$(POD_NAMESPACE)`**, read off
+  the running Deployment, so a `ca` ClusterIssuer resolves its Secret in `cert-manager`.
+- **A Certificate in an unrelated namespace issued from such a ClusterIssuer**, and the CA key
+  Secret was `NotFound` in that namespace. Only the leaf landed there — `ca.crt`, `tls.crt`,
+  `tls.key`, `CA:FALSE`, so it can sign nothing.
+- **The leaf works where it has to**: a real `nats-server`, running the repo's staging config,
+  served it and a real client verified it with the `ca.crt` from that Secret.
+- **A missing Secret is loud**: the ClusterIssuer reports
+  `ErrGetKeyPair: Error getting keypair for CA issuer: secrets "hermes-internal-ca-tls" not found`
+  and issues nothing — observed accidentally, by renaming the Secret during setup.
+
+**Phase 2's objection was not wrong and the cost is real**, so it is recorded rather than
+glossed: a ClusterIssuer can be used from *any* namespace, verified here by minting a
+`nats.hermes.svc` certificate from a namespace that is not `hermes`. The trade is deliberate — a
+never-rotated ten-year root read silently and offline versus a logged API write yielding one
+90-day leaf — and **the residual is not closed**: nothing here stops another namespace requesting
+a certificate this CA signs. Closing it needs admission policy or cert-manager approver RBAC.
+
+The whole fix rests on `deploy/k8s/pki` being a sibling of `base/` rather than inside it, since
+`base` sets `namespace: hermes` and the transformer would move the CA key back with a manifest
+that applies cleanly and certificates that still issue. Nothing about that failure is visible in
+behaviour, so `scripts/check_ca_key_location.py` gates it in `make verify`; mutation-checked by
+adding `../pki` to `base/kustomization.yaml`, which fails with
+`Certificate/hermes-internal-ca has isCA: true in namespace hermes`.
+
+**Unverified, and labelled as such:** nothing was applied to a real staging or production
+cluster — no AWS and no ESO — so the new `HERMES_CENTRIFUGO_NATS_URL`,
+`HERMES_CENTRIFUGO_NATS_PASSWORD` and provisioner ExternalSecret entries are structurally valid
+and untested against a real secret store. **`hermes-natsprovision` has never run as a Kubernetes
+Job**: the binary was exercised in a container with the configuration the Job supplies, but the
+Job manifest, its ordering against the services, and its image tag reaching staging via Kargo
+are all unexercised. Certificate renewal through the new ClusterIssuer was not driven through an
+expiry cycle. **Finding 41's second half is still open** — production's `centrifugo-env.yaml`
+still sets no `CENTRIFUGO_REDIS_PASSWORD` or Redis TLS variables, though the ExternalSecret does
+now carry the value.
+
+---
+
+## Resolved 2026-07-30 — finding 11 closed, against a real ArgoCD
+
+The triage could confirm only that the annotations were still commented and that the Kargo
+stages still rewrite the tag; it could not verify the failure or the fix, because no ArgoCD was
+available. One now is. **ArgoCD v3.4.5 is installed on the local k3s cluster in its own
+`argocd` namespace** and stays there for future verification work.
+
+**The defect, as actually observed.** A harness Application carrying the staging
+Application's own `syncPolicy` verbatim (`ServerSideApply=true`, `automated` with
+`prune`/`selfHeal`, `retry.limit: 3`) synced a kustomization containing the committed
+`migration-job.yaml`, a Secret, and a marker ConfigMap, against the **real `cmd/migrate`
+binary and a real Postgres**. First sync: `Synced`/`Healthy`, migrations applied. Then the tag
+was rewritten from `f11-v1` to `f11-v2` in the kustomization's `images:` block — exactly what
+`kustomize-set-image` does in `deploy/kargo/stages/{staging,production}.yaml:63-65` — and
+pushed. The second sync failed:
+
+```
+Job.batch "hermes-migrate" is invalid: spec.template: Invalid value:
+{"labels":{"batch.kubernetes.io/controller-uid":"1f61dbd5-…","job-name":"hermes-migrate"},
+ "Spec":{…"Containers":[{"Name":"migrate","Image":"hermes-migrate:f11-v2",…}]…}}:
+field is immutable (retried 3 times)
+```
+
+The Application settled at `OutOfSync` / `phase: Failed` and stayed there. **The finding
+understated it in one way that matters:** the failure is not atomic. The per-resource sync
+result was
+
+```
+Secret/hermes-secrets   Synced      Succeeded
+ConfigMap/f11-marker    Synced      Succeeded
+Job/hermes-migrate      SyncFailed  Failed
+```
+
+and the marker ConfigMap advanced to the new revision. So in production the promotion's new
+Deployments would roll out while the migration silently stayed at the old spec — new code
+against an unmigrated schema — with the Application red. The Job kept `image: …:f11-v1` and
+`succeeded: 1`; it never re-ran.
+
+**The fix.** `argocd.argoproj.io/hook: PreSync` and
+`hook-delete-policy: BeforeHookCreation` re-enabled. On the next sync ArgoCD deleted the
+tracked Job, recreated it as a `PreSync` hook at the new tag, ran it, and reported
+`Synced`/`Healthy`/`Succeeded` with `hookType: PreSync, hookPhase: Succeeded`. A **second**
+tag rewrite then also succeeded — new Job UID, migration re-run — which is the case that used
+to fail. The Job is no longer a tracked application resource; it appears only in the sync
+result as a hook.
+
+**`BeforeHookCreation` is not interchangeable with `HookSucceeded`, and the difference was
+measured.** `HookSucceeded` keeps a failed Job's logs, which is genuinely useful, but:
+
+- with `HookSucceeded` and a failing migration, the Job survives — and a forced re-sync with
+  git unchanged **never re-runs it** (the Job UID does not change) and the operation stays
+  `Failed`. The migration gets no second chance without a manual `kubectl delete job`.
+- the next promotion then reproduces **the original finding**:
+  `one or more objects failed to apply, reason: Job.batch "hermes-migrate" is invalid:
+  spec.template … field is immutable`. `HookSucceeded` reintroduces the exact bug.
+- switching back to `BeforeHookCreation` recovered that stuck namespace on the next sync,
+  unattended.
+
+**What an operator sees when a migration fails under `PreSync`** — the point the review said
+needed a staging soak, now observed rather than reasoned. With the Job pointed at an
+unreachable database:
+
+| Stage | Application state |
+|---|---|
+| Job retrying (`backoffLimit: 3`, four pod attempts) | `phase: Running`, `waiting for completion of hook batch/Job/hermes-migrate` |
+| Between ArgoCD's own retries | `waiting for deletion of hook batch/Job/hermes-migrate`, then the Job is recreated |
+| Terminal | `phase: Failed`, `one or more synchronization tasks completed unsuccessfully (retried 3 times)`; hook result `hookPhase: Failed`, `Job has reached the specified backoff limit` |
+
+**The `Sync` phase never ran.** The marker ConfigMap stayed at its previous revision and the
+Secret was untouched, so the old release keeps serving — which is the desired behaviour and
+the opposite of what happens today. Kargo's `argocd-update` step fails with it, so no Freight
+advances.
+
+**The operationally important cost: the failed Job's logs do not survive.**
+`BeforeHookCreation` deletes the Job and its pod before each retry — visible in the
+application-controller log as `waiting for deletion of hook batch/Job/hermes-migrate` — and
+once the retry budget is spent the Job is **gone**:
+`Error from server (NotFound): jobs.batch "hermes-migrate" not found`. The Application status
+says only "Job has reached the specified backoff limit". The real cause
+(`migration failed: create migrator: failed to open database: dial tcp …: connect: connection
+timed out`) exists only in the container's stdout. **Migration diagnosis therefore depends on
+log shipping, which makes finding 10 (OTLP egress blocked) a prerequisite for this decision
+being operable rather than an unrelated bug.** `deployment-guide.md` now says to read the
+error from Loki, not `kubectl logs`.
+
+**A second cost, named and deliberately not fixed:** the Job sets `backoffLimit: 3` but no
+`activeDeadlineSeconds`, and ArgoCD applies no timeout of its own to hook completion. A
+migration blocked on a lock pins the Application in `waiting for completion of hook` with no
+terminal state. The black-holed-connection variant took roughly two minutes per pod attempt
+and pushed a single sync past ten minutes. A deadline low enough to catch a hang could abort a
+legitimately long migration midway, so this is recorded in ADR 0006 as a follow-up rather than
+guessed at.
+
+**The `TODO: re-enable once Crossplane has provisioned the database` was a real concern, and
+it is broader than Crossplane.** Verified on a virgin namespace: the `PreSync` phase runs
+before the `Sync` phase, so it runs before the ExternalSecret that materialises
+`hermes-secrets` — which is an ordinary `Sync`-phase resource in
+`overlays/staging/external-secrets.yaml` with no hook or sync-wave annotation. The hook pod
+started with no `HERMES_DATABASE_URL` (the `secretKeyRef` is `optional: true`) and exited:
+
+```
+database-url is required (or set HERMES_DATABASE_URL)
+```
+
+Because the failed hook blocks the `Sync` phase, the ExternalSecret is then never created —
+**a bootstrap deadlock**, not a transient. Only `kube-root-ca.crt` ever appeared in the
+namespace. This is not a reason to keep the hook off: today's behaviour breaks on *every*
+promotion, whereas this breaks once, loudly, at first sync. It is handled by applying
+`secret-store.yaml` and `external-secrets.yaml` out of band, after the Crossplane claims are
+Healthy and before the Hermes Application exists — now an ordered step in
+`deployment-guide.md` for both staging and production.
+
+**Filed rather than chosen quietly.**
+[ADR 0006](../adr/0006-migration-job-as-an-argocd-presync-hook.md) records the decision, the
+rejected alternatives (status quo, `HookSucceeded`, revision-scoped Job names as the Helm
+chart already uses, sync-waves instead of a phase), and the open question about folding the
+secret plumbing into `PreSync`. The **mechanism** for that was verified — a Secret annotated
+`hook: PreSync` with `sync-wave: "-1"` made the same virgin-namespace bootstrap go straight to
+`Synced`/`Healthy` — but with a plain Secret, which is Healthy the moment it is applied. A
+real ExternalSecret is reconciled asynchronously, so it only works if ArgoCD blocks on the
+ExternalSecret's health; ESO is not installed on the verification cluster, so that is
+**unverified** and adopting it blind would trade a deterministic deadlock for a race.
+
+**Also re-checked, per the review's note.** `deployment-guide.md`'s manual-run block named the
+right Job (`hermes-migrate`) after the earlier correction, but was still wrong in a second way
+nobody had caught: `kubectl apply -f deploy/k8s/base/migration-job.yaml` applies a manifest
+with **no `metadata.namespace`** and the **untagged kustomize placeholder** `image:
+hermes-migrate`, so it lands in whatever namespace is current and cannot pull. Replaced with
+`argocd app sync` as the supported path plus a rendered-overlay extraction for running it by
+hand — the extraction command was executed against the staging overlay and emits exactly the
+one Job, with the hook annotations and the real ECR tag.
+
+**Egress checked, since a blocking hook makes it load-bearing.** The migration pod carries
+`app.kubernetes.io/part-of: hermes` on `spec.template.metadata.labels` (finding 47's
+`includeTemplates`), so `allow-egress-managed-services` permits 5432 into `10.0.0.0/8` and
+`default-deny-all` permits DNS. The hook can reach Aurora.
+
+**Unverified.** Everything above ran on k3s against a local Postgres and a locally-built
+`hermes-migrate` image, not against AWS, ECR, Aurora, ESO or Crossplane; no Kargo controller
+was involved, so the promotion was simulated by making the same `images:` edit and commit that
+`kustomize-set-image` makes. The ArgoCD version tested is the current `stable` manifest, which
+may not match the version the real clusters run. Whether ArgoCD's health assessment for
+`external-secrets.io/ExternalSecret` is strong enough to order a `PreSync` ExternalSecret
+ahead of the migration hook was not tested.
+
+---
+
+## Resolved 2026-07-31 — findings 38, 5, 6, 7 and 12, with no AWS account
+
+**Read the verification caveat first, because it is unlike every other section here.** Every
+prior batch was proven against something running — a real k3s cluster, a real ArgoCD, a real
+Postgres. **This one was not, and could not be. No AWS account is reachable from this work.**
+Nothing below has been applied, no API call was made, and no cluster exists to observe.
+
+What *was* executed, and should be read as the ceiling on these claims:
+
+- `terraform` 1.9.8 downloaded to `/tmp` (deliberately not added as a repo dependency),
+  `terraform init -backend=false` against the real registry, then `validate` and
+  `fmt -check` — both clean. Note `fmt` also corrected a pre-existing violation in
+  `modules/eks/main.tf` that predates this batch.
+- `terraform plan` far enough to hit the provider credential wall, which is enough to prove
+  variable requirements and validations fire and that nothing earlier in the graph objects.
+- `terraform console` for subnet arithmetic and for precondition truth tables.
+- A harness that extracts the IAM policy expression **from the real file text**, renders it
+  through `terraform console`, and asserts on the result — including two deliberate mutants,
+  both caught.
+- `infra/scripts/test-lib.sh`, 17 cases, watched red first and mutation-checked.
+- The bootstrap role guard run end to end, in both the rejecting and accepting directions.
+- The `make verify` YAML gate over all 16 Crossplane files, plus a template-render smoke test.
+
+What was **not** verified: that any of it applies; that the Crossplane IAM policy is
+*sufficient* rather than merely well-formed; that the CloudWatch log-group ordering avoids
+the collision it is designed to avoid; that the generated `DeploymentRuntimeConfig` is
+accepted by a real Crossplane; that the seed script's `kubectl` and `aws` calls work; or that
+the connection-secret key names match what Crossplane actually writes — those were read from
+the compositions' `connectionDetails` blocks, not observed.
+
+### Finding 38 — closed
+
+`staging = 10.20.0.0/16`, `production = 10.30.0.0/16`. `10.0.0.0/16` is deliberately left
+unallocated because it is the default in most module examples and console wizards, so a
+future peer that took the default still does not collide. `10.10.0.0/16` is reserved for a
+dev environment. The register is in `infra/terraform/variables.tf` beside the variable.
+
+The root `vpc_cidr` **default is removed**, not changed. The defect was never the value; it
+was that a missing override was silent. Demonstrated: an unset `vpc_cidr` now fails with
+*"No value for required variable"*, and a `/20` is rejected by a validation rule.
+
+Both ranges stay inside `10.0.0.0/8`, so the `allow-egress-managed-services` NetworkPolicy
+verified in the finding 11 section above still covers Aurora.
+
+**Adjacent, and flagged as adjacent rather than folded in:** private subnets were `/24`,
+about 250 usable addresses per AZ. Under the VPC CNI every *pod* consumes a VPC address, so
+that is a hard per-AZ pod ceiling that production's node group could reach on its own, and
+`aws_subnet.cidr_block` is `ForceNew` exactly like the VPC CIDR. Now `/20`. Public stays
+`/24` and sits inside a `/20` the private allocation never uses; the two sets were checked in
+`terraform console` for 1–6 AZs and do not intersect.
+
+### Finding 5 — closed, and the finding's premise was wrong on one point
+
+`public_access_cidrs` loses its `0.0.0.0/0` default and becomes **required, and deliberately
+unset in both tfvars files**, so `terraform plan` refuses until an operator decides. No range
+was invented: ArgoCD, Kargo and Crossplane are all in-cluster and never touch the public
+endpoint, which leaves an operator and possibly CI, and GitHub runner egress is not
+allowlistable. Two resource preconditions guard it.
+
+**One of those preconditions exists because of something the finding did not know.** Verified
+in AWS provider 5.100.0 source: both the create and update paths guard on a non-empty set,
+so `public_access_cidrs = []` sends *nothing* to the EKS API and EKS applies its own default
+of `0.0.0.0/0`. Setting `[]` reads as "allow nothing" and means "allow everything", silently,
+with no diff. Anyone hardening this the obvious way would have made it worse.
+`endpoint_public_access = false` is the only expression of "no public access", and is now a
+variable.
+
+Control plane logging: all five types on, with a Terraform-owned log group created before the
+cluster, 30 days staging / 365 production.
+
+**The finding's KMS claim is incorrect and the correction matters.** It says envelope
+encryption "cannot be added to a live cluster", and ranked it as the irreversible piece for
+that reason. It can: AWS `AssociateEncryptionConfig` exists precisely to enable encryption on
+existing clusters, the provider models absent → present as an **in-place update** (asserted
+by its own acceptance test `TestAccEKSCluster_Encryption_update`, which checks the cluster is
+not recreated), and from Kubernetes 1.28 EKS already envelope-encrypts with an AWS-owned key
+by default — this cluster is on 1.35. So this is a customer-managed KEK replacing an
+AWS-owned one, not encryption replacing none.
+
+It was still done now, for reasons the finding did not name: AWS cannot *disable* encryption
+once enabled; **removing** the block from configuration forces a full cluster replacement;
+and changing `key_arn` afterwards is a **silent no-op** that reports success and does nothing
+(the update handler only calls the API for the 0 → 1 transition). Treat the key as permanent.
+
+### Finding 6 — closed for secrets, partially for the rest, and the boundary is stated
+
+`secretsmanager` → `secret:hermes/*` and `ssm` → `parameter/hermes/*`, the same shape as the
+ESO role. That closes the read-every-secret-in-the-account hole, which was the substance.
+
+`rds` and `elasticache` are scoped by resource **type** and account, not by name, because
+Crossplane derives those external names and there is no stable prefix. Prefix-scoping needs a
+naming convention enforced in the compositions first — recorded as a follow-up rather than
+smuggled in.
+
+**The EC2 statement is unchanged and still broad, on purpose.** Narrowing it wants an
+`aws:ResourceTag` condition, and whether upjet tags a security group at creation or in a
+follow-up call decides whether that condition wedges provisioning outright. With no cluster
+to find out on, a policy that deadlocks the provider would be worse than the one being
+replaced.
+
+The policy is proven well-formed and nothing more. The first apply with a live claim is what
+establishes sufficiency; expect `AccessDenied` to name any gap. Likely candidates:
+`iam:CreateServiceLinkedRole` in an account that has never used RDS or ElastiCache, and
+`kms:DescribeKey`.
+
+### Finding 7 — closed, plus the discarded-argument half
+
+`infra/crossplane/provider/runtime-config.yaml` is **deleted**. The `DeploymentRuntimeConfig`
+is generated by `bootstrap-cluster.sh` from the ARN the operator passes — the value the script
+previously required and then threw away — and applied before `aws-provider.yaml`.
+
+Deleting rather than templating is deliberate: `deploy/argocd/crossplane-infra.yaml` syncs
+`infra/crossplane` recursively, so any `*.yaml` left in that directory would be applied over
+the generated object. A `kubectl`-created object carries no ArgoCD tracking metadata and is
+neither overwritten nor pruned. This needed **no** change in `deploy/argocd/`, which this unit
+does not own — deliberately, so the fix does not merely look complete.
+
+All three role ARNs are now checked against the cluster name before anything installs.
+Demonstrated: staging's Crossplane ARN against `hermes-production` aborts with exit 1 and
+prints the expected name and the `terraform output` command, before any `kubectl` or `helm`
+call; correct ARNs pass and the script proceeds.
+
+The account ID is out of this file. It remains in git history and six other checked-in files
+outside this unit. It is an account ID, not a credential — worth parameterising for
+portability, not worth calling a breach.
+
+### Finding 12 — deliberately NOT closed, and now loud instead of silent
+
+The composition still writes no values. What changed is that this is no longer invisible.
+
+- `bootstrap-cluster.sh` ends with a **REQUIRED MANUAL STEP** banner naming the empty
+  secrets, the `CreateContainerConfigError` that results, and the command that fixes it.
+- `infra/scripts/seed-connection-secret.sh` derives `database_url`, `redis_url`,
+  `centrifugo_redis_address` and `centrifugo_redis_password` from the Crossplane connection
+  secrets and **merges** them into `hermes/<env>/connection` — merging because
+  `centrifugo_nats_url` lives in the same secret, comes from `cmd/natskeys`, and a wholesale
+  put would silently delete it.
+- `hermes/<env>/nats-nkeys` was **missing entirely**. The overlays' ExternalSecret reads
+  fourteen properties from it and nothing created even the container. Added.
+- The dead `email_webhook_url` SSM parameter is removed (no Go code ever read it).
+  `sms_webhook_url` is genuinely used and is untouched, with a comment saying so.
+
+**The automated route exists and was verified against pinned upstream source, so nobody has
+to redo the research.** `function-extra-resources` v0.3.0 *can* fetch a core `v1/Secret` by
+name; `function-go-templating` v0.7.0 *can* emit `CompositeConnectionDetails`; and
+`provider-aws-secretsmanager` v1.18.0's `SecretVersion` has **no literal `secretString` field
+at all**, only `secretStringSecretRef` — so the objection that this would render an Aurora
+password into a managed-resource spec in etcd turns out not to apply.
+
+It was not shipped for three blockers, recorded in full in the composition:
+
+1. It cannot be rendered or tested here — no cluster and no container runtime, so
+   `crossplane render` cannot run. Unrendered pipeline YAML would reproduce the exact defect
+   being fixed: reconciles green, delivers nothing.
+2. `bootstrap-cluster.sh` installs Crossplane **unpinned**, and `function-extra-resources`
+   v0.3.0 returns nothing at all, *silently*, on anything older than 1.20.
+3. Once Crossplane owns `hermes/<env>/connection` it reverts hand-edits on the next reconcile,
+   including `centrifugo_nats_url`, which it cannot derive.
+
+### Also fixed, unrelated to the five
+
+`bootstrap-cluster.sh` told operators `kubectl apply -f deploy/kargo/`, which is **not
+recursive** (`-R` defaults to false), so it silently skipped both promotion stages and the
+health-check AnalysisTemplate with its ServiceAccount, Role, RoleBinding and NetworkPolicy —
+now load-bearing, since production promotions are actually verified. Replaced with
+`project.yaml` first (the Kargo Project owns the `hermes` namespace everything else is
+namespaced into, and a recursive apply walks `analysis/` first alphabetically) then
+`kubectl apply -R -f deploy/kargo/`. `deploy/argocd/` is flat and was checked, not assumed.
+
+### Filed rather than chosen quietly
+
+[ADR 0007](../adr/0007-aws-network-and-control-plane-posture.md) records the allocation
+register, the decision to make the API allowlist a required input, the KMS correction, and
+the two rejected alternatives most likely to be re-proposed —
+`endpoint_public_access = false` outright (the better posture; rejected only because this repo
+ships no bastion or VPN) and keeping the runtime config in git behind an ArgoCD exclusion
+(more consistent, but it would have made the fix depend on an unmade edit elsewhere).
+
+### Follow-ups this unit could not make
+
+- `docs/deployment-guide.md:438` claims the composition assembles connection details. **It
+  does not.** The guide needs correcting and should point at `seed-connection-secret.sh`.
+- `Makefile` — nothing statically checks the IAM policy for a reintroduced service wildcard.
+  A harness proved it during this change but was not committed: it needs a `terraform` binary
+  that neither this box nor CI has, and a gate that silently skips is worse than none.
+- `bootstrap-cluster.sh` installs Crossplane unpinned; pinning `--version` is a prerequisite
+  for anything depending on `function-extra-resources`.
+- The account ID is hardcoded in `deploy/k8s/overlays/*/images/kustomization.yaml` and three
+  `deploy/kargo/` files.
+## Resolved 2026-07-31 — finding 11's twin, in the Job nobody cross-checked
+
+Closing finding 11 created a second instance of finding 11. PR #71 added
+`deploy/k8s/base/nats-provision-job.yaml` with its hook annotations commented out and this
+reason:
+
+> Left commented to match hermes-migrate rather than enabling it for one Job and not the other.
+
+PR #72 then made `hermes-migrate` a `PreSync` hook. The two PRs were developed in parallel and
+neither saw the other, so the justification was **stale the moment #72 merged** — the Jobs no
+longer matched, and `hermes-natsprovision` was left as an ordinary tracked resource with the
+same immutable-`spec.template` defect, on the same Kargo promotion path. Nothing detected this:
+`make verify` renders the overlays and both Jobs render fine, and no gate compares a comment to
+the thing it claims parity with.
+
+**Reproduced, not inferred.** Same ArgoCD v3.4.5, same harness shape, real `cmd/natsprovision`
+binary against a real NATS with JetStream. First sync clean; the second, with the tag rewritten
+the way `kustomize-set-image` rewrites it:
+
+```
+Job.batch "hermes-natsprovision" is invalid: spec.template: Invalid value: {...}:
+field is immutable
+```
+
+Terminal at `OutOfSync` / `phase: Failed` / `retryCount: 3`, and — as with the migration — not
+atomic: the StatefulSet and both Deployments in the same sync reported `serverside-applied`.
+
+**One way this is worse than finding 11.** Throughout, the Application reported
+`health: Healthy`. A failed migration eventually shows up as an unhealthy workload; a failed
+stream provisioning on a cluster whose streams already exist shows up as nothing. New images
+roll out, streams are never re-declared, and the only signal is a red sync status on an
+application that calls itself healthy.
+
+**The fix is not the same fix, and both wrong answers were tested rather than reasoned about.**
+
+- `PreSync` cannot work: `hermes-migrate` targets Aurora, which exists before any sync, whereas
+  this Job targets the NATS StatefulSet *this same Application creates in the `Sync` phase*.
+- `PostSync` deadlocks. Verified on a virgin namespace: the provisioning Job **was never
+  created at all**, the six stream-consuming services (which `os.Exit(1)` without streams) sat
+  in `CrashLoopBackOff`, and the Application went terminal at `Degraded` / `phase: Failed` with
+  `exceeded its progress deadline`. The services cannot go healthy without the streams; the
+  hook that creates the streams cannot run until they are healthy.
+- `hook: Sync` with the Job **alone** at wave 1 deadlocks identically — wave 0 then holds the
+  services, which never go healthy, so wave 1 never starts. Also verified: no Job pod in three
+  minutes.
+
+**What shipped.** `hook: Sync` at `sync-wave: "0"` with `hook-delete-policy: BeforeHookCreation`
+on the Job, and `sync-wave: "1"` on the six services that fail closed on streams (`send`,
+`dispatch`, `worker-email`, `worker-sms`, `worker-inbox`, `worker-events`). `admin`, `inbox` and
+`user` do not call `MustEnsureStreams` and stay at the default wave. The NATS StatefulSet is
+deliberately not moved: its config Secret and TLS certificate are themselves wave-0 resources,
+so an earlier wave would strand it.
+
+Two consecutive tag rewrites both synced clean — the case that used to fail. A virgin-namespace
+bootstrap went from **2 restarts per service to 0**, with service pods created only after the
+Job completed, which settles the assumption the whole design rests on: **ArgoCD does wait for
+wave 0, including a `Sync`-phase hook Job's completion, before applying wave 1.**
+
+**And this is a detection-gap story, not just a defect.** Under the old shape, a failed
+provisioner and a healthy one look the same for the first minute — crash-looping pods either
+way. Under the new one, a failed provisioner shows as *no service pods at all* plus
+`waiting for completion of hook batch/Job/hermes-natsprovision`, which no operator will mistake
+for normal. Verified by pointing the Job at an unreachable bus and letting it run to the end:
+the Job exhausted `backoffLimit: 6` at **10m38s** (`BackoffLimitExceeded`) and the Application
+went terminal at **22m23s** with `phase: Failed` / `retryCount: 3`. **It terminates — it does
+not hang.** At that point the namespace held only the NATS pod: no service Deployment was ever
+created, and the failed Job was gone, so its logs are Loki's problem exactly as ADR 0006 says.
+The one trap is that `health` reads `Healthy` at the terminal state, because nothing unhealthy
+exists — nothing exists. Sync status is the signal, not health.
+
+Recorded as an **amendment to ADR 0006** rather than a new ADR: it is the same decision class
+for the same class of Job, it reverses nothing (`hermes-migrate` stays `PreSync`), and it
+corrects one sentence in that ADR's *Alternatives considered* which reads as "waves do not gate
+anything" — measured, a failing wave-0 hook does stop wave 1 from being applied at all.
+
+**Two things found on the way that were not the finding.** Neither is fixed here.
+
+1. ArgoCD excludes hook resources from the desired-state diff, so a commit that changes *only*
+   a hook Job's image tag leaves the Application `Synced` at the new revision and triggers no
+   sync. Masked in practice because a Kargo promotion rewrites all eleven tags and then runs
+   `argocd-update`. **This applies equally to `hermes-migrate` and was not noticed when that
+   hook landed.**
+2. On the single sync where the annotations are first added, ArgoCD **prunes** the
+   previously-tracked Job (`status: Pruned`) and the hook runs on the *next* sync, not that one.
+   Harmless where the streams already exist, but "deploy the change" and "re-provision" are two
+   syncs.
+
+**Unverified.** Everything ran on k3s against a locally built `hermes-natsprovision` image and a
+single-node plaintext NATS — not against AWS, ECR, ESO, cert-manager-issued NATS certificates or
+a three-node JetStream cluster, and no Kargo controller was involved. The six services were
+represented by **stand-in Deployments** that exit non-zero when a stream is absent, not by the
+real service images; they reproduce the property that matters for sync ordering (fail closed at
+boot, never become Available) but not the services' full startup sequence, which also touches
+Postgres and Redis. `progressDeadlineSeconds` was lowered to 120 in the stand-ins to keep the
+deadlock runs tractable — the real default is 600, so a real `PostSync` deadlock takes
+correspondingly longer to reach its terminal state, not less long.
+
+---
+
 ## Suggested remediation order
 
 > **Superseded 2026-07-29 — see "Revised remediation order" below.** The original order is
@@ -1576,8 +2261,8 @@ step 4 above no longer applies.
    35's egress blocker, then decide explicitly whether to enable `enableNetworkPolicy` on the
    VPC CNI addon. Doing 8 or 10 alone is wasted work; doing 47 alone flips the namespace from
    inert to enforced-and-wrong. Validate with `kubectl kustomize` against both overlays.
-4. **The remaining security workstream.** 1 (NATS auth — the large one, entangled with 14 and
-   19), 3 (permission enforcement — note the Huma middleware shape is why `RequirePermission`
+4. **The remaining security workstream.** ~~1 (NATS auth — the large one, entangled with 14 and
+   19)~~ done 2026-07-30, all three ADR 0005 phases, 3 (permission enforcement — note the Huma middleware shape is why `RequirePermission`
    has no call sites), 14, 15, 16 (pin the actions, including the three workflows added since
    the review), 21.
 5. **Delivery correctness.** 9, which needs explicit sign-off that the two tests pinning
@@ -1628,3 +2313,348 @@ cover the optional SigNoz fan-out from commit `55430f8`, and
 `observability/adr/001-lgtm-over-signoz.md:4` was properly amended (dated 2026-06-13) *ahead
 of* the code landing rather than silently rewritten — exactly the amend-versus-supersede
 discipline `adr/README.md:56-69` prescribes and the rest of the tree is missing.
+
+## Resolved 2026-07-31 — findings 8, 36 and 35 closed, against a real scheduler
+
+Three findings that share one shape: a production control that renders, applies, and does
+nothing. All three are now closed, and the parts that could be executed were executed against
+a live single-node k3s v1.34.6 cluster in a scratch namespace, using the **rendered production
+overlay** rather than a hand-written approximation.
+
+### Finding 8's capacity half
+
+`hermes-send` was absent from `patches/replicas.yaml`, `patches/resources.yaml`,
+`patches/anti-affinity.yaml` and had neither an HPA nor a PDB — confirmed, five omissions, all
+five fixed. In production the service every write passes through would have run as **one pod
+with no resource requests, no autoscaling, no disruption budget and no spread constraint**.
+
+The numbers are not admin's, and the reasoning is recorded in the files. Send is a thin
+ingestion layer — API-key HMAC, Redis idempotency check, NATS publish — so its per-request
+work is small and CPU-shaped, where admin's is IO-shaped and blocks on Postgres. What differs
+is the *rate*: the rate limiter admits 2000 req/s sustained with a 5000 burst per credential
+(finding 39), four times admin's 500/s. Hence `cpu: 300m` against admin's `200m`
+(CPU is both the binding resource and the autoscaling signal), the same `256Mi/512Mi` memory
+(the heap is set by concurrent in-flight bodies at burst, not by cached state), `maxReplicas:
+20` against admin's 10 (nothing shared caps the fan-out), and a scale-up policy with **no**
+stabilization window against admin's 60s ramp — ingestion spikes arrive in seconds and a
+scale-up that lands after the burst was rate-limited is not a scale-up.
+
+### Finding 36
+
+`patches/anti-affinity.yaml` now covers all ten Deployments plus the NATS StatefulSet, and
+PDBs exist for send, user and all four workers.
+
+Two *different* rules, deliberately. Every Deployment gets soft spread
+(`whenUnsatisfiable: ScheduleAnyway`) on hostname and zone: a hard rule would cap the workload
+at the node count and silently defeat the HPAs the moment the autoscaler asked for more
+replicas than there are nodes. NATS gets `requiredDuringSchedulingIgnoredDuringExecution` on
+hostname, because a soft rule there is worth nothing — it permits exactly the "all three on one
+node" arrangement that `pdb/nats-pdb.yaml` cannot survive. **The cost is explicit: production
+needs at least 3 schedulable nodes, and 4 to drain one without leaving a NATS pod Pending.**
+
+**The wedge in finding 36 was reproduced, not reasoned about.** On this single-node box, with
+the anti-affinity applied, the NATS PDB reports
+
+```
+currentHealthy: 1  desiredHealthy: 2  expectedPods: 3  disruptionsAllowed: 0
+reason: InsufficientPods
+```
+
+and an eviction of the surviving pod — the same API call `kubectl drain` makes — is refused:
+
+```
+Error from server (TooManyRequests): Cannot evict pod as it would violate the pod's
+disruption budget.
+```
+
+That is the finding's second clause verbatim: below quorum the budget blocks the drain that
+would fix the situation. The *pre-fix* arrangement was observed too — with the anti-affinity
+removed, all three NATS pods scheduled onto `vps01` and the PDB happily reported
+`disruptionsAllowed: 1`, i.e. it looked healthy while being one node loss away from total
+loss. With the rule in place the scheduler refuses:
+`0/1 nodes are available: 1 node(s) didn't match pod anti-affinity rules`.
+
+**PDBs were also changed from `minAvailable: 1` to `maxUnavailable: 1`** for every application
+workload — this goes slightly beyond the finding's text and is called out for that reason.
+`minAvailable: 1` on a Deployment the HPA has taken to ten replicas permits **nine**
+simultaneous evictions; it guarantees only that the service does not reach zero. The rationale,
+and which workloads deliberately get no PDB (the Jobs and the CronJob), is in
+`deploy/k8s/overlays/production/pdb/README.md`. `nats` keeps `minAvailable: 2` because quorum
+is an absolute of a fixed-size cluster, not a fraction of an elastic one.
+
+### Finding 35's residue
+
+`deploy/kargo/stages/production.yaml` had no `verification` block, so `argocd-update` returning
+success was the whole of "production promotion verified" — every other part of finding 35's fix
+(ServiceAccount, RBAC, digest pin, egress policy, `hermes-send` in the checked list) repaired a
+check whose result was never read. The block now exists and references the same
+`hermes-health-check` template staging uses.
+
+Reviewing the check against the current service set found **`centrifugo` was never checked** —
+it is the one Deployment in the namespace not named `hermes-*`, so it fell out of the loop.
+It is now checked by name.
+
+A second, quieter gap: the readiness sweep was
+`kubectl get pods | grep -v "Running\|Completed" | wc -l`, which **passes a pod sitting at 0/1
+Running with a failing readiness probe.** Measured, not assumed — against a namespace holding
+two Pending pods and one deliberately-never-Ready pod, the old expression returned `2` and did
+not see the canary; the replacement, which reads the `Ready` condition and excludes only
+terminal Job pods by phase, returned all three.
+
+### What was verified, and what was not
+
+Applied into a scratch namespace on the live cluster: all 52 objects accepted; every one of the
+eleven PDBs reports `expectedPods` equal to its workload's replica count (so no selector
+selects nothing or over-selects) and `disruptionsAllowed: 1` when healthy; all five HPAs
+resolve their `scaleTargetRef` and the send HPA reaches
+`AbleToScale=True, ScalingActive=True (ValidMetricFound)` against a real metrics-server; all
+ten Deployments carry the spread constraints.
+
+Two deliberate mutations confirmed the assertions bite. Removing send's resource requests
+flipped its HPA to `ScalingActive=False, FailedGetResourceMetric` — so `resources.yaml` and
+`send-hpa.yaml` are coupled, and the HPA alone would have existed without ever scaling.
+Introducing a one-character typo in the send PDB's selector (`hermes-sned`) dropped
+`expectedPods` from 3 to 0 with no error from any tool — which is why `expectedPods` is the
+assertion that pins a selector, and why "kustomize renders" proves nothing here.
+
+Not verified, and stated rather than implied:
+
+- **The Kargo half was not exercised.** There is no Kargo controller and no Argo Rollouts CRD
+  on this cluster. `production.yaml` parses and matches staging's structure; that a promotion
+  actually blocks on a failed AnalysisRun is unproven here.
+- **Real spreading cannot be demonstrated on one node.** The cluster is single-node, so the
+  soft `ScheduleAnyway` constraints on the Deployments were confirmed present on every pod spec
+  but never had a second domain to spread into. The node also carries no
+  `topology.kubernetes.io/zone` label, so the zone constraints matched no domain at all.
+- The workloads ran under `registry.k8s.io/pause` with probes stripped, because the ECR images
+  are unreachable from this box. Scheduling, selectors, PDB arithmetic and HPA metric plumbing
+  are unaffected by that; anything depending on the services' own behaviour was not tested.
+
+### Follow-up this change could not make
+
+`docs/deployment-guide.md:382` applies `deploy/kargo/analysis/health-check.yaml` by name, and
+line 466's `kubectl apply -f deploy/kargo/` is not recursive — so **`analysis/rbac.yaml` is
+applied by neither path.** The ServiceAccount, Role, RoleBinding and egress NetworkPolicy that
+finding 35's earlier fix added never reach the cluster, and the health check that production now
+blocks on would 403. The fix is one character on line 382 (`.../analysis/` instead of
+`.../analysis/health-check.yaml`); that file was outside this change's ownership boundary.
+
+---
+
+## Added and resolved 2026-07-31 — finding 52, the unquoted `$VARIABLE` in `nats-accounts.conf`
+
+> **Renumbered 2026-08-05.** This finding and the one below it were filed as "38" and "39" —
+> numbers already held by the shared VPC CIDR and the rate-limiter findings, both of which are
+> still referenced under those numbers elsewhere in this document and in
+> `internal/middleware/ratelimit.go:29`. Finding numbers are stable and never reused (see
+> [How to read this](#how-to-read-this)), so these two are now **52** and **53**, and every
+> reference in the tree was updated with them: `deploy/k8s/base/infra/nats-accounts.conf`,
+> `internal/messaging/centrifugopassword_test.go`, ADR 0005 and issue #82. The merge commit for
+> PR #81 names 38 and 39 and cannot be rewritten; there it means 52 and 53.
+
+**52. [P0] An unquoted `$VARIABLE` in `nats-accounts.conf` is re-lexed, and ~2.3% of generated
+Centrifugo passwords stop nats-server starting. RESOLVED 2026-07-31.**
+
+**Real, was on `main`, now fixed.** Reported originally as an intermittent `internal/messaging`
+failure naming a different offending character each run (`'R'`, `'7'`, `'Z'`), which is what
+made it look like anything but a config bug.
+
+**Mechanism.** `nats-accounts.conf:242` carries Centrifugo's credential as
+`password: $HERMES_CENTRIFUGO_NATS_PASSWORD`. nats-server does not substitute such a reference
+— `conf/parse.go` `lookupVariable` resolves it by **re-parsing the environment value as a fresh
+configuration document** (`pk=<value>`). The password must therefore lex as a bare conf value,
+and `cmd/natskeys` was emitting unconstrained 43-character base64url.
+
+**The rule, enumerated against the real parser rather than modelled** (nats-server v2.12.6, the
+committed file, `server.ProcessConfigFile`). Both standing hypotheses were wrong:
+
+| Shape | Result |
+|---|---|
+| leading `-` | `Expected a digit but got 'X'` — `lexNegNumberStart` demands a digit. **This is the error that names a letter**, not a leading digit. |
+| leading digit, first non-digit is `-` | ISO8601 date path; this is the variant that names a **digit** as offending |
+| leading digit, size suffix (`kKmMgGtTpPeE`), digit — `2p2…` | integer ends early, rest is trailing junk. Neither reviewer predicted this one. |
+| all digits, or exactly `true`/`false` | **no parse error**: reaches the server as `int64`/`bool` |
+| leading letter | always safe, whatever follows — `-` and `_` later are harmless |
+| `_` anywhere | harmless |
+
+A leading digit is *usually fine* (`7Rabcdefgh` parses), so "starts with a digit" was not it.
+
+**Rate.** 465 failures in 20,000 draws through the real parser = **2.33%** (analytic prediction
+from the rule above: 2.34%). Confirmed end-to-end at the process level: with the constraint
+removed, 6 of 300 test-binary processes failed (2.0%); with it, **0 of 500**.
+
+Note for anyone repeating the measurement: `permFixtureOnce` is a package-level
+`sync.OnceValues`, so there is exactly **one draw per test-binary process** regardless of
+`-run` filtering. An earlier explanation that filtered runs take fewer draws is wrong; a 0/40
+sample was simply consistent with 2.3% (P ≈ 0.39) and too small to see it.
+
+**Fix.** The reference stays **unquoted** and `cmd/natskeys` redraws until the first character
+is an ASCII letter (costing ~0.3 bits of 256).
+
+**Quoting the reference is not a fix and must never be applied.** NATS reaches `isVariable()`
+only from `lexString`, i.e. only for unquoted tokens (`conf/lex.go:958-971`). Both
+`"$HERMES_CENTRIFUGO_NATS_PASSWORD"` and `'$…'` were observed to resolve Centrifugo's password
+to the **literal 32-character string** — no parse error, no log line, a credential published in
+git, and Centrifugo unable to authenticate. Strictly worse than the bug.
+`TestAccounts_CentrifugoPasswordReferenceMustNotBeQuoted` fails if anyone tries.
+
+**The `$HERMES_NKEY_*` references have the same exposure and are safe by luck, not design.** An
+nkeys user public key is `U` + base32 `[A-Z2-7]`: always a leading letter, never a `-`. Now
+asserted (`TestAccounts_NKeyVariablesCannotHitTheFailingShapes`) rather than assumed, so a key
+format change is a red test rather than a cluster that will not start.
+
+### Open finding 53 — an empty `HERMES_CENTRIFUGO_NATS_PASSWORD` authenticates
+
+**53. [P0] An empty `HERMES_CENTRIFUGO_NATS_PASSWORD` parses cleanly and authenticates on the
+wire.** Tracked as issue #82. *(Filed as "39" — renumbered 2026-08-05, see the note above.)*
+
+**Not fixed here; belongs to whoever owns the Secret/ESO path.** `nats-accounts.conf` claims:
+
+> An unset variable is a parse error, so a half-provisioned cluster fails to start rather than
+> starting without the account.
+
+That is true for **unset** and false for **empty**. `HERMES_CENTRIFUGO_NATS_PASSWORD=""` parses
+cleanly, the server starts, the `centrifugo` user exists with password `""`, and a connection as
+that user **with no credential succeeds** — verified on the wire against an embedded server, not
+inferred. A half-provisioned cluster therefore accepts an unauthenticated Centrifugo connection
+while appearing healthy.
+
+The conf language cannot express "must be non-empty", so this cannot be closed in the file that
+documents the guarantee. Pinned as a labelled characterisation test
+(`TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`), which flips to reporting the
+good news if a future nats-server rejects it.
+
+---
+
+## Resolved 2026-07-31 — the controls that existed and did not run
+
+The single most repeated defect across the six remediation units was not a wrong control but an
+**inert** one: NetworkPolicies selecting zero pods, a permission check with no call sites,
+`helm template` piped to `/dev/null`, a migration hook that had never executed, a comment
+claiming parity with a file that had since changed, and `make verify` in no CI workflow. Each
+looked correct in review and did nothing. Four units filed the gaps below and could not close
+them, because `scripts/`, `Makefile` and `.github/` were outside their boundaries.
+
+Three new gates now exist, and **each was watched failing against the real rendered overlay
+before it was made to pass** — a gate only ever seen green is the thing this section exists to
+prevent.
+
+### `scripts/check_job_hooks.py` — every Job must be a usable ArgoCD hook
+
+Reproduced against `main` itself rather than a fixture: at the time of writing,
+`deploy/k8s/base/nats-provision-job.yaml` still carries its hook annotations as YAML comments,
+and the gate names it exactly — `Job/hermes-natsprovision has no argocd.argoproj.io/hook
+annotation`. Re-running with PR #80's version of that file substituted into the render passes.
+That substitution also confirms the gate does **not** pin the phase: it accepts `Sync`, which is
+what #80 uses and what a gate demanding `PreSync` would have wrongly rejected — `PostSync` and a
+lone later sync-wave were both measured to deadlock.
+
+The phase and delete policy are checked against ArgoCD's recognised values, because an
+unrecognised phase (`presync`) is ignored silently and the Job reverts to an ordinary tracked
+resource: the annotation is visibly present in review and does nothing.
+
+### `scripts/check_pdb_selectors.py` — every PDB must protect something
+
+Three mutants introduced into the rendered production overlay, all three named:
+
+| Mutant | What the gate says |
+|---|---|
+| the `hermes-sned` typo from this review's own finding-36 verification | `selector matches none of the 14 workloads; expectedPods would be 0` |
+| nats PDB `minAvailable: 2 → 3` | `disruptionsAllowed: 0 permanently — the budget blocks every node drain instead of pacing it` |
+| a PDB pointed at the `hermes-natsprovision` Job | `matches only pods that are never replaced` |
+
+The second and third go beyond the filed gap and were added because
+`deploy/k8s/overlays/production/pdb/README.md` names both as live hazards in prose — "it would
+the moment someone adds a workload at `replicas: 1`" — with nothing enforcing either.
+Label-selector semantics are **imported** from `check_networkpolicy_selectors.py`, not
+reimplemented; a test asserts the identity, because two copies would drift while each kept
+passing its own tests.
+
+### `scripts/check_workload_resources.py` — requests, and HPAs that can read their metric
+
+The mutation this review measured directly — removing `hermes-send`'s resource requests, which
+flipped its HPA to `ScalingActive=False, FailedGetResourceMetric` — now produces three named
+failures, one for the missing requests and one per affected HPA metric. A `scaleTargetRef` typo
+and a StatefulSet losing its memory limit are also caught.
+
+**The `local` overlay is exempt, and this is stated rather than filtered silently.** Run against
+it, the gate fails on exactly three workloads: `postgres`, `redis` and `mailpit` — laptop
+conveniences that reach no cluster. Local also renders zero HPAs, zero PDBs and zero Jobs, so
+there is no autoscaling to disable and no drain to survive. Running the gate on local while
+skipping non-`hermes-*` workloads was considered and rejected as the kind of special case that
+hides the next omission.
+
+### Gates that existed and ran nowhere
+
+- **`check_ca_key_location.py`** was in `make verify` and in **no CI workflow** — the same gap
+  the NetworkPolicy step closed one release earlier, missed on the identical file. Now a step in
+  `kustomize-validate`.
+- **`infra/scripts/test-lib.sh`** shipped with 17 passing tests that nothing ran, because
+  `verify-manifests` discovers only `scripts/`. Now in `make verify` and its own CI job.
+- **Terraform was in neither.** ADR 0007 records that `terraform validate` and `fmt -check`
+  *were* executed during that work — by hand, once. `make tf-check` now runs both
+  credential-free (`-backend=false`) and fails loudly when terraform is absent. It is
+  deliberately **not** in `make verify`: that target is documented as needing no cloud
+  credentials and is the completion gate every unit runs, and a hard failure on a missing binary
+  would have made it red for all six units in this batch, none of which had terraform installed.
+  The predictable response to that is that people stop running `verify`. CI has terraform
+  unconditionally, which is the half that was actually missing.
+
+### The chart's `helm test` now runs
+
+`ci.yml` had no `helm test`, `kind` or `k3s` step, so the chart test that reads
+`HERMES_DATABASE_URL` and `HERMES_REDIS_URL` out of the chart's own rendered Secret and
+ConfigMap — the only thing that can catch a connection-URL helper naming no Service — ran only
+when an agent invoked it by hand. A `chart-install` job installs the chart on kind and runs it.
+
+Executed end to end on a local kind v1.36.1 cluster before being written into CI: Postgres,
+Redis, a three-node NATS and Centrifugo all reach Running, and `helm test --filter
+name=hermes-test-datastores` reports `Phase: Succeeded` with
+`postgres: connected via HERMES_DATABASE_URL` / `redis: connected via HERMES_REDIS_URL`.
+
+**What the job does not cover, said on its face rather than implied.**
+`ghcr.io/hermesnotifications/hermes-*:0.1.0` is unpublished and returns `403 Forbidden` to an
+anonymous pull — confirmed from the kubelet event, not assumed — so no Hermes service can start.
+The nine Deployments install at `replicas=0` rather than being left in `ImagePullBackOff`, and
+`templates/tests/test-connection.yaml`, which curls the services' `/healthz`, is **excluded by
+`--filter`**. It cannot pass until a release is cut, and a job that appeared to run it would
+claim coverage it does not have. The job name says "datastores only".
+
+That the wiring bites was checked rather than assumed: running the excluded
+`test-connection` pod deliberately exits `helm test` with `1` and
+`Error: 1 error occurred: * pod hermes-test-connection failed`.
+
+### Finding 53 — owner determined, not closed
+
+The claim in `nats-accounts.conf`'s header was corrected: it asserted that a half-provisioned
+cluster fails to start, which is true for an unset variable and **false for an empty one**.
+
+The owner is now named rather than left as "whoever populates the Secret": **an initContainer on
+the NATS StatefulSet** (`deploy/k8s/base/infra/nats.yaml`). Two candidates were evaluated and
+rejected on evidence. `internal/config` cannot work — **no Hermes Go process reads
+`HERMES_CENTRIFUGO_NATS_PASSWORD` at all**; nats-server consumes it directly from its own
+environment, so a check there would sit in a process that never sees the value and pass forever.
+`cmd/natsprovision` runs on every deploy and already fails the sync, but it would have to open a
+second connection deliberately impersonating `centrifugo` with an empty credential — emitting an
+authorization-violation event on every deploy and degrading the one signal that would show a real
+intrusion — and a rejection is anyway indistinguishable from a not-yet-ready server, a TLS
+failure, or a missing account. Decisively, both can only observe the problem *after* nats-server
+is already serving; only a guard on the NATS pod delivers the "fails to start" the header claims.
+
+**Not implemented, for a stated reason.** The local overlay drops `-c nats.conf` and legitimately
+has no password, so the guard needs a matching removal patch in
+`overlays/local/patches/nats-local.yaml` or it blocks `make dev-up`. That is two files outside
+this change's ownership.
+
+The characterisation test is kept **unflipped on purpose**. It pins nats-server's parser
+behaviour, which is upstream and unchanged; the fix prevents an empty value from reaching it.
+Flipping it would make it assert something false about nats-server.
+
+### Not done, and why
+
+The IAM-policy harness driven through `terraform console` (ADR 0007) was **not recovered**. It
+was never committed, so there is nothing in git to restore — it would be written from scratch,
+for `infra/terraform/` code this change does not own, and, decisively, terraform is not installed
+on this machine by default, so it could not be watched failing. A harness written blind is the
+defect this section is about. `terraform validate` now runs in CI, which gives it somewhere to
+plug in; it is left to the unit that owns those modules.

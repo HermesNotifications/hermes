@@ -2,7 +2,11 @@
   "engine": "redis",
   "redis_address": "overridden-by-env",
   "broker": "nats",
-  "nats_url": "nats://nats:4222",
+  "nats_url": "tls://nats:4222",
+  "nats_tls": {
+    "enabled": true,
+    "server_ca_pem_file": "/etc/nats-certs/ca.crt"
+  },
   "token_hmac_secret_key": "overridden-by-env",
   "api_key": "overridden-by-env",
   "admin": false,

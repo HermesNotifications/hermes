@@ -24,8 +24,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger, messaging.WithCABundle(cfg.NATSCABundlePath))
-	bootstrap.MustSetupStreams(ctx, natsClient, logger)
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
+		messaging.WithCABundle(cfg.NATSCABundlePath),
+		messaging.WithIdentity("hermes-worker-sms", cfg.NATSNKeySeedPath))
+	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
+	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-worker-sms", logger)
 	defer natsClient.Close()
 
 	provider := delivery.NewWebhookProvider("sms", cfg.SMSWebhookURL)

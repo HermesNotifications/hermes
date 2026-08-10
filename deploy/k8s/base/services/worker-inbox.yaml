@@ -2,6 +2,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hermes-worker-inbox
+  annotations:
+    # ADR 0006, amended 2026-07-31. Calls bootstrap.MustEnsureStreams and exits non-zero
+    # without the JetStream streams, so it is applied only after wave 0 (NATS plus the
+    # hermes-natsprovision Sync hook) is healthy. See services/dispatch.yaml for the
+    # measurement and the cost.
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app.kubernetes.io/name: hermes-worker-inbox
     app.kubernetes.io/component: worker
@@ -78,6 +84,10 @@ spec:
             - name: nats-ca
               mountPath: /etc/nats-certs
               readOnly: true
+            # ADR 0005 phase 3. Only this service's NKey seed is projected — see send.yaml.
+            - name: nats-nkey
+              mountPath: /etc/nats-nkey
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir:
@@ -89,6 +99,14 @@ spec:
             items:
               - key: ca.crt
                 path: ca.crt
+        - name: nats-nkey
+          secret:
+            secretName: nats-nkeys
+            optional: true
+            defaultMode: 0400
+            items:
+              - key: hermes-worker-inbox.nk
+                path: seed.nk
 ---
 apiVersion: v1
 kind: Service

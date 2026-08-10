@@ -47,10 +47,17 @@ func MustConnectNATS(url string, logger *slog.Logger, opts ...messaging.Option) 
 	return client
 }
 
-// MustSetupStreams creates JetStream streams or exits the process.
-func MustSetupStreams(ctx context.Context, client *messaging.Client, logger *slog.Logger) {
-	if err := client.SetupStreams(ctx); err != nil {
-		logger.Error("nats stream setup failed", "error", err)
+// MustEnsureStreams verifies that the streams the named service depends on exist, or exits the
+// process.
+//
+// ADR 0005 phase 4. This replaced MustSetupStreams in every service. Declaring streams needs
+// STREAM.CREATE and STREAM.UPDATE, and granting that to all six services let any one of them
+// rewrite the configuration of streams it never touched; cmd/natsprovision now holds those
+// rights alone. Exiting preserves the property that made self-declaration attractive: a service
+// never runs against a bus that is not ready, it just cannot repair one either.
+func MustEnsureStreams(ctx context.Context, client *messaging.Client, service string, logger *slog.Logger) {
+	if err := client.EnsureStreams(ctx, service); err != nil {
+		logger.Error("nats streams are not ready", "service", service, "error", err)
 		os.Exit(1)
 	}
 }

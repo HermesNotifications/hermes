@@ -10,6 +10,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -54,10 +55,27 @@ func tlsClusterCA(t *testing.T) string {
 	return ca
 }
 
+// tlsClusterIdentity supplies the NKey credential ADR 0005 phase 3 added. Pointing
+// HERMES_TLS_NATS_SEED_DIR at a directory of <service>.nk files — which is what
+// `go run ./cmd/natskeys` produces and what the nats-nkeys Secret holds — makes these tests
+// authenticate as a real service. Leaving it unset keeps them usable against a cluster that
+// has TLS but no accounts yet, where WithIdentity's empty seed is a no-op.
+func tlsClusterIdentity(t *testing.T, service string) messaging.Option {
+	t.Helper()
+	dir := os.Getenv("HERMES_TLS_NATS_SEED_DIR")
+	if dir == "" {
+		return messaging.WithIdentity(service, "")
+	}
+	return messaging.WithIdentity(service, filepath.Join(dir, service+".nk"))
+}
+
 // The whole path the services take: connect, declare the streams, publish — over TLS,
-// against a certificate this repo's Certificate resource asked cert-manager to issue.
+// against a certificate this repo's Certificate resource asked cert-manager to issue, as the
+// NKey user whose permissions allow exactly this.
 func TestTLSClusterConnectAndPublish(t *testing.T) {
-	client, err := messaging.Connect("tls://"+tlsClusterAddr(t), messaging.WithCABundle(tlsClusterCA(t)))
+	client, err := messaging.Connect("tls://"+tlsClusterAddr(t),
+		messaging.WithCABundle(tlsClusterCA(t)),
+		tlsClusterIdentity(t, "hermes-send"))
 	if err != nil {
 		t.Fatalf("tls:// with the issuing CA should connect: %v", err)
 	}

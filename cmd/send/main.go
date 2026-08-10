@@ -22,8 +22,15 @@ func main() {
 	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
 	defer pool.Close()
 
-	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger, messaging.WithCABundle(cfg.NATSCABundlePath))
-	bootstrap.MustSetupStreams(ctx, natsClient, logger)
+	// "hermes-send" is not decoration: it selects this service's user, and therefore its
+	// subject permissions, in deploy/k8s/base/infra/nats-accounts.conf, and confines the
+	// connection's reply inboxes to _INBOX.hermes-send (ADR 0005 phase 3).
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
+		messaging.WithCABundle(cfg.NATSCABundlePath),
+		messaging.WithIdentity("hermes-send", cfg.NATSNKeySeedPath))
+	// ADR 0005 phase 4. Verify, do not declare: cmd/natsprovision owns stream creation, and
+	// this service holds no permission to create one. Exits if the streams are not there yet.
+	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-send", logger)
 	defer natsClient.Close()
 
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)

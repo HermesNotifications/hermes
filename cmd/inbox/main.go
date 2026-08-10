@@ -14,7 +14,6 @@ import (
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
 	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/inbox"
-	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/store/dynamo"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
@@ -30,9 +29,10 @@ func main() {
 	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
 	defer pool.Close()
 
-	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger, messaging.WithCABundle(cfg.NATSCABundlePath))
-	defer natsClient.Close()
-
+	// No NATS connection here on purpose. This service reads from the store and pushes
+	// nothing onto the bus; it used to connect and hand the client to a field nobody read.
+	// Under ADR 0005 phase 3 that dead connection would have needed its own NKey user and
+	// permissions, so it is gone instead.
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
 	defer redisClient.Close()
 
@@ -67,7 +67,7 @@ func main() {
 		}
 	}
 
-	srv := inbox.NewServer(inboxStore, centrifugoClient, natsClient, redisClient, keyProvider, logger)
+	srv := inbox.NewServer(inboxStore, centrifugoClient, redisClient, keyProvider, logger)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }

@@ -10,6 +10,10 @@ mechanics (branches, hooks, CI) see [CONTRIBUTING.md](../CONTRIBUTING.md).
 - **Docker** — runs the local infrastructure
 - For the full Kubernetes dev loop: **[k3d](https://k3d.io)**,
   **[Tilt](https://docs.tilt.dev/install)**, **kubectl**
+- For `make verify`: **[Helm](https://helm.sh/docs/intro/install/) v3** — `make verify-chart`
+  renders `charts/hermes/` and checks it against the Go source. It fails rather than skips
+  when Helm is missing, because a gate that quietly does not run is what let the chart
+  drift in the first place.
 - For the admin portal: **pnpm**
 
 ## Two ways to run locally
@@ -64,6 +68,68 @@ make build           # build all services into bin/<service>/service
 
 Then run individual services from `bin/`, or just use this mode to run integration tests
 (see [testing.md](testing.md)). `make infra-down` stops the infrastructure.
+
+## Parallel development sandboxes (one namespace per worker)
+
+For several developers or agents working against one k3s cluster without colliding. Each
+worker gets a namespace holding Postgres, Redis, NATS with JetStream, Mailpit and
+DynamoDB-local:
+
+```bash
+make devworker-up                      # namespace hermes-dev-$USER
+make devworker-up WORKER=alice         # or name it explicitly
+
+eval "$(make devworker-env WORKER=alice)"
+go run ./cmd/migrate/ -database-url "$HERMES_DATABASE_URL" -migrations-path ./migrations
+go test ./... -tags=integration -p 1 -count=1     # the whole suite, including e2e
+
+make devworker-list
+make devworker-down WORKER=alice       # deletes the namespace and its volumes
+```
+
+Verified: two sandboxes run concurrently with distinct addresses, and the full
+`-tags=integration` suite passes against one.
+
+**`devworker-env` emits ClusterIPs, not `.svc` names.** Cluster DNS does not resolve from
+the host, but on a k3s node the host routes to both the service and pod CIDRs, so these
+URLs work from a plain shell with no port-forward. They are node-local — only reachable
+from the machine running the cluster.
+
+**NATS is a headless Service**, so its variable carries the *pod* IP and changes if
+`nats-0` restarts. Re-run `devworker-env` after a restart.
+
+### What a sandbox deliberately does not contain
+
+- **The Hermes services.** There is no image registry on the cluster and containerd is
+  separate from Docker, so service images would need `k3s ctr images import` per worker.
+  Every verification task so far needed only infrastructure plus lightweight stand-ins. If
+  you do need them: `make docker-<service>`, then
+  `docker save hermes-<service>:latest | sudo k3s ctr images import -`, and set
+  `imagePullPolicy: IfNotPresent`.
+- **NATS TLS.** `base/infra/nats-certificates.yaml` pins `dnsNames` to `nats.hermes`, and
+  kustomize does not rewrite strings inside `dnsNames`, so per-namespace certificates need
+  per-namespace SANs. Sandboxes run plaintext NATS. To test TLS, issue a leaf with SANs for
+  your namespace — this is how
+  [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md) phase 2 was
+  verified. Note that phase 4 moved the CA itself to a **`ClusterIssuer`** whose signing Secret
+  lives in cert-manager's namespace (`deploy/k8s/pki/`), so a sandbox test should either
+  reference that ClusterIssuer or create its own distinctly-named one — do not add a namespaced
+  `ca` Issuer to a Hermes namespace, which is the shape `make verify` now rejects.
+- **A LoadBalancer of any kind.** Every Service is ClusterIP on purpose: a cluster may
+  already publish Postgres or Redis on 5432/6379 via LoadBalancer, and a second one would
+  contend for the same address.
+- **The `app.kubernetes.io/part-of: hermes` label.** A sandbox carrying it would be
+  governed by the Hermes NetworkPolicies, which have no allow rules for it — the pods would
+  get DNS egress and nothing else.
+
+### Notes
+
+Namespaces are labelled `hermes.io/devworker=true`, so a stray one is identifiable as
+disposable rather than someone's real work. Volumes use the `local-path` provisioner and are
+deleted with the namespace.
+
+Sandboxes cost the cluster very little — the whole set requests well under 100m CPU. The
+real constraint on parallel work is host CPU from concurrent Go builds, not the cluster.
 
 This mode is also what `make dispatchbench` needs — it sweeps dispatch worker concurrency and
 prefetch against a real backend (`BACKENDS=postgres|dynamo`) and is how the numbers in

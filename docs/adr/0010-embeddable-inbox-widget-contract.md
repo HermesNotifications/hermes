@@ -1,5 +1,5 @@
 ---
-id: 0006
+id: 0010
 title: Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React
 status: Accepted
 affects:
@@ -12,7 +12,7 @@ affects:
 source: docs/reviews/2026-07-27-architecture-review.md — finding 46; web inbox hardening pass 2026-07-30
 ---
 
-# ADR 0006: The embeddable inbox contract
+# ADR 0010: The embeddable inbox contract
 
 **Status:** Accepted (2026-07-30)  
 **Date:** 2026-07-30  

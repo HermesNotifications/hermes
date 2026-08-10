@@ -15,3 +15,8 @@ secretGenerator:
   - name: nats-server-config
     files:
       - nats.conf=nats-server.conf
+      # ADR 0005 phase 3. A second key of the same Secret, so both files land in
+      # /etc/nats-config and nats.conf's `include "accounts.conf"` resolves. Separate from
+      # nats.conf because staging replaces that one and must not fork the permissions;
+      # staging merges into this generator instead, keeping this key.
+      - accounts.conf=nats-accounts.conf

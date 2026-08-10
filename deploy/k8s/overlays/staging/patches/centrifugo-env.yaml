@@ -32,3 +32,16 @@ spec:
               value: "true"
             - name: CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY
               value: "true"
+            # ADR 0005 phase 4. The full bus URL including Centrifugo's password, which is
+            # why it comes from a Secret and not from centrifugo-config.json. It must keep
+            # the tls:// scheme and must match the `centrifugo` user in nats-accounts.conf.
+            #
+            # Note CENTRIFUGO_REDIS_TLS above is a plain bool while the NATS equivalent is a
+            # nested map (nats_tls) set in centrifugo-config.json. That asymmetry is
+            # Centrifugo's, not ours, and it is the reason the NATS half went unsolved in
+            # phase 3: `nats_tls: true` is rejected as "expected a map, got 'bool'".
+            - name: CENTRIFUGO_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_NATS_URL

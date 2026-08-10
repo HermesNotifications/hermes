@@ -32,7 +32,18 @@ type Config struct {
 	// phase 2) that is in no system trust store, so this is how the connection can be
 	// verified. Empty means "use the system pool", which is the local development
 	// path — `make infra-up` runs NATS without TLS at all.
-	NATSCABundlePath   string
+	NATSCABundlePath string
+	// NATSNKeySeedPath is the file holding this service's NKey seed — the private half of
+	// the identity that selects its user, and therefore its subject permissions, in
+	// deploy/k8s/base/infra/nats-accounts.conf (ADR 0005 phase 3). Empty means "connect
+	// anonymously", which only works against a server with no accounts: `make infra-up`
+	// and the local overlay. It is not a silent downgrade — a server that defines accounts
+	// answers an unauthenticated CONNECT with an authorization violation, so a deployment
+	// that forgets the seed fails to start rather than running with fewer rights.
+	//
+	// nats.go re-reads the file on every authentication challenge, so a rotated Secret is
+	// picked up on the next reconnect without a restart.
+	NATSNKeySeedPath   string
 	RedisURL           string
 	JWTSecret          string
 	CentrifugoAPIURL   string
@@ -68,6 +79,7 @@ func Load() Config {
 		DatabaseURL:      envStr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"),
 		NATSUrl:          envStr("HERMES_NATS_URL", "nats://localhost:4222"),
 		NATSCABundlePath: envStr("HERMES_NATS_CA_BUNDLE", ""),
+		NATSNKeySeedPath: envStr("HERMES_NATS_NKEY_SEED", ""),
 		RedisURL:         envStr("HERMES_REDIS_URL", "redis://localhost:6379/0"),
 		JWTSecret:        envStr("HERMES_JWT_SECRET", "hermes-jwt-secret"),
 		CentrifugoAPIURL: envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000"),

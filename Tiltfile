@@ -68,6 +68,24 @@ local_resource(
     labels=["infra"],
 )
 
+# --- NATS stream provisioning ---
+# ADR 0005 phase 4. Services no longer declare their own streams — they hold no permission to —
+# so something has to, before they start. In a cluster that is the hermes-natsprovision Job; the
+# local overlay deletes it and runs the same binary here instead, mirroring how `migrate` works.
+# Local NATS is plaintext with no accounts, so an empty CA bundle and seed are correct here.
+local_resource(
+    "natsprovision",
+    cmd=" && ".join([
+        "go build -o ./bin/natsprovision/service ./cmd/natsprovision/",
+        "for i in 1 2 3 4 5 6 7 8 9 10; do " +
+        "HERMES_NATS_URL=nats://localhost:4222 HERMES_NATS_CA_BUNDLE= HERMES_NATS_NKEY_SEED= " +
+        "./bin/natsprovision/service && break || sleep 2; done",
+    ]),
+    deps=["cmd/natsprovision/", "internal/messaging/"],
+    resource_deps=["nats"],
+    labels=["infra"],
+)
+
 # --- Seed ---
 local_resource(
     "seed",
@@ -126,10 +144,13 @@ for svc_name, svc_cfg in services.items():
     )
 
     # Service deployments come from Kustomize; Tilt matches by image name
+    # natsprovision is a hard dependency now, not a nicety: ADR 0005 phase 4 removed each
+    # service's ability to create its own streams, and MustEnsureStreams exits if they are
+    # missing. Without this the pods crash-loop until provisioning happens to land.
     k8s_resource(
         "hermes-" + svc_name,
         port_forwards=["{port}:{port}".format(port=port)],
-        resource_deps=["compile-" + svc_name],
+        resource_deps=["compile-" + svc_name, "natsprovision"],
         labels=["services"],
     )
 

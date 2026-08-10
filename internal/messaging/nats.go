@@ -5,6 +5,7 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"sync"
@@ -43,6 +44,10 @@ type Option func(*connectOptions)
 
 type connectOptions struct {
 	nats []nats.Option
+	// errs collects option failures that cannot be expressed as a nats.Option — loading
+	// an NKey seed happens eagerly, unlike a CA bundle, which nats.go reads at dial
+	// time. Collected rather than returned so Connect reports every problem at once.
+	errs []error
 }
 
 // WithCABundle trusts the PEM bundle at path when verifying the NATS server's
@@ -66,6 +71,10 @@ func Connect(url string, opts ...Option) (*Client, error) {
 	var co connectOptions
 	for _, opt := range opts {
 		opt(&co)
+	}
+
+	if err := errors.Join(co.errs...); err != nil {
+		return nil, err
 	}
 
 	nc, err := nats.Connect(url, co.nats...)

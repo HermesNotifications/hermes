@@ -15,7 +15,9 @@ configuration at all.
 |---|---|---|
 | `HERMES_HTTP_PORT` | `8080` | Port the service's HTTP server binds. Each service sets its own default via deployment config (see [services.md](services.md)). |
 | `HERMES_DATABASE_URL` | `postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable` | Postgres DSN. |
-| `HERMES_NATS_URL` | `nats://localhost:4222` | NATS JetStream server. |
+| `HERMES_NATS_URL` | `nats://localhost:4222` | NATS JetStream server. Must be `tls://` outside development — see [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md). |
+| `HERMES_NATS_CA_BUNDLE` | _(empty)_ | PEM file of the roots that verify the NATS server certificate. cert-manager signs `nats.hermes.svc` with a private CA that is in no system trust store, so in a real deployment this is how the connection can be verified at all; the deployment mounts it at `/etc/nats-certs/ca.crt`. Empty means "use the system pool", which is the local setting — `make infra-up` runs NATS without TLS. A path that is set but missing **fails the connection** rather than downgrading it. |
+| `HERMES_NATS_NKEY_SEED` | _(empty)_ | File holding this service's NATS NKey seed. The seed selects the service's user in `deploy/k8s/base/infra/nats-accounts.conf`, and with it the subjects that service may publish and subscribe to (see [NATS authorization](#nats-authorization) below). The deployment mounts it at `/etc/nats-nkey/seed.nk`. Empty connects anonymously, which only works against a server with no accounts — the local overlay. It is not a silent downgrade: a server that defines accounts answers an unauthenticated connection with an authorization violation, so a deployment that forgets the seed fails to start. Re-read on every reconnect, so a rotated Secret needs no restart. |
 | `HERMES_REDIS_URL` | `redis://localhost:6379/0` | Redis (cache, idempotency, Centrifugo engine). |
 | `HERMES_JWT_SECRET` | `hermes-jwt-secret` | Secret used to sign/verify Hermes-issued JWTs. |
 | `HERMES_API_KEY_HMAC_SECRET` | `hermes-dev-hmac-secret` | HMAC key for hashing/verifying API-key secrets. |
@@ -39,6 +41,100 @@ flags, because two settings that can disagree are worse than one that cannot. Ou
 development, `HERMES_DATABASE_URL` needs `sslmode=require` or stricter (`allow` and `prefer`
 are rejected — both silently fall back to plaintext), `HERMES_REDIS_URL` must use `rediss://`,
 and `HERMES_NATS_URL` must use `tls://`.
+
+### NATS authorization
+
+TLS encrypts the bus; it authorises nothing. Authorization is a second layer, added in
+[ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md) phase 3: the server
+defines a single `HERMES` account with **one NKey user per service**, each scoped to the
+subjects that service actually uses. The permissions live in
+`deploy/k8s/base/infra/nats-accounts.conf`, which both the base and staging server
+configurations `include`.
+
+| Service | Publishes | Consumes (consumer name) |
+|---|---|---|
+| `hermes-send` | `notification.send` | — |
+| `hermes-dispatch` | `delivery.email`, `delivery.sms`, `delivery.inbox`, `notification.events`, `dlq.notification.send` | `notification.send` (`dispatch`) |
+| `hermes-worker-email` | `notification.events`, `dlq.delivery.email` | `delivery.email` (`worker-email`) |
+| `hermes-worker-sms` | `notification.events`, `dlq.delivery.sms` | `delivery.sms` (`worker-sms`) |
+| `hermes-worker-inbox` | `notification.events`, `dlq.delivery.inbox` | `delivery.inbox` (`worker-inbox`) |
+| `hermes-worker-events` | `dlq.notification.events` | `notification.events` (`event-writer`) |
+| `hermes-natsprovision` | — (declares streams only) | — |
+| `centrifugo` | `centrifugo.>` | `centrifugo.>` |
+
+`hermes-admin`, `hermes-user` and `hermes-inbox` do not connect to NATS and have no credential.
+
+Two of those rows are not services:
+
+- **`hermes-natsprovision`** is a run-to-completion Job (ADR 0005 phase 4) and the **only**
+  identity that may create or update a stream. Services hold `$JS.API.STREAM.INFO.<STREAM>` for
+  the streams in `messaging.StreamsForService` and call `messaging.EnsureStreams` at boot, which
+  exits non-zero if a stream is missing. Streams are provisioned the way the database schema is:
+  by a Job that runs first. `STREAM.DELETE`, `STREAM.PURGE`, `CONSUMER.DELETE`, `DIRECT.GET`,
+  `STREAM.MSG.GET`, `STREAM.LIST` and `$JS.API.INFO` are granted to **nobody**.
+- **`centrifugo`** is the one **password** user on the bus, because `centrifugo:v5` exposes no
+  NKey setting in any form — the credential can only travel in `nats_url`'s userinfo. Its
+  password comes from `nats-nkeys/HERMES_CENTRIFUGO_NATS_PASSWORD` for the server and from
+  `hermes-secrets/HERMES_CENTRIFUGO_NATS_URL` for Centrifugo; `go run ./cmd/natskeys` emits both
+  from one value because nothing in the cluster checks they match. Centrifugo's TLS is configured
+  by `nats_tls` in `centrifugo-config.json` — a **map**, not a bool, and absent from
+  `centrifugo --help` entirely.
+
+Three things follow that are easy to trip over:
+
+- **A subject added in code needs a permission added here**, or the service fails at runtime
+  rather than at deploy. `TestAccounts_ConfCoversEverySubjectTheCodeUses` in
+  `internal/messaging` is the guard: it fails if a subject in `messaging.Streams` has no grant.
+  `TestAccounts_StreamInfoGrantsMatchStreamsForService` and
+  `TestAccounts_OnlyTheProvisionerMayDeclareStreams` guard the stream grants in both directions.
+- **JetStream is a separate permission surface.** Publishing to a stream subject is not enough;
+  declaring a stream needs `$JS.API.STREAM.CREATE|UPDATE.<STREAM>` (provisioner only), reading
+  one needs `$JS.API.STREAM.INFO.<STREAM>`, and consuming needs `$JS.API.CONSUMER.CREATE`,
+  `$JS.API.CONSUMER.MSG.NEXT` and `$JS.ACK` for that one stream and consumer name. A missing
+  JetStream grant looks like a broken stream, not a permissions problem — the request simply
+  never gets a reply.
+- **Each connection's reply inbox is scoped to `_INBOX.<service>`** by
+  `messaging.WithIdentity`. JetStream delivers pulled messages to the client's inbox, so a user
+  permitted to subscribe to `_INBOX.>` would receive copies of every other service's messages
+  and read `delivery.*` without any `delivery.*` permission. The narrow subscribe lists and the
+  client-side prefix are one mechanism; changing either alone breaks it.
+
+Generate a matched key set with `go run ./cmd/natskeys` (`-format json` for the payload the
+staging and production ExternalSecrets read). Each key's public half becomes a
+`$HERMES_NKEY_*` variable in the NATS server's environment; the seed is mounted into that one
+service's pod. Rotating one half of a pair alone locks that service out of the bus.
+
+#### Setting `HERMES_CENTRIFUGO_NATS_PASSWORD` by hand
+
+**The first character must be an ASCII letter.** If you rotate this password yourself rather
+than taking what `cmd/natskeys` emits, this is not a style preference — get it wrong and
+**nats-server will not start**.
+
+`nats-accounts.conf` reads the password as an unquoted `$VARIABLE`, and nats-server resolves
+such a reference by *re-parsing the value as a configuration document*. So the value has to
+lex as a bare conf value, and these do not:
+
+| Password | What nats-server does |
+|---|---|
+| `-Xk3f…` | `Parse error: 'Expected a digit but got 'X''` — a leading `-` starts a negative number |
+| `12-Xk3f…` | `All ISO8601 dates must be in full Zulu form` — a leading digit starts a number, and a later `-` makes it a date |
+| `2p2Xk3f…` | `Expected a top-level value to end…` — a size suffix (`kKmMgGtTpPeE`) then a digit ends the number early |
+| `1234567890`, `true`, `false` | No parse error at all: the value reaches the server as an integer or a bool instead of a string |
+
+A leading letter avoids every one of these, whatever follows it — `-` and `_` later in the
+value are fine. `cmd/natskeys` guarantees it by redrawing; nothing stops a hand-written
+`kubectl create secret` from ignoring it. About 2.3% of unconstrained 43-character base64url
+values hit a failing shape, which is intermittent enough to look like anything but the cause.
+
+Do **not** try to fix this by quoting the reference in `nats-accounts.conf`. NATS only treats
+an *unquoted* token as a variable, so quoting stops the lookup happening and sets Centrifugo's
+password to the literal string `$HERMES_CENTRIFUGO_NATS_PASSWORD` — no parse error, no log
+line, and a credential that is committed in git.
+`TestAccounts_CentrifugoPasswordReferenceMustNotBeQuoted` fails if anyone tries.
+
+Also: an **unset** variable is a parse error, but an **empty** one is not. Setting this to `""`
+starts the server and lets anyone connect as the `centrifugo` user with no credential. Verified
+on the wire; see `TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`.
 
 ### Email (`worker-email`)
 

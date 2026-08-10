@@ -23,6 +23,8 @@ resources:
   - services/
   - infra/
   - migration-job.yaml
+  # ADR 0005 phase 4. Streams are schema, so they are provisioned by a Job like the schema is.
+  - nats-provision-job.yaml
   - cleanup-cronjob.yaml
   - ingress.yaml
 
@@ -38,6 +40,11 @@ configMapGenerator:
       # No system trust store contains it. The path is the mount in every NATS client
       # pod; an empty value means "use the system pool", which is the local dev setting.
       - HERMES_NATS_CA_BUNDLE=/etc/nats-certs/ca.crt
+      # ADR 0005 phase 3. Where each service finds its own NKey seed. The path is the same
+      # in every pod because each Deployment projects only its own key from the nats-nkeys
+      # Secret to this fixed filename, so one shared value works and no service can name
+      # another's file. Empty means "connect anonymously", which is the local dev setting.
+      - HERMES_NATS_NKEY_SEED=/etc/nats-nkey/seed.nk
       - HERMES_CENTRIFUGO_API_URL=http://centrifugo:8000
       # OpenTelemetry — cluster-local Collector in the observability namespace.
       # Overlays may override to an out-of-cluster endpoint.

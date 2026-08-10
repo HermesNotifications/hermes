@@ -1,5 +1,7 @@
 # --- Variables ---
-SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate seed cleanup
+# natsprovision is a Job like migrate, not a long-running service: ADR 0005 phase 4 made it
+# the only identity that may declare JetStream streams.
+SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate natsprovision seed cleanup
 DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 
 # --- Build ---
@@ -31,6 +33,9 @@ lint:              ## Run golangci-lint
 # The completion gate for parallel agent work (.claude/ownership.json). Everything
 # here must run without cluster or cloud credentials, so it proves manifests and
 # compositions are well-formed -- not that they are correct against a live API.
+#
+# `tf-check` is deliberately NOT part of this target; it runs in CI instead. The
+# reasoning is recorded in full above that target, under "Terraform".
 .PHONY: verify verify-manifests
 verify:            ## Full local verification gate (no infra needed)
 	go build ./...
@@ -47,6 +52,83 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 	python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
 	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_networkpolicy_selectors.py -
 	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_networkpolicy_selectors.py -
+	@# ADR 0005 phase 4: the CA private key must not render into the application namespace.
+	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_ca_key_location.py - --namespace hermes
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_ca_key_location.py - --namespace hermes
+	@# ADR 0006. A Job's spec.template is immutable and Kargo rewrites its image tag on every
+	@# promotion, so a Job that is not an ArgoCD hook applies once and fails the SECOND
+	@# promotion with `field is immutable` -- while the Application still reports Healthy.
+	@# Established by stashing the fix rather than assuming: every other step in this target
+	@# passes identically with that defect present and absent.
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_job_hooks.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_job_hooks.py -
+	@# Finding 36. A one-character typo in a PDB selector (`hermes-sned`) took expectedPods
+	@# from 3 to 0 with no error from kustomize, kubectl or the API server.
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_pdb_selectors.py -
+	@# Finding 8. hermes-send rendered with no resource requests, no HPA and no PDB and
+	@# nothing objected. An HPA whose target declares no request for the resource it measures
+	@# reports ScalingActive=False / FailedGetResourceMetric and silently never scales.
+	@# The local overlay is deliberately exempt -- see the module docstring for why.
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_workload_resources.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_workload_resources.py - --require-hpa
+	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
+	@# or rejects. It shipped with 17 passing tests that nothing ran.
+	./infra/scripts/test-lib.sh
+	$(MAKE) verify-chart
+
+# The chart's only previous control was `helm template ... > /dev/null` in CI, which
+# proves the templates parse and asserts nothing about what they produce. That is how the
+# chart reached main missing the natsprovision Job (six services crash-loop at boot),
+# routing /v1/types and /v1/groups (no handler since the rename), having no rule at all
+# for /v1/templates, /v1/apikeys, /v1/organizations or /v1/subscriptions, and rendering
+# the bundled NATS images under the Hermes registry. All of it renders cleanly.
+.PHONY: verify-chart
+verify-chart:      ## Check the rendered Helm chart against the Go source it deploys
+	@# Absent helm must fail loudly. A gate that skips when its tool is missing is the
+	@# same class of defect as the one this target exists to close.
+	@command -v helm >/dev/null 2>&1 || { \
+	  echo "ERROR: helm not found on PATH."; \
+	  echo "  The Helm chart gate cannot run without it, and skipping it is how the chart"; \
+	  echo "  drifted in the first place. Install Helm v3:"; \
+	  echo "    https://helm.sh/docs/intro/install/"; \
+	  exit 1; }
+	helm dependency build charts/hermes/
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  | python3 scripts/check_helm_render.py - --source-root=.
+	@# Optional features render into workloads the default install never produces, so they
+	@# need their own pass -- hermes-cleanup was missing from the cd.yml publish matrix and
+	@# only shows up when the CronJob renders.
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
+	  --set observability.enabled=true \
+	  | python3 scripts/check_helm_render.py - --source-root=.
+	@# The production posture must be refused at render time, not discovered as a
+	@# crash-loop. Bundled sub-charts cannot satisfy config.Validate(), so this must fail.
+	@if helm template verify charts/hermes/ \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set global.domain=verify.example.com --set hermes.env=production >/dev/null 2>&1; then \
+	  echo "ERROR: hermes.env=production rendered with the bundled sub-charts."; \
+	  echo "  It must fail: _validate.tpl should refuse a combination whose workloads all"; \
+	  echo "  exit at startup on config.Validate()."; \
+	  exit 1; \
+	fi
+	@echo "ok: production install with bundled sub-charts is refused at render time"
+	@# No hermes-admin-portal image exists and nothing here can build one, so enabling it
+	@# on chart defaults must be refused rather than deferred to ImagePullBackOff.
+	@if helm template verify charts/hermes/ \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set global.domain=verify.example.com --set adminPortal.enabled=true >/dev/null 2>&1; then \
+	  echo "ERROR: adminPortal.enabled=true rendered against the unpublished default image."; \
+	  echo "  It must fail: _validate.tpl should require adminPortal.image.repository to be"; \
+	  echo "  overridden with an image the operator built themselves."; \
+	  exit 1; \
+	fi
+	@echo "ok: admin portal on the unpublished default image is refused at render time"
 
 # --- Helm ---
 .PHONY: helm-lint
@@ -103,6 +185,61 @@ sdk-dotnet:        ## Generate .NET server SDK
 		--additional-properties=packageName=Hermes.ServerSdk,targetFramework=net8.0,hideGenerationTimestamp=true,packageGuid='{102EB2C0-41DB-427A-A9EF-333D033706BE}' \
 		--global-property=skipFormModel=true
 sdk-generate: openapi sdk-ts-generate sdk-ts-build sdk-python sdk-java sdk-dotnet  ## Full pipeline: specs → types → build
+
+# --- Parallel development sandboxes (one namespace per worker) ---
+#
+# For running several agents or developers against one k3s cluster without them
+# colliding. Each worker gets its own namespace holding Postgres, Redis, NATS with
+# JetStream, and Mailpit. See docs/development.md.
+#
+# WORKER defaults to your username so `make devworker-up` is safe to type without
+# thinking; CI and agents should pass it explicitly.
+WORKER ?= $(USER)
+DEVWORKER_NS := hermes-dev-$(WORKER)
+
+.PHONY: devworker-up devworker-down devworker-list devworker-env
+devworker-up:      ## Create an isolated dev sandbox namespace (WORKER=name)
+	@kubectl create namespace $(DEVWORKER_NS) --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+	@# Labelled so devworker-list can find sandboxes without pattern-matching names, and
+	@# so a stray sandbox is identifiable as disposable rather than someone's real work.
+	@kubectl label namespace $(DEVWORKER_NS) hermes.io/devworker=true --overwrite >/dev/null
+	@# deploy/k8s/devworker deliberately sets no `namespace:` anywhere, so `-n` places
+	@# everything. That is what makes this parallel-safe: no shared file is edited, and
+	@# no throwaway overlay is needed (kustomize also rejects absolute `resources` paths).
+	kubectl kustomize deploy/k8s/devworker | kubectl apply -n $(DEVWORKER_NS) -f -
+	@echo "waiting for $(DEVWORKER_NS) to become ready..."
+	@kubectl -n $(DEVWORKER_NS) wait --for=condition=Ready pod --all --timeout=180s
+	@$(MAKE) --no-print-directory devworker-env WORKER=$(WORKER)
+
+devworker-down:    ## Delete a dev sandbox namespace and its volumes (WORKER=name)
+	kubectl delete namespace $(DEVWORKER_NS) --wait=false
+
+devworker-list:    ## List all dev sandbox namespaces
+	@kubectl get ns -l hermes.io/devworker=true --no-headers 2>/dev/null || \
+		kubectl get ns --no-headers | grep '^hermes-dev-' || echo "no sandboxes"
+
+devworker-env:     ## Print eval-able env vars pointing at a sandbox (WORKER=name)
+	@# Emits ClusterIPs, not .svc DNS names. Cluster DNS does not resolve from the host,
+	@# but on a k3s node the host CAN route to both service and pod CIDRs — verified. So
+	@# these URLs work directly from a shell, with no port-forward.
+	@#
+	@# Node-local by nature: these addresses are only reachable from this machine.
+	@set -e; ns=$(DEVWORKER_NS); \
+	ip() { kubectl -n $$ns get svc $$1 -o jsonpath='{.spec.clusterIP}'; }; \
+	nats_ip() { kubectl -n $$ns get pod nats-0 -o jsonpath='{.status.podIP}'; }; \
+	echo "# eval \"\$$(make devworker-env WORKER=$(WORKER))\""; \
+	echo "export HERMES_ENV=development"; \
+	echo "export HERMES_DATABASE_URL='postgres://hermes:hermes@$$(ip postgres):5432/hermes?sslmode=disable'"; \
+	echo "export HERMES_REDIS_URL='redis://$$(ip redis):6379'"; \
+	echo "# NATS is a headless Service (no ClusterIP), so this is the pod IP and it"; \
+	echo "# changes if nats-0 restarts. Re-run this target after a restart."; \
+	echo "export HERMES_NATS_URL='nats://$$(nats_ip):4222'"; \
+	echo "export HERMES_EMAIL_SMTP_HOST='$$(ip mailpit)'"; \
+	echo "export MAILPIT_SMTP_HOST='$$(ip mailpit)'"; \
+	echo "export MAILPIT_API_URL='http://$$(ip mailpit):8025'"; \
+	echo "export HERMES_DYNAMO_ENDPOINT='http://$$(ip dynamodb-local):8000'"; \
+	echo "export HERMES_DYNAMO_REGION=us-east-1"; \
+	echo "export AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy"
 
 # --- Infrastructure ---
 .PHONY: infra-up infra-down migrate seed
@@ -242,7 +379,42 @@ dev-ui:
 # Terraform (requires AWS credentials)
 # =============================================================================
 
-.PHONY: tf-plan tf-apply tf-destroy tf-bootstrap
+.PHONY: tf-plan tf-apply tf-destroy tf-bootstrap tf-check
+
+# Credential-free Terraform checks. ADR 0007 records that `terraform validate`,
+# `terraform fmt -check` and variable-validation truth tables WERE executed during that
+# work -- by hand, once, and then never again, because Terraform appeared in neither
+# `make verify` nor CI. That is this repository's signature defect: a control that ran
+# once and does not run.
+#
+# This target is called by the `terraform` job in .github/workflows/ci.yml, so it now runs
+# on every merge. It fails loudly when terraform is absent rather than skipping: a gate
+# that goes quiet when its tool is missing is the same defect as no gate at all, and it is
+# the reason `verify-chart` has the identical guard for helm.
+#
+# WHY THIS IS NOT IN `make verify`, deliberately and against the usual rule that every
+# gate belongs in both. `verify` is the completion gate every agent and developer runs, and
+# it is documented above as needing no cluster and no cloud credentials. `terraform init`
+# needs neither of those but does need the network and a ~700MB provider download, and a
+# hard failure on a missing binary would have made `verify` red for every unit in this
+# remediation batch -- none of which had terraform installed, and none of which touched
+# infra/terraform. The predictable response to that is that people stop running `verify`,
+# which costs more than the gap it closes. CI has terraform unconditionally, so the check
+# genuinely runs on the merge path, which is the half that was actually missing.
+#
+# Run it locally with `make tf-check` when you touch infra/terraform.
+tf-check:        ## Credential-free terraform fmt/validate (runs in CI; needs terraform)
+	@command -v terraform >/dev/null 2>&1 || { \
+	  echo "ERROR: terraform not found on PATH."; \
+	  echo "  This gate cannot run without it, and skipping it is how infra/terraform came"; \
+	  echo "  to have no automated check at all. Install Terraform:"; \
+	  echo "    https://developer.hashicorp.com/terraform/install"; \
+	  exit 1; }
+	terraform -chdir=infra/terraform fmt -check -recursive
+	@# -backend=false: no S3 backend, no credentials, no state. This still resolves the
+	@# module graph and the provider schemas, which is what makes `validate` mean anything.
+	terraform -chdir=infra/terraform init -backend=false -input=false
+	terraform -chdir=infra/terraform validate
 
 tf-plan:         ## Plan infra changes (usage: make tf-plan ENV=staging)
 	@test -n "$(ENV)" || { echo "Usage: make tf-plan ENV=staging"; exit 1; }

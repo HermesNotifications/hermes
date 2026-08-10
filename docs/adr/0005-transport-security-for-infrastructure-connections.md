@@ -5,14 +5,20 @@ status: Accepted
 affects:
   - internal/config/**
   - internal/messaging/**
-  - deploy/k8s/base/infra/nats.yaml
+  - deploy/k8s/base/infra/**
+  - deploy/k8s/base/services/**
+  - deploy/k8s/overlays/**
+  - cmd/natskeys/**
   - infra/crossplane/**
 source: docs/reviews/2026-07-27-architecture-review.md — findings 1, 14 and 19; triage of 2026-07-29
 ---
 
 # ADR 0005: Transport security for infrastructure connections
 
-**Status:** Accepted (2026-07-29)  
+**Status:** Accepted (2026-07-29; amended 2026-07-31: the Centrifugo password's first character
+must be an ASCII letter — a cross-component contract binding `cmd/natskeys`, `nats-accounts.conf`
+and anyone setting the Secret by hand; amended 2026-08-05: review findings 38/39 referenced
+below renumbered to 52/53, references only)  
 **Date:** 2026-07-29  
 **Author:** Daryl Robbins
 
@@ -211,6 +217,292 @@ issuer cannot sign an internal name) but it was reasoned, not observed.
   picked up at the next restart. Untested through an actual expiry cycle; a reloader annotation
   or SIGHUP sidecar may be wanted before certificates get short lifetimes.
 
+## Amendment 2026-07-30 — phase 3 implemented; least privilege reached, with one named gap
+
+Phase 3 (NKey accounts and per-service subject permissions) is done, and the decision stands
+as written: one `HERMES` account, one NKey user per service, users scoped to the subjects they
+use, credentials delivered through ExternalSecrets. What follows is what implementation
+settled, verified against the same k3s cluster and cert-manager v1.21.0 phase 2 used, plus an
+embedded `nats-server` in `make test`.
+
+**The permissions were derived from an observed protocol trace, not from the subject list.**
+Running `internal/messaging` against a traced JetStream server showed what the code actually
+emits, and two of the four things it emits are not subjects at all:
+
+- `SetupStreams` publishes `$JS.API.STREAM.UPDATE.<S>` *and* `$JS.API.STREAM.CREATE.<S>` —
+  `CreateOrUpdateStream` tries UPDATE first and falls back on "stream not found", so both are
+  required. Granting only CREATE makes first boot work and every boot after it hang.
+- Consuming needs `$JS.API.CONSUMER.CREATE.<S>.<consumer>.<filter…>`,
+  `$JS.API.CONSUMER.MSG.NEXT.<S>.<consumer>` and `$JS.ACK.<S>.<consumer>.>`. A missing
+  JetStream grant produces no error — the request gets no reply and times out — which is why
+  this record's warning about runtime failure understates it: it looks like a broken stream.
+
+1. **A pull consumer needs no `subscribe` permission on the stream subject, and that moves the
+   boundary.** Messages arrive on the client's own reply inbox, not on `delivery.email`. So
+   `subscribe: _INBOX.>` — the obvious grant — would let any service receive copies of every
+   other service's pulled messages, reading recipient addresses and rendered bodies with no
+   `delivery.*` permission at all. `messaging.WithIdentity` therefore confines each connection
+   to `_INBOX.<service>` and each user may subscribe to only its own prefix. **The client-side
+   prefix and the server-side permission are one mechanism; changing either alone reopens the
+   hole.** This was the least obvious finding of the phase and is verified in both directions.
+2. **The permissions live in their own file, `nats-accounts.conf`, included by both server
+   configurations.** Staging's `secretGenerator` changed from `behavior: replace` to `merge`:
+   replace would have dropped the `accounts.conf` key, silently removing all authorisation from
+   staging while leaving TLS in place. That is the exact failure this record warns about, and
+   it would have been invisible in a rendered diff of `nats.conf`.
+3. **Users are named by `$VARIABLE`, resolved from the server's environment.** Permissions stay
+   reviewable in git; identities stay per-environment in the `nats-nkeys` Secret. Verified
+   fail-closed in-cluster: with the Secret deleted the server refuses to start with
+   `variable reference for 'HERMES_NKEY_SEND' ... can not be found` rather than starting with
+   no accounts. `go run ./cmd/natskeys` generates a matched set.
+4. **`HERMES_NATS_NKEY_SEED` is not required outside development**, following the same
+   reasoning as `HERMES_NATS_CA_BUNDLE` in the phase 2 amendment: a server with accounts
+   answers an unauthenticated CONNECT with an authorization violation, so an unset seed is a
+   refused connection at startup, not a quieter one. Verified, both in `make test` and against
+   the cluster.
+5. **The inbox service lost its NATS connection entirely.** It held a `*messaging.Client` no
+   code read. Under per-service credentials a connection costs an identity and a permission
+   set, so the dead client was a credential granted for nothing; it is deleted rather than
+   given a no-permission user.
+6. **`nats:2-alpine` accepts the accounts configuration**, answering one of this record's "what
+   I could not check" items. Verified on the image's current 2.14.3 and on the embedded 2.12.6.
+
+**Where least privilege is not achieved, and why.** Every service calls `SetupStreams` at boot,
+so **every user can create or update all four streams** — including streams it neither
+publishes to nor consumes. Deletion, purge, direct get and listing are granted to nobody, so
+the residual is stream-config tampering (an availability concern), not reading or forging
+traffic. Fixing it properly means moving stream provisioning to a single identity, which trades
+a startup ordering guarantee for the narrower grant; that was judged the worse deal while
+`MustSetupStreams` exits non-zero on failure. Revisit if a provisioning job appears for other
+reasons.
+
+**Unresolved, and now urgent: Centrifugo cannot use this bus.** `centrifugo:v5` (5.4.9) exposes
+exactly one NATS setting, `--nats_url`, documented as `nats://user:pass@host:4222`. There is no
+NATS CA, TLS or NKey option. The base ConfigMap still sets `nats_url: nats://nats:4222` and
+neither overlay changes it, so **Centrifugo's NATS broker was already incompatible with phase
+2** — plaintext against a TLS-required server — and phase 3 adds authentication it also cannot
+present. Phase 3 deliberately does **not** add a Centrifugo user: what credential form it can
+actually present was not verified, and inventing one would be a guess. NATS accounts do support
+password users alongside NKey users, so a password in `nats_url` is the likely path, but the TLS
+half has no evident answer short of a sidecar or a plaintext listener. This blocks multi-node
+Centrifugo fan-out in staging and production and is not a phase 3 regression.
+
+## Amendment 2026-07-30 — phase 4: the three things phases 1–3 left open
+
+Phase 3 closed finding 1 and named three residual items. All three are now settled. The
+decision stands; two of the three change details this record previously argued the other way,
+and both departures are set out below with what changed the answer. Verified against the same
+k3s cluster and cert-manager v1.21.0, plus the embedded `nats-server` in `make test`.
+
+### 1. Centrifugo can use the bus after all — TLS *and* a credential
+
+The phase 3 amendment recorded that `centrifugo:v5` "exposes exactly one NATS setting,
+`--nats_url`" and that "the TLS half has no evident answer short of a sidecar or a plaintext
+listener". **That was wrong, and wrong in a way worth recording: `--help` is not the
+configuration surface.** Centrifugo registers configuration keys that have no flag equivalent,
+and one of them is `nats_tls`. Established by reading the image's registered keys and struct
+tags and then executing every candidate against a TLS-required `nats-server`:
+
+```json
+"nats_url": "tls://nats:4222",
+"nats_tls": { "enabled": true, "server_ca_pem_file": "/etc/nats-certs/ca.crt" }
+```
+
+Three details are load-bearing and each was observed, not inferred:
+
+- **`nats_tls` is a map, not a bool.** `"nats_tls": true` is rejected with
+  `error configuring nats tls: extract TLS config: '' expected a map, got 'bool'`. The
+  overlays' existing `CENTRIFUGO_REDIS_TLS: "true"` *is* a bool, so the natural guess by
+  analogy is the wrong one — which is most likely why phase 3 concluded the option did not
+  exist.
+- **`"enabled": true` is required.** With it false the CA is ignored and the connection fails
+  `x509: certificate signed by unknown authority`.
+- **A plaintext `nats://` URL was never the actual failure.** nats.go upgrades to TLS when the
+  server advertises `tls_required`, so the pre-phase-4 base ConfigMap failed on *CA
+  verification*, not on a refused plaintext connection. The practical difference matters: there
+  was never a silent-plaintext path here either.
+
+**Centrifugo is a password user, not an NKey user.** No NKey setting exists in any form — no
+flag, no config key, no environment variable. The credential can only travel in `nats_url`'s
+userinfo, so `nats-accounts.conf` gains a `centrifugo` password user beside the six NKey users,
+which NATS supports natively. **A client certificate would have been possible**
+(`nats_tls.cert_pem_file`/`key_pem_file` exist) and was not used: this record already argues
+that mTLS without accounts authenticates a connection while granting every subject, and a
+password user with a subject scope is the thing that actually constrains Centrifugo.
+
+Its subject space is granted as the prefix `centrifugo.>` in both directions rather than as the
+three observed patterns. That restricts nothing further — all three of `centrifugo.control`,
+`centrifugo.node.<nodeID>` and `centrifugo.client.<channel>` are needed for publish *and*
+subscribe — while avoiding a trap: a subject added by a future Centrifugo version would fail
+**silently**. Observed with the subscribe grant narrowed: the server logs
+`Permissions Violation for Subscription`, the client stays connected, and publications simply
+never arrive. Nothing surfaces to the subscriber.
+
+Two consequences that are not obvious:
+
+- **The password is stored twice** — as `centrifugo_password` for nats-server and inside
+  `centrifugo_nats_url` for Centrifugo — because Centrifugo has no separate password setting.
+  Nothing in the cluster checks that they agree. `cmd/natskeys` therefore emits both from one
+  generated value, and a test asserts the URL round-trips the password through `url.Parse`.
+- **nats-server holds a plaintext password in its process environment.** NATS supports bcrypt
+  for password users, which would keep only a hash server-side; it is not used here because the
+  two halves would then need generating and rotating as a pair with no cross-check. Worth
+  revisiting if the NATS config Secret and the client Secret ever diverge in blast radius.
+
+### 2. Stream provisioning is one identity — reversing this record's earlier judgement
+
+Phase 3 judged a provisioning identity "the worse deal while `MustSetupStreams` exits
+non-zero", because self-declaration means any service can heal a missing stream at boot. **That
+trade was framed as a binary and it is not one.** The startup-ordering guarantee comes from
+services *failing closed on a stream they need*, not from their being able to create it. So
+services now **verify** instead of declaring:
+
+- `cmd/natsprovision` runs as a Job and is the only identity holding
+  `$JS.API.STREAM.CREATE.<S>` and `…UPDATE.<S>`.
+- Services hold `$JS.API.STREAM.INFO.<S>` — a read — for only the streams in
+  `messaging.StreamsForService`, and `MustEnsureStreams` exits non-zero if one is absent.
+
+The guarantee phase 3 wanted to keep is kept; what is given up is self-healing. That is the
+same bargain the repository already makes for the database: streams are schema, and schema is
+provisioned by a Job that runs first, with a crash-loop as the convergence mechanism. Verified
+by running the real binaries against a real TLS+NKey server: a worker on a fresh bus exits 1
+with `stream DELIVERY is not available to hermes-worker-email (has cmd/natsprovision run?)`,
+and starts normally once the Job's binary has run.
+
+`STREAM.INFO` is a new grant and does leak stream configuration and message counts to the
+services that depend on that stream. That is a read of metadata, not of traffic, and it is
+scoped per stream — `TestProvisioning_ServicesCannotReadStreamsTheyDoNotDependOn` asserts the
+refusals. **`STREAM.DELETE`, `STREAM.PURGE`, `CONSUMER.DELETE`, `DIRECT.GET`, `STREAM.MSG.GET`,
+`STREAM.LIST` and `$JS.API.INFO` remain granted to nobody, the provisioner included** — which
+is why removing streams during verification required a fresh server rather than a delete call.
+
+The cost is a new deployable: an image, a CI matrix entry, a Kargo subscription, a Job, and one
+more NKey. The Job inherits `hermes-migrate`'s unsolved problem — a Job's pod template is
+immutable, so re-applying a changed one needs an Argo PreSync hook, which is commented out for
+both.
+
+### 3. The CA private key is out of the application namespace — departing from amendment 1
+
+The phase 2 amendment chose a namespaced `Issuer` because "a namespaced issuer cannot be
+borrowed by a workload in another namespace", and accepted that the CA key therefore sat in
+`hermes`. The CA is now a `ClusterIssuer`, with the signing Secret in cert-manager's
+cluster-resource namespace (`--cluster-resource-namespace=$(POD_NAMESPACE)` = `cert-manager`,
+read off the running Deployment). Verified: a Certificate in an unrelated namespace issued from
+a `ca` ClusterIssuer whose Secret exists only in `cert-manager`, and only the leaf — `ca.crt`,
+`tls.crt`, `tls.key`, `CA:FALSE` — landed in the requesting namespace.
+
+**Phase 2's reasoning was not wrong, and its cost is real.** A ClusterIssuer can be used by a
+Certificate in *any* namespace; that was verified too, by minting a certificate with SAN
+`nats.hermes.svc` from a namespace that is not `hermes`. This is a trade, made deliberately:
+
+- The CA key is the ten-year root of the entire internal trust domain and is never rotated.
+  Reading it is silent, offline, untraceable, and yields unlimited certificates for any
+  identity — including identities that do not exist yet.
+- Requesting a leaf is a logged Kubernetes API write that leaves `Certificate` and
+  `CertificateRequest` objects behind, needs create permission on cert-manager CRDs, and yields
+  one 90-day certificate.
+- Secret-read in an application namespace is a common grant that tends to widen — this record's
+  own phase 2 amendment says "revisit if the namespace gains broader Secret readers".
+  Cluster-wide Certificate-create is rarer and is constrainable by admission policy or by
+  cert-manager's CertificateRequest approval RBAC.
+
+Trading an unbounded invisible compromise for a bounded auditable one is worth it. **The
+residual is not closed:** any namespace may still request a certificate this CA signs, and
+nothing in this repository constrains that. Closing it needs admission policy or approver RBAC,
+neither of which is in scope here.
+
+Two things this depends on that are easy to break:
+
+- **`deploy/k8s/pki` must not be reached from inside `base/`.** `base/kustomization.yaml` sets
+  `namespace: hermes`, and the kustomize namespace transformer would rewrite the CA
+  Certificate's `namespace: cert-manager` — putting the key straight back where this change
+  removes it from, with a manifest that applies cleanly and certificates that still issue.
+  Nothing about the failure is visible in behaviour, so
+  `scripts/check_ca_key_location.py` fails the build on it and runs in `make verify`.
+- **The hardcoded `cert-manager` namespace couples Hermes to where cert-manager runs.** If they
+  disagree the ClusterIssuer reports `Ready: False` with
+  `ErrGetKeyPair: ... secrets "hermes-internal-ca-tls" not found` and issues nothing — loud,
+  observed, but it is a coupling that did not exist before. Hermes' manifests now also write one
+  resource into a namespace they do not own.
+
+### What this phase could not check
+
+- **Nothing was applied to a real staging or production cluster.** No AWS, no ESO: the new
+  `HERMES_CENTRIFUGO_NATS_URL`, `HERMES_CENTRIFUGO_NATS_PASSWORD` and provisioner ExternalSecret
+  entries are structurally valid and untested against a real secret store.
+- **`hermes-natsprovision` has never been run as a Kubernetes Job.** The binary was verified
+  against a real TLS+NKey server in a container with the same configuration the Job supplies;
+  the Job manifest itself, its ordering against services, and its image tag reaching staging
+  through Kargo are unexercised.
+- **Two Hermes installs in one cluster would now collide** on the cluster-scoped ClusterIssuer
+  names and the CA Secret name. They already could not coexist — `base/kustomization.yaml` pins
+  both overlays to the `hermes` namespace — so this adds no new constraint today, but it removes
+  the option.
+- **Certificate renewal through the new ClusterIssuer was not exercised through an expiry
+  cycle**, and neither was the phase 2 note that NATS reloads certificates only on SIGHUP.
+- **Centrifugo's Redis auth in production** (finding 41's second half) was not touched. The
+  production ExternalSecret does now carry `HERMES_CENTRIFUGO_REDIS_PASSWORD`, but its
+  `centrifugo-env.yaml` patch still does not set `CENTRIFUGO_REDIS_PASSWORD` or the Redis TLS
+  variables that staging sets — a separate, still-open gap.
+
+## Amendment 2026-07-31 — the Centrifugo password's first character is a cross-component contract
+
+Phase 4 introduced `centrifugo` as a password user (amendment item 1 above) and left the
+password's *shape* unstated, on the reasonable assumption that a password is an opaque string.
+It is not, and the gap is recorded here because it binds three components that have no other
+contact with each other.
+
+**The constraint.** The generated Centrifugo NATS password **must begin with an ASCII letter**.
+
+**Why.** `nats-accounts.conf` carries the credential as an unquoted variable reference,
+`password: $HERMES_CENTRIFUGO_NATS_PASSWORD`. nats-server does not substitute such a reference:
+`conf/parse.go`'s `lookupVariable` resolves it by **re-parsing the environment value as a fresh
+configuration document**. The password therefore has to lex as a bare conf value. Enumerated
+against the real parser (nats-server v2.12.6) rather than modelled, the failing shapes are a
+leading `-`, a leading digit whose first non-digit is `-`, and a leading digit followed by a
+size suffix and another digit. A leading ASCII letter is always safe whatever follows.
+Unconstrained 43-character base64url hits a failing shape in **2.33%** of draws (465 of 20,000
+through the real parser), which is why it presented as an intermittent, differently-worded test
+failure rather than as a configuration bug.
+
+**Why this is an ADR amendment and not just a code comment.** The constraint is currently
+enforced in `cmd/natskeys` and described in `docs/configuration.md`, and that is the whole of
+it — but it binds:
+
+- **the generator** (`cmd/natskeys`), which must redraw until the first character is a letter;
+- **the config file** (`deploy/k8s/base/infra/nats-accounts.conf`), whose reference must stay
+  **unquoted** — quoting is not a fix and must never be applied. NATS reaches `isVariable()`
+  only from `lexString`, so both `"$HERMES_…"` and `'$…'` resolve Centrifugo's password to the
+  *literal* variable name: no parse error, no log line, a credential published in git, and
+  Centrifugo unable to authenticate. Strictly worse than the bug;
+- **any human** who sets `HERMES_CENTRIFUGO_NATS_PASSWORD` by hand with
+  `kubectl create secret` or by editing Secrets Manager, who has no other way to learn this.
+
+A rule that three independent parties must honour, where violating it stops the whole bus
+starting, is a cross-component contract — and one that is invisible in each component
+separately, which is exactly the kind this record exists to hold.
+
+**Scope.** The `$HERMES_NKEY_*` references have identical exposure and are safe **by luck, not
+by design**: an nkeys user public key is `U` followed by base32 `[A-Z2-7]`, so it always begins
+with a letter and never contains `-`. That is now asserted
+(`TestAccounts_NKeyVariablesCannotHitTheFailingShapes`) rather than assumed, so a key-format
+change becomes a red test rather than a cluster that will not start.
+
+**Still open, and not closed by this amendment (finding 53, issue #82).** An *empty*
+`HERMES_CENTRIFUGO_NATS_PASSWORD` parses cleanly, starts the server, and lets a client connect
+as `centrifugo` with no credential at all — verified on the wire. The conf language cannot
+express "must be non-empty", so it cannot be closed in the file that documents the guarantee.
+The owner is now determined: an initContainer on the NATS StatefulSet
+(`deploy/k8s/base/infra/nats.yaml`), which is the only candidate that can deliver "a
+half-provisioned cluster fails to start" rather than reporting the problem after nats-server is
+already serving. `internal/config` cannot (no Hermes process reads the variable) and
+`cmd/natsprovision` should not (it would have to impersonate `centrifugo` with an empty
+credential on every deploy). The complication a fix must handle is that the local overlay drops
+`-c nats.conf` and legitimately has no password, so the guard needs a matching removal patch
+there. The behaviour is pinned meanwhile by
+`TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`, which is deliberately **not**
+flipped: it characterises nats-server's parser, which is upstream and unchanged.
+
 ## Status history
 
 - 2026-07-29 — Accepted. Written before implementation, to unblock findings 1, 14 and 19,
@@ -220,3 +512,30 @@ issuer cannot sign an internal name) but it was reasoned, not observed.
   details settled above; the claim about the existing Let's Encrypt ClusterIssuer corrected
   from observed to reasoned. Phases 1 and 2 are done; **phase 3 (NKey accounts and
   per-service subject permissions) remains open** and is where authn/authz actually arrives.
+- 2026-07-30 — Amended: phase 3 implemented and verified both in `make test` (embedded
+  nats-server loading the committed permissions file) and against the k3s cluster. **All three
+  phases are now done**, and finding 1 is closed. One residual over-grant is named above
+  (stream create/update for every service), and one blocker is surfaced rather than solved
+  (Centrifugo's NATS broker cannot present TLS or a credential).
+- 2026-07-30 — Amended: **phase 4**, closing all three items phase 3 left open. Centrifugo now
+  reaches the bus over TLS as a password user — the phase 3 amendment's claim that
+  `centrifugo:v5` has no TLS option is **corrected**, it has an undocumented `nats_tls`
+  configuration key with no flag equivalent. Stream declaration moved to a single provisioning
+  identity (`cmd/natsprovision`), **reversing** phase 3's judgement that the trade was not worth
+  making, because services can fail closed on a stream without being able to create it. The CA
+  private key moved out of the `hermes` namespace into a `ClusterIssuer`, **departing** from the
+  phase 2 amendment's preference for a namespaced `Issuer`; that departure is a deliberate trade
+  and its residual — any namespace may request a certificate this CA signs — is named and not
+  closed.
+- 2026-07-31 — Amended (clarification, no decision changed): the Centrifugo password's **first
+  character must be an ASCII letter**, because `nats-accounts.conf` references it unquoted and
+  nats-server resolves such a reference by re-parsing the value as a configuration document.
+  ~2.3% of unconstrained base64url draws otherwise stop the server starting. Recorded here
+  rather than left in `cmd/natskeys` alone because it binds the generator, the config file (whose
+  reference must stay **unquoted** — quoting silently publishes the literal variable name as the
+  password) and any human creating the Secret by hand. Finding 53 — an *empty* password
+  authenticates — remains open, but its owner is now determined: an initContainer on the NATS
+  StatefulSet, not `internal/config` and not `cmd/natsprovision`, with reasons recorded above.
+- 2026-08-05 — Amended (correction, no decision changed): the two review findings referenced
+  above were filed as 38 and 39, numbers already held by other findings, and are now **52**
+  (the unquoted `$VARIABLE`) and **53** (the empty password). Only the references changed.

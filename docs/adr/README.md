@@ -14,8 +14,12 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0002](0002-provider-plugin-model-bus-native-isolation.md) | Adopt a provider plugin model with bus-native (NATS subject) isolation | Accepted | 2026-06-13 |
 | [0003](0003-rename-tenant-to-organization.md) | Rename `tenant` to `organization`, and name the app as the isolation boundary | Accepted | 2026-07-27 |
 | [0004](0004-ownership-manifest-for-review-remediation.md) | Ownership manifest for the review-remediation batch, with auth owned by a unit rather than escalated | Accepted | 2026-07-29 |
-| [0005](0005-transport-security-for-infrastructure-connections.md) | Authenticate and encrypt connections to NATS, Postgres and Redis, with a config surface rather than connection-string archaeology | Accepted | 2026-07-29 |
-| [0006](0006-embeddable-inbox-widget-contract.md) | Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React | Accepted | 2026-07-30 |
+| [0005](0005-transport-security-for-infrastructure-connections.md) | Authenticate and encrypt connections to NATS, Postgres and Redis, with a config surface rather than connection-string archaeology | Accepted (amended 2026-08-05) | 2026-07-29 |
+| [0006](0006-migration-job-as-an-argocd-presync-hook.md) | Run the migration Job as an ArgoCD `PreSync` hook, and gate the sync on it | Accepted (amended 2026-07-31) | 2026-07-30 |
+| [0007](0007-aws-network-and-control-plane-posture.md) | Fix the AWS network address plan and the EKS control-plane posture before either environment exists | Accepted | 2026-07-31 |
+| [0008](0008-helm-chart-provisioning-jobs-are-not-hooks.md) | Run the Helm chart's provisioning Jobs as plain resources, not Helm hooks | Accepted | 2026-07-31 |
+| [0009](0009-bundled-datastores-as-plain-manifests-on-official-images.md) | Ship the bundled evaluation Postgres and Redis as plain manifests on Docker Official Images | Accepted | 2026-07-31 |
+| [0010](0010-embeddable-inbox-widget-contract.md) | Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React | Accepted | 2026-07-30 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

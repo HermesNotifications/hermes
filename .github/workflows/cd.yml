@@ -39,6 +39,14 @@ jobs:
           - inbox
           - user
           - migrate
+          # ADR 0005 phase 4. Run-to-completion like migrate: the only bus identity that may
+          # declare a JetStream stream. Services fail closed without it, so it must ship.
+          - natsprovision
+          # charts/hermes/templates/cleanup-cronjob.yaml references hermes-cleanup, and this
+          # matrix did not build it — so `hermes.cleanup.enabled=true` was an ImagePullBackOff.
+          # Caught by scripts/check_helm_render.py, which reads this list to decide whether an
+          # image under the Hermes registry actually exists.
+          - cleanup
     env:
       # The exact commit CI validated. For workflow_run, github.sha is the branch
       # tip (which can race ahead), so we pin to the run's head_sha; for tag

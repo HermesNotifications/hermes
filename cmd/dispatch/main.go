@@ -31,8 +31,11 @@ func main() {
 	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
 	defer pool.Close()
 
-	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger, messaging.WithCABundle(cfg.NATSCABundlePath))
-	bootstrap.MustSetupStreams(ctx, natsClient, logger)
+	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
+		messaging.WithCABundle(cfg.NATSCABundlePath),
+		messaging.WithIdentity("hermes-dispatch", cfg.NATSNKeySeedPath))
+	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
+	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-dispatch", logger)
 	defer natsClient.Close()
 
 	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)

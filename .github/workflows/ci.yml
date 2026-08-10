@@ -157,7 +157,7 @@ jobs:
       # On PRs, only smoke-test the admin image; on main, build every service.
       # The matrix is selected here so PRs spin up one runner instead of ten.
       matrix:
-        service: ${{ fromJSON(github.event_name == 'pull_request' && '["admin"]' || '["admin","send","dispatch","worker-events","worker-email","worker-sms","worker-inbox","inbox","user","migrate"]') }}
+        service: ${{ fromJSON(github.event_name == 'pull_request' && '["admin"]' || '["admin","send","dispatch","worker-events","worker-email","worker-sms","worker-inbox","inbox","user","migrate","natsprovision"]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -189,7 +189,49 @@ jobs:
           helm repo add centrifugal https://centrifugal.github.io/helm-charts
       - run: helm dependency build charts/hermes/
       - run: helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com
-      - run: helm template test charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com > /dev/null
+      - run: jq . charts/hermes/values.schema.json > /dev/null
+      - name: Unit-test the chart render gate
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
+      # This step replaces `helm template ... > /dev/null`, which proved the chart renders
+      # and asserted nothing about what it renders. The chart reached main with six
+      # services crash-looping at boot for want of the natsprovision Job, two ingress
+      # routes no handler has served since the group/type rename, four admin endpoints
+      # with no route at all, and the bundled NATS images rewritten under the Hermes
+      # registry. Every one of those rendered cleanly.
+      - name: Check the rendered chart against the Go source
+        run: |
+          helm template test charts/hermes/ \
+            --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+            --set global.domain=test.example.com \
+            | python3 scripts/check_helm_render.py - --source-root=.
+      # Optional features render workloads the default install never produces. hermes-cleanup
+      # was missing from the cd.yml publish matrix and only surfaces when the CronJob renders.
+      - name: Check the optional-feature render too
+        run: |
+          helm template test charts/hermes/ \
+            --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+            --set global.domain=test.example.com \
+            --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
+            --set observability.enabled=true \
+            | python3 scripts/check_helm_render.py - --source-root=.
+      - name: A production install on bundled sub-charts must be refused at render time
+        run: |
+          if helm template test charts/hermes/ \
+               --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+               --set global.domain=test.example.com --set hermes.env=production \
+               > /dev/null 2>&1; then
+            echo "::error::hermes.env=production rendered with bundled sub-charts; every workload would exit on config.Validate()"
+            exit 1
+          fi
+      - name: The admin portal on its unpublished default image must be refused
+        run: |
+          if helm template test charts/hermes/ \
+               --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+               --set global.domain=test.example.com --set adminPortal.enabled=true \
+               > /dev/null 2>&1; then
+            echo "::error::adminPortal.enabled=true rendered against hermes-admin-portal, which nothing in this repository builds"
+            exit 1
+          fi
 
   kustomize-validate:
     name: Validate Kustomize Overlays
@@ -213,3 +255,141 @@ jobs:
           python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
           kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_networkpolicy_selectors.py -
           kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_networkpolicy_selectors.py -
+
+      # ADR 0005 phase 4. This gate has been in `make verify` since it was written and was
+      # never added here — the same "exists but does not run on the merge path" gap the
+      # NetworkPolicy step above closed one release earlier.
+      - name: The CA private key must not render into the application namespace
+        run: |
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_ca_key_location.py - --namespace hermes
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_ca_key_location.py - --namespace hermes
+
+      # ADR 0006. A Job's spec.template is immutable and Kargo rewrites its image tag on
+      # every promotion, so a Job that is not an ArgoCD hook applies once and then fails
+      # the SECOND promotion with `field is immutable` — while the Application can still
+      # report health: Healthy, because no workload changed. Every other step in this job
+      # passes identically with that defect present and absent.
+      - name: Every Job must be a usable ArgoCD hook
+        run: |
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_job_hooks.py -
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_job_hooks.py -
+
+      # Finding 36. A one-character typo in the send PDB's selector (`hermes-sned`) took
+      # expectedPods from 3 to 0 with no error from kustomize, kubectl or the API server.
+      - name: Every PodDisruptionBudget must protect something
+        run: |
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_pdb_selectors.py -
+
+      # Finding 8. hermes-send rendered with no resource requests, no HPA and no PDB and
+      # nothing objected. An HPA whose target declares no request for the resource it
+      # measures reports ScalingActive=False / FailedGetResourceMetric and never scales.
+      # The local overlay is deliberately exempt — see the script's module docstring.
+      - name: Workloads must declare requests, and HPAs must be able to read their metric
+        run: |
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_workload_resources.py -
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_workload_resources.py - --require-hpa
+
+  infra-scripts:
+    name: Infra Shell Library
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # infra/scripts/lib.sh derives the database and Redis URLs that config.Validate
+      # accepts or rejects, and guards the bootstrap role ARN against finding 7's exact
+      # mistake (production bootstrapped with staging's ARN). It shipped with 17 passing
+      # tests that nothing ran: `make verify-manifests` discovers only scripts/.
+      - name: Test infra/scripts/lib.sh
+        run: ./infra/scripts/test-lib.sh
+
+  terraform:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+          # The wrapper rewrites stdout and swallows exit codes in some shapes; we only
+          # want the binary on PATH so `make tf-check` behaves exactly as it does locally.
+          terraform_wrapper: false
+
+      # ADR 0007 records that `terraform validate` and `fmt -check` WERE run during that
+      # work — by hand, once, and then never again, because Terraform was in neither
+      # `make verify` nor CI. `make tf-check` fails loudly when terraform is absent rather
+      # than skipping; here it is guaranteed present, so this genuinely runs every merge.
+      #
+      # `terraform init -backend=false` rewrites .terraform.lock.hcl to add the runner's
+      # platform hashes. That is expected and not committed — do not add a `git diff
+      # --exit-code` assertion here, it would fail on every run for no reason.
+      - name: Credential-free terraform fmt and validate
+        run: make tf-check
+
+  chart-install:
+    # WHAT THIS COVERS, AND WHAT IT DOES NOT — read before trusting a green tick.
+    #
+    # COVERED: the chart installs into a real cluster; the bundled Postgres, Redis, NATS
+    # and Centrifugo actually start; and `helm test` connects to Postgres and Redis using
+    # HERMES_DATABASE_URL and HERMES_REDIS_URL read out of the chart's OWN rendered Secret
+    # and ConfigMap. That last part is the point. hermes.databaseUrl and hermes.redisUrl
+    # build a hostname by string-formatting, and a hostname naming no Service renders,
+    # lints, and passes `helm template` and scripts/check_helm_render.py without a murmur —
+    # verified: with both connection-URL helpers reverted to the old Bitnami Service names,
+    # `make verify-chart` stayed green. Only connecting catches it.
+    #
+    # NOT COVERED: any Hermes service. ghcr.io/hermesnotifications/hermes-*:0.1.0 is not
+    # published and returns 403 Forbidden to an anonymous pull, so no Hermes pod can start
+    # here. The nine Deployments are therefore installed at replicas=0 rather than left to
+    # ImagePullBackOff, and the templates/tests/test-connection.yaml pod — which curls the
+    # services' /healthz — is deliberately EXCLUDED by --filter. It cannot pass until a
+    # release is cut, and a job that appeared to run it would be claiming coverage it does
+    # not have. The two provisioning Jobs still fail to pull; that is expected and does not
+    # fail this job, because `helm install --wait` does not wait for Jobs.
+    #
+    # When the images are published: drop the replicas=0 overrides, add --wait-for-jobs,
+    # and remove the --filter so test-connection runs too.
+    name: Chart Install on kind (datastores only, see comments)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+
+      - uses: helm/kind-action@99576bfa6ddf9a8e612d83b513da5a75875caced # v1.9.0
+        with:
+          cluster_name: hermes-chart-gate
+
+      - name: Add chart repositories
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm repo add centrifugal https://centrifugal.github.io/helm-charts
+          helm dependency build charts/hermes/
+
+      # replicas=0 on every Hermes service: the images 403, so the alternative is nine
+      # Deployments in ImagePullBackOff and a --wait that times out after ten minutes.
+      # This way the failure that matters (a datastore that does not come up, or a
+      # connection URL naming no Service) is the only thing that can fail the step.
+      - name: Install the chart
+        run: |
+          helm install hermes charts/hermes/ \
+            --namespace hermes-chart-gate --create-namespace \
+            --set hermes.jwt.secret=citest --set hermes.apiKey.hmacSecret=citest \
+            --set global.domain=ci.example.com \
+            --set admin.replicas=0 --set send.replicas=0 --set dispatch.replicas=0 \
+            --set inbox.replicas=0 --set user.replicas=0 \
+            --set workerEmail.replicas=0 --set workerSms.replicas=0 \
+            --set workerInbox.replicas=0 --set workerEvents.replicas=0 \
+            --wait --timeout 10m
+
+      - name: The bundled datastores must be reachable at the URLs the chart generates
+        run: |
+          helm test hermes --namespace hermes-chart-gate \
+            --filter name=hermes-test-datastores --timeout 5m
+
+      - name: Show what actually ran
+        if: always()
+        run: |
+          kubectl -n hermes-chart-gate get pods
+          echo "--- datastore test output (the assertion this job exists for) ---"
+          kubectl -n hermes-chart-gate logs hermes-test-datastores --all-containers || true
