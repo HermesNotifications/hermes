@@ -148,6 +148,22 @@ class NextFreeNumber(unittest.TestCase):
         self.assertEqual(check.next_free_number(files(("0001", "a")), None), "0002")
 
 
+class RequireBase(unittest.TestCase):
+    """A green CI step must prove the comparison happened, not merely that nothing objected."""
+
+    def test_an_unreadable_base_is_a_skip_by_default(self):
+        stats = {"adrs": 3, "indexed": 3, "base_adrs": None}
+        self.assertEqual(check.report([], stats, "origin/main", [], None), 0)
+
+    def test_an_unreadable_base_fails_under_require_base(self):
+        stats = {"adrs": 3, "indexed": 3, "base_adrs": None}
+        self.assertEqual(check.report([], stats, "origin/main", [], None, require_base=True), 1)
+
+    def test_require_base_is_satisfied_by_a_readable_base(self):
+        stats = {"adrs": 3, "indexed": 3, "base_adrs": 3}
+        self.assertEqual(check.report([], stats, "origin/main", [], {}, require_base=True), 0)
+
+
 class Sentinels(unittest.TestCase):
     def test_an_empty_directory_is_an_error_not_a_pass(self):
         # A gate that silently verifies nothing is the failure mode these all exist to prevent.

@@ -57,7 +57,7 @@ jobs:
       - name: ADR numbers must not collide with main
         run: |
           python3 -m unittest discover -s scripts -p 'test_check_adr_numbering.py' -t scripts
-          python3 scripts/check_adr_numbering.py --base origin/main
+          python3 scripts/check_adr_numbering.py --base origin/main --require-base
 
   test-unit:
     name: Unit Tests

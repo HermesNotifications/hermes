@@ -183,12 +183,25 @@ def next_free_number(files, base):
     return f"{candidate:04d}"
 
 
-def report(failures, stats, base_ref, files, base):
+def report(failures, stats, base_ref, files, base, require_base=False):
     if stats["adrs"] == 0:
         print("ERROR: no ADRs found; is --adr-dir pointing at the right directory?", file=sys.stderr)
         return 1
 
     if stats["base_adrs"] is None:
+        if require_base:
+            # CI passes --require-base so that a green step is proof the comparison happened.
+            # Without it, a shallow clone with no origin/main ref would skip the only check
+            # that cannot be run locally, and the step would pass while asserting nothing --
+            # which is the exact class of defect this gate was written to catch.
+            print(
+                f"ERROR: --require-base was given and {base_ref} could not be read, so the "
+                f"cross-branch collision check did not run. In CI this usually means the "
+                f"explicit `git fetch --depth=1 origin main` step is missing or failed: "
+                f"actions/checkout leaves a shallow clone with no {base_ref} ref.",
+                file=sys.stderr,
+            )
+            return 1
         print(
             f"note: could not read {base_ref}, so the cross-branch collision check did not run. "
             f"Fetch it (`git fetch origin main`) to get the check that actually matters.",
@@ -219,6 +232,9 @@ def main(argv=None):
     parser.add_argument("--adr-dir", default="docs/adr")
     parser.add_argument("--base", default="origin/main",
                         help="Ref to check numbers against. Use '' to skip that check.")
+    parser.add_argument("--require-base", action="store_true",
+                        help="Fail if the base ref cannot be read, rather than skipping that "
+                             "check. Use in CI, so a green step proves the comparison ran.")
     args = parser.parse_args(argv)
 
     files, malformed = adr_files(args.adr_dir)
@@ -227,7 +243,7 @@ def main(argv=None):
     base = base_adrs(args.base, args.adr_dir) if args.base else None
 
     failures, stats = evaluate(files, malformed, headings, index, base)
-    return report(failures, stats, args.base or "(skipped)", files, base)
+    return report(failures, stats, args.base or "(skipped)", files, base, args.require_base)
 
 
 if __name__ == "__main__":
