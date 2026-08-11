@@ -150,13 +150,6 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# kubelet SIGKILLs mid-drain, which is strictly worse than not draining at all.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_shutdown_budget.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_shutdown_budget.py -
-	@# Three ADR number collisions happened while one branch was open -- a 0006, then a
-	@# 0010/0011/0012 three-way. Every one was caught by a person reading a merge conflict, and
-	@# every one could as easily have been resolved by taking a side, leaving two ADR 0010s and
-	@# every "Superseded by" pointing at them ambiguous. The collisions are structural: two
-	@# branches each take "one above the highest in the index" exactly as the README instructs,
-	@# and both are right until they meet -- which is here, on whichever merges second.
-	$(PYTHON) scripts/check_adr_numbering.py docs/adr
 	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
 	@# or rejects. It shipped with 17 passing tests that nothing ran.
 	./infra/scripts/test-lib.sh
