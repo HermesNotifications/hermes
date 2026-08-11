@@ -125,6 +125,105 @@ describe("inboxReducer: loading the first page", () => {
   });
 });
 
+describe("inboxReducer: reconciling after a realtime gap", () => {
+  /**
+   * The repair path for a socket that dropped. With `broker: nats` Centrifugo keeps no
+   * history, so anything published during the gap is gone and only Hermes still has it —
+   * the store refetches page 1 and merges it here. The merge is the point: a wholesale
+   * replace would collapse a paged-through list every time a laptop woke up.
+   */
+  it("prepends arrivals without discarding pages already loaded", () => {
+    // Three pages' worth on screen; page 1 comes back carrying one row we have never seen.
+    const state = loaded({
+      notifications: [notification("ntf_3"), notification("ntf_2"), notification("ntf_1")],
+      cursor: "cur_page3",
+      hasMore: true,
+    });
+
+    const next = inboxReducer(state, {
+      type: "reconcile/success",
+      page: page({ data: [notification("ntf_4"), notification("ntf_3")], unreadCount: 4 }),
+    });
+
+    expect(next.notifications.map((n) => n.id)).toEqual(["ntf_4", "ntf_3", "ntf_2", "ntf_1"]);
+    expect(next.unreadCount).toBe(4);
+  });
+
+  it("leaves the cursor alone, so loadMore does not re-fetch loaded pages", () => {
+    const state = loaded({ cursor: "cur_page3", hasMore: true });
+
+    const next = inboxReducer(state, {
+      type: "reconcile/success",
+      page: page({ data: [notification("ntf_2")], unreadCount: 1, cursor: "cur_page1" }),
+    });
+
+    expect(next.cursor).toBe("cur_page3");
+    expect(next.hasMore).toBe(true);
+  });
+
+  it("adopts the server's copy of a row changed while we were away", () => {
+    // The case a "give me everything newer than X" watermark cannot cover: this row is not
+    // new, it was read on another device.
+    const state = loaded();
+
+    const next = inboxReducer(state, {
+      type: "reconcile/success",
+      page: page({
+        data: [notification("ntf_2", { read_at: "2026-07-29T10:00:00.000Z" }), notification("ntf_1")],
+        unreadCount: 1,
+      }),
+    });
+
+    expect(next.notifications.find((n) => n.id === "ntf_2")?.read_at).toBe(
+      "2026-07-29T10:00:00.000Z"
+    );
+    expect(next.unreadCount).toBe(1);
+  });
+
+  it("takes the unread count from the server even when no row changed", () => {
+    const next = inboxReducer(loaded(), {
+      type: "reconcile/success",
+      page: page({ data: [notification("ntf_2"), notification("ntf_1")], unreadCount: 7 }),
+    });
+
+    expect(next.unreadCount).toBe(7);
+    expect(next.notifications).toHaveLength(2);
+  });
+
+  it("does not duplicate rows it already holds", () => {
+    const next = inboxReducer(loaded(), {
+      type: "reconcile/success",
+      page: page({ data: [notification("ntf_2"), notification("ntf_1")], unreadCount: 2 }),
+    });
+
+    expect(next.notifications.map((n) => n.id)).toEqual(["ntf_2", "ntf_1"]);
+  });
+
+  it("behaves as a first load when nothing is on screen yet", () => {
+    // No pagination state worth preserving. Without this branch an inbox whose initial load
+    // failed would gain rows but no cursor, and never offer "load more" again.
+    const next = inboxReducer(initialInboxState, {
+      type: "reconcile/success",
+      page: page({ data: [notification("ntf_1")], unreadCount: 1, cursor: "cur_1" }),
+    });
+
+    expect(next.notifications.map((n) => n.id)).toEqual(["ntf_1"]);
+    expect(next.cursor).toBe("cur_1");
+    expect(next.hasMore).toBe(true);
+  });
+
+  it("clears a stale error, since a successful reconcile means the inbox is working", () => {
+    const state = loaded({ error: new HermesError("earlier failure", "network") });
+
+    const next = inboxReducer(state, {
+      type: "reconcile/success",
+      page: page({ data: [notification("ntf_2")], unreadCount: 1 }),
+    });
+
+    expect(next.error).toBeUndefined();
+  });
+});
+
 describe("inboxReducer: hasMore", () => {
   // InboxAPI.list normalises the API's `cursor: ""` last-page sentinel to `undefined`,
   // so `hasMore` keys off undefined. A fixture that hand-writes `cursor: undefined`

@@ -207,12 +207,19 @@ export class RealtimeConnection {
       console.error("Hermes realtime error:", ctx);
     }) as (ctx: never) => void);
 
-    // recoverable + positioned ask Centrifugo to replay anything published while the
-    // socket was down, using the history it is already configured to keep.
-    const subscription = transport.newSubscription(`user#${userId}`, {
-      recoverable: true,
-      positioned: true,
-    });
+    // Deliberately NOT recoverable/positioned.
+    //
+    // Those options ask Centrifugo to replay publications missed while the socket was down.
+    // This deployment runs `broker: nats` (deploy/k8s/base/infra/centrifugo.yaml), and the
+    // NATS broker is at-most-once with no history — so there is nothing to replay from and
+    // the options are inert. The `history_size` and `history_ttl` settings alongside it are
+    // inert for the same reason. Requesting a guarantee the server cannot honour is worse
+    // than not requesting it: it reads like a safety net in code review.
+    //
+    // Recovery is done one layer up instead, and from the durable source rather than a
+    // 50-message buffer: InboxStore reconciles against the Hermes API on every reconnect.
+    // See issue #102 for the decision and the alternatives weighed.
+    const subscription = transport.newSubscription(`user#${userId}`);
     this.subscription = subscription;
 
     subscription.on("publication", ((ctx: { data: unknown }) => {

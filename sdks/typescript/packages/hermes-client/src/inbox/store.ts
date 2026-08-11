@@ -49,6 +49,14 @@ export class InboxStore {
   private cleanups: Array<() => void> = [];
   private disposed = false;
   private started = false;
+  /**
+   * Whether realtime has ever reached `connected` on this run.
+   *
+   * Distinguishes the first connect, which needs no repair, from a reconnect, which follows
+   * a gap. Reset by {@link stop} so a stop/start cycle — StrictMode's, or a genuine remount —
+   * does not reconcile immediately after the load that start() already performed.
+   */
+  private hasConnected = false;
 
   /**
    * Realtime actions seen while a mutation is in flight, one buffer per mutation.
@@ -141,6 +149,17 @@ export class InboxStore {
     this.cleanups.push(
       this.client.onStatusChange((status) => {
         this.dispatch({ type: "realtime/status", status });
+        if (status !== "connected") return;
+
+        // The first connect needs no repair: start() has just loaded the first page, and the
+        // subscription was established before anything could be missed. Every *sub­sequent*
+        // connect follows a gap in which publications were lost for good, because the NATS
+        // broker keeps no history for Centrifugo to replay (issue #102).
+        if (!this.hasConnected) {
+          this.hasConnected = true;
+          return;
+        }
+        void this.reconcile();
       })
     );
 
@@ -177,6 +196,35 @@ export class InboxStore {
     } catch (cause) {
       if (this.disposed || generation !== this.generation) return;
       this.dispatch({ type: "load/failure", error: this.asHermesError(cause) });
+    }
+  }
+
+  /**
+   * Repair the inbox after a realtime gap.
+   *
+   * Refetches the first page and merges it into what is on screen, which recovers arrivals
+   * that were published while the socket was down and corrects rows changed elsewhere. See
+   * the `reconcile/success` case in the reducer for why this merges rather than replaces.
+   *
+   * Deliberately does **not** bump the generation. This is background repair, not a
+   * user-initiated load: it must not cancel an in-flight `loadMore`, and it must lose to a
+   * concurrent `refresh` rather than the other way round.
+   */
+  private async reconcile(): Promise<void> {
+    if (this.disposed) return;
+    const generation = this.generation;
+
+    try {
+      const page = await this.client.inbox.list({
+        limit: this.pageSize,
+        archived: this.archived,
+      });
+      if (this.disposed || generation !== this.generation) return;
+      this.dispatch({ type: "reconcile/success", page });
+    } catch {
+      // Swallowed on purpose. A failed repair must not put an error banner over an inbox
+      // that is otherwise working — the user did not ask for this and nothing is broken from
+      // where they sit. The next reconnect, refresh or page load tries again.
     }
   }
 
@@ -286,6 +334,9 @@ export class InboxStore {
     this.started = false;
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups = [];
+    // The next start() loads the first page itself, so the connect that follows it is a first
+    // connect again, not a gap to repair.
+    this.hasConnected = false;
     if (this.ownsConnection) this.client.disconnect();
   }
 

@@ -56,6 +56,7 @@ export type InboxAction =
   | { type: "page/start" }
   | { type: "page/success"; page: InboxPage }
   | { type: "page/failure"; error: HermesError }
+  | { type: "reconcile/success"; page: InboxPage }
   | { type: "realtime/notification"; event: NewNotificationEvent }
   | { type: "realtime/update"; event: InboxUpdatedEvent; at: string }
   | { type: "optimistic/read"; id: string; at: string }
@@ -154,6 +155,58 @@ export function inboxReducer(state: InboxState, action: InboxAction): InboxState
 
     case "page/failure":
       return { ...state, loadingMore: false, error: action.error };
+
+    case "reconcile/success": {
+      // Repair after a realtime gap, without throwing away what is on screen.
+      //
+      // With `broker: nats` Centrifugo keeps no history, so a publication sent while the
+      // socket was down is gone — the client cannot ask the server to replay it, and the
+      // only durable copy is in Hermes itself (see issue #102). So on reconnect the store
+      // refetches the first page and merges it here.
+      //
+      // Merging rather than replacing is the whole point. `load/success` swaps the list
+      // wholesale, which would collapse a user who had paged through three pages of history
+      // back down to one every time their laptop woke up. Instead:
+      //   * rows the page carries that we have never seen are genuine arrivals, prepended in
+      //     page order — the list is newest-first, and these are the newest;
+      //   * rows we already hold are replaced by the server's copy, which is what catches a
+      //     notification read or archived on another device while we were away;
+      //   * `cursor` and `hasMore` are deliberately untouched, because pagination is still
+      //     wherever loadMore left it. Overwriting them with page 1's cursor would re-fetch
+      //     pages the user already has.
+      //
+      // Known limit: a merge cannot observe a deletion. A row removed elsewhere during the
+      // gap stays on screen until the next full load. The unread count is still correct,
+      // since it comes from the server below.
+      const { page } = action;
+
+      // Nothing loaded yet — there is no pagination state worth preserving, so this is
+      // simply a first load. Without this branch an inbox whose initial load had failed
+      // would gain rows but no cursor, and never offer "load more" again.
+      if (state.notifications.length === 0) {
+        return {
+          ...state,
+          notifications: page.data,
+          unreadCount: page.unreadCount,
+          cursor: page.cursor,
+          hasMore: page.cursor !== undefined,
+          loading: false,
+          error: undefined,
+        };
+      }
+
+      const fromServer = new Map(page.data.map((n) => [n.id, n]));
+      const known = new Set(state.notifications.map((n) => n.id));
+      const arrived = page.data.filter((n) => !known.has(n.id));
+      const refreshed = state.notifications.map((n) => fromServer.get(n.id) ?? n);
+
+      return {
+        ...state,
+        notifications: arrived.length === 0 ? refreshed : [...arrived, ...refreshed],
+        unreadCount: page.unreadCount,
+        error: undefined,
+      };
+    }
 
     case "realtime/notification": {
       const incoming = notificationFromEvent(action.event);

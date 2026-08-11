@@ -170,14 +170,20 @@ describe("RealtimeConnection: subscribing", () => {
     expect(transport().connectCalls).toBe(1);
   });
 
-  it("asks for a recoverable subscription so a brief drop does not lose publications", async () => {
-    // Centrifugo is configured with history_size 50 / history_ttl 1h. Without asking
-    // for recovery the client silently misses anything published while the socket was
-    // down, which for a notification inbox means a notification that never appears.
+  it("does not ask for recovery, which this deployment cannot provide", async () => {
+    // Inverted deliberately. It previously asserted recoverable/positioned, on the premise
+    // that Centrifugo's history_size 50 / history_ttl 1h would replay anything missed while
+    // the socket was down. That premise is false here: the deployment sets `broker: nats`,
+    // and the NATS broker is at-most-once with no history, which makes both the options and
+    // those history settings inert.
+    //
+    // Asserting the flags therefore pinned a guarantee that did not exist, and made the gap
+    // look closed to anyone reading either the code or this suite. Recovery now happens in
+    // InboxStore, against the Hermes API, on reconnect. See issue #102.
     const { conn, transport } = connection();
     await conn.connect("usr_1");
-    expect(transport().latest.options.recoverable).toBe(true);
-    expect(transport().latest.options.positioned).toBe(true);
+    expect(transport().latest.options.recoverable).toBeUndefined();
+    expect(transport().latest.options.positioned).toBeUndefined();
   });
 
   it("passes a token getter so the socket can re-authenticate on reconnect", async () => {

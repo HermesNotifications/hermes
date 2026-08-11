@@ -683,6 +683,96 @@ describe("InboxStore: disposal", () => {
   });
 });
 
+describe("InboxStore: reconciling on reconnect", () => {
+  /**
+   * A dropped socket loses publications permanently — the NATS broker keeps no history for
+   * Centrifugo to replay (issue #102). So the store repairs itself against the API whenever
+   * realtime comes back, and only then: the first connect follows start()'s own load.
+   */
+  it("does not reconcile on the first connect", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+
+    fake.emitStatus("connected");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Exactly one list(): the one start() performed.
+    expect(fake.calls.filter((c) => c === "list")).toHaveLength(1);
+  });
+
+  it("refetches when realtime comes back after a drop", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    fake.emitStatus("connected");
+
+    fake.emitStatus("disconnected");
+    fake.emitStatus("connected");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fake.calls.filter((c) => c === "list")).toHaveLength(2);
+  });
+
+  it("merges what it finds instead of replacing the list", async () => {
+    const fake = new FakeHermesClient(
+      fakePage({ data: [fakeNotification("older")], unreadCount: 1, cursor: "cur_1" })
+    );
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    fake.emitStatus("connected");
+
+    // While the socket was down, something arrived that the client never saw.
+    fake.page = fakePage({
+      data: [fakeNotification("missed"), fakeNotification("older")],
+      unreadCount: 2,
+    });
+    fake.emitStatus("disconnected");
+    fake.emitStatus("connected");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const after = inbox.getSnapshot();
+    expect(after.notifications.map((n) => n.id)).toEqual(["missed", "older"]);
+    expect(after.unreadCount).toBe(2);
+    // Pagination untouched, so a user who had paged deeper keeps what they loaded.
+    expect(after.cursor).toBe("cur_1");
+  });
+
+  it("does not surface an error when the repair itself fails", async () => {
+    // Background repair. An error banner over a working inbox would be the store reporting a
+    // problem the user does not have.
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    fake.emitStatus("connected");
+
+    fake.fail("list", HermesError.fromStatus("Inbox", 500));
+    fake.emitStatus("disconnected");
+    fake.emitStatus("connected");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(inbox.getSnapshot().error).toBeUndefined();
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("treats a restart as a first connect, not a gap", async () => {
+    // StrictMode's effect/cleanup/effect, or a genuine remount: start() loads the page again,
+    // so the connect that follows is not a gap to repair.
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    fake.emitStatus("connected");
+    inbox.stop();
+
+    await inbox.start();
+    fake.emitStatus("connected");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Two list() calls, one per start(), and no reconcile on top.
+    expect(fake.calls.filter((c) => c === "list")).toHaveLength(2);
+  });
+});
+
 describe("InboxStore: connection ownership", () => {
   it("closes the socket on stop when the connection is its own", async () => {
     const fake = new FakeHermesClient(fakePage());
