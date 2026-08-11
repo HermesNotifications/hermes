@@ -64,11 +64,6 @@ public class CreateAPIKeyInputBody {
   @javax.annotation.Nonnull
   private String name;
 
-  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
-  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
-  @javax.annotation.Nonnull
-  private String organizationId;
-
   public static final String SERIALIZED_NAME_PERMISSIONS = "permissions";
   @SerializedName(SERIALIZED_NAME_PERMISSIONS)
   @javax.annotation.Nullable
@@ -114,25 +109,6 @@ public class CreateAPIKeyInputBody {
   }
 
 
-  public CreateAPIKeyInputBody organizationId(@javax.annotation.Nonnull String organizationId) {
-    this.organizationId = organizationId;
-    return this;
-  }
-
-  /**
-   * Organization this key may act for
-   * @return organizationId
-   */
-  @javax.annotation.Nonnull
-  public String getOrganizationId() {
-    return organizationId;
-  }
-
-  public void setOrganizationId(@javax.annotation.Nonnull String organizationId) {
-    this.organizationId = organizationId;
-  }
-
-
   public CreateAPIKeyInputBody permissions(@javax.annotation.Nullable List<String> permissions) {
     this.permissions = permissions;
     return this;
@@ -172,7 +148,6 @@ public class CreateAPIKeyInputBody {
     CreateAPIKeyInputBody createAPIKeyInputBody = (CreateAPIKeyInputBody) o;
     return Objects.equals(this.$schema, createAPIKeyInputBody.$schema) &&
         Objects.equals(this.name, createAPIKeyInputBody.name) &&
-        Objects.equals(this.organizationId, createAPIKeyInputBody.organizationId) &&
         Objects.equals(this.permissions, createAPIKeyInputBody.permissions);
   }
 
@@ -182,7 +157,7 @@ public class CreateAPIKeyInputBody {
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, name, organizationId, permissions);
+    return Objects.hash($schema, name, permissions);
   }
 
   private static <T> int hashCodeNullable(JsonNullable<T> a) {
@@ -198,7 +173,6 @@ public class CreateAPIKeyInputBody {
     sb.append("class CreateAPIKeyInputBody {\n");
     sb.append("    $schema: ").append(toIndentedString($schema)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
-    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
     sb.append("    permissions: ").append(toIndentedString(permissions)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -221,10 +195,10 @@ public class CreateAPIKeyInputBody {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "name", "organization_id", "permissions"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "name", "permissions"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("name", "organization_id"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("name"));
   }
 
   /**
@@ -260,9 +234,6 @@ public class CreateAPIKeyInputBody {
       }
       if (!jsonObj.get("name").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `name` to be a primitive type in the JSON string but got `%s`", jsonObj.get("name").toString()));
-      }
-      if (!jsonObj.get("organization_id").isJsonPrimitive()) {
-        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
       }
       // ensure the optional json data is an array if present
       if (jsonObj.get("permissions") != null && !jsonObj.get("permissions").isJsonNull() && !jsonObj.get("permissions").isJsonArray()) {

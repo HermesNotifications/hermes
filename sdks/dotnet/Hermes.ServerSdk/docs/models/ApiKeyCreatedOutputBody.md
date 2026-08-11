@@ -7,7 +7,6 @@ Name | Type | Description | Notes
 **CreatedAt** | **DateTime** |  | 
 **Id** | **string** |  | 
 **Name** | **string** |  | 
-**OrganizationId** | **string** |  | 
 **RawKey** | **string** |  | 
 **Schema** | **string** | A URL to the JSON Schema for this object. | [optional] [readonly] 
 **Permissions** | **List&lt;string&gt;** |  | 

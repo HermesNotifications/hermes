@@ -31,12 +31,8 @@ var DefaultPermissions = []string{
 }
 
 type ValidatedKey struct {
-	ID string
-	// OrganizationID is the organization this key may act for, derived from the
-	// key itself rather than from anything the caller sends. Empty means the key
-	// predates scoping and is unconstrained — see ADR 0011.
-	OrganizationID string
-	Permissions    []string
+	ID          string
+	Permissions []string
 }
 
 const validatedKeyContextKey contextKey = "validatedKey"

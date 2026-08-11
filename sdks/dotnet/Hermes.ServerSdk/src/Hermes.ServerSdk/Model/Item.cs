@@ -36,15 +36,13 @@ namespace Hermes.ServerSdk.Model
         /// <param name="createdAt">createdAt</param>
         /// <param name="id">id</param>
         /// <param name="name">name</param>
-        /// <param name="organizationId">organizationId</param>
         /// <param name="permissions">permissions</param>
         [JsonConstructor]
-        public Item(DateTime createdAt, string id, string name, Option<string?> organizationId = default, List<string>? permissions = default)
+        public Item(DateTime createdAt, string id, string name, List<string>? permissions = default)
         {
             CreatedAt = createdAt;
             Id = id;
             Name = name;
-            OrganizationIdOption = organizationId;
             Permissions = permissions;
             OnCreated();
         }
@@ -70,19 +68,6 @@ namespace Hermes.ServerSdk.Model
         public string Name { get; set; }
 
         /// <summary>
-        /// Used to track the state of OrganizationId
-        /// </summary>
-        [JsonIgnore]
-        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
-        public Option<string?> OrganizationIdOption { get; private set; }
-
-        /// <summary>
-        /// Gets or Sets OrganizationId
-        /// </summary>
-        [JsonPropertyName("organization_id")]
-        public string? OrganizationId { get { return this.OrganizationIdOption; } set { this.OrganizationIdOption = new(value); } }
-
-        /// <summary>
         /// Gets or Sets Permissions
         /// </summary>
         [JsonPropertyName("permissions")]
@@ -99,7 +84,6 @@ namespace Hermes.ServerSdk.Model
             sb.Append("  CreatedAt: ").Append(CreatedAt).Append("\n");
             sb.Append("  Id: ").Append(Id).Append("\n");
             sb.Append("  Name: ").Append(Name).Append("\n");
-            sb.Append("  OrganizationId: ").Append(OrganizationId).Append("\n");
             sb.Append("  Permissions: ").Append(Permissions).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
@@ -146,7 +130,6 @@ namespace Hermes.ServerSdk.Model
             Option<DateTime?> createdAt = default;
             Option<string?> id = default;
             Option<string?> name = default;
-            Option<string?> organizationId = default;
             Option<List<string>?> permissions = default;
 
             while (utf8JsonReader.Read())
@@ -172,9 +155,6 @@ namespace Hermes.ServerSdk.Model
                             break;
                         case "name":
                             name = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
-                        case "organization_id":
-                            organizationId = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
                         case "permissions":
                             permissions = new Option<List<string>?>(JsonSerializer.Deserialize<List<string>>(ref utf8JsonReader, jsonSerializerOptions));
@@ -206,10 +186,7 @@ namespace Hermes.ServerSdk.Model
             if (name.IsSet && name.Value == null)
                 throw new ArgumentNullException(nameof(name), "Property is not nullable for class Item.");
 
-            if (organizationId.IsSet && organizationId.Value == null)
-                throw new ArgumentNullException(nameof(organizationId), "Property is not nullable for class Item.");
-
-            return new Item(createdAt.Value!.Value!, id.Value!, name.Value!, organizationId, permissions.Value!);
+            return new Item(createdAt.Value!.Value!, id.Value!, name.Value!, permissions.Value!);
         }
 
         /// <summary>
@@ -242,17 +219,11 @@ namespace Hermes.ServerSdk.Model
             if (item.Name == null)
                 throw new ArgumentNullException(nameof(item.Name), "Property is required for class Item.");
 
-            if (item.OrganizationIdOption.IsSet && item.OrganizationId == null)
-                throw new ArgumentNullException(nameof(item.OrganizationId), "Property is required for class Item.");
-
             writer.WriteString("created_at", item.CreatedAt.ToString(CreatedAtFormat));
 
             writer.WriteString("id", item.Id);
 
             writer.WriteString("name", item.Name);
-
-            if (item.OrganizationIdOption.IsSet)
-                writer.WriteString("organization_id", item.OrganizationId);
 
             if (item.Permissions != null)
             {

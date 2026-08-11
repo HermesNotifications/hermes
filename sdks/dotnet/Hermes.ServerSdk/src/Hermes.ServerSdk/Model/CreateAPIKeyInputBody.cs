@@ -34,14 +34,12 @@ namespace Hermes.ServerSdk.Model
         /// Initializes a new instance of the <see cref="CreateAPIKeyInputBody" /> class.
         /// </summary>
         /// <param name="name">Human-readable key name</param>
-        /// <param name="organizationId">Organization this key may act for</param>
         /// <param name="schema">A URL to the JSON Schema for this object.</param>
         /// <param name="permissions">Permission set (defaults to all except apikeys:manage)</param>
         [JsonConstructor]
-        public CreateAPIKeyInputBody(string name, string organizationId, Option<string?> schema = default, Option<List<string>?> permissions = default)
+        public CreateAPIKeyInputBody(string name, Option<string?> schema = default, Option<List<string>?> permissions = default)
         {
             Name = name;
-            OrganizationId = organizationId;
             SchemaOption = schema;
             PermissionsOption = permissions;
             OnCreated();
@@ -55,13 +53,6 @@ namespace Hermes.ServerSdk.Model
         /// <value>Human-readable key name</value>
         [JsonPropertyName("name")]
         public string Name { get; set; }
-
-        /// <summary>
-        /// Organization this key may act for
-        /// </summary>
-        /// <value>Organization this key may act for</value>
-        [JsonPropertyName("organization_id")]
-        public string OrganizationId { get; set; }
 
         /// <summary>
         /// Used to track the state of Schema
@@ -100,7 +91,6 @@ namespace Hermes.ServerSdk.Model
             StringBuilder sb = new StringBuilder();
             sb.Append("class CreateAPIKeyInputBody {\n");
             sb.Append("  Name: ").Append(Name).Append("\n");
-            sb.Append("  OrganizationId: ").Append(OrganizationId).Append("\n");
             sb.Append("  Schema: ").Append(Schema).Append("\n");
             sb.Append("  Permissions: ").Append(Permissions).Append("\n");
             sb.Append("}\n");
@@ -118,12 +108,6 @@ namespace Hermes.ServerSdk.Model
             if (this.Name != null && this.Name.Length < 1)
             {
                 yield return new ValidationResult("Invalid value for Name, length must be greater than 1.", new [] { "Name" });
-            }
-
-            // OrganizationId (string) minLength
-            if (this.OrganizationId != null && this.OrganizationId.Length < 1)
-            {
-                yield return new ValidationResult("Invalid value for OrganizationId, length must be greater than 1.", new [] { "OrganizationId" });
             }
 
             yield break;
@@ -153,7 +137,6 @@ namespace Hermes.ServerSdk.Model
             JsonTokenType startingTokenType = utf8JsonReader.TokenType;
 
             Option<string?> name = default;
-            Option<string?> organizationId = default;
             Option<string?> schema = default;
             Option<List<string>?> permissions = default;
 
@@ -175,9 +158,6 @@ namespace Hermes.ServerSdk.Model
                         case "name":
                             name = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
-                        case "organization_id":
-                            organizationId = new Option<string?>(utf8JsonReader.GetString()!);
-                            break;
                         case "$schema":
                             schema = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
@@ -193,19 +173,13 @@ namespace Hermes.ServerSdk.Model
             if (!name.IsSet)
                 throw new ArgumentException("Property is required for class CreateAPIKeyInputBody.", nameof(name));
 
-            if (!organizationId.IsSet)
-                throw new ArgumentException("Property is required for class CreateAPIKeyInputBody.", nameof(organizationId));
-
             if (name.IsSet && name.Value == null)
                 throw new ArgumentNullException(nameof(name), "Property is not nullable for class CreateAPIKeyInputBody.");
-
-            if (organizationId.IsSet && organizationId.Value == null)
-                throw new ArgumentNullException(nameof(organizationId), "Property is not nullable for class CreateAPIKeyInputBody.");
 
             if (schema.IsSet && schema.Value == null)
                 throw new ArgumentNullException(nameof(schema), "Property is not nullable for class CreateAPIKeyInputBody.");
 
-            return new CreateAPIKeyInputBody(name.Value!, organizationId.Value!, schema, permissions);
+            return new CreateAPIKeyInputBody(name.Value!, schema, permissions);
         }
 
         /// <summary>
@@ -235,15 +209,10 @@ namespace Hermes.ServerSdk.Model
             if (createAPIKeyInputBody.Name == null)
                 throw new ArgumentNullException(nameof(createAPIKeyInputBody.Name), "Property is required for class CreateAPIKeyInputBody.");
 
-            if (createAPIKeyInputBody.OrganizationId == null)
-                throw new ArgumentNullException(nameof(createAPIKeyInputBody.OrganizationId), "Property is required for class CreateAPIKeyInputBody.");
-
             if (createAPIKeyInputBody.SchemaOption.IsSet && createAPIKeyInputBody.Schema == null)
                 throw new ArgumentNullException(nameof(createAPIKeyInputBody.Schema), "Property is required for class CreateAPIKeyInputBody.");
 
             writer.WriteString("name", createAPIKeyInputBody.Name);
-
-            writer.WriteString("organization_id", createAPIKeyInputBody.OrganizationId);
 
             if (createAPIKeyInputBody.SchemaOption.IsSet)
                 writer.WriteString("$schema", createAPIKeyInputBody.Schema);

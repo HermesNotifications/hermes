@@ -14,21 +14,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// nullableOrg maps the empty string to SQL NULL. An empty organization_id must not
-// be stored as '' — the column is a UUID with a foreign key, so '' fails the cast,
-// and NULL is what "this key predates scoping" means in the schema.
-func nullableOrg(id string) any {
-	if id == "" {
-		return nil
-	}
-	return id
-}
-
-func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name, organizationID string, permissions []string) (*models.APIKey, error) {
-	k := &models.APIKey{ID: id, KeyHash: keyHash, Name: name, OrganizationID: organizationID, Permissions: permissions}
+func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error) {
+	k := &models.APIKey{ID: id, KeyHash: keyHash, Name: name, Permissions: permissions}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO api_keys (id, key_hash, name, organization_id, permissions) VALUES ($1, $2, $3, $4, $5) RETURNING created_at`,
-		k.ID, k.KeyHash, k.Name, nullableOrg(k.OrganizationID), k.Permissions,
+		`INSERT INTO api_keys (id, key_hash, name, permissions) VALUES ($1, $2, $3, $4) RETURNING created_at`,
+		k.ID, k.KeyHash, k.Name, k.Permissions,
 	).Scan(&k.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create api key: %w", err)
@@ -37,7 +27,7 @@ func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name, organizatio
 }
 
 func (s *Store) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, key_hash, name, organization_id, permissions, created_at FROM api_keys`)
+	rows, err := s.pool.Query(ctx, `SELECT id, key_hash, name, permissions, created_at FROM api_keys`)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
@@ -46,12 +36,8 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 	var keys []models.APIKey
 	for rows.Next() {
 		var k models.APIKey
-		var org *string
-		if err := rows.Scan(&k.ID, &k.KeyHash, &k.Name, &org, &k.Permissions, &k.CreatedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.KeyHash, &k.Name, &k.Permissions, &k.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
-		}
-		if org != nil {
-			k.OrganizationID = *org
 		}
 		keys = append(keys, k)
 	}
@@ -60,19 +46,15 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 
 func (s *Store) GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error) {
 	var k models.APIKey
-	var org *string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, key_hash, name, organization_id, permissions, created_at FROM api_keys WHERE id = $1`,
+		`SELECT id, key_hash, name, permissions, created_at FROM api_keys WHERE id = $1`,
 		id,
-	).Scan(&k.ID, &k.KeyHash, &k.Name, &org, &k.Permissions, &k.CreatedAt)
+	).Scan(&k.ID, &k.KeyHash, &k.Name, &k.Permissions, &k.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get api key: %w", err)
-	}
-	if org != nil {
-		k.OrganizationID = *org
 	}
 	return &k, nil
 }

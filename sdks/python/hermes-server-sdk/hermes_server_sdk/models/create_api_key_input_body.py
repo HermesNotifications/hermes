@@ -29,9 +29,8 @@ class CreateAPIKeyInputBody(BaseModel):
     """ # noqa: E501
     var_schema: Optional[StrictStr] = Field(default=None, description="A URL to the JSON Schema for this object.", alias="$schema")
     name: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Human-readable key name")
-    organization_id: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Organization this key may act for")
     permissions: Optional[List[StrictStr]] = Field(default=None, description="Permission set (defaults to all except apikeys:manage)")
-    __properties: ClassVar[List[str]] = ["$schema", "name", "organization_id", "permissions"]
+    __properties: ClassVar[List[str]] = ["$schema", "name", "permissions"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -93,7 +92,6 @@ class CreateAPIKeyInputBody(BaseModel):
         _obj = cls.model_validate({
             "$schema": obj.get("$schema"),
             "name": obj.get("name"),
-            "organization_id": obj.get("organization_id"),
             "permissions": obj.get("permissions")
         })
         return _obj

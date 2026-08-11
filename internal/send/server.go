@@ -124,20 +124,6 @@ func requirePermission(ctx context.Context, perm string) error {
 	}
 }
 
-// cachedAPIKey is the Redis representation of a validated key.
-//
-// It is a named type so the read and write sides cannot drift. They were two
-// anonymous structs, and adding OrganizationID to only one of them would have
-// silently unscoped every cache hit — the key would authenticate with no
-// organization and the ADR 0011 check would wave it through for the whole 5-minute
-// TTL. Entries written before this field existed unmarshal with an empty
-// OrganizationID and are treated as unscoped until the TTL turns them over.
-type cachedAPIKey struct {
-	KeyHash        string   `json:"key_hash"`
-	Permissions    []string `json:"permissions"`
-	OrganizationID string   `json:"organization_id,omitempty"`
-}
-
 func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
 	keyID, secret, err := auth.ParseAPIKey(rawKey)
 	if err != nil {
@@ -146,7 +132,6 @@ func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
 
 	var keyHash string
 	var permissions []string
-	var organizationID string
 
 	// Try cache first
 	if s.cache != nil {
@@ -154,11 +139,13 @@ func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
 		if err != nil {
 			s.logger.Error("cache get api key failed", "error", err)
 		} else if cached != nil {
-			var entry cachedAPIKey
+			var entry struct {
+				KeyHash     string   `json:"key_hash"`
+				Permissions []string `json:"permissions"`
+			}
 			if json.Unmarshal(cached, &entry) == nil {
 				keyHash = entry.KeyHash
 				permissions = entry.Permissions
-				organizationID = entry.OrganizationID
 			}
 		}
 	}
@@ -171,11 +158,13 @@ func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
 		}
 		keyHash = k.KeyHash
 		permissions = k.Permissions
-		organizationID = k.OrganizationID
 
 		// Populate cache
 		if s.cache != nil {
-			entry, _ := json.Marshal(cachedAPIKey{keyHash, permissions, organizationID})
+			entry, _ := json.Marshal(struct {
+				KeyHash     string   `json:"key_hash"`
+				Permissions []string `json:"permissions"`
+			}{keyHash, permissions})
 			if err := s.cache.SetAPIKey(context.Background(), keyID, entry, 5*time.Minute); err != nil {
 				s.logger.Error("cache set api key failed", "error", err)
 			}
@@ -186,5 +175,5 @@ func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
 		return nil
 	}
 
-	return &auth.ValidatedKey{ID: keyID, OrganizationID: organizationID, Permissions: permissions}
+	return &auth.ValidatedKey{ID: keyID, Permissions: permissions}
 }
