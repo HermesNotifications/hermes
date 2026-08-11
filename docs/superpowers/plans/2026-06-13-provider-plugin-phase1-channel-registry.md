@@ -52,7 +52,7 @@ Create `internal/provider/registry_test.go`:
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -122,7 +122,7 @@ Create `internal/provider/channel.go`:
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -181,7 +181,7 @@ Create `internal/provider/manifest.go`:
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -200,7 +200,7 @@ Create `internal/provider/registry.go`:
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -275,7 +275,7 @@ Create `internal/provider/builtins_test.go`:
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -351,7 +351,7 @@ Create `internal/provider/builtins.go`:
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -437,7 +437,7 @@ Create `internal/dispatch/channels_internal_test.go`:
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatch
 

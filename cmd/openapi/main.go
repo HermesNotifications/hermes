@@ -1,5 +1,5 @@
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 // Command openapi generates OpenAPI 3.1 specs from huma route registrations.
 // Usage: go run ./cmd/openapi -service admin -out api/admin/openapi.yaml

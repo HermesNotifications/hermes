@@ -171,6 +171,8 @@ sdk-java:          ## Generate Java server SDK
 		-i api/admin/openapi.yaml -g java \
 		-o sdks/java/hermes-server-sdk \
 		--additional-properties=artifactId=hermes-server-sdk,groupId=com.hermes,invokerPackage=com.hermes.sdk,apiPackage=com.hermes.sdk.api,modelPackage=com.hermes.sdk.model,hideGenerationTimestamp=true \
+		--additional-properties=licenseName="Apache License 2.0" \
+		--additional-properties=licenseUrl=https://www.apache.org/licenses/LICENSE-2.0.txt \
 		--global-property=skipFormModel=true
 sdk-dotnet:        ## Generate .NET server SDK
 	npx @openapitools/openapi-generator-cli generate \
