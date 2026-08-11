@@ -288,6 +288,93 @@ describe("InboxStore: optimistic mutations", () => {
 
     expect(inbox.getSnapshot().error).toBeUndefined();
   });
+
+  it("keeps a notification that arrived while a failing mutation was in flight", async () => {
+    // Rollback restores a snapshot taken before the request went out, so anything realtime
+    // delivered meanwhile used to be erased along with the optimistic change — and, since
+    // the arrival had already been consumed, it would not come back until a manual refresh.
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake);
+    await inbox.start();
+
+    const archive = deferred<void>();
+    fake.inbox.archive = async () => archive.promise;
+
+    const pending = inbox.archive("a");
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual([]);
+
+    // A new notification lands while the archive is still out.
+    fake.emit("notification", {
+      type: "notification.new",
+      id: "arrived",
+      title: "Arrived mid-flight",
+      body: "Body",
+      createdAt: "2026-07-30T10:00:00.000Z",
+    });
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toContain("arrived");
+
+    archive.reject(HermesError.fromStatus("Inbox", 500));
+    await pending;
+
+    const after = inbox.getSnapshot();
+    // The archive is undone *and* the arrival survives.
+    expect(after.notifications.map((n) => n.id).sort()).toEqual(["a", "arrived"]);
+    expect(after.error).toBeDefined();
+  });
+
+  it("keeps a realtime update that landed while a failing mutation was in flight", async () => {
+    const fake = new FakeHermesClient(
+      fakePage({ data: [fakeNotification("a"), fakeNotification("b")], unreadCount: 2 })
+    );
+    const inbox = store(fake);
+    await inbox.start();
+
+    const archive = deferred<void>();
+    fake.inbox.archive = async () => archive.promise;
+    const pending = inbox.archive("a");
+
+    // The server says b was read elsewhere.
+    fake.emit("update", {
+      type: "inbox.updated",
+      action: "read",
+      notificationId: "b",
+      unreadCount: 1,
+    });
+
+    archive.reject(HermesError.fromStatus("Inbox", 500));
+    await pending;
+
+    const after = inbox.getSnapshot();
+    expect(after.notifications.map((n) => n.id).sort()).toEqual(["a", "b"]);
+    expect(after.notifications.find((n) => n.id === "b")?.read_at).toBeDefined();
+    expect(after.unreadCount).toBe(1);
+  });
+
+  it("does not replay realtime events when the mutation succeeds", async () => {
+    // The buffer exists only for the rollback path; replaying on success would double-apply.
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake);
+    await inbox.start();
+
+    const archive = deferred<void>();
+    fake.inbox.archive = async () => archive.promise;
+    const pending = inbox.archive("a");
+
+    fake.emit("notification", {
+      type: "notification.new",
+      id: "arrived",
+      title: "Arrived",
+      body: "Body",
+      createdAt: "2026-07-30T10:00:00.000Z",
+    });
+
+    archive.resolve();
+    await pending;
+
+    const ids = inbox.getSnapshot().notifications.map((n) => n.id);
+    expect(ids).toEqual(["arrived"]);
+    expect(ids.filter((id) => id === "arrived")).toHaveLength(1);
+  });
 });
 
 describe("InboxStore: unread count propagation", () => {

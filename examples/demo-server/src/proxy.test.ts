@@ -53,6 +53,28 @@ describe("buildProxyRequest: routing", () => {
     expect(proxied.url).toBe(`${UPSTREAM}/v1/inbox`);
   });
 
+  it("keeps a path component on the upstream instead of dropping it", () => {
+    // The incoming pathname is root-absolute, so resolving it as a relative reference used
+    // to replace the upstream's path entirely — an upstream behind a gateway prefix would
+    // silently proxy to the wrong place. The defaults have no path, so nothing local caught
+    // it, but this file is reference code integrators copy.
+    const proxied = buildProxyRequest(request("/v1/inbox"), "https://hermes.example.com/gateway");
+    expect(proxied.url).toBe("https://hermes.example.com/gateway/v1/inbox");
+  });
+
+  it("keeps a path component whether or not it ends in a slash", () => {
+    const proxied = buildProxyRequest(request("/v1/inbox"), "https://hermes.example.com/gateway/");
+    expect(proxied.url).toBe("https://hermes.example.com/gateway/v1/inbox");
+  });
+
+  it("keeps a nested path component, with the query string intact", () => {
+    const proxied = buildProxyRequest(
+      request("/v1/inbox?limit=5"),
+      "https://hermes.example.com/a/b"
+    );
+    expect(proxied.url).toBe("https://hermes.example.com/a/b/v1/inbox?limit=5");
+  });
+
   it("only claims the /v1 prefix", () => {
     // /api/* is the demo's own surface and must not be forwarded upstream.
     expect(PROXY_PREFIX).toBe("/v1/");

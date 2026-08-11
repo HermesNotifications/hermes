@@ -428,6 +428,35 @@ describe("<hermes-inbox>: action urls", () => {
   });
 });
 
+describe("<hermes-inbox>: the clientFactory escape hatch", () => {
+  it("builds its client through a factory set on the element", async () => {
+    // The property was declared and documented as an escape hatch for tests and wrappers,
+    // but nothing read it: applyConfig never forwarded it, and the controller took a factory
+    // only from its constructor — which runs in a field initializer, before any property is
+    // assigned. Setting it silently did nothing and the element opened a real socket.
+    const fake = new FakeHermesClient(
+      fakePage({ data: [fakeNotification("from-factory")], unreadCount: 1 })
+    );
+    let calls = 0;
+
+    const el = document.createElement("hermes-inbox") as HermesInbox;
+    el.clientFactory = () => {
+      calls++;
+      return fake.asClient();
+    };
+    el.apiUrl = "http://localhost:8888";
+    el.token = "jwt-token";
+    document.body.append(el);
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+
+    expect(calls).toBe(1);
+    await clickTrigger(el);
+    expect(text(el, ".notification-title")).toBe("Title from-factory");
+  });
+});
+
 describe("<hermes-inbox>: unsafe action urls", () => {
   /**
    * `action_url` is attacker-influenced: the send API takes it as an unvalidated string and

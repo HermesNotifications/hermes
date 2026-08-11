@@ -48,6 +48,15 @@ export interface InboxControllerConfig {
   archived?: boolean;
   /** A pre-built client. When set, no token handling happens at all. */
   client?: HermesClient;
+  /**
+   * Overrides how the client is built, taking precedence over the factory given to the
+   * constructor. This is what makes the element's `clientFactory` property mean something.
+   *
+   * Deliberately not part of {@link ClientIdentity}: identity is compared by value, and a
+   * caller passing an inline arrow would then look different on every render and rebuild
+   * forever. It is read when a client is next built, exactly like `getToken`.
+   */
+  clientFactory?: ClientFactory;
 }
 
 export interface InboxControllerOptions {
@@ -192,14 +201,25 @@ export class InboxController implements ReactiveController {
       let token = config.token ?? "";
       if (!token && config.tokenUrl) {
         const minted = await this.mintToken(config.tokenUrl);
-        if (!minted) return;
+        if (!minted) {
+          // Forget the config rather than leaving it recorded as applied. teardown() has
+          // already run, so there is no store and no client — and a config still marked
+          // applied would short-circuit every later configure(), which the element fires on
+          // every render. One transient failure of the token endpoint at mount would
+          // otherwise strand the widget empty forever, with no path back.
+          //
+          // Only when still current: a newer configure() owns `applied` now, and clearing
+          // it here would undo its bookkeeping.
+          if (generation === this.generation) this.applied = undefined;
+          return;
+        }
         if (generation !== this.generation) return;
         token = minted.token;
         this.scheduleRefresh(config, minted.expiresAt);
       }
       this.currentToken = token;
 
-      client = this.clientFactory({
+      client = (config.clientFactory ?? this.clientFactory)({
         apiUrl: config.apiUrl ?? "",
         ...(config.socketUrl ? { socketUrl: config.socketUrl } : {}),
         token,

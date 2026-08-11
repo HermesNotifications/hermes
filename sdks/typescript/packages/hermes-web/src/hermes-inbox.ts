@@ -438,6 +438,7 @@ export class HermesInbox extends LitElement {
       pageSize: this.pageSize,
       archived: this.archived,
       ...(this.client ? { client: this.client } : {}),
+      ...(this.clientFactory ? { clientFactory: this.clientFactory } : {}),
     });
   }
 

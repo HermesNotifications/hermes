@@ -67,10 +67,14 @@ export function upstreamFor(pathname: string, upstream: UpstreamRoutes): string 
  */
 export function buildProxyRequest(request: Request, upstreamOrigin: string): Request {
   const incoming = new URL(request.url);
-  const target = new URL(
-    `${incoming.pathname}${incoming.search}`,
-    upstreamOrigin.endsWith("/") ? upstreamOrigin : `${upstreamOrigin}/`
-  );
+  // The incoming pathname is root-absolute, so resolving it against the upstream as a
+  // relative reference would discard any path the upstream carries: an upstream of
+  // `https://hermes.example.com/gateway` would proxy `/v1/inbox` to
+  // `https://hermes.example.com/v1/inbox`. The defaults have no path, so this never bit
+  // locally — but this file is reference code integrators copy. Join the two explicitly.
+  const base = new URL(upstreamOrigin);
+  const basePath = base.pathname.endsWith("/") ? base.pathname.slice(0, -1) : base.pathname;
+  const target = new URL(`${basePath}${incoming.pathname}${incoming.search}`, base.origin);
 
   const headers = new Headers();
   for (const [name, value] of request.headers) {

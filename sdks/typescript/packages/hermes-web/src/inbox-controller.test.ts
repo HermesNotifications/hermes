@@ -655,3 +655,102 @@ describe("InboxController: losing a usable config", () => {
     expect(host.updateRequests).toBe(updatesBefore);
   });
 });
+
+describe("InboxController: retrying after a failed token mint", () => {
+  /** A fetch that fails `failures` times, then serves a token. */
+  function flakyTokenFetch(failures: number) {
+    let calls = 0;
+    return vi.fn(async () => {
+      calls++;
+      if (calls <= failures) return new Response("nope", { status: 503 });
+      return new Response(JSON.stringify({ token: "minted-jwt" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  const WITH_TOKEN_URL = {
+    apiUrl: "http://localhost:8888",
+    tokenUrl: "/api/hermes-token",
+    userId: "usr_1",
+  } as const;
+
+  it("retries after a transient token-endpoint failure", async () => {
+    // configure() recorded the config as applied *before* rebuild ran, and rebuild bailed
+    // out after teardown when the mint failed. The widget was left with no store and no
+    // client, while every later configure() — the element fires one on each render —
+    // short-circuited on the applied config. A single 503 at mount stranded it empty.
+    const { controller, clients } = harness({ fetch: flakyTokenFetch(1) });
+
+    controller.configure(WITH_TOKEN_URL);
+    await settle();
+    expect(clients).toHaveLength(0);
+
+    // The element re-renders and configures again with the same values.
+    controller.configure(WITH_TOKEN_URL);
+    await settle();
+
+    expect(clients).toHaveLength(1);
+  });
+
+  it("reports the failure rather than swallowing it", async () => {
+    const errors: HermesError[] = [];
+    const host = new StubHost();
+    const controller = new InboxController(host, {
+      clientFactory: () => new FakeHermesClient(fakePage()).asClient(),
+      fetch: flakyTokenFetch(1),
+      onError: (error) => errors.push(error),
+    });
+
+    controller.configure(WITH_TOKEN_URL);
+    await settle();
+
+    expect(errors).toHaveLength(1);
+  });
+
+  it("leaves a superseding config's bookkeeping alone", async () => {
+    // Only the current generation may clear `applied`; a newer configure() owns it now.
+    const { controller, clients } = harness({ fetch: flakyTokenFetch(1) });
+
+    controller.configure(WITH_TOKEN_URL);
+    controller.configure(READY);
+    await settle();
+
+    // The direct-token config still built its client, and the failed mint did not undo it.
+    expect(clients).toHaveLength(1);
+    controller.configure(READY);
+    await settle();
+    expect(clients).toHaveLength(1);
+  });
+});
+
+describe("InboxController: config-supplied client factory", () => {
+  it("prefers a factory passed through the config over the constructor's", async () => {
+    // This is what makes the element's documented `clientFactory` property mean anything:
+    // the controller is constructed in a field initializer, long before properties are set,
+    // so a factory that only arrived via the constructor could never come from the host.
+    const fromConfig: FakeHermesClient[] = [];
+    const { controller, clients } = harness();
+
+    controller.configure({
+      ...READY,
+      clientFactory: () => {
+        const fake = new FakeHermesClient(fakePage());
+        fromConfig.push(fake);
+        return fake.asClient();
+      },
+    });
+    await settle();
+
+    expect(fromConfig).toHaveLength(1);
+    expect(clients).toHaveLength(0);
+  });
+
+  it("falls back to the constructor factory when the config supplies none", async () => {
+    const { controller, clients } = harness();
+    controller.configure(READY);
+    await settle();
+    expect(clients).toHaveLength(1);
+  });
+});

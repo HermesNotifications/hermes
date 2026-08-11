@@ -51,6 +51,16 @@ export class InboxStore {
   private started = false;
 
   /**
+   * Realtime actions seen while a mutation is in flight, one buffer per mutation.
+   *
+   * A rollback restores a snapshot taken before the request went out, so anything realtime
+   * delivered in the meantime would vanish with it — a notification that arrived while an
+   * archive was failing would be erased from the list and not come back until a manual
+   * refresh. Replaying the buffer after the rollback puts it back.
+   */
+  private replayBuffers = new Set<InboxAction[]>();
+
+  /**
    * Incremented on every load. A response tagged with a stale generation is dropped, so
    * two racing loads cannot have the loser resolve last and clobber the winner.
    */
@@ -120,12 +130,12 @@ export class InboxStore {
 
     this.cleanups.push(
       this.client.on("notification", (event: NewNotificationEvent) => {
-        this.dispatch({ type: "realtime/notification", event });
+        this.dispatchRealtime({ type: "realtime/notification", event });
       })
     );
     this.cleanups.push(
       this.client.on("update", (event: InboxUpdatedEvent) => {
-        this.dispatch({ type: "realtime/update", event, at: this.now() });
+        this.dispatchRealtime({ type: "realtime/update", event, at: this.now() });
       })
     );
     this.cleanups.push(
@@ -202,13 +212,27 @@ export class InboxStore {
   private async mutate(action: InboxAction, call: () => Promise<void>): Promise<void> {
     if (this.disposed) return;
     const snapshot = this.state;
+    const replay: InboxAction[] = [];
+    this.replayBuffers.add(replay);
     this.dispatch(action);
     try {
       await call();
     } catch (cause) {
       if (this.disposed) return;
       this.dispatch({ type: "rollback", state: snapshot, error: this.asHermesError(cause) });
+      // The snapshot predates anything realtime delivered while the request was out, so
+      // reapply it. The reducer's realtime cases are written to be safe here: an arrival
+      // already on screen is replaced in place rather than counted twice.
+      for (const buffered of replay) this.dispatch(buffered);
+    } finally {
+      this.replayBuffers.delete(replay);
     }
+  }
+
+  /** Apply a realtime action, recording it for any mutation that may have to roll back. */
+  private dispatchRealtime(action: InboxAction): void {
+    for (const buffer of this.replayBuffers) buffer.push(action);
+    this.dispatch(action);
   }
 
   markRead(id: string): Promise<void> {
