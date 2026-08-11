@@ -59,7 +59,7 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 		t.Fatalf("nats: %v", err)
 	}
 	defer natsClient.Close()
-	if err := natsClient.SetupStreams(ctx); err != nil {
+	if err := natsClient.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("setup streams: %v", err)
 	}
 

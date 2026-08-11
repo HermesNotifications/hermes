@@ -23,7 +23,11 @@ spec:
         app.kubernetes.io/component: worker
     spec:
       serviceAccountName: hermes
-      terminationGracePeriodSeconds: 30
+      # 60, not 30: this pod drains NATS on the way out (5s readiness drain + up to 30s for
+      # in-flight handlers + 15s HTTP shutdown). Under a 30s grace the kubelet would SIGKILL
+      # mid-send, and the message would be redelivered and the email sent twice.
+      # scripts/check_shutdown_budget.py enforces the arithmetic.
+      terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

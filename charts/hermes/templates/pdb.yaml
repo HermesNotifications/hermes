@@ -1,0 +1,41 @@
+{{/*
+PodDisruptionBudgets for the long-running services.
+
+The chart had none at all, which meant a node drain or a cluster upgrade could evict every
+replica of a service simultaneously. That is invisible until it happens, and the kustomize
+overlays have carried eleven budgets for exactly this reason.
+
+Deliberately excluded: the migration and natsprovision Jobs and the cleanup CronJob. An evicted
+Job pod is never replaced, so a budget over one can never be satisfied again and the drain waits
+forever — the failure mode is worse than the gap. deploy/k8s/overlays/production/pdb/README.md
+records the same decision, and scripts/check_pdb_selectors.py enforces it on that side.
+
+Off by default: a single-replica evaluation install with maxUnavailable: 1 is fine, but an
+operator who has not thought about replica counts is better served by an install that drains
+cleanly than by one that appears protected.
+*/}}
+{{- $root := . -}}
+{{- range $service := list "admin" "send" "dispatch" "inbox" "user" "workerEmail" "workerSms" "workerInbox" "workerEvents" }}
+{{- $cfg := index $root.Values $service }}
+{{- if $cfg.podDisruptionBudget.enabled }}
+{{- $name := $service | kebabcase }}
+{{- $ctx := dict "root" $root "service" $name }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hermes.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "hermes.serviceLabels" $ctx | nindent 4 }}
+spec:
+  {{- /*
+    maxUnavailable, never minAvailable. Expressed as a ceiling on disruptions it always permits
+    at least one eviction; minAvailable at or above the replica count pins disruptionsAllowed to
+    zero permanently and blocks the very drain that would resolve the situation.
+  */}}
+  maxUnavailable: {{ $cfg.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "hermes.serviceSelectorLabels" $ctx | nindent 6 }}
+{{- end }}
+{{- end }}

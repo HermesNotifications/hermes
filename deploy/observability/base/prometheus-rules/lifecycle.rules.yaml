@@ -1,0 +1,82 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hermes-lifecycle
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: hermes.lifecycle
+      rules:
+        # docs/observability/runbooks/db-pool-saturated.md has existed since before there was
+        # any metric that could detect the condition it describes, and before
+        # HERMES_DATABASE_MAX_CONNS existed to fix it. Both exist now (ADR 0012).
+        - alert: DBPoolSaturated
+          expr: |
+            hermes_db_pool_connections{state="acquired"}
+              / on (job, instance) hermes_db_pool_max > 0.9
+          for: 5m
+          labels:
+            severity: warn
+            component: database
+          annotations:
+            summary: "Database pool over 90% acquired on {{ $labels.job }}"
+            description: "{{ $labels.job }} has held more than 90% of its connections for 5 minutes. Requests are close to queueing on acquire, which surfaces as latency with no slow query to blame."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
+
+        # The leading indicator: waiting for a connection is already latency, and it starts
+        # before saturation is sustained enough to trip the alert above.
+        - alert: DBPoolAcquireWaits
+          expr: rate(hermes_db_pool_acquire_waits_total[5m]) > 0
+          for: 10m
+          labels:
+            severity: info
+            component: database
+          annotations:
+            summary: "Requests are waiting for a database connection on {{ $labels.job }}"
+            description: "{{ $labels.job }} has been finding its pool empty on acquire for 10 minutes."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
+
+        # Should be zero. Non-zero means a pod was still running handlers when its drain budget
+        # expired: the messages are safe (unacked, so redelivered) but their side effects will
+        # be repeated — a duplicate email or push per occurrence.
+        - alert: UngracefulShutdown
+          expr: increase(hermes_shutdown_ungraceful_total[15m]) > 0
+          for: 1m
+          labels:
+            severity: warn
+            component: lifecycle
+          annotations:
+            summary: "{{ $labels.job }} did not finish draining before its budget expired"
+            description: "{{ $value }} shutdown(s) in the last 15 minutes abandoned in-flight handlers. Those messages will be redelivered and their side effects repeated."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/ungraceful-shutdown.md"
+
+        # Redis deliberately does not gate readiness — every read it serves falls back to
+        # Postgres — so a failing Redis leaves every probe green. This is the only signal.
+        - alert: CacheDegraded
+          expr: rate(hermes_cache_result_total{result="error"}[5m]) > 0
+          for: 10m
+          labels:
+            severity: warn
+            component: cache
+          annotations:
+            summary: "Cache errors on {{ $labels.job }} ({{ $labels.op }})"
+            description: "{{ $labels.job }} has been failing to read the cache for 10 minutes and is falling back to the database. Correct, but slower and more load than intended — and invisible in readiness by design."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/cache-degraded.md"
+
+        # The metric that says whether AckWait is right. Once p99 handler duration approaches
+        # the configured AckWait, JetStream begins redelivering messages whose handlers are
+        # still running, and every side effect happens twice.
+        - alert: MessagingRedeliverySpike
+          expr: |
+            rate(hermes_messaging_redeliveries_total[10m])
+              / on (stream, consumer) rate(hermes_messaging_handler_duration_seconds_count[10m]) > 0.1
+          for: 10m
+          labels:
+            severity: warn
+            component: pipeline
+          annotations:
+            summary: "Over 10% of messages redelivered on {{ $labels.stream }}/{{ $labels.consumer }}"
+            description: "Redeliveries without a matching rise in handler failures point at AckWait rather than a downstream fault: handlers are outliving their ack deadline and their side effects are repeating."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/messaging-redeliveries.md"

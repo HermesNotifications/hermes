@@ -574,10 +574,40 @@ def check_hook_config_refs(docs):
     return failures
 
 
+def check_rewrite_targets(docs):
+    """An nginx rewrite-target using a capture group needs use-regex to have one.
+
+    The failure is entirely silent. `rewrite-target: /$2` against `path: /realtime(/|$)(.*)`
+    looks correct and renders without complaint, but without `use-regex: "true"` nginx treats
+    the path as a literal prefix, never compiles the groups, and substitutes empty for `$2` --
+    so every websocket request is rewritten to `/` and the realtime route does not work at all.
+    The kustomize overlays set it; the chart shipped without it.
+    """
+    failures = []
+    for doc in docs:
+        if doc.get("kind") != "Ingress":
+            continue
+        meta = doc.get("metadata") or {}
+        annotations = meta.get("annotations") or {}
+        target = annotations.get("nginx.ingress.kubernetes.io/rewrite-target", "")
+        if "$" not in target:
+            continue
+        if annotations.get("nginx.ingress.kubernetes.io/use-regex") != "true":
+            failures.append(
+                f"Ingress {meta.get('name', '?')!r} sets rewrite-target {target!r}, which "
+                "refers to a regex capture group, but does not set "
+                'nginx.ingress.kubernetes.io/use-regex: "true". nginx will treat the path as a '
+                "literal prefix, capture nothing, and rewrite every request to the substituted "
+                "empty value — silently breaking the route while the manifest looks right."
+            )
+    return failures
+
+
 def evaluate(docs, source):
     """Run every check. Returns (failures, stats)."""
     failures = []
     failures += check_ingress_routes(docs, source.routes)
+    failures += check_rewrite_targets(docs)
     failures += check_provisioner(docs, source.stream_services, source.provisioner)
     failures += check_images(docs, source.published_images, source.registry)
     failures += check_config(docs, source.email_providers)

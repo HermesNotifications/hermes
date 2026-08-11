@@ -62,6 +62,61 @@ describe("InboxStore: starting", () => {
     expect(fake.listOptions[0]).toMatchObject({ limit: 20 });
   });
 
+  it("subscribes before it lists", async () => {
+    // Ordering, and it is the whole point. Listing first leaves a window between the page
+    // response and the subscription going live in which a publication is dropped outright --
+    // Centrifugo has no channel to deliver it to, so nothing retries and nothing recovers it
+    // unless the deployment keeps history, which the bundled Helm Centrifugo does not.
+    //
+    // Subscribing first converts that lost update into a duplicate, which the reducer already
+    // dedupes by id.
+    const fake = new FakeHermesClient(fakePage());
+    await store(fake, { userId: "usr_1" }).start();
+
+    expect(fake.calls).toEqual(["connect:usr_1", "waitUntilConnected", "list"]);
+  });
+
+  it("reports loading from the moment start is called, not from the fetch", async () => {
+    // start() now does socket work before it lists, and that gap is entirely visible to a
+    // renderer. Without an immediate load/start the store reads "not loading, no notifications"
+    // throughout the connect, so the widget shows its empty state -- "you're all caught up" --
+    // over an inbox it simply has not fetched yet.
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const inbox = store(fake, { userId: "usr_1" });
+
+    const starting = inbox.start();
+    expect(inbox.getSnapshot().loading).toBe(true);
+
+    await starting;
+    expect(inbox.getSnapshot().loading).toBe(false);
+  });
+
+  it("lists anyway when realtime never becomes ready", async () => {
+    // A blocked websocket must not cost the user their inbox. The store waits a bounded time
+    // and then fetches regardless, inheriting the race it was trying to avoid -- which is no
+    // worse than the behaviour this ordering replaced.
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    fake.realtimeBecomesReady = false;
+    const inbox = store(fake, { userId: "usr_1" });
+
+    await inbox.start();
+
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  it("still lists when the socket refuses to connect at all", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    fake.connect = async () => {
+      throw new Error("websocket blocked");
+    };
+    const inbox = store(fake, { userId: "usr_1" });
+
+    await inbox.start();
+
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["a"]);
+    expect(inbox.getSnapshot().realtime).toBe("disconnected");
+  });
+
   it("registers one handler per realtime signal it consumes", async () => {
     // notification, update and status — three. A regression that dropped one would leave
     // the widget silently missing a whole class of change.
@@ -567,20 +622,24 @@ describe("InboxStore: stop and restart", () => {
     expect(fake.calls.filter((call) => call === "list")).toHaveLength(1);
   });
 
-  it("does not connect when stopped while the first page was in flight", async () => {
-    // Otherwise the socket outlives the store: publications arrive on a connection nobody is
-    // listening to, which is exactly how a widget ends up connected and permanently empty.
+  it("does not fetch when stopped while the socket was coming up", async () => {
+    // The mirror of the old ordering guard. start() now subscribes first, so the window in
+    // which stop() can race it is the connect, not the list -- and fetching afterwards would
+    // push a page into a store nobody is listening to.
     const fake = new FakeHermesClient(fakePage());
-    const pending = deferred<ReturnType<typeof fakePage>>();
-    fake.inbox.list = async () => pending.promise;
+    const pending = deferred<void>();
+    fake.connect = async () => {
+      fake.calls.push("connect");
+      await pending.promise;
+    };
     const inbox = store(fake, { userId: "usr_1" });
 
     const starting = inbox.start();
     inbox.stop();
-    pending.resolve(fakePage());
+    pending.resolve();
     await starting;
 
-    expect(fake.calls.some((call) => call.startsWith("connect"))).toBe(false);
+    expect(fake.calls.filter((call) => call === "list")).toHaveLength(0);
   });
 });
 

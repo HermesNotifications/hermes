@@ -147,6 +147,18 @@ export class HermesClient {
     await this.realtime.connect(resolved);
   }
 
+  /**
+   * Resolve once the realtime channel is subscribed, or when `timeoutMs` elapses. Reports
+   * whether the subscription actually became live.
+   *
+   * Distinct from awaiting {@link connect}, which returns well before Centrifugo confirms the
+   * subscription — and until it does, publications to the channel are dropped rather than
+   * queued.
+   */
+  waitUntilConnected(timeoutMs: number): Promise<boolean> {
+    return this.realtime.waitUntilConnected(timeoutMs);
+  }
+
   /** Close the socket, keeping handlers so a later connect() still delivers. */
   disconnect(): void {
     this.realtime.disconnect();
@@ -187,9 +199,29 @@ export class HermesClient {
     for (const handler of this.unreadCountHandlers) handler(count);
   }
 
+  /**
+   * Fetch the unread count from the server and publish it.
+   *
+   * The reason this exists: a host that renders only a bell badge, with no `<hermes-inbox>`
+   * mounted, has nothing driving `onUnreadCountChange` until the user's first mutation — so the
+   * badge reads zero on first paint no matter how many notifications are waiting. Calling this
+   * once at mount is what makes a standalone badge correct immediately.
+   *
+   * A mounted inbox does not need it; its initial page already carries the count.
+   */
+  async refreshUnreadCount(): Promise<number> {
+    const count = await this.inbox.unreadCount();
+    this.setUnreadCount(count);
+    return count;
+  }
+
   private handleEvent(event: HermesEvent) {
     if (event.type === "notification.new") {
       for (const handler of this.notificationHandlers) handler(event);
+      // An arrival moves the badge even with no inbox mounted -- but only when the server sent
+      // a number. Guessing here would race the store's own reducer, which owns the fallback
+      // arithmetic and has the notification list needed to dedupe against.
+      if (event.unreadCount !== undefined) this.setUnreadCount(event.unreadCount);
     } else if (event.type === "inbox.updated") {
       for (const handler of this.updateHandlers) handler(event);
       this.setUnreadCount(event.unreadCount);

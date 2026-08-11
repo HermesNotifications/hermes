@@ -5,3 +5,4 @@ resources:
   - service.rules.yaml
   - pipeline.rules.yaml
   - infra.rules.yaml
+  - lifecycle.rules.yaml

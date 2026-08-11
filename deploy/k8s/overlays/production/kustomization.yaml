@@ -34,6 +34,16 @@ configMapGenerator:
       # this the check defaults to development and is silently inert here — which is the
       # same failure mode as finding 47, a control that exists and does not run.
       - HERMES_ENV=production
+      # Matches the 3-replica NATS StatefulSet. Without this every stream lives on one peer, so
+      # losing a single node takes NOTIFICATIONS or DELIVERY offline entirely — publishes fail,
+      # consumers stall, and restarting services crash-loop on EnsureStreams — despite the
+      # minAvailable: 2 PDB and the hard hostname anti-affinity that exist to prevent it.
+      - HERMES_NATS_STREAM_REPLICAS=3
+      # Roughly 60% of the 5Gi JetStream PVC per node. A file store that reaches the disk limit
+      # fails *every* publish, including the dead-letter publishes that are the safety net;
+      # bounding the work streams means a spike is rejected at the edge (a 503 the caller can
+      # retry) instead of taking the DLQ down with it.
+      - HERMES_NATS_STREAM_MAX_BYTES=3221225472
     options:
       disableNameSuffixHash: true
   - name: hermes-domain

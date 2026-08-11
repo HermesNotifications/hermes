@@ -23,7 +23,9 @@ spec:
         app.kubernetes.io/component: worker
     spec:
       serviceAccountName: hermes
-      terminationGracePeriodSeconds: 30
+      # 60, not 30: this pod drains NATS and then flushes its event batch to Postgres, in that
+      # order. See worker-email for the arithmetic.
+      terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

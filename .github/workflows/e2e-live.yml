@@ -15,8 +15,10 @@ on:
   schedule:
     # 06:00 UTC daily, so a regression is caught within a day of landing.
     - cron: "0 6 * * *"
+  # No `branches:` filter — see the note in ci.yml. Safe to widen despite the cost of this job:
+  # the `e2e-live` label guard below still gates every pull_request run, so a stacked PR gains
+  # the *ability* to opt in rather than a 30-minute run it did not ask for.
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened, labeled]
 
 concurrency:

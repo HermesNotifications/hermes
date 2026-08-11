@@ -39,6 +39,13 @@ type Server struct {
 	skipAuth       bool
 	jwtKeyProvider auth.JWTKeyProvider
 	limiter        *middleware.RateLimiter
+	readiness      *httputil.Readiness
+}
+
+// SetReadiness installs the readiness probe /readyz answers with. Without one the endpoint
+// reports ready unconditionally, which is what it did before dependencies were checked at all.
+func (s *Server) SetReadiness(r *httputil.Readiness) {
+	s.readiness = r
 }
 
 // SetSkipAuth disables JWT authentication. Intended for use in tests only.
@@ -88,7 +95,14 @@ func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Lo
 func (s *Server) routes() {
 	// Health checks registered directly on chi (not in OpenAPI spec)
 	s.router.Get("/healthz", httputil.HealthzHandler())
-	s.router.Get("/readyz", httputil.ReadyzHandler())
+	// Resolved per request, so SetReadiness can install a probe after the routes are built.
+	s.router.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if s.readiness == nil {
+			httputil.ReadyzHandler()(w, r)
+			return
+		}
+		s.readiness.Handler()(w, r)
+	})
 
 	s.registerProfileRoutes()
 	s.registerPreferenceRoutes()

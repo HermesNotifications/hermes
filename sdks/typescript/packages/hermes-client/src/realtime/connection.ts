@@ -98,6 +98,10 @@ export function eventFromPublication(data: unknown): HermesEvent | undefined {
         createdAt: (payload.created_at as string) ?? new Date().toISOString(),
         ...(typeof action?.url === "string" ? { actionUrl: action.url } : {}),
         ...(typeof action?.label === "string" ? { actionLabel: action.label } : {}),
+        // Only when the server actually sent a number. Coercing an absent field to 0 here would
+        // be worse than having no count at all: the reducer trusts a present count absolutely,
+        // so a fabricated zero would blank the badge on every arrival.
+        ...(typeof payload.unread_count === "number" ? { unreadCount: payload.unread_count } : {}),
       };
       return event;
     }
@@ -154,6 +158,40 @@ export class RealtimeConnection {
   /** How many event handlers are registered. Exposed for teardown assertions. */
   handlerCount(): number {
     return this.handlers.length + this.statusHandlers.length;
+  }
+
+  /**
+   * Resolve once the channel is subscribed, or when `timeoutMs` elapses — reporting which.
+   *
+   * `connect()` cannot serve this purpose: it resolves as soon as the transport has been told
+   * to connect, which is several round trips before Centrifugo confirms the subscription. Until
+   * that confirmation the channel does not exist server-side and anything published to it is
+   * discarded, so "connect resolved" is not the same question as "is it safe to stop worrying
+   * about missing a publication".
+   *
+   * Resolves `false` rather than rejecting on timeout: the callers are ones that want to get on
+   * with their work regardless, and a rejection would force each of them to write the same
+   * try/catch to ignore it.
+   */
+  waitUntilConnected(timeoutMs: number): Promise<boolean> {
+    if (this.currentStatus === "connected") return Promise.resolve(true);
+
+    return new Promise<boolean>((resolve) => {
+      let settle = (result: boolean) => {
+        settle = () => {};
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(result);
+      };
+      const timer = setTimeout(() => settle(false), timeoutMs);
+      // Node keeps the process alive for a pending timer, so this wait could be the reason an
+      // SSR render or a script refuses to exit. Browsers type setTimeout as returning a number
+      // and have no unref, hence the guarded cast rather than a Node-typed timer.
+      (timer as unknown as { unref?: () => void }).unref?.();
+      const unsubscribe = this.onStatusChange((status) => {
+        if (status === "connected") settle(true);
+      });
+    });
   }
 
   private emit(event: HermesEvent): void {

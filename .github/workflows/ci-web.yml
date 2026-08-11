@@ -17,8 +17,8 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/ci-web.yml"
+  # No `branches:` filter — see the note in ci.yml. A PR stacked on another PR ran no CI at all.
   pull_request:
-    branches: [main]
     paths:
       - "web/admin/**"
       - "sdks/typescript/**"

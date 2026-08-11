@@ -44,14 +44,14 @@ func TestInbox(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		notifIDs[i] = id.Notification.New()
 		n := &models.Notification{
-			ID:         notifIDs[i],
-			OrganizationID:   organizationID,
-			UserID:     user.ID,
-			CategoryID: cat.ID,
-			Title:      fmt.Sprintf("Notification %d", i+1),
-			Body:       fmt.Sprintf("Body %d", i+1),
-			Channels:   []string{"inbox"},
-			Status:     models.StatusDelivered,
+			ID:             notifIDs[i],
+			OrganizationID: organizationID,
+			UserID:         user.ID,
+			CategoryID:     cat.ID,
+			Title:          fmt.Sprintf("Notification %d", i+1),
+			Body:           fmt.Sprintf("Body %d", i+1),
+			Channels:       []string{"inbox"},
+			Status:         models.StatusDelivered,
 		}
 		_, err := s.CreateNotification(ctx, n)
 		if err != nil {
@@ -64,22 +64,27 @@ func TestInbox(t *testing.T) {
 	// 1. ListInbox with pagination
 	t.Run("ListInbox_Pagination", func(t *testing.T) {
 		// Page 1: limit=2
-		notifs, unreadCount, cursor, err := s.ListInbox(ctx, user.ID, false, "", 2)
+		notifs, cursor, err := s.ListInbox(ctx, user.ID, false, "", 2)
 		if err != nil {
 			t.Fatalf("ListInbox page 1: %v", err)
 		}
 		if len(notifs) != 2 {
 			t.Fatalf("page 1: expected 2, got %d", len(notifs))
 		}
-		if unreadCount != 5 {
-			t.Fatalf("expected unread_count=5, got %d", unreadCount)
-		}
 		if cursor == "" {
 			t.Fatal("expected non-empty cursor for page 1")
 		}
 
+		unreadCount, err := s.UnreadCount(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("UnreadCount: %v", err)
+		}
+		if unreadCount != 5 {
+			t.Fatalf("expected unread_count=5, got %d", unreadCount)
+		}
+
 		// Page 2: limit=2
-		notifs2, _, cursor2, err := s.ListInbox(ctx, user.ID, false, cursor, 2)
+		notifs2, cursor2, err := s.ListInbox(ctx, user.ID, false, cursor, 2)
 		if err != nil {
 			t.Fatalf("ListInbox page 2: %v", err)
 		}
@@ -91,7 +96,7 @@ func TestInbox(t *testing.T) {
 		}
 
 		// Page 3: should return 1
-		notifs3, _, cursor3, err := s.ListInbox(ctx, user.ID, false, cursor2, 2)
+		notifs3, cursor3, err := s.ListInbox(ctx, user.ID, false, cursor2, 2)
 		if err != nil {
 			t.Fatalf("ListInbox page 3: %v", err)
 		}
@@ -135,9 +140,9 @@ func TestInbox(t *testing.T) {
 			t.Fatal("expected read_at to be set")
 		}
 
-		_, unreadCount, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
+		unreadCount, err := s.UnreadCount(ctx, user.ID)
 		if err != nil {
-			t.Fatalf("ListInbox: %v", err)
+			t.Fatalf("UnreadCount: %v", err)
 		}
 		if unreadCount != 4 {
 			t.Fatalf("expected unread_count=4, got %d", unreadCount)
@@ -159,9 +164,9 @@ func TestInbox(t *testing.T) {
 			t.Fatal("expected read_at to be nil")
 		}
 
-		_, unreadCount, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
+		unreadCount, err := s.UnreadCount(ctx, user.ID)
 		if err != nil {
-			t.Fatalf("ListInbox: %v", err)
+			t.Fatalf("UnreadCount: %v", err)
 		}
 		if unreadCount != 5 {
 			t.Fatalf("expected unread_count=5, got %d", unreadCount)
@@ -176,7 +181,7 @@ func TestInbox(t *testing.T) {
 		}
 
 		// Default inbox should return 4
-		notifs, _, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
+		notifs, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
 		if err != nil {
 			t.Fatalf("ListInbox default: %v", err)
 		}
@@ -185,7 +190,7 @@ func TestInbox(t *testing.T) {
 		}
 
 		// Archived inbox should return 1
-		archived, _, _, err := s.ListInbox(ctx, user.ID, true, "", 20)
+		archived, _, err := s.ListInbox(ctx, user.ID, true, "", 20)
 		if err != nil {
 			t.Fatalf("ListInbox archived: %v", err)
 		}
@@ -201,7 +206,7 @@ func TestInbox(t *testing.T) {
 			t.Fatalf("Unarchive: %v", err)
 		}
 
-		notifs, _, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
+		notifs, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
 		if err != nil {
 			t.Fatalf("ListInbox: %v", err)
 		}
@@ -217,7 +222,7 @@ func TestInbox(t *testing.T) {
 			t.Fatalf("SoftDelete: %v", err)
 		}
 
-		notifs, _, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
+		notifs, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
 		if err != nil {
 			t.Fatalf("ListInbox: %v", err)
 		}
@@ -233,9 +238,9 @@ func TestInbox(t *testing.T) {
 			t.Fatalf("MarkAllRead: %v", err)
 		}
 
-		_, unreadCount, _, err := s.ListInbox(ctx, user.ID, false, "", 20)
+		unreadCount, err := s.UnreadCount(ctx, user.ID)
 		if err != nil {
-			t.Fatalf("ListInbox: %v", err)
+			t.Fatalf("UnreadCount: %v", err)
 		}
 		if unreadCount != 0 {
 			t.Fatalf("expected unread_count=0 after MarkAllRead, got %d", unreadCount)

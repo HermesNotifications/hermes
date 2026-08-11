@@ -9,6 +9,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
 type notificationIDInput struct {
@@ -38,25 +39,26 @@ const (
 // Returns the current unread count (from cache INCR/DECR result or DB fallback).
 func (s *Server) updateCacheAfterAction(ctx context.Context, userID string, affectsCount bool, dir cacheDirection) int {
 	if !affectsCount || s.cache == nil {
-		return s.getUnreadCount(ctx, userID)
+		return s.unreadCount(ctx, userID)
 	}
 
 	var newCount int64
 	var err error
 	if dir == cacheIncr {
-		newCount, err = s.cache.IncrUnreadCount(ctx, userID)
+		newCount, err = s.cache.IncrUnreadCount(ctx, userID, models.UnreadCountCap)
 	} else {
 		newCount, err = s.cache.DecrUnreadCount(ctx, userID)
 	}
 
 	if err != nil {
 		s.logger.Error("failed to update unread count cache", "error", err)
-		return s.getUnreadCount(ctx, userID)
+		return s.unreadCount(ctx, userID)
 	}
 
-	// DecrUnreadCount returns -1 on cache miss — fall back to DB
+	// Both directions report a miss as UnreadCountMiss. Neither will create the key: only an
+	// authoritative read knows what the count actually is.
 	if newCount < 0 {
-		return s.getUnreadCount(ctx, userID)
+		return s.unreadCount(ctx, userID)
 	}
 
 	return int(newCount)

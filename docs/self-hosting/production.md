@@ -180,6 +180,46 @@ There is no `externalCentrifugo.apiKey` — the key always comes from a Secret o
 Centrifugo must be configured to validate the same tokens Hermes issues: its token secret has
 to equal `HERMES_JWT_SECRET`.
 
+### What your Centrifugo has to be configured with
+
+Four of these are load-bearing in a way that is invisible when they are missing: the connection
+succeeds, the widget reports itself connected, and notifications are quietly lost. Configure all
+of them.
+
+| Setting | Why the client needs it |
+|---|---|
+| Redis engine + a broker | Hermes publishes through whichever Centrifugo node it reaches. Without a shared engine, a publication is delivered only to clients connected to *that* node. |
+| `allow_user_limited_channels` | Every subscription is to `user#<internal-user-id>`. Without this, Centrifugo does not treat the `user#` prefix as a user-limited channel and the subscription is refused. |
+| `history_size` / `history_ttl` | The SDK subscribes with `recoverable: true, positioned: true`, which asks Centrifugo to replay what was published while a socket was down. With no history configured that request is accepted and does nothing. |
+| `allowed_origins` | Centrifugo answers `403` at the handshake to any browser origin not listed — while permitting connections that carry no `Origin` at all, so health checks and `curl` succeed and only real browsers are refused. An embedded widget lives on *your* origin, not the Hermes one. |
+
+Values for the v6 configuration schema (the v5 keys are flat and differ — check
+`centrifugo defaultconfig` against the image you are running):
+
+```yaml
+engine:
+  type: redis
+  redis:
+    address: "rediss://:PASSWORD@your-redis:6379/1"
+client:
+  allowed_origins: ["https://app.example.com"]
+  token:
+    hmac_secret_key: "<the same value as HERMES_JWT_SECRET>"
+channel:
+  without_namespace:
+    presence: true
+    history_size: 50
+    history_ttl: "1h"
+    allow_user_limited_channels: true
+http_api:
+  key: "<the same value as HERMES_CENTRIFUGO_API_KEY>"
+```
+
+Run at least three replicas behind a PodDisruptionBudget. Do not add session affinity: with a
+shared engine any node can serve any user, and pinning would concentrate reconnects on one pod.
+Do give it a generous `terminationGracePeriodSeconds` — every socket on a terminating pod
+reconnects at once, and a graceful exit is what makes clients back off instead of hot-looping.
+
 ## Secrets Management
 
 ### Using existingSecret
