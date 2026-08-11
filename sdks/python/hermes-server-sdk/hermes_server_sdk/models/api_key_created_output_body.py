@@ -31,9 +31,10 @@ class ApiKeyCreatedOutputBody(BaseModel):
     created_at: datetime
     id: StrictStr
     name: StrictStr
+    organization_id: StrictStr
     permissions: Optional[List[StrictStr]]
     raw_key: StrictStr
-    __properties: ClassVar[List[str]] = ["$schema", "created_at", "id", "name", "permissions", "raw_key"]
+    __properties: ClassVar[List[str]] = ["$schema", "created_at", "id", "name", "organization_id", "permissions", "raw_key"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -97,6 +98,7 @@ class ApiKeyCreatedOutputBody(BaseModel):
             "created_at": obj.get("created_at"),
             "id": obj.get("id"),
             "name": obj.get("name"),
+            "organization_id": obj.get("organization_id"),
             "permissions": obj.get("permissions"),
             "raw_key": obj.get("raw_key")
         })

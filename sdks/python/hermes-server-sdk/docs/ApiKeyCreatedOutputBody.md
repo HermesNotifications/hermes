@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **created_at** | **datetime** |  | 
 **id** | **str** |  | 
 **name** | **str** |  | 
+**organization_id** | **str** |  | 
 **permissions** | **List[str]** |  | 
 **raw_key** | **str** |  | 
 

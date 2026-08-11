@@ -68,6 +68,11 @@ public class Item {
   @javax.annotation.Nonnull
   private String name;
 
+  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
+  @javax.annotation.Nullable
+  private String organizationId;
+
   public static final String SERIALIZED_NAME_PERMISSIONS = "permissions";
   @SerializedName(SERIALIZED_NAME_PERMISSIONS)
   @javax.annotation.Nullable
@@ -133,6 +138,25 @@ public class Item {
   }
 
 
+  public Item organizationId(@javax.annotation.Nullable String organizationId) {
+    this.organizationId = organizationId;
+    return this;
+  }
+
+  /**
+   * Get organizationId
+   * @return organizationId
+   */
+  @javax.annotation.Nullable
+  public String getOrganizationId() {
+    return organizationId;
+  }
+
+  public void setOrganizationId(@javax.annotation.Nullable String organizationId) {
+    this.organizationId = organizationId;
+  }
+
+
   public Item permissions(@javax.annotation.Nullable List<String> permissions) {
     this.permissions = permissions;
     return this;
@@ -173,12 +197,13 @@ public class Item {
     return Objects.equals(this.createdAt, item.createdAt) &&
         Objects.equals(this.id, item.id) &&
         Objects.equals(this.name, item.name) &&
+        Objects.equals(this.organizationId, item.organizationId) &&
         Objects.equals(this.permissions, item.permissions);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(createdAt, id, name, permissions);
+    return Objects.hash(createdAt, id, name, organizationId, permissions);
   }
 
   @Override
@@ -188,6 +213,7 @@ public class Item {
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
     sb.append("    permissions: ").append(toIndentedString(permissions)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -210,7 +236,7 @@ public class Item {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("created_at", "id", "name", "permissions"));
+    openapiFields = new HashSet<String>(Arrays.asList("created_at", "id", "name", "organization_id", "permissions"));
 
     // a set of required properties/fields (JSON key names)
     openapiRequiredFields = new HashSet<String>(Arrays.asList("created_at", "id", "name", "permissions"));
@@ -249,6 +275,9 @@ public class Item {
       }
       if (!jsonObj.get("name").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `name` to be a primitive type in the JSON string but got `%s`", jsonObj.get("name").toString()));
+      }
+      if ((jsonObj.get("organization_id") != null && !jsonObj.get("organization_id").isJsonNull()) && !jsonObj.get("organization_id").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
       }
       // ensure the required json array is present
       if (jsonObj.get("permissions") == null) {

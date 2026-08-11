@@ -290,6 +290,12 @@ export class NotificationsService {
 export type APIKeyInfo = {
   id: string;
   name: string;
+  /**
+   * The organization this key may act for. Optional only because keys created
+   * before scoping was introduced carry none; those are unconstrained and should
+   * be replaced. See ADR 0011.
+   */
+  organization_id?: string;
   permissions: string[] | null;
   created_at: string;
 };
@@ -306,13 +312,19 @@ export class APIKeysService {
     return unwrap(result) ?? [];
   }
 
+  /**
+   * Creates an API key scoped to one organization. The key may only send for that
+   * organization — `/v1/send` returns 403 for any other.
+   */
   async create(body: {
     name: string;
+    organization_id: string;
     permissions?: string[];
   }): Promise<APIKeyCreated> {
     const result = await this.client.POST("/v1/apikeys", {
       body: {
         name: body.name,
+        organization_id: body.organization_id,
         permissions: body.permissions,
       },
     });

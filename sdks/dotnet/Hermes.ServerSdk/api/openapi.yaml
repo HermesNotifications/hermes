@@ -624,6 +624,7 @@ components:
         permissions:
         - permissions
         - permissions
+        organization_id: organization_id
         name: name
         created_at: 2000-01-23T04:56:07.000+00:00
         id: id
@@ -641,6 +642,8 @@ components:
           type: string
         name:
           type: string
+        organization_id:
+          type: string
         permissions:
           items:
             type: string
@@ -652,6 +655,7 @@ components:
       - created_at
       - id
       - name
+      - organization_id
       - permissions
       - raw_key
     CreateAPIKeyInputBody:
@@ -661,6 +665,7 @@ components:
         permissions:
         - permissions
         - permissions
+        organization_id: organization_id
         name: name
       properties:
         $schema:
@@ -672,6 +677,10 @@ components:
           description: Human-readable key name
           minLength: 1
           type: string
+        organization_id:
+          description: Organization this key may act for
+          minLength: 1
+          type: string
         permissions:
           description: Permission set (defaults to all except apikeys:manage)
           items:
@@ -680,6 +689,7 @@ components:
           type: array
       required:
       - name
+      - organization_id
     CreateCategoryInputBody:
       additionalProperties: false
       example:
@@ -868,6 +878,7 @@ components:
         permissions:
         - permissions
         - permissions
+        organization_id: organization_id
         name: name
         created_at: 2000-01-23T04:56:07.000+00:00
         id: id
@@ -878,6 +889,8 @@ components:
         id:
           type: string
         name:
+          type: string
+        organization_id:
           type: string
         permissions:
           items:
