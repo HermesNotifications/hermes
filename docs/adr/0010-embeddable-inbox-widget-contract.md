@@ -96,6 +96,13 @@ synthesized from a live arrival has empty strings there; the honest fix is a ric
 tracked separately. Aliasing the element under a second tag name registers a subclass, because
 `customElements.define` refuses one constructor under two names.
 
+> **Update 2026-08-10 ([ADR 0011](0011-cache-first-unread-count.md)).** The count half of that
+> richer payload now exists: `notification.new` carries an optional `unread_count`, so the
+> reducer no longer has to invent one by incrementing locally — which is the arithmetic that
+> diverged between the two implementations this ADR consolidated. It is optional because the
+> publishing worker has no database and cannot know the number when its cache has expired. The
+> identity fields (`category_id`, `organization_id`, `user_id`) are still absent.
+
 ## Alternatives considered
 
 **A fifth `inbox-core` package** for the shared reducer. Rejected: a new CI build target, lockfile

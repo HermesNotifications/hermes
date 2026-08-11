@@ -29,13 +29,13 @@ func testNotifStore(t *testing.T) *dynamo.NotificationStore {
 
 func newNotif(userID, organizationID string) *models.Notification {
 	return &models.Notification{
-		ID:       id.Notification.New(),
+		ID:             id.Notification.New(),
 		OrganizationID: organizationID,
-		UserID:   userID,
-		Title:    "test notification",
-		Body:     "test body",
-		Channels: []string{"inbox"},
-		Status:   models.StatusPending,
+		UserID:         userID,
+		Title:          "test notification",
+		Body:           "test body",
+		Channels:       []string{"inbox"},
+		Status:         models.StatusPending,
 	}
 }
 
@@ -320,7 +320,7 @@ func TestListInbox_BasicAndPagination(t *testing.T) {
 	}
 
 	// Page 1: limit=3
-	page1, _, cursor1, err := st.ListInbox(ctx, userID, false, "", 3)
+	page1, cursor1, err := st.ListInbox(ctx, userID, false, "", 3)
 	if err != nil {
 		t.Fatalf("ListInbox page1: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestListInbox_BasicAndPagination(t *testing.T) {
 	}
 
 	// Page 2: should return remaining 2
-	page2, _, cursor2, err := st.ListInbox(ctx, userID, false, cursor1, 3)
+	page2, cursor2, err := st.ListInbox(ctx, userID, false, cursor1, 3)
 	if err != nil {
 		t.Fatalf("ListInbox page2: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestListInbox_ArchivedSeparate(t *testing.T) {
 	}
 
 	// Active inbox should only contain active
-	activeList, _, _, err := st.ListInbox(ctx, userID, false, "", 20)
+	activeList, _, err := st.ListInbox(ctx, userID, false, "", 20)
 	if err != nil {
 		t.Fatalf("ListInbox active: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestListInbox_ArchivedSeparate(t *testing.T) {
 	}
 
 	// Archived inbox should only contain archived
-	archivedList, _, _, err := st.ListInbox(ctx, userID, true, "", 20)
+	archivedList, _, err := st.ListInbox(ctx, userID, true, "", 20)
 	if err != nil {
 		t.Fatalf("ListInbox archived: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestSoftDelete(t *testing.T) {
 	}
 
 	// Deleted notification should not appear in inbox
-	inbox, _, _, _ := st.ListInbox(ctx, userID, false, "", 20)
+	inbox, _, _ := st.ListInbox(ctx, userID, false, "", 20)
 	for _, item := range inbox {
 		if item.ID == n.ID {
 			t.Error("soft-deleted notification appears in inbox")

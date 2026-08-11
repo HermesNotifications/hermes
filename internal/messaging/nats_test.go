@@ -64,7 +64,7 @@ func TestConnect_And_SetupStreams(t *testing.T) {
 	}
 	defer client.Close()
 
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 }
@@ -76,7 +76,7 @@ func TestPublish_And_Subscribe(t *testing.T) {
 	}
 	defer client.Close()
 
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 
@@ -124,7 +124,7 @@ func TestSubscribe_PoolBoundsConcurrency(t *testing.T) {
 		t.Fatalf("Connect: %v", err)
 	}
 	defer client.Close()
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS")
@@ -189,7 +189,7 @@ func TestSubscribe_RecoversFromHandlerPanic(t *testing.T) {
 		t.Fatalf("Connect: %v", err)
 	}
 	defer client.Close()
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS", "DLQ")
@@ -227,7 +227,7 @@ func TestSetupStreams_CreatesDLQ(t *testing.T) {
 	}
 	defer client.Close()
 
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 
@@ -339,7 +339,7 @@ func TestSubscribe_DeadLettersAfterMaxDeliveries(t *testing.T) {
 		t.Fatalf("Connect: %v", err)
 	}
 	defer client.Close()
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS", "DLQ")
@@ -392,7 +392,7 @@ func TestSubscribe_DeadLettersPermanentError(t *testing.T) {
 		t.Fatalf("Connect: %v", err)
 	}
 	defer client.Close()
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 	cleanupConsumers(t, testNATSUrl(t), "NOTIFICATIONS", "DLQ")

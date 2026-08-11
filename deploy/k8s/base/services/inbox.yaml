@@ -40,6 +40,12 @@ spec:
           env:
             - name: HERMES_HTTP_PORT
               value: "8086"
+            # This service holds no NATS client at all (ADR 0005 phase 3 — see the comment on
+            # inbox.Server), so there is nothing to drain and the default budget would reserve
+            # 30s of the grace period for a step that never runs. Stating it keeps
+            # check_shutdown_budget.py honest instead of making it guess.
+            - name: HERMES_NATS_DRAIN_TIMEOUT
+              value: "0s"
             - name: DD_SERVICE
               value: hermes-inbox
             - name: OTEL_SERVICE_NAME

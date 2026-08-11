@@ -29,7 +29,8 @@ func main() {
 		messaging.WithIdentity("hermes-worker-sms", cfg.NATSNKeySeedPath))
 	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
 	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-worker-sms", logger)
-	defer natsClient.Close()
+	// Drained as a shutdown callback below rather than deferred here — a deferred Close ran
+	// after the HTTP server stopped, so the pool kept pulling work it would then abandon.
 
 	provider := delivery.NewWebhookProvider("sms", cfg.SMSWebhookURL)
 
@@ -39,9 +40,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The bus only. A failing SMS webhook is a per-message failure that retries and eventually
+	// dead-letters; it must not remove delivery capacity.
+	readiness := bootstrap.NewReadiness(bootstrap.NATSCheck(natsClient))
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
+	mux.HandleFunc("GET /readyz", readiness.Handler())
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger)
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+			OnShutdown:      []func(){bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger)},
+		})
 }

@@ -80,6 +80,26 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 	kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_centrifugo_origins.py -
 	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_centrifugo_origins.py -
 	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_centrifugo_origins.py -
+	@# The memory engine gives each Centrifugo node its own subscription registry, so above one
+	@# replica a publication reaches only the clients on the node that received it -- silently,
+	@# with nothing in any log or health check to say so. production.md has said this in prose
+	@# since the chart shipped; prose does not fail a render.
+	kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_centrifugo_engine.py -
+	@# JetStream defaults to one replica when Replicas is unset, which is what every stream ran
+	@# with on a three-node cluster: `nats stream ls` looks healthy, every publish succeeds, and
+	@# the first evidence is a node going away and taking NOTIFICATIONS or DELIVERY with it.
+	@# All three overlays -- staging and local are the single-node cases the gate must also pass.
+	kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_nats_stream_replicas.py -
+	@# Every Hermes image is FROM scratch, so preStop.exec cannot run `sleep` and the drain
+	@# delay lives in-process instead. That splits one budget across a manifest and an env var,
+	@# which is precisely the pairing that drifts: exceed terminationGracePeriodSeconds and the
+	@# kubelet SIGKILLs mid-drain, which is strictly worse than not draining at all.
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_shutdown_budget.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_shutdown_budget.py -
 	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
 	@# or rejects. It shipped with 17 passing tests that nothing ran.
 	./infra/scripts/test-lib.sh
@@ -106,6 +126,17 @@ verify-chart:      ## Check the rendered Helm chart against the Go source it dep
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  | python3 scripts/check_helm_render.py - --source-root=.
+	@# The same two gates the kustomize overlays get. Running them only over kustomize is
+	@# exactly how the chart drifted into shipping no PDBs, no grace periods and empty
+	@# resource requests while the overlays had all three.
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  | python3 scripts/check_workload_resources.py - --skip=nats,centrifugo,postgresql,redis
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  | python3 scripts/check_shutdown_budget.py -
 	@# Optional features render into workloads the default install never produces, so they
 	@# need their own pass -- hermes-cleanup was missing from the cd.yml publish matrix and
 	@# only shows up when the CronJob renders.

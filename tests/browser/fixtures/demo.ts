@@ -80,8 +80,12 @@ export const test = base.extend<DemoFixtures>({
     // is called. The widget fetches its first page as soon as the session resolves, which is
     // comfortably before any post-navigation assertion settles — so waiting afterwards misses the
     // response and then hangs until the test times out.
+    // Exact path, for the same reason countInboxFetches matches exactly: a substring match would
+    // also accept `/v1/inbox/unread-count`, and resolving on that would let the fixture hand the
+    // test a page whose list has not actually loaded yet.
     const firstLoad = page.waitForResponse(
-      (response) => response.url().includes("/v1/inbox") && response.request().method() === "GET"
+      (response) =>
+        response.request().method() === "GET" && isInboxListRequest(response.url())
     );
     await page.goto("/");
     await expect(trigger(page)).toBeVisible();
@@ -170,13 +174,30 @@ export async function openPanel(page: Page): Promise<void> {
   await expect(panel(page)).toBeVisible();
 }
 
-/** Count `GET /v1/inbox` requests from now on. */
+/**
+ * Count list fetches — `GET /v1/inbox` exactly — from now on.
+ *
+ * The match is on the exact pathname, not a substring, and that distinction is load-bearing.
+ * `/v1/inbox/unread-count` contains `/v1/inbox`, and it is a deliberately cheap endpoint that
+ * fetches no rows: a client is expected to call it, and counting it here would fail
+ * realtime-arrival's negative assertion with a message blaming realtime for something realtime
+ * did not do.
+ */
 export function countInboxFetches(page: Page): { get: () => number } {
   let count = 0;
   page.on("request", (request) => {
-    if (request.url().includes("/v1/inbox") && request.method() === "GET") count++;
+    if (request.method() === "GET" && isInboxListRequest(request.url())) count++;
   });
   return { get: () => count };
+}
+
+/** True only for the list endpoint itself, ignoring query string and any trailing slash. */
+function isInboxListRequest(url: string): boolean {
+  try {
+    return new URL(url).pathname.replace(/\/+$/, "") === "/v1/inbox";
+  } catch {
+    return false;
+  }
 }
 
 /** Fail a test on any unexpected console error, so a silent SDK exception cannot hide. */

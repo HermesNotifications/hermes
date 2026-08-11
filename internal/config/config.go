@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type EmailConfig struct {
@@ -43,7 +44,65 @@ type Config struct {
 	//
 	// nats.go re-reads the file on every authentication challenge, so a rotated Secret is
 	// picked up on the next reconnect without a restart.
-	NATSNKeySeedPath   string
+	NATSNKeySeedPath string
+
+	// NATSStreamReplicas is the JetStream replication factor cmd/natsprovision declares the
+	// streams with. Only that binary reads it; every other service verifies rather than
+	// declares (ADR 0005 phase 4).
+	//
+	// The default of 1 matches a single-node bus — `make infra-up`, the local overlay,
+	// staging. A clustered deployment must set 3, and until it does, losing the one node
+	// holding a stream takes the pipeline down despite the PDB and the anti-affinity rules
+	// that exist to prevent exactly that.
+	NATSStreamReplicas int
+	// NATSStreamMaxBytes caps each work stream's on-disk size. 0 (the default) is unbounded,
+	// which is only safe while nothing fills the volume: a JetStream file store that hits the
+	// disk limit fails *every* publish, including the dead-letter publishes that are supposed
+	// to be the safety net. Set it to roughly 60% of the JetStream PVC.
+	NATSStreamMaxBytes int64
+	// NATSStreamReplicasAllowChange permits natsprovision to alter the replication factor of a
+	// stream that already exists. Off by default because that migration moves the whole stream
+	// between peers; see messaging.SetupStreams.
+	NATSStreamReplicasAllowChange bool
+
+	// ShutdownDrainDelay is how long a service keeps serving after flipping /readyz to 503,
+	// giving kube-proxy and the ingress time to stop routing to it. In-process because every
+	// image is FROM scratch and so cannot run a preStop exec hook.
+	ShutdownDrainDelay time.Duration
+	// ShutdownTimeout bounds the graceful HTTP shutdown that follows.
+	ShutdownTimeout time.Duration
+	// NATSDrainTimeout bounds waiting for in-flight message handlers. Set to 0 on services
+	// that hold no NATS client, so the shutdown budget reflects what actually runs.
+	NATSDrainTimeout time.Duration
+
+	// DatabaseMaxConns bounds this service's Postgres pool.
+	//
+	// docs/observability/runbooks/db-pool-saturated.md told operators to set
+	// HERMES_DATABASE_MAX_CONNS long before it existed. It exists now. A fixed default rather
+	// than a CPU-derived one, because the derived value came from the *node's* core count and
+	// so varied with wherever the scheduler happened to place the pod.
+	DatabaseMaxConns int
+	// DatabaseMinConns is the warm pool kept open between requests.
+	DatabaseMinConns int
+	// DatabaseMaxConnLifetime recycles a connection after this long, with jitter applied in
+	// internal/database so a pool that filled during a burst does not replace every connection
+	// at the same instant later.
+	DatabaseMaxConnLifetime time.Duration
+	// DatabaseMaxConnIdleTime closes connections idle for this long.
+	DatabaseMaxConnIdleTime time.Duration
+
+	// RedisPoolSize bounds the go-redis connection pool. Its own default is 10 × GOMAXPROCS,
+	// which is node-derived for the same reason the pgx one was.
+	RedisPoolSize int
+	// RedisTimeout bounds a single Redis command.
+	//
+	// go-redis defaults to 3 seconds, and that default is the hazard: every inbox read consults
+	// the unread-count cache, so a Redis hiccup means each request blocks three seconds before
+	// falling back to Postgres, in-flight requests pile up, and the HTTP tier collapses because
+	// of a dependency it can serve perfectly well without. Failing fast to the database is the
+	// whole point of having a fallback.
+	RedisTimeout time.Duration
+
 	RedisURL           string
 	JWTSecret          string
 	CentrifugoAPIURL   string
@@ -93,6 +152,22 @@ func Load() Config {
 		NATSUrl:          envStr("HERMES_NATS_URL", "nats://localhost:4222"),
 		NATSCABundlePath: envStr("HERMES_NATS_CA_BUNDLE", ""),
 		NATSNKeySeedPath: envStr("HERMES_NATS_NKEY_SEED", ""),
+
+		NATSStreamReplicas:            envInt("HERMES_NATS_STREAM_REPLICAS", 1),
+		NATSStreamMaxBytes:            envInt64("HERMES_NATS_STREAM_MAX_BYTES", 0),
+		NATSStreamReplicasAllowChange: envBool("HERMES_NATS_STREAM_REPLICAS_ALLOW_CHANGE", false),
+
+		ShutdownDrainDelay: envDuration("HERMES_SHUTDOWN_DRAIN_DELAY", 5*time.Second),
+		ShutdownTimeout:    envDuration("HERMES_SHUTDOWN_TIMEOUT", 15*time.Second),
+		NATSDrainTimeout:   envDuration("HERMES_NATS_DRAIN_TIMEOUT", 30*time.Second),
+
+		DatabaseMaxConns:        envInt("HERMES_DATABASE_MAX_CONNS", 10),
+		DatabaseMinConns:        envInt("HERMES_DATABASE_MIN_CONNS", 2),
+		DatabaseMaxConnLifetime: envDuration("HERMES_DATABASE_MAX_CONN_LIFETIME", 30*time.Minute),
+		DatabaseMaxConnIdleTime: envDuration("HERMES_DATABASE_MAX_CONN_IDLE_TIME", 5*time.Minute),
+
+		RedisPoolSize:    envInt("HERMES_REDIS_POOL_SIZE", 16),
+		RedisTimeout:     envDuration("HERMES_REDIS_TIMEOUT", 500*time.Millisecond),
 		RedisURL:         envStr("HERMES_REDIS_URL", "redis://localhost:6379/0"),
 		JWTSecret:        envStr("HERMES_JWT_SECRET", "hermes-jwt-secret"),
 		CentrifugoAPIURL: envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000"),
@@ -223,6 +298,27 @@ func envStr(key, fallback string) string {
 func envInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+// envDuration reads a Go duration string ("30s", "1m"). A bare number is rejected rather than
+// guessed at: "30" could plausibly mean seconds or milliseconds, and silently choosing wrong
+// would either shorten a drain to nothing or stretch it past the grace period.
+func envDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return fallback
+}
+
+func envInt64(key string, fallback int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return i
 		}
 	}

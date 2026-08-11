@@ -20,6 +20,8 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0008](0008-helm-chart-provisioning-jobs-are-not-hooks.md) | Run the Helm chart's provisioning Jobs as plain resources, not Helm hooks | Accepted | 2026-07-31 |
 | [0009](0009-bundled-datastores-as-plain-manifests-on-official-images.md) | Ship the bundled evaluation Postgres and Redis as plain manifests on Docker Official Images | Accepted | 2026-07-31 |
 | [0010](0010-embeddable-inbox-widget-contract.md) | Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React | Accepted | 2026-07-30 |
+| [0011](0011-cache-first-unread-count.md) | Serve the unread count from cache, and keep it off the websocket's critical path | Accepted | 2026-08-10 |
+| [0012](0012-lifecycle-and-jetstream-durability.md) | Drain before shutdown, and replicate the streams the cluster can lose | Accepted | 2026-08-10 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

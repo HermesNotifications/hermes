@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
@@ -46,6 +47,11 @@ func (w *Worker) Start(_ context.Context) error {
 		Consumer:      w.consumer,
 		MaxAckPending: 256,
 		Workers:       4,
+		// The slowest handlers in the system: an SMTP conversation, a customer's webhook, a
+		// Centrifugo publish. AckWait must clear the handler deadline or JetStream redelivers a
+		// message mid-send and the recipient gets the notification twice.
+		HandlerTimeout: 30 * time.Second,
+		AckWait:        60 * time.Second,
 	}, func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
 		return w.handleMessage(ctx, data, info)
 	})

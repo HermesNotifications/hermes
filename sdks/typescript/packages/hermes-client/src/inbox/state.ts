@@ -157,19 +157,26 @@ export function inboxReducer(state: InboxState, action: InboxAction): InboxState
 
     case "realtime/notification": {
       const incoming = notificationFromEvent(action.event);
+      // The server's number when it sent one. It only omits it when the publishing worker had
+      // no cached count to read and no database to ask, in which case the local arithmetic
+      // below is still the best answer available.
+      const fromServer = action.event.unreadCount;
       const index = state.notifications.findIndex((n) => n.id === incoming.id);
       if (index >= 0) {
-        // Already on screen — a redelivery, or an arrival that raced the initial
-        // list(). Replace in place and leave the count alone; incrementing here is
-        // how a badge ends up ahead of the server.
+        // Already on screen — a redelivery, or an arrival that raced the initial list().
+        // Replace in place. Taking the server's count here is safe and was not before:
+        // incrementing was what put a badge ahead of the server, so this branch used to have to
+        // leave the count untouched entirely.
         const notifications = [...state.notifications];
         notifications[index] = incoming;
-        return { ...state, notifications };
+        return fromServer === undefined
+          ? { ...state, notifications }
+          : { ...state, notifications, unreadCount: fromServer };
       }
       return {
         ...state,
         notifications: [incoming, ...state.notifications],
-        unreadCount: state.unreadCount + 1,
+        unreadCount: fromServer ?? state.unreadCount + 1,
       };
     }
 

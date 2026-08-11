@@ -42,11 +42,19 @@ func main() {
 		messaging.WithIdentity(messaging.ProvisionerService, cfg.NATSNKeySeedPath))
 	defer client.Close()
 
-	if err := client.SetupStreams(ctx); err != nil {
+	opts := messaging.StreamOptions{
+		Replicas:           cfg.NATSStreamReplicas,
+		MaxBytes:           cfg.NATSStreamMaxBytes,
+		AllowReplicaChange: cfg.NATSStreamReplicasAllowChange,
+	}
+	if err := client.SetupStreams(ctx, opts); err != nil {
 		// Exiting non-zero is what makes the Job fail and retry rather than reporting success
 		// on a bus with no streams, which every service would then refuse to start against.
 		logger.Error("nats stream provisioning failed", "error", err)
 		os.Exit(1)
 	}
-	logger.Info("nats streams provisioned", "streams", messaging.StreamNames())
+	logger.Info("nats streams provisioned",
+		"streams", messaging.StreamNames(),
+		"replicas", opts.Replicas,
+		"max_bytes", opts.MaxBytes)
 }

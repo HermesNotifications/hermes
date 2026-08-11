@@ -25,10 +25,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
+	pool := bootstrap.MustConnectDB(ctx, cfg, logger)
 	defer pool.Close()
 
-	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
+	redisClient := bootstrap.MustConnectRedis(cfg, logger)
 	defer redisClient.Close()
 
 	pgStore := postgres.New(pool)
@@ -55,7 +55,15 @@ func main() {
 	srv := admin.NewServer(adminStore, organizations, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
 	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
+	readiness := bootstrap.NewReadiness(bootstrap.PostgresCheck(pool))
+	srv.SetReadiness(readiness)
+
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+		})
 }
 
 // adminStoreWithDynamoNotifs routes GetNotificationByID and GetNotificationEvents

@@ -11,6 +11,15 @@ import {
   type InboxState,
 } from "./state.js";
 
+/**
+ * How long `start()` will wait for the realtime channel before fetching the first page anyway.
+ *
+ * Long enough to cover a normal websocket handshake, short enough that a user on a network where
+ * the socket is blocked outright still sees their inbox promptly. Exceeding it is not an error:
+ * the list loads, and the store simply inherits the race it was trying to avoid.
+ */
+export const REALTIME_READY_TIMEOUT_MS = 3000;
+
 export interface InboxStoreOptions {
   client: HermesClient;
   /**
@@ -144,21 +153,42 @@ export class InboxStore {
       })
     );
 
-    await this.refresh();
+    // Enter the loading state before the socket work below, not when refresh() finally runs.
+    // Otherwise the store reports "not loading, no notifications" for as long as the connect
+    // takes, and a widget rendering that faithfully shows its empty state -- "You're all caught
+    // up" over an inbox that simply has not been fetched yet -- before the rows appear. A brief
+    // empty-state flash is a worse bug than the race this ordering fixes.
+    this.dispatch({ type: "load/start" });
 
-    // Re-checked after the await: `stop()` may have run while the first page was in flight, and
-    // connecting afterwards would leave an orphaned socket delivering publications to a store that
-    // is no longer listening.
-    if (this.disposed || !this.started) return;
-
+    // Subscribe before listing, not after.
+    //
+    // The other order loses anything published between the list response and the subscription
+    // going live: Centrifugo has no channel to deliver it to yet, so the publication is
+    // discarded outright rather than queued. `recoverable: true` covers that gap only on a
+    // deployment whose engine keeps history, which the bundled Helm Centrifugo -- memory engine,
+    // no history configured -- does not.
+    //
+    // Listing after the channel is live turns that lost update into a harmless duplicate
+    // instead: an arrival that also appears in the page is deduped by id in the reducer, and
+    // `load/success` takes the server's count either way.
     try {
       await this.client.connect(this.userId);
+      // Bounded, because first paint must not wait on a websocket. If realtime is not live in
+      // time we list anyway and accept the old race, which is no worse than the behaviour this
+      // replaces.
+      await this.client.waitUntilConnected(REALTIME_READY_TIMEOUT_MS);
     } catch (cause) {
       // A dead socket must not take the inbox down with it: the list still works, it
       // just will not update on its own. Surfacing the status is how a UI can say so.
       console.error("Hermes: realtime connection failed:", cause);
       this.dispatch({ type: "realtime/status", status: "disconnected" });
     }
+
+    // Re-checked after the await: `stop()` may have run while the socket was coming up, and
+    // fetching afterwards would push a page into a store that is no longer listening.
+    if (this.disposed || !this.started) return;
+
+    await this.refresh();
   }
 
   /** Reload the first page, discarding any cursor. */

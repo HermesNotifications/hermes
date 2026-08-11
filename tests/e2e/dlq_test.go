@@ -56,7 +56,7 @@ func TestDLQ_UnprocessableDeliveryIsDeadLettered(t *testing.T) {
 		t.Fatalf("nats connect: %v", err)
 	}
 	defer client.Close()
-	if err := client.SetupStreams(ctx); err != nil {
+	if err := client.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("setup streams: %v", err)
 	}
 

@@ -26,14 +26,14 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
+	pool := bootstrap.MustConnectDB(ctx, cfg, logger)
 	defer pool.Close()
 
 	// No NATS connection here on purpose. This service reads from the store and pushes
 	// nothing onto the bus; it used to connect and hand the client to a field nobody read.
 	// Under ADR 0005 phase 3 that dead connection would have needed its own NKey user and
 	// permissions, so it is gone instead.
-	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
+	redisClient := bootstrap.MustConnectRedis(cfg, logger)
 	defer redisClient.Close()
 
 	centrifugoClient := centrifugo.NewClient(cfg.CentrifugoAPIURL, cfg.CentrifugoAPIKey)
@@ -70,7 +70,17 @@ func main() {
 	srv := inbox.NewServer(inboxStore, centrifugoClient, redisClient, keyProvider, logger)
 	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
+	// Postgres only. Redis is deliberately not a readiness dependency: every read it serves
+	// falls back to the database, so a Redis blip must not empty this service's endpoint list.
+	readiness := bootstrap.NewReadiness(bootstrap.PostgresCheck(pool))
+	srv.SetReadiness(readiness)
+
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+		})
 }
 
 // inboxStoreWithDynamoInbox delegates InboxRepository methods to DynamoDB while
@@ -80,7 +90,7 @@ type inboxStoreWithDynamoInbox struct {
 	notifs *dynamo.NotificationStore
 }
 
-func (s *inboxStoreWithDynamoInbox) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, int, string, error) {
+func (s *inboxStoreWithDynamoInbox) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error) {
 	return s.notifs.ListInbox(ctx, userID, archived, cursor, limit)
 }
 func (s *inboxStoreWithDynamoInbox) UnreadCount(ctx context.Context, userID string) (int, error) {

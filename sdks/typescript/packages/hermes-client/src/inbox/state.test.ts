@@ -207,10 +207,31 @@ describe("inboxReducer: realtime arrivals", () => {
     expect(next.notifications.map((n) => n.id)).toEqual(["ntf_3", "ntf_2", "ntf_1"]);
   });
 
-  it("increments the unread count", () => {
+  it("increments the unread count when the server did not send one", () => {
     expect(
       inboxReducer(loaded(), { type: "realtime/notification", event: event() }).unreadCount
     ).toBe(3);
+  });
+
+  it("prefers the server's count over incrementing locally", () => {
+    // Local +1 is a guess that drifts: it assumes this client has seen every prior arrival and
+    // every prior read. The publishing worker knows the actual number whenever its cache is
+    // warm, so when it sends one, it wins.
+    const next = inboxReducer(loaded(), {
+      type: "realtime/notification",
+      event: event({ id: "ntf_3", unreadCount: 41 }),
+    });
+    expect(next.unreadCount).toBe(41);
+  });
+
+  it("falls back to a local increment when the worker could not know the count", () => {
+    // The worker has no database. On a cache miss it omits the field rather than guessing, and
+    // the client is the one left to approximate.
+    const next = inboxReducer(loaded(), {
+      type: "realtime/notification",
+      event: event({ id: "ntf_3", unreadCount: undefined }),
+    });
+    expect(next.unreadCount).toBe(3);
   });
 
   it("carries the action url and label through onto the row", () => {
@@ -237,6 +258,18 @@ describe("inboxReducer: realtime arrivals", () => {
     expect(next.notifications.filter((n) => n.id === "ntf_2")).toHaveLength(1);
     expect(next.notifications.find((n) => n.id === "ntf_2")?.title).toBe("Updated title");
     expect(next.unreadCount).toBe(2);
+  });
+
+  it("still takes the server's count when replacing a row already on screen", () => {
+    // This branch had to leave the count strictly alone before, because the only thing it could
+    // have done was increment -- which is precisely how a badge got ahead. A number from the
+    // server carries no such risk.
+    const next = inboxReducer(loaded(), {
+      type: "realtime/notification",
+      event: event({ id: "ntf_2", unreadCount: 7 }),
+    });
+    expect(next.notifications).toHaveLength(2);
+    expect(next.unreadCount).toBe(7);
   });
 });
 

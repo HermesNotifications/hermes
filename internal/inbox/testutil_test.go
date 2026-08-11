@@ -19,11 +19,17 @@ import (
 type mockInboxStore struct {
 	notifications []models.Notification
 	categories    []models.SubscriptionCategory
+
+	// unreadCountCalls records how many times the store was asked for an authoritative count.
+	// Tests assert on it to prove the cache path is doing its job -- a count served from cache
+	// must not reach the store at all.
+	unreadCountCalls int
+	// unreadCountErr, when set, makes UnreadCount fail, exercising the fallback paths.
+	unreadCountErr error
 }
 
-func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, int, string, error) {
+func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error) {
 	var result []models.Notification
-	unread := 0
 	for _, n := range m.notifications {
 		if n.UserID != userID || n.DeletedAt != nil {
 			continue
@@ -33,9 +39,6 @@ func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived 
 		}
 		if !archived && n.ArchivedAt != nil {
 			continue
-		}
-		if n.ReadAt == nil && n.ArchivedAt == nil {
-			unread++
 		}
 		result = append(result, n)
 	}
@@ -50,14 +53,21 @@ func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived 
 		nextCursor = "next-cursor"
 	}
 
-	return result, unread, nextCursor, nil
+	return result, nextCursor, nil
 }
 
 func (m *mockInboxStore) UnreadCount(ctx context.Context, userID string) (int, error) {
+	m.unreadCountCalls++
+	if m.unreadCountErr != nil {
+		return 0, m.unreadCountErr
+	}
 	count := 0
 	for _, n := range m.notifications {
 		if n.UserID == userID && n.ReadAt == nil && n.ArchivedAt == nil && n.DeletedAt == nil {
 			count++
+		}
+		if count >= models.UnreadCountCap {
+			return models.UnreadCountCap, nil
 		}
 	}
 	return count, nil

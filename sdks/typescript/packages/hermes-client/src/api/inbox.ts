@@ -54,6 +54,19 @@ export class InboxAPI {
     };
   }
 
+  /**
+   * Fetch just the unread count, without pulling any notifications.
+   *
+   * For a host that renders a bell badge with no inbox panel mounted. Cheap on the server (a
+   * single cache read on a warm cache), but it is still an HTTP request and still subject to
+   * the per-user rate limit — call it on mount and let the realtime channel keep it current,
+   * rather than polling.
+   */
+  async unreadCount(): Promise<number> {
+    const { data } = await this.send(() => this.client.GET("/v1/inbox/unread-count"));
+    return data?.unread_count ?? 0;
+  }
+
   async markRead(id: string): Promise<void> {
     await this.send(() => this.client.PUT("/v1/inbox/{id}/read", { params: { path: { id } } }));
   }

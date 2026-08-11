@@ -71,7 +71,7 @@ func main() {
 	admin, err := messaging.Connect(*natsURL)
 	must(err, "nats admin")
 	defer admin.Close()
-	must(admin.SetupStreams(ctx), "setup streams")
+	must(admin.SetupStreams(ctx, messaging.StreamOptions{}), "setup streams")
 
 	nc, err := nats.Connect(*natsURL)
 	must(err, "nats raw")
