@@ -110,7 +110,14 @@ function AppShell({ session }) {
 
 `HermesProvider` is worth using even for a single widget: everything below it shares one client and
 therefore one websocket. Two components each building their own client would open two connections
-for the same user.
+for the same user. A client you pass in stays yours: the widget never disposes it, so a badge or a
+second widget reading the same client keeps working when this one unmounts or rebuilds.
+
+> **`action_url` is restricted to `http:`, `https:` and relative URLs.** It reaches the widget as an
+> unvalidated string from the send API and over the websocket, and the row renders it into an
+> `href` — so anything else (`javascript:`, `data:`, `vbscript:`) would be script execution in
+> *your* page. A notification whose `action_url` fails that check renders as a plain row with no
+> link and no action label; it still emits `hermes-notification-click`.
 
 The wrapper exists because React does not handle custom elements well — React 18 stringifies every
 prop, and even React 19 does not connect `on*` props to CustomEvents. Through the wrapper,

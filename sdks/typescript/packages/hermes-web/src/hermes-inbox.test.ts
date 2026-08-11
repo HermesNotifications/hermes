@@ -428,6 +428,54 @@ describe("<hermes-inbox>: action urls", () => {
   });
 });
 
+describe("<hermes-inbox>: unsafe action urls", () => {
+  /**
+   * `action_url` is attacker-influenced: the send API takes it as an unvalidated string and
+   * it also arrives over the websocket. lit does not sanitize `href`, so interpolating it
+   * unchecked put script execution in the *host page* one click away — in a widget built to
+   * be embedded in customer applications.
+   */
+  it.each([
+    { name: "javascript", url: "javascript:alert(document.domain)" },
+    { name: "javascript with mixed case", url: "JaVaScRiPt:alert(1)" },
+    { name: "javascript padded with whitespace", url: "  javascript:alert(1)  " },
+    { name: "javascript split by a tab", url: "java\tscript:alert(1)" },
+    { name: "javascript split by a newline", url: "java\nscript:alert(1)" },
+    { name: "data", url: "data:text/html,<script>alert(1)</script>" },
+    { name: "vbscript", url: "vbscript:msgbox(1)" },
+  ])("renders no link for a $name url", async ({ url }) => {
+    const el = await mount(
+      new FakeHermesClient(
+        fakePage({ data: [unread("n1", { action_url: url })], unreadCount: 1 })
+      )
+    );
+    await clickTrigger(el);
+
+    expect(shadow(el).querySelector("a.row-target")).toBeNull();
+    // Still an interactive row, so the notification stays reachable and keyboard-usable.
+    expect(shadow(el).querySelector("button.row-target")).not.toBeNull();
+    expect(shadow(el).innerHTML).not.toContain("alert(");
+  });
+
+  it.each([
+    { name: "https", url: "https://example.com/invoices/1" },
+    { name: "http", url: "http://example.com/invoices/1" },
+    { name: "root-relative", url: "/invoices/1" },
+    { name: "document-relative", url: "invoices/1" },
+  ])("still renders a link for a $name url", async ({ url }) => {
+    const el = await mount(
+      new FakeHermesClient(
+        fakePage({ data: [unread("n1", { action_url: url })], unreadCount: 1 })
+      )
+    );
+    await clickTrigger(el);
+
+    const link = shadow(el).querySelector<HTMLAnchorElement>("a.row-target");
+    // The original string is preserved, so a host that routes internally sees what it sent.
+    expect(link?.getAttribute("href")).toBe(url);
+  });
+});
+
 describe("<hermes-inbox>: events cross the shadow boundary", () => {
   // Without composed: true a CustomEvent stops at the shadow root, so no ancestor listener
   // ever fires — which is what made the React wrapper impossible. Asserting on `document`

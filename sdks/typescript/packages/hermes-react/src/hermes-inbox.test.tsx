@@ -132,6 +132,64 @@ describe("<HermesInbox />: props become element properties", () => {
   });
 });
 
+describe("<HermesInbox />: props that go away", () => {
+  /**
+   * The sync effect used to skip `undefined`, which conflates "this prop was never set"
+   * with "this prop was just cleared". Only the second needs action — and it is exactly
+   * what a host signing out does, dropping its client, token and userId in one render. The
+   * element kept the previous values and carried on showing the signed-out user's inbox.
+   */
+  it("clears a string prop that becomes undefined", async () => {
+    const { container, rerender } = render(
+      <HermesInbox apiUrl="http://localhost:8888" token="tok" userId="usr_1" />
+    );
+    await ensureHermesInboxRegistered();
+    await customElements.whenDefined("hermes-inbox");
+    const element = container.querySelector("hermes-inbox") as HermesInboxElement;
+    await element.updateComplete;
+    expect(element.userId).toBe("usr_1");
+
+    rerender(<HermesInbox apiUrl="http://localhost:8888" token="tok" />);
+    await element.updateComplete;
+
+    expect(element.userId).toBeUndefined();
+  });
+
+  it("clears an injected client when the host signs out", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 1 }));
+    const { container, rerender } = render(
+      <HermesInbox client={fake.asClient()} userId="usr_1" />
+    );
+    await ensureHermesInboxRegistered();
+    await customElements.whenDefined("hermes-inbox");
+    const element = container.querySelector("hermes-inbox") as HermesInboxElement;
+    await element.updateComplete;
+    expect(element.client).toBe(fake.asClient());
+
+    rerender(<HermesInbox />);
+    await element.updateComplete;
+
+    expect(element.client).toBeUndefined();
+    expect(element.userId).toBeUndefined();
+  });
+
+  it("leaves properties it never set alone", async () => {
+    // Only properties this component assigned are cleared. Anything the host set directly
+    // on the element stays its own.
+    const { container, rerender } = render(<HermesInbox apiUrl="http://localhost:8888" token="tok" />);
+    await ensureHermesInboxRegistered();
+    await customElements.whenDefined("hermes-inbox");
+    const element = container.querySelector("hermes-inbox") as HermesInboxElement;
+    await element.updateComplete;
+    element.heading = "Set by the host";
+
+    rerender(<HermesInbox apiUrl="http://localhost:8888" token="tok" archived />);
+    await element.updateComplete;
+
+    expect(element.heading).toBe("Set by the host");
+  });
+});
+
 describe("<HermesInbox />: events become callbacks", () => {
   it("calls onNotification when the element emits one", async () => {
     const fake = new FakeHermesClient(fakePage());

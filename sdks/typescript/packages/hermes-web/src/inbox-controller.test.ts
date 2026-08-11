@@ -521,3 +521,137 @@ describe("InboxController: teardown", () => {
     expect(controller.state.error).toBeUndefined();
   });
 });
+
+describe("InboxController: injected client ownership", () => {
+  /**
+   * A client passed in through `config.client` belongs to the caller, who is very likely
+   * sharing it — the React provider owns one client, hands it to the widget, and also
+   * feeds a standalone unread badge from it. `dispose()` clears *every* handler on the
+   * client, so disposing an injected one here left those siblings permanently deaf, with
+   * nothing to resubscribe them because the client identity never changed.
+   */
+  function shared() {
+    const fake = new FakeHermesClient(fakePage({ data: [fakeNotification("a")], unreadCount: 3 }));
+    const seen: number[] = [];
+    // A sibling consumer of the same client, registered before the widget exists.
+    fake.on("unreadCountChange", ((count: number) => seen.push(count)) as never);
+    return { fake, seen };
+  }
+
+  it("does not dispose a client it was handed", async () => {
+    const { fake, seen } = shared();
+    const { controller } = harness();
+    controller.configure({ client: fake.asClient(), userId: "usr_1" });
+    await settle();
+
+    controller.hostDisconnected();
+
+    fake.emit("unreadCountChange", 9);
+    expect(seen).toContain(9);
+  });
+
+  it("keeps a sibling's subscription alive across a rebuild", async () => {
+    // The exact demo path: becomeUser() changes userId, which is part of the client
+    // identity, so the controller rebuilds — and used to dispose the shared client on its
+    // way through teardown, freezing the host's own unread badge for good.
+    const { fake, seen } = shared();
+    const { controller } = harness();
+    controller.configure({ client: fake.asClient(), userId: "usr_1" });
+    await settle();
+
+    controller.configure({ client: fake.asClient(), userId: "usr_2" });
+    await settle();
+
+    fake.emit("unreadCountChange", 4);
+    expect(seen).toContain(4);
+  });
+
+  it("does not close a shared socket on teardown", async () => {
+    const { fake } = shared();
+    const { controller } = harness();
+    controller.configure({ client: fake.asClient(), userId: "usr_1" });
+    await settle();
+
+    controller.hostDisconnected();
+
+    expect(fake.calls).not.toContain("disconnect");
+  });
+
+  it("removes its own handlers from a shared client, so rebuilds do not stack them", async () => {
+    const { fake, seen } = shared();
+    const received: number[] = [];
+    const host = new StubHost();
+    const controller = new InboxController(host, {
+      onUnreadCountChange: (count) => received.push(count),
+    });
+
+    controller.configure({ client: fake.asClient(), userId: "usr_1" });
+    await settle();
+    controller.configure({ client: fake.asClient(), userId: "usr_2" });
+    await settle();
+    controller.configure({ client: fake.asClient(), userId: "usr_3" });
+    await settle();
+
+    fake.emit("unreadCountChange", 5);
+
+    // Once, not once per rebuild.
+    expect(received.filter((c) => c === 5)).toHaveLength(1);
+    expect(seen).toContain(5);
+  });
+
+  it("still disposes a client it built itself", async () => {
+    const { controller, clients } = harness();
+    controller.configure(READY);
+    await settle();
+
+    controller.hostDisconnected();
+
+    expect(clients[0].calls).toContain("disconnect");
+    expect(clients[0].handlerCount()).toBe(0);
+  });
+});
+
+describe("InboxController: losing a usable config", () => {
+  it("tears the inbox down when the host drops its credentials", async () => {
+    // A host signing out clears client, token and userId together. configure() used to
+    // return early on an unusable config, leaving the previous store running — so the
+    // widget kept showing, and live-updating, the signed-out user's inbox.
+    const { controller, clients } = harness({
+      page: fakePage({ data: [fakeNotification("a")], unreadCount: 2 }),
+    });
+    controller.configure(READY);
+    await settle();
+    expect(controller.state.notifications).toHaveLength(1);
+
+    controller.configure({ apiUrl: READY.apiUrl });
+    await settle();
+
+    expect(controller.state.notifications).toHaveLength(0);
+    expect(controller.state.unreadCount).toBe(0);
+    expect(clients[0].calls).toContain("disconnect");
+  });
+
+  it("reconfigures cleanly when credentials come back", async () => {
+    const { controller, clients } = harness();
+    controller.configure(READY);
+    await settle();
+    controller.configure({ apiUrl: READY.apiUrl });
+    await settle();
+
+    controller.configure(READY);
+    await settle();
+
+    expect(clients).toHaveLength(2);
+    expect(controller.state.loading).toBe(false);
+  });
+
+  it("stays quiet when it never had a usable config to begin with", () => {
+    const { controller, host, clients } = harness();
+    const updatesBefore = host.updateRequests;
+
+    controller.configure({ apiUrl: READY.apiUrl });
+
+    expect(clients).toHaveLength(0);
+    expect(host.updateRequests).toBe(updatesBefore);
+  });
+});

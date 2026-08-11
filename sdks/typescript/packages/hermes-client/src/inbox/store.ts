@@ -24,6 +24,15 @@ export interface InboxStoreOptions {
   archived?: boolean;
   /** Injected clock, so timestamps in tests are exact values. */
   now?: () => string;
+  /**
+   * Whether stopping this store may close the client's socket.
+   *
+   * False when the client is **shared** — another store, or a standalone unread badge, may
+   * still be using that same connection, and closing it here would silently stop their
+   * updates with nothing to reconnect them. Defaults to true, which is correct for a client
+   * built for this store alone.
+   */
+  ownsConnection?: boolean;
 }
 
 /**
@@ -52,6 +61,7 @@ export class InboxStore {
   private readonly pageSize: number;
   private readonly archived: boolean;
   private readonly now: () => string;
+  private readonly ownsConnection: boolean;
 
   constructor(options: InboxStoreOptions) {
     this.client = options.client;
@@ -59,6 +69,7 @@ export class InboxStore {
     this.pageSize = options.pageSize ?? 20;
     this.archived = options.archived ?? false;
     this.now = options.now ?? (() => new Date().toISOString());
+    this.ownsConnection = options.ownsConnection ?? true;
   }
 
   getSnapshot(): InboxState {
@@ -251,7 +262,7 @@ export class InboxStore {
     this.started = false;
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups = [];
-    this.client.disconnect();
+    if (this.ownsConnection) this.client.disconnect();
   }
 
   /** Stop, drop every subscriber, and refuse all further work. Permanent. */

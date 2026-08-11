@@ -15,6 +15,39 @@ import {
 } from "@hermes-notifications/client";
 import { InboxController, type ClientFactory } from "./inbox-controller.js";
 
+/** Schemes allowed to reach an `href`. Everything else is treated as no action at all. */
+const SAFE_ACTION_PROTOCOLS = new Set(["http:", "https:"]);
+
+/**
+ * Resolve a notification's `action_url` to something safe to place in an `href`, or
+ * `undefined` when it is not.
+ *
+ * `action_url` is attacker-influenced input: the send API accepts it as a free-form string
+ * with no validation, and it also arrives over the websocket. lit does **not** sanitize
+ * `href`, so an unchecked `javascript:` url would run script in the *host page* — in a
+ * widget whose whole purpose is to be embedded in someone else's application.
+ *
+ * Relative urls are resolved against the document only to classify them; the original
+ * string is returned so a single-page-app host that `preventDefault()`s and routes
+ * internally still sees exactly what it was given.
+ */
+export function safeActionUrl(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined;
+
+  // The URL parser strips the tabs and newlines that "java\tscript:" style evasions rely
+  // on, so delegating to it classifies those correctly rather than pattern-matching.
+  const base = typeof document !== "undefined" ? document.baseURI : "https://example.invalid/";
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed, base);
+  } catch {
+    return undefined;
+  }
+  return SAFE_ACTION_PROTOCOLS.has(parsed.protocol) ? trimmed : undefined;
+}
+
 /**
  * `<hermes-inbox>` — an embeddable notification inbox.
  *
@@ -548,7 +581,11 @@ export class HermesInbox extends LitElement {
 
   private renderNotification(notification: Notification): TemplateResult {
     const isUnread = !notification.read_at;
-    const hasAction = Boolean(notification.action_url);
+    // A url that does not survive the scheme check is treated as no action: the row falls
+    // back to a <button>, which still emits hermes-notification-click, and no action
+    // affordance is shown for a link that would go nowhere.
+    const actionUrl = safeActionUrl(notification.action_url);
+    const hasAction = actionUrl !== undefined;
 
     const body = html`
       <div class="notification-title" part="title">${notification.title}</div>
@@ -570,7 +607,7 @@ export class HermesInbox extends LitElement {
       ? html`<a
           class="row-target"
           part="action-link"
-          href=${notification.action_url ?? "#"}
+          href=${actionUrl ?? "#"}
           @click=${(event: Event) => this.onActionActivate(event, notification)}
         >
           <div class="notification-content">${body}</div>

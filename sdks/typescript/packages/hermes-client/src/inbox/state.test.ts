@@ -78,6 +78,17 @@ describe("inboxReducer: loading the first page", () => {
     expect(next.notifications).toHaveLength(2);
   });
 
+  it("clears loadingMore on load/start, since a reload supersedes any page in flight", () => {
+    const next = inboxReducer({ ...loaded(), loadingMore: true }, { type: "load/start" });
+    expect(next.loadingMore).toBe(false);
+    expect(next.loading).toBe(true);
+  });
+
+  it("still short-circuits load/start when already loading and no page is in flight", () => {
+    const state = { ...loaded(), loading: true, loadingMore: false };
+    expect(inboxReducer(state, { type: "load/start" })).toBe(state);
+  });
+
   it("publishes the page, the unread count and the cursor", () => {
     const next = inboxReducer(
       { ...initialInboxState, loading: true },

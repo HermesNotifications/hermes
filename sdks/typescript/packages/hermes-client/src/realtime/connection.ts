@@ -119,6 +119,13 @@ export class RealtimeConnection {
   private statusHandlers: StatusHandler[] = [];
   private currentStatus: RealtimeStatus = "disconnected";
   private currentUserId: string | null = null;
+  /**
+   * Serializes connect attempts. `connect()` has to await a token before it can build a
+   * transport, and without this queue two calls landing in the same tick would each get
+   * past the "already connected" guard — the second overwriting `this.transport` and
+   * orphaning the first, which no `disconnect()` could then reach.
+   */
+  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly socketUrl: string,
@@ -166,8 +173,22 @@ export class RealtimeConnection {
    * old socket down first — without that, switching users leaves the client listening on
    * the previous channel while REST returns the new user's rows, so the inbox loads once
    * and then never updates.
+   *
+   * Calls are serialized, so concurrent callers — two stores over one shared client, or
+   * StrictMode's effect/cleanup/effect — resolve to a single socket. The no-op check runs
+   * inside the queue, once any earlier attempt has settled and `transport` reflects it.
    */
-  async connect(userId: string): Promise<void> {
+  connect(userId: string): Promise<void> {
+    const attempt = this.queue.then(
+      () => this.openConnection(userId),
+      () => this.openConnection(userId)
+    );
+    // Swallow on the queue only; `attempt` still rejects for the caller that asked.
+    this.queue = attempt.catch(() => undefined);
+    return attempt;
+  }
+
+  private async openConnection(userId: string): Promise<void> {
     if (this.transport && this.currentUserId === userId) return;
     if (this.transport) this.teardown();
 

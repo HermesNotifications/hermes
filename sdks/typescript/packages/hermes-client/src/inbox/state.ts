@@ -117,7 +117,13 @@ function decrement(count: number): number {
 export function inboxReducer(state: InboxState, action: InboxAction): InboxState {
   switch (action.type) {
     case "load/start":
-      return state.loading ? state : { ...state, loading: true, error: undefined };
+      // Clearing loadingMore is what keeps pagination alive across a refresh. A page
+      // request that is in flight when the list reloads has its response dropped on the
+      // generation check, before it can dispatch page/success or page/failure — so if the
+      // flag were left set, nothing would ever clear it and every later loadMore() would
+      // return at its `loadingMore` guard with the footer stuck on "Loading…".
+      if (state.loading && !state.loadingMore) return state;
+      return { ...state, loading: true, loadingMore: false, error: undefined };
 
     case "load/success":
       return {

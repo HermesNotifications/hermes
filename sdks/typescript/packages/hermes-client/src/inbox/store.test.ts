@@ -18,7 +18,12 @@ const NOW = "2026-07-29T10:00:00.000Z";
 
 function store(
   fake: FakeHermesClient,
-  options: { userId?: string; pageSize?: number; archived?: boolean } = {}
+  options: {
+    userId?: string;
+    pageSize?: number;
+    archived?: boolean;
+    ownsConnection?: boolean;
+  } = {}
 ) {
   return new InboxStore({
     client: fake.asClient(),
@@ -553,5 +558,70 @@ describe("InboxStore: disposal", () => {
 
     expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["winner"]);
     expect(inbox.getSnapshot().unreadCount).toBe(1);
+  });
+
+  it("recovers pagination when a refresh supersedes an in-flight page", async () => {
+    // The regression: loadMore's response is dropped on the generation check *before* it
+    // can dispatch page/success or page/failure, so nothing cleared loadingMore and every
+    // later loadMore() returned at its guard — pagination dead until remount.
+    const fake = new FakeHermesClient(
+      fakePage({ data: [fakeNotification("a")], unreadCount: 0, cursor: "cur_1" })
+    );
+    const inbox = store(fake);
+    await inbox.start();
+    expect(inbox.getSnapshot().hasMore).toBe(true);
+
+    const page = deferred<ReturnType<typeof fakePage>>();
+    fake.inbox.list = async () => page.promise;
+
+    const pending = inbox.loadMore();
+    expect(inbox.getSnapshot().loadingMore).toBe(true);
+
+    // A refresh lands while that page is still out.
+    const reloaded = fakePage({ data: [fakeNotification("b")], unreadCount: 0, cursor: "cur_2" });
+    fake.inbox.list = async () => reloaded;
+    await inbox.refresh();
+
+    page.resolve(fakePage({ data: [fakeNotification("stale")], unreadCount: 0 }));
+    await pending;
+
+    expect(inbox.getSnapshot().loadingMore).toBe(false);
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["b"]);
+
+    // And the next page actually loads, rather than returning at the guard.
+    fake.inbox.list = async () =>
+      fakePage({ data: [fakeNotification("c")], unreadCount: 0 });
+    await inbox.loadMore();
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["b", "c"]);
+  });
+});
+
+describe("InboxStore: connection ownership", () => {
+  it("closes the socket on stop when the connection is its own", async () => {
+    const fake = new FakeHermesClient(fakePage());
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    inbox.stop();
+    expect(fake.calls).toContain("disconnect");
+  });
+
+  it("leaves a shared socket open on stop", async () => {
+    // A client handed in from outside may be driving a second widget or a standalone
+    // badge. Closing its socket here would stop their updates with nothing to restart it.
+    const fake = new FakeHermesClient(fakePage());
+    const inbox = store(fake, { userId: "usr_1", ownsConnection: false });
+    await inbox.start();
+    inbox.stop();
+    expect(fake.calls).not.toContain("disconnect");
+  });
+
+  it("still unsubscribes its own handlers from a shared client", async () => {
+    const fake = new FakeHermesClient(fakePage());
+    const inbox = store(fake, { userId: "usr_1", ownsConnection: false });
+    await inbox.start();
+    const wired = fake.handlerCount();
+    expect(wired).toBeGreaterThan(0);
+    inbox.stop();
+    expect(fake.handlerCount()).toBe(0);
   });
 });

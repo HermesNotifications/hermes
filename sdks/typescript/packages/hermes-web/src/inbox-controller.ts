@@ -92,8 +92,15 @@ type ClientIdentity = {
 export class InboxController implements ReactiveController {
   private store?: InboxStore;
   private client?: HermesClient;
+  /**
+   * Whether {@link client} was built here. An injected client belongs to the caller, who may
+   * be sharing it with other widgets, so tearing this controller down must not dispose it.
+   */
+  private ownsClient = false;
   private applied?: ClientIdentity;
   private storeUnsubscribe?: () => void;
+  /** Unsubscribes for the handlers wired onto {@link client}, undone on every teardown. */
+  private clientUnsubscribes: Array<() => void> = [];
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private currentToken = "";
   private snapshot: InboxState = initialInboxState;
@@ -153,7 +160,20 @@ export class InboxController implements ReactiveController {
     const usable =
       config.client !== undefined ||
       (Boolean(config.apiUrl) && (Boolean(config.token) || Boolean(config.tokenUrl)));
-    if (!usable) return;
+    if (!usable) {
+      // Going from a usable config to an unusable one is a real transition, not a no-op: a
+      // host signing out drops its client and token, and leaving the previous store running
+      // would keep the signed-out user's rows on screen and live-updating. Bumping the
+      // generation also abandons any rebuild still in flight.
+      if (this.applied) {
+        this.generation++;
+        this.teardown();
+        this.applied = undefined;
+        this.snapshot = initialInboxState;
+        this.host.requestUpdate();
+      }
+      return;
+    }
 
     this.applied = identity;
     void this.rebuild(config);
@@ -164,8 +184,10 @@ export class InboxController implements ReactiveController {
     this.teardown();
 
     let client: HermesClient;
+    let ownsClient: boolean;
     if (config.client) {
       client = config.client;
+      ownsClient = false;
     } else {
       let token = config.token ?? "";
       if (!token && config.tokenUrl) {
@@ -183,14 +205,16 @@ export class InboxController implements ReactiveController {
         token,
         ...(this.resolveGetToken(config) ? { getToken: this.resolveGetToken(config) } : {}),
       });
+      ownsClient = true;
     }
 
     if (generation !== this.generation) {
-      client.dispose?.();
+      if (ownsClient) client.dispose?.();
       return;
     }
 
     this.client = client;
+    this.ownsClient = ownsClient;
     this.wireClientEvents(client);
 
     const store = new InboxStore({
@@ -199,6 +223,8 @@ export class InboxController implements ReactiveController {
       ...(config.pageSize !== undefined ? { pageSize: config.pageSize } : {}),
       ...(config.archived !== undefined ? { archived: config.archived } : {}),
       now: this.now,
+      // A shared client's socket is not ours to close on stop.
+      ownsConnection: ownsClient,
     });
     this.store = store;
     this.storeUnsubscribe = store.subscribe(() => this.publish());
@@ -273,12 +299,22 @@ export class InboxController implements ReactiveController {
     }, delay);
   }
 
+  /**
+   * Register the host's event forwarders, keeping each unsubscribe.
+   *
+   * Dropping them used to be survivable only because teardown disposed the client, which
+   * cleared every handler wholesale. On a shared client — which is not ours to dispose —
+   * the same handlers would otherwise pile up one set per rebuild, and the host would see
+   * each notification duplicated once per rebuild it had ever done.
+   */
   private wireClientEvents(client: HermesClient): void {
     const { onNotification, onUpdate, onUnreadCountChange, onStatusChange } = this.options;
-    if (onNotification) client.on("notification", onNotification);
-    if (onUpdate) client.on("update", onUpdate);
-    if (onUnreadCountChange) client.on("unreadCountChange", onUnreadCountChange);
-    if (onStatusChange) client.onStatusChange(onStatusChange);
+    if (onNotification) this.clientUnsubscribes.push(client.on("notification", onNotification));
+    if (onUpdate) this.clientUnsubscribes.push(client.on("update", onUpdate));
+    if (onUnreadCountChange) {
+      this.clientUnsubscribes.push(client.on("unreadCountChange", onUnreadCountChange));
+    }
+    if (onStatusChange) this.clientUnsubscribes.push(client.onStatusChange(onStatusChange));
   }
 
   /** Copy the store's snapshot out and re-render, reporting any newly recorded error. */
@@ -308,8 +344,14 @@ export class InboxController implements ReactiveController {
     this.storeUnsubscribe = undefined;
     this.store?.dispose();
     this.store = undefined;
-    this.client?.dispose();
+
+    for (const unsubscribe of this.clientUnsubscribes) unsubscribe();
+    this.clientUnsubscribes = [];
+    // Only a client we built. Disposing an injected one would clear every handler its
+    // owner and any sibling widget registered, leaving them permanently deaf.
+    if (this.ownsClient) this.client?.dispose();
     this.client = undefined;
+    this.ownsClient = false;
   }
 
   refresh(): Promise<void> {

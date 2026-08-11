@@ -209,6 +209,65 @@ describe("RealtimeConnection: subscribing", () => {
   });
 });
 
+describe("RealtimeConnection: concurrent connects", () => {
+  /**
+   * `connect()` must await a token before it can build a transport. The idempotence guard
+   * above reads `this.transport`, which is only assigned *after* that await — so two calls
+   * landing in the same tick both used to get through, and the second overwrote the first.
+   * The orphan stayed subscribed, kept emitting into the same handler list, and no
+   * `disconnect()` could reach it.
+   *
+   * These are reachable in normal use: two stores over one shared client both connect on
+   * mount, and StrictMode runs effect → cleanup → effect.
+   */
+  it("builds a single transport for two connects in the same tick", async () => {
+    const { conn, transports } = connection();
+    await Promise.all([conn.connect("usr_1"), conn.connect("usr_1")]);
+    expect(transports).toHaveLength(1);
+    expect(transports[0].subscriptions).toHaveLength(1);
+  });
+
+  it("emits each publication once, not once per racing connect", async () => {
+    const { conn, transports, events } = connection();
+    await Promise.all([conn.connect("usr_1"), conn.connect("usr_1"), conn.connect("usr_1")]);
+
+    // Publish on every transport that got built, not just the first. An orphan left behind
+    // by a lost race stays subscribed and keeps emitting into the same handler list, so a
+    // test that only drove transports[0] would not see the duplication at all.
+    const publication = {
+      type: "notification.new",
+      id: "ntf_1",
+      title: "Hello",
+      body: "Body",
+      created_at: "2026-07-30T10:00:00.000Z",
+    };
+    for (const transport of transports) transport.latest.publish(publication);
+
+    expect(events).toHaveLength(1);
+  });
+
+  it("orphans no transport when racing connects name different users", async () => {
+    const { conn, transports } = connection();
+    await Promise.all([conn.connect("usr_1"), conn.connect("usr_2")]);
+
+    // Every transport but the last has been closed...
+    for (const superseded of transports.slice(0, -1)) {
+      expect(superseded.disconnectCalls).toBeGreaterThan(0);
+    }
+    // ...and the survivor is the one disconnect() can still reach.
+    const live = transports.at(-1);
+    const before = live?.disconnectCalls ?? 0;
+    conn.disconnect();
+    expect(live?.disconnectCalls).toBe(before + 1);
+  });
+
+  it("serializes so a later connect wins the final subscription", async () => {
+    const { conn, transports } = connection();
+    await Promise.all([conn.connect("usr_1"), conn.connect("usr_2")]);
+    expect(transports.at(-1)?.latest.channel).toBe("user#usr_2");
+  });
+});
+
 describe("RealtimeConnection: inbox.updated publications", () => {
   it.each([
     "read",

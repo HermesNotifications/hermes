@@ -140,13 +140,25 @@ export function HermesInbox({
   // Assigned as properties, not attributes, so numbers stay numbers and functions and client
   // instances survive at all. Lit re-applies own properties set before upgrade, so this is
   // safe even though registration resolves asynchronously.
+  // Which properties this component has actually assigned. Needed because "not set" and
+  // "set back to undefined" are different events with the same value: only the second must
+  // clear the element, and only if we were the one who set it.
+  const assigned = useRef(new Set<string>());
+
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
+    const target = element as unknown as Record<string, unknown>;
     for (const name of ELEMENT_PROPERTIES) {
       const value = properties[name];
       if (value !== undefined) {
-        (element as unknown as Record<string, unknown>)[name] = value;
+        target[name] = value;
+        assigned.current.add(name);
+      } else if (assigned.current.delete(name)) {
+        // A prop going value → undefined has to be pushed through, not skipped. Skipping is
+        // how a host that signs out — dropping its client, token and userId together —
+        // leaves the widget holding the previous user's inbox, still live.
+        target[name] = undefined;
       }
     }
   });
