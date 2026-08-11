@@ -107,6 +107,15 @@ test.describe("realtime arrival", () => {
 
     await hermesUser.send({ title: "Bridged event", body: "b" });
 
+    // Gate on the widget seeing the arrival before asserting the host did.
+    //
+    // These are two different failures wearing one face. This test flaked once in CI with an empty
+    // activity log — and the screenshot showed the badge still at 0, meaning nothing had arrived at
+    // all: a slow delivery, not a broken bridge. Asserting only the log reports that as "the
+    // CustomEvent never crossed the shadow boundary", which sends the next person into the React
+    // wrapper, the one place the fault cannot be. Splitting it puts the blame where it belongs.
+    await expect(badge(demoPage)).toHaveText("1");
+
     await expect(demoPage.getByTestId("activity-log")).toContainText(
       "arrived over websocket: Bridged event"
     );

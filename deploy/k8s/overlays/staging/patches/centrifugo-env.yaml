@@ -8,6 +8,13 @@ spec:
       containers:
         - name: centrifugo
           env:
+            # Origins allowed to open a realtime websocket, space-separated (v5 env form),
+            # substituted at deploy time. See the production patch for the full reasoning:
+            # the widget is embedded in a customer application, so the browser's Origin is
+            # never this domain, and anything unlisted is refused with a 403 at the handshake
+            # while every non-browser client keeps working.
+            - name: CENTRIFUGO_ALLOWED_ORIGINS
+              value: "ALLOWED_ORIGINS_PLACEHOLDER"
             - name: CENTRIFUGO_TOKEN_HMAC_SECRET_KEY
               valueFrom:
                 secretKeyRef:

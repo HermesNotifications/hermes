@@ -103,6 +103,21 @@ Known gaps in this chart, so you do not discover them in production:
     across replicas, so scaling Centrifugo past one pod silently delivers each message to
     only the subset of users connected to one pod. Use an external Centrifugo with the
     Redis engine for anything beyond evaluation.
+{{- if not .Values.centrifugo.enabled }}
+  * This install points at an EXTERNAL Centrifugo, whose configuration the chart does not
+    own. Realtime will not work in a browser until that Centrifugo lists your application's
+    origins in allowed_origins. The widget is embedded in your app, so the browser's Origin
+    is your domain while the socket is on the Hermes domain — cross-origin by construction,
+    and refused with a 403 at the websocket handshake by default.
+{{- else if not .Values.centrifugo.config.client.allowed_origins }}
+  * centrifugo.config.client.allowed_origins is empty, so the bundled Centrifugo accepts
+    same-origin websockets only. Any page embedding the widget on a different origin than
+    the Hermes ingress is refused with a 403 at the handshake. Set it to your application's
+    origins before this install serves a browser.
+{{- end }}
+    Either way the failure is quiet: Centrifugo permits connections carrying no Origin
+    header at all, so health checks, curl and every server-side client keep succeeding while
+    every browser is turned away.
   * A flagless `helm install` cannot fail on a failed migration or stream provisioning —
     see the `--wait` note above. This is a consequence of ADR 0008 and is the one thing
     that decision gave up.

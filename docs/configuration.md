@@ -136,6 +136,40 @@ Also: an **unset** variable is a parse error, but an **empty** one is not. Setti
 starts the server and lets anyone connect as the `centrifugo` user with no credential. Verified
 on the wire; see `TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`.
 
+### Centrifugo allowed origins
+
+**Realtime does not work in a browser until this is set.** It is not a Hermes variable — it is
+Centrifugo's own, and it is the one piece of realtime configuration whose absence is invisible
+from every direction except a real browser.
+
+| Where | Setting |
+|---|---|
+| `deploy/k8s/overlays/local` | `allowed_origins` in `centrifugo-config.json` (top-level: the v5 image) |
+| `deploy/k8s/overlays/{staging,production}` | `CENTRIFUGO_ALLOWED_ORIGINS` on the Centrifugo Deployment, space-separated, substituted at deploy time like `DOMAIN_PLACEHOLDER` |
+| Helm chart | `centrifugo.config.client.allowed_origins` (nested under `client`: the sub-chart ships v6) |
+
+The inbox widget is embedded in **your** application, so the browser presents your origin while
+the socket lives on the Hermes domain. Every connection is cross-origin by construction, and
+Centrifugo answers `403` at the websocket handshake to any origin not listed.
+
+What makes it expensive to diagnose is the asymmetry: Centrifugo **permits connections that
+carry no `Origin` header at all**, "as they typically originate from non-browser environments".
+So `/health` returns 200, `curl` connects, every server-side client connects, the pods are Ready
+and stay Ready — and no browser can connect. The service looks perfect and serves nobody.
+
+Two gates now hold this:
+
+- `scripts/check_centrifugo_origins.py`, run by `make verify-manifests` against all three
+  overlays, fails when the key is absent or empty. Pass `--forbid-placeholder` in a deploy
+  pipeline to also reject an unsubstituted `ALLOWED_ORIGINS_PLACEHOLDER`.
+- `tests/browser/global-setup.ts` performs a real handshake carrying an `Origin` before any spec
+  runs, so the live suite reports this in seconds rather than as a wall of widget failures.
+
+Note the version split: the kustomize overlays run `centrifugo/centrifugo:v5`, where the option
+is top-level and the env var is `CENTRIFUGO_ALLOWED_ORIGINS`. The Helm sub-chart ships
+Centrifugo 6.6.2, where it moved under `client` and the env var became
+`CENTRIFUGO_CLIENT_ALLOWED_ORIGINS`. Config written for one is silently ignored by the other.
+
 ### Email (`worker-email`)
 
 | Variable | Default | Purpose |

@@ -535,3 +535,23 @@ centrifugo:
   config:
     engine:
       type: memory
+    client:
+      # -- Origins permitted to open a realtime websocket, e.g.
+      # `["https://app.example.com", "https://*.example.com"]`.
+      #
+      # **Set this or realtime does not work.** The inbox widget is embedded in *your*
+      # application, so the browser's `Origin` is your app's domain while the socket lives on
+      # the Hermes domain — cross-origin by construction. Centrifugo answers `403` at the
+      # websocket handshake to any origin not listed here.
+      #
+      # The failure is quiet in the worst way: Centrifugo permits connections that carry *no*
+      # `Origin` header at all, "as they typically originate from non-browser environments".
+      # So health checks, curl and every server-side client succeed while every browser is
+      # refused. The service looks healthy and serves nobody.
+      #
+      # Empty (the default) means same-origin only, which suits a local evaluation where the
+      # page and the socket share a host, and nothing else.
+      #
+      # Note the nesting: this sub-chart ships Centrifugo v6, where the option lives under
+      # `client`. The kustomize overlays in deploy/k8s run the v5 image, where it is top-level.
+      allowed_origins: []

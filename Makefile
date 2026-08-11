@@ -72,6 +72,14 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 	@# The local overlay is deliberately exempt -- see the module docstring for why.
 	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_workload_resources.py -
 	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_workload_resources.py - --require-hpa
+	@# Centrifugo 403s any websocket whose Origin is not listed, but permits connections with
+	@# no Origin at all -- so /health, curl and every server-side client succeed while no
+	@# browser can connect. The local overlay shipped with no allowed_origins and the first
+	@# live browser run spent 45 minutes failing 24 specs to say only "connecting".
+	@# All three overlays: this is the one control whose absence is invisible everywhere else.
+	kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_centrifugo_origins.py -
 	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
 	@# or rejects. It shipped with 17 passing tests that nothing ran.
 	./infra/scripts/test-lib.sh
