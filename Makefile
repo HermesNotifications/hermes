@@ -166,12 +166,19 @@ sdk-python:        ## Generate Python server SDK
 		-o sdks/python/hermes-server-sdk \
 		--additional-properties=packageName=hermes_server_sdk,projectName=hermes-server-sdk \
 		--global-property=skipFormModel=true
+# The inner double quotes on licenseName are literal, and load-bearing. The npx wrapper joins
+# its argv back into a command string and re-splits it, so ordinary shell quoting is already
+# gone by the time the generator parses anything: `licenseName="Apache License 2.0"` arrives as
+# three arguments and the run dies with `Found unexpected parameters: [License, 2.0]`. Quoting
+# the whole key=value, so the quotes survive *into* the wrapper, is what keeps the space
+# intact. This is the only additional-property here whose value contains a space, which is why
+# it is the only one that needs it.
 sdk-java:          ## Generate Java server SDK
 	npx @openapitools/openapi-generator-cli generate \
 		-i api/admin/openapi.yaml -g java \
 		-o sdks/java/hermes-server-sdk \
 		--additional-properties=artifactId=hermes-server-sdk,groupId=com.hermes,invokerPackage=com.hermes.sdk,apiPackage=com.hermes.sdk.api,modelPackage=com.hermes.sdk.model,hideGenerationTimestamp=true \
-		--additional-properties=licenseName="Apache License 2.0" \
+		--additional-properties='"licenseName=Apache License 2.0"' \
 		--additional-properties=licenseUrl=https://www.apache.org/licenses/LICENSE-2.0.txt \
 		--global-property=skipFormModel=true
 sdk-dotnet:        ## Generate .NET server SDK
