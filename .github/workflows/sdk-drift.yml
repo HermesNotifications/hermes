@@ -14,6 +14,13 @@ name: SDK Drift
 # which is the exact failure mode being fixed. The filter covers the inputs that can
 # actually cause drift — the specs, the SDKs, the generator config, and the Go sources the
 # specs are generated from.
+#
+# `Makefile` is on the list because it *defines* `make sdk-generate` — every generator
+# invocation, flag and additional-property lives there. Leaving it off meant a change to how
+# the SDKs are generated could merge without this job ever running, which is a hole in the
+# same wall this workflow was built to close: a Makefile-only edit to the sdk-java flags
+# broke generation on main, and the PR that fixed it did not trigger this check either.
+#
 # The path list is duplicated rather than shared via a YAML anchor: GitHub Actions does not
 # support anchors/aliases, even though a standard YAML parser accepts them. Keep the two
 # lists in step.
@@ -32,6 +39,7 @@ on:
       - "openapitools.json"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
+      - "Makefile"
       - ".github/workflows/sdk-drift.yml"
   pull_request:
     branches: [main]
@@ -47,6 +55,7 @@ on:
       - "openapitools.json"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
+      - "Makefile"
       - ".github/workflows/sdk-drift.yml"
 
 concurrency:
