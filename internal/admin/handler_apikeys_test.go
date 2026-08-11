@@ -27,7 +27,7 @@ func TestHandleListAPIKeys(t *testing.T) {
 func TestHandleCreateAPIKey(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"name":"Test Key","permissions":["notifications:send"]}`
+	body := `{"name":"Test Key","organization_id":"test-organization-id","permissions":["notifications:send"]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/apikeys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -56,10 +56,42 @@ func TestHandleCreateAPIKey(t *testing.T) {
 	}
 }
 
+// A key must name the organization it may act for (ADR 0011). Minting one without
+// an organization is what produced keys that could send for anybody.
+func TestHandleCreateAPIKey_RequiresAnOrganization(t *testing.T) {
+	srv := newTestServer(t)
+
+	body := `{"name":"Unscoped Key","permissions":["notifications:send"]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/apikeys", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for a key with no organization, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// An unknown organization is the caller's mistake, not a server fault. Letting it
+// reach the foreign key would surface as a 500 and tell them nothing.
+func TestHandleCreateAPIKey_RejectsUnknownOrganization(t *testing.T) {
+	srv := newTestServer(t)
+
+	body := `{"name":"Orphan Key","organization_id":"no-such-organization"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/apikeys", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an unknown organization, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandleCreateAPIKey_InvalidPermission(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"name":"Bad Key","permissions":["foo:bar"]}`
+	body := `{"name":"Bad Key","organization_id":"test-organization-id","permissions":["foo:bar"]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/apikeys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -73,7 +105,7 @@ func TestHandleCreateAPIKey_InvalidPermission(t *testing.T) {
 func TestHandleCreateAPIKey_DefaultPermissions(t *testing.T) {
 	srv := newTestServer(t)
 
-	body := `{"name":"Default Key"}`
+	body := `{"name":"Default Key","organization_id":"test-organization-id"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/apikeys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -97,7 +129,7 @@ func TestHandleDeleteAPIKey(t *testing.T) {
 	srv := newTestServer(t)
 
 	// Create a key first
-	body := `{"name":"To Delete","permissions":["notifications:send"]}`
+	body := `{"name":"To Delete","organization_id":"test-organization-id","permissions":["notifications:send"]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/apikeys", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

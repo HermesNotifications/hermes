@@ -13,6 +13,30 @@ import (
 	"testing"
 )
 
+// Bounding the work streams with DiscardNew means a publish can now fail because
+// the pipeline is saturated, not only because NATS is unreachable. A 503 with no
+// Retry-After leaves the client to invent a backoff, and the clients that invent
+// one badly retry hardest exactly when the pipeline is already behind.
+func TestSendHandler_PublishFailureCarriesRetryAfter(t *testing.T) {
+	pub := &mockPublisher{err: fmt.Errorf("nats: maximum bytes exceeded")}
+	srv := newTestServerWithPublisher(t, pub)
+
+	body := `{"to":{"organization_id":"t1","user_id":"u1"},"template":"welcome"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when the notification could not be published, got %d: %s",
+			w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Retry-After"); got == "" {
+		t.Error("503 carries no Retry-After; the client has nothing to back off against")
+	}
+}
+
 func TestSendHandler_TemplateSend_Success(t *testing.T) {
 	pub := &mockPublisher{}
 	srv := newTestServerWithPublisher(t, pub)

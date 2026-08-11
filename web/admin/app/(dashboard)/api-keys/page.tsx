@@ -5,10 +5,14 @@
 import { DataTable } from "@/components/data-table";
 import { CreateAPIKeyDialog } from "@/components/create-api-key-dialog";
 import { listAPIKeys } from "@/lib/actions/api-keys";
+import { listOrganizations } from "@/lib/actions/organizations";
 import { columns } from "./columns";
 
 export default async function APIKeysPage() {
-  const apiKeys = await listAPIKeys();
+  const [apiKeys, organizations] = await Promise.all([
+    listAPIKeys(),
+    listOrganizations(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -19,7 +23,7 @@ export default async function APIKeysPage() {
             Manage API keys for server-to-server access to the Hermes API.
           </p>
         </div>
-        <CreateAPIKeyDialog />
+        <CreateAPIKeyDialog organizations={organizations ?? []} />
       </div>
 
       <DataTable

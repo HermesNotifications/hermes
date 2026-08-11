@@ -5,6 +5,28 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Per-IP shielding, which the in-process limiter structurally cannot provide:
+    # it runs *after* authentication, so an unauthenticated flood is rejected by
+    # APIKeyMiddleware — after an HMAC and a Redis lookup per request — and never
+    # reaches a bucket. This bounds that work per source address.
+    #
+    # The rate is deliberately set at send's per-credential sustained ceiling
+    # (2000/s) rather than below it. nginx cannot tell an authenticated request
+    # from an unauthenticated one, so anything lower would make the documented
+    # per-credential limit unreachable for a legitimate caller behind a single
+    # egress IP and would contradict our own API contract. This is a flood
+    # bound, not a quota — the quota is the app's job.
+    #
+    # Like the app limiter, this is per nginx replica, so the effective ceiling
+    # scales with the ingress controller's replica count.
+    nginx.ingress.kubernetes.io/limit-rps: "2000"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/limit-connections: "500"
+    # Both default to 503, which tells a client the service is broken when in
+    # fact it was told to slow down. 429 is the honest answer and is what the
+    # app limiter returns, so a caller sees one status for one condition.
+    nginx.ingress.kubernetes.io/limit-req-status-code: "429"
+    nginx.ingress.kubernetes.io/limit-conn-status-code: "429"
 spec:
   ingressClassName: nginx
   rules:
@@ -102,6 +124,12 @@ metadata:
   name: hermes-realtime-ingress
   namespace: hermes
   annotations:
+    # No limit-connections here, deliberately. These are long-lived WebSockets:
+    # one browser tab holds one connection open for its whole session, so a
+    # per-IP connection cap counts concurrent *users* behind a shared egress
+    # address, not abuse. An office or campus NAT would hit it during normal
+    # use. Per-IP request limits are on hermes-ingress, where requests are
+    # short-lived and the count means what it looks like it means.
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"

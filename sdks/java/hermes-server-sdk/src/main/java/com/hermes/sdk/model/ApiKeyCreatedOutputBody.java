@@ -74,6 +74,11 @@ public class ApiKeyCreatedOutputBody {
   @javax.annotation.Nonnull
   private String name;
 
+  public static final String SERIALIZED_NAME_ORGANIZATION_ID = "organization_id";
+  @SerializedName(SERIALIZED_NAME_ORGANIZATION_ID)
+  @javax.annotation.Nonnull
+  private String organizationId;
+
   public static final String SERIALIZED_NAME_PERMISSIONS = "permissions";
   @SerializedName(SERIALIZED_NAME_PERMISSIONS)
   @javax.annotation.Nullable
@@ -162,6 +167,25 @@ public class ApiKeyCreatedOutputBody {
   }
 
 
+  public ApiKeyCreatedOutputBody organizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
+    return this;
+  }
+
+  /**
+   * Get organizationId
+   * @return organizationId
+   */
+  @javax.annotation.Nonnull
+  public String getOrganizationId() {
+    return organizationId;
+  }
+
+  public void setOrganizationId(@javax.annotation.Nonnull String organizationId) {
+    this.organizationId = organizationId;
+  }
+
+
   public ApiKeyCreatedOutputBody permissions(@javax.annotation.Nullable List<String> permissions) {
     this.permissions = permissions;
     return this;
@@ -222,13 +246,14 @@ public class ApiKeyCreatedOutputBody {
         Objects.equals(this.createdAt, apiKeyCreatedOutputBody.createdAt) &&
         Objects.equals(this.id, apiKeyCreatedOutputBody.id) &&
         Objects.equals(this.name, apiKeyCreatedOutputBody.name) &&
+        Objects.equals(this.organizationId, apiKeyCreatedOutputBody.organizationId) &&
         Objects.equals(this.permissions, apiKeyCreatedOutputBody.permissions) &&
         Objects.equals(this.rawKey, apiKeyCreatedOutputBody.rawKey);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, createdAt, id, name, permissions, rawKey);
+    return Objects.hash($schema, createdAt, id, name, organizationId, permissions, rawKey);
   }
 
   @Override
@@ -239,6 +264,7 @@ public class ApiKeyCreatedOutputBody {
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    organizationId: ").append(toIndentedString(organizationId)).append("\n");
     sb.append("    permissions: ").append(toIndentedString(permissions)).append("\n");
     sb.append("    rawKey: ").append(toIndentedString(rawKey)).append("\n");
     sb.append("}");
@@ -262,10 +288,10 @@ public class ApiKeyCreatedOutputBody {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "created_at", "id", "name", "permissions", "raw_key"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "created_at", "id", "name", "organization_id", "permissions", "raw_key"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("created_at", "id", "name", "permissions", "raw_key"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("created_at", "id", "name", "organization_id", "permissions", "raw_key"));
   }
 
   /**
@@ -304,6 +330,9 @@ public class ApiKeyCreatedOutputBody {
       }
       if (!jsonObj.get("name").isJsonPrimitive()) {
         throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `name` to be a primitive type in the JSON string but got `%s`", jsonObj.get("name").toString()));
+      }
+      if (!jsonObj.get("organization_id").isJsonPrimitive()) {
+        throw new IllegalArgumentException(String.format(java.util.Locale.ROOT, "Expected the field `organization_id` to be a primitive type in the JSON string but got `%s`", jsonObj.get("organization_id").toString()));
       }
       // ensure the required json array is present
       if (jsonObj.get("permissions") == null) {

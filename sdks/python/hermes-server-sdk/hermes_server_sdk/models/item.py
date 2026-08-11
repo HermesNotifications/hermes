@@ -30,8 +30,9 @@ class Item(BaseModel):
     created_at: datetime
     id: StrictStr
     name: StrictStr
+    organization_id: Optional[StrictStr] = None
     permissions: Optional[List[StrictStr]]
-    __properties: ClassVar[List[str]] = ["created_at", "id", "name", "permissions"]
+    __properties: ClassVar[List[str]] = ["created_at", "id", "name", "organization_id", "permissions"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,6 +93,7 @@ class Item(BaseModel):
             "created_at": obj.get("created_at"),
             "id": obj.get("id"),
             "name": obj.get("name"),
+            "organization_id": obj.get("organization_id"),
             "permissions": obj.get("permissions")
         })
         return _obj

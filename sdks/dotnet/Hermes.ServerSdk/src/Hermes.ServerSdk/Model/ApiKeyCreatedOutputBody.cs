@@ -36,15 +36,17 @@ namespace Hermes.ServerSdk.Model
         /// <param name="createdAt">createdAt</param>
         /// <param name="id">id</param>
         /// <param name="name">name</param>
+        /// <param name="organizationId">organizationId</param>
         /// <param name="rawKey">rawKey</param>
         /// <param name="schema">A URL to the JSON Schema for this object.</param>
         /// <param name="permissions">permissions</param>
         [JsonConstructor]
-        public ApiKeyCreatedOutputBody(DateTime createdAt, string id, string name, string rawKey, Option<string?> schema = default, List<string>? permissions = default)
+        public ApiKeyCreatedOutputBody(DateTime createdAt, string id, string name, string organizationId, string rawKey, Option<string?> schema = default, List<string>? permissions = default)
         {
             CreatedAt = createdAt;
             Id = id;
             Name = name;
+            OrganizationId = organizationId;
             RawKey = rawKey;
             SchemaOption = schema;
             Permissions = permissions;
@@ -70,6 +72,12 @@ namespace Hermes.ServerSdk.Model
         /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; set; }
+
+        /// <summary>
+        /// Gets or Sets OrganizationId
+        /// </summary>
+        [JsonPropertyName("organization_id")]
+        public string OrganizationId { get; set; }
 
         /// <summary>
         /// Gets or Sets RawKey
@@ -108,6 +116,7 @@ namespace Hermes.ServerSdk.Model
             sb.Append("  CreatedAt: ").Append(CreatedAt).Append("\n");
             sb.Append("  Id: ").Append(Id).Append("\n");
             sb.Append("  Name: ").Append(Name).Append("\n");
+            sb.Append("  OrganizationId: ").Append(OrganizationId).Append("\n");
             sb.Append("  RawKey: ").Append(RawKey).Append("\n");
             sb.Append("  Schema: ").Append(Schema).Append("\n");
             sb.Append("  Permissions: ").Append(Permissions).Append("\n");
@@ -156,6 +165,7 @@ namespace Hermes.ServerSdk.Model
             Option<DateTime?> createdAt = default;
             Option<string?> id = default;
             Option<string?> name = default;
+            Option<string?> organizationId = default;
             Option<string?> rawKey = default;
             Option<string?> schema = default;
             Option<List<string>?> permissions = default;
@@ -184,6 +194,9 @@ namespace Hermes.ServerSdk.Model
                         case "name":
                             name = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
+                        case "organization_id":
+                            organizationId = new Option<string?>(utf8JsonReader.GetString()!);
+                            break;
                         case "raw_key":
                             rawKey = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
@@ -208,6 +221,9 @@ namespace Hermes.ServerSdk.Model
             if (!name.IsSet)
                 throw new ArgumentException("Property is required for class ApiKeyCreatedOutputBody.", nameof(name));
 
+            if (!organizationId.IsSet)
+                throw new ArgumentException("Property is required for class ApiKeyCreatedOutputBody.", nameof(organizationId));
+
             if (!rawKey.IsSet)
                 throw new ArgumentException("Property is required for class ApiKeyCreatedOutputBody.", nameof(rawKey));
 
@@ -223,13 +239,16 @@ namespace Hermes.ServerSdk.Model
             if (name.IsSet && name.Value == null)
                 throw new ArgumentNullException(nameof(name), "Property is not nullable for class ApiKeyCreatedOutputBody.");
 
+            if (organizationId.IsSet && organizationId.Value == null)
+                throw new ArgumentNullException(nameof(organizationId), "Property is not nullable for class ApiKeyCreatedOutputBody.");
+
             if (rawKey.IsSet && rawKey.Value == null)
                 throw new ArgumentNullException(nameof(rawKey), "Property is not nullable for class ApiKeyCreatedOutputBody.");
 
             if (schema.IsSet && schema.Value == null)
                 throw new ArgumentNullException(nameof(schema), "Property is not nullable for class ApiKeyCreatedOutputBody.");
 
-            return new ApiKeyCreatedOutputBody(createdAt.Value!.Value!, id.Value!, name.Value!, rawKey.Value!, schema, permissions.Value!);
+            return new ApiKeyCreatedOutputBody(createdAt.Value!.Value!, id.Value!, name.Value!, organizationId.Value!, rawKey.Value!, schema, permissions.Value!);
         }
 
         /// <summary>
@@ -262,6 +281,9 @@ namespace Hermes.ServerSdk.Model
             if (apiKeyCreatedOutputBody.Name == null)
                 throw new ArgumentNullException(nameof(apiKeyCreatedOutputBody.Name), "Property is required for class ApiKeyCreatedOutputBody.");
 
+            if (apiKeyCreatedOutputBody.OrganizationId == null)
+                throw new ArgumentNullException(nameof(apiKeyCreatedOutputBody.OrganizationId), "Property is required for class ApiKeyCreatedOutputBody.");
+
             if (apiKeyCreatedOutputBody.RawKey == null)
                 throw new ArgumentNullException(nameof(apiKeyCreatedOutputBody.RawKey), "Property is required for class ApiKeyCreatedOutputBody.");
 
@@ -273,6 +295,8 @@ namespace Hermes.ServerSdk.Model
             writer.WriteString("id", apiKeyCreatedOutputBody.Id);
 
             writer.WriteString("name", apiKeyCreatedOutputBody.Name);
+
+            writer.WriteString("organization_id", apiKeyCreatedOutputBody.OrganizationId);
 
             writer.WriteString("raw_key", apiKeyCreatedOutputBody.RawKey);
 

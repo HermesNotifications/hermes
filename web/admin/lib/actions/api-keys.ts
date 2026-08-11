@@ -14,6 +14,8 @@ export async function listAPIKeys() {
 
 export async function createAPIKey(data: {
   name: string;
+  /** The organization the key may act for. Required — see ADR 0011. */
+  organization_id: string;
   permissions?: string[];
 }) {
   const hermes = getHermes();

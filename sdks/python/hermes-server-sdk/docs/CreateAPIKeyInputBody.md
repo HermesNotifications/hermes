@@ -7,6 +7,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **var_schema** | **str** | A URL to the JSON Schema for this object. | [optional] [readonly] 
 **name** | **str** | Human-readable key name | 
+**organization_id** | **str** | Organization this key may act for | 
 **permissions** | **List[str]** | Permission set (defaults to all except apikeys:manage) | [optional] 
 
 ## Example

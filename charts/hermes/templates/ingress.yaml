@@ -38,10 +38,28 @@ metadata:
   name: {{ $fullName }}
   labels:
     {{- include "hermes.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
   annotations:
+    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- end }}
+    {{- if .Values.ingress.rateLimit.enabled }}
+    {{/*
+    Per-IP flood shielding, on the API ingress only. The in-process limiter runs
+    after authentication, so an unauthenticated flood costs an HMAC and a Redis
+    lookup per request before it is rejected and never reaches a bucket.
+
+    The default rps matches send's per-credential sustained ceiling rather than
+    sitting below it: nginx cannot distinguish an authenticated request from an
+    unauthenticated one, so a lower value would make the documented per-credential
+    limit unreachable for a legitimate caller behind one egress IP. This bounds a
+    flood; it is not a quota. nginx-only — other ingress controllers ignore these.
+    */}}
+    nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.rateLimit.rps | quote }}
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.rateLimit.burstMultiplier | quote }}
+    nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.rateLimit.connections | quote }}
+    nginx.ingress.kubernetes.io/limit-req-status-code: "429"
+    nginx.ingress.kubernetes.io/limit-conn-status-code: "429"
+    {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}

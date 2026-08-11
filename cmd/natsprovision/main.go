@@ -40,7 +40,8 @@ func main() {
 	// the bus that can shape a stream.
 	client := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
 		messaging.WithCABundle(cfg.NATSCABundlePath),
-		messaging.WithIdentity(messaging.ProvisionerService, cfg.NATSNKeySeedPath))
+		messaging.WithIdentity(messaging.ProvisionerService, cfg.NATSNKeySeedPath),
+		messaging.WithStreamMaxBytes(cfg.NATSStreamMaxBytes))
 	defer client.Close()
 
 	if err := client.SetupStreams(ctx); err != nil {

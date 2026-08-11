@@ -13,6 +13,30 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermes-notifications/hermes/internal/observability"
+	"go.opentelemetry.io/otel/metric"
+)
+
+var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/send")
+
+// publishRejectionCounter is the signal that the pipeline is refusing work.
+// Before the work streams were bounded this could only mean NATS was
+// unreachable; it now also means a stream hit its ceiling, which is the
+// condition an operator needs to see before callers start reporting 503s.
+var publishRejectionCounter, _ = meter.Int64Counter(
+	"hermes.send.publish_rejections",
+	metric.WithDescription("Send requests refused because the notification could not be published to NATS."),
+	metric.WithUnit("1"),
+)
+
+// unscopedKeyUseCounter counts sends by API keys that predate organization
+// scoping (ADR 0011). It is the migration's completion signal: while it is
+// non-zero there are keys in use that can address any organization, and
+// api_keys.organization_id cannot be tightened to NOT NULL.
+var unscopedKeyUseCounter, _ = meter.Int64Counter(
+	"hermes.send.unscoped_key_uses",
+	metric.WithDescription("Sends authenticated by an API key with no organization, which is therefore unconstrained."),
+	metric.WithUnit("1"),
 )
 
 type sendRecipient struct {
@@ -62,6 +86,28 @@ func (s *Server) registerSendRoutes() {
 		}
 
 		req := &input.Body
+
+		// ADR 0011. The organization arrives in the request body, so until keys were
+		// scoped nothing stopped a key from addressing an organization that was not
+		// its own: the permission check gates *whether* you may send, never *for
+		// whom*. A key that names an organization may only act for that one.
+		//
+		// A key with no organization predates migration 000018 and is left
+		// unconstrained rather than broken — there is no way to infer which
+		// organization it belongs to, and guessing would either break a working
+		// integration or mis-attribute its sends. Each such use is counted so
+		// operators can find them; the column goes NOT NULL once that reads zero.
+		if key := auth.GetValidatedKey(ctx); key != nil {
+			switch {
+			case key.OrganizationID == "":
+				unscopedKeyUseCounter.Add(ctx, 1)
+			case key.OrganizationID != req.To.OrganizationID:
+				// Deliberately not "organization not found": the caller authenticated
+				// fine and the organization may well exist. Saying which would let a
+				// key probe for valid organization IDs.
+				return nil, huma.Error403Forbidden("api key cannot send for this organization")
+			}
+		}
 
 		// Validate: exactly one of template or content
 		if (req.Template == "" && req.Content == nil) || (req.Template != "" && req.Content != nil) {
@@ -130,7 +176,20 @@ func (s *Server) registerSendRoutes() {
 
 		if err := s.nats.Publish(ctx, "notification.send", msgBytes); err != nil {
 			s.logger.Error("failed to publish to NATS", "error", err, "notification_id", notifID)
-			return nil, huma.NewError(http.StatusServiceUnavailable, "service temporarily unavailable")
+			publishRejectionCounter.Add(ctx, 1)
+			// Now that the work streams are bounded with DiscardNew, a publish can
+			// fail because the pipeline is saturated rather than because NATS is
+			// unreachable. Both are "we could not accept this, try later", so the
+			// status stays 503 — a 429 would blame the caller for a backlog that a
+			// stalled consumer, not their request rate, most likely caused.
+			//
+			// What was missing is the "try later" half: a 503 with no Retry-After
+			// leaves a client to invent a backoff, and the ones that invent badly
+			// retry hardest exactly when the pipeline is already behind.
+			return nil, huma.ErrorWithHeaders(
+				huma.NewError(http.StatusServiceUnavailable, "service temporarily unavailable"),
+				http.Header{"Retry-After": []string{"5"}},
+			)
 		}
 
 		resp := &sendOutput{}

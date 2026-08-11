@@ -104,6 +104,29 @@ Use the returned `id` as `organization_id` in subsequent calls.
 
 API keys authenticate server-to-server calls to the Admin API (`POST /admin/v1/apikeys`). The raw key is shown **once** on creation -- store it securely. Only an HMAC-SHA256 hash is persisted, so it cannot be retrieved later.
 
+Every key is **scoped to one organization**, which is required at creation:
+
+```bash
+curl -X POST https://hermes.example.com/admin/v1/apikeys \
+  -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "billing-service",
+    "organization_id": "9f8c1e0a-...",
+    "permissions": ["notifications:send"]
+  }'
+```
+
+The key may only act for that organization. `POST /v1/send` returns `403` if the
+`organization_id` in the request body is any other organization, so the `organization_id` you
+send must match the one the key was issued for. See
+[ADR 0011](adr/0011-api-keys-are-scoped-to-an-organization.md).
+
+> **Keys created before this was introduced carry no organization and are not constrained.**
+> They keep working unchanged, but they can address any organization, so they should be
+> replaced with scoped keys. Operators can see whether any remain in use via the
+> `hermes.send.unscoped_key_uses` metric.
+
 ### 3. Create Subscription Categories
 
 Categories group related notifications and define default delivery channels and a default opt-in state. Three categories (`account`, `general`, `marketing`) are seeded by default; create more as needed.
@@ -226,6 +249,28 @@ curl -X POST https://hermes.example.com/admin/v1/send \
 ```
 
 If the same organization + idempotency key has been seen before, Hermes returns the existing notification ID with a `202 Accepted` status.
+
+### When Hermes cannot accept a send
+
+`POST /v1/send` returns `503 Service Unavailable` with a `Retry-After` header when the
+notification cannot be handed to the pipeline — either the message bus is unreachable, or the
+delivery backlog has reached its configured ceiling because something downstream has stalled.
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/problem+json
+Retry-After: 5
+```
+
+**Retry, honouring `Retry-After`.** A 503 here means the notification was *not* accepted — no
+notification ID was issued and nothing will be delivered — so unlike a timeout there is no
+ambiguity about whether the send happened. Retrying with the same `X-Idempotency-Key` is safe
+and is the recommended pattern: if an earlier attempt did in fact succeed, the retry returns
+that attempt's notification ID instead of creating a second notification.
+
+Hermes rejects rather than silently dropping work that it has already acknowledged; see
+[ADR 0010](adr/0010-bounded-work-streams-reject-rather-than-drop.md). A `202` therefore remains
+a real commitment.
 
 ### Checking Notification Status
 

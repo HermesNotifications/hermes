@@ -7,9 +7,16 @@
 import * as React from "react";
 import { KeyRoundIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
 import { toast } from "sonner";
-import type { APIKeyCreated } from "@hermes-notifications/server";
+import type { APIKeyCreated, Organization } from "@hermes-notifications/server";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -37,15 +44,26 @@ const DEFAULT_PERMISSIONS = [
   "organizations:manage",
 ];
 
-export function CreateAPIKeyDialog() {
+export function CreateAPIKeyDialog({
+  organizations,
+}: {
+  organizations: Organization[];
+}) {
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
+  // A key is scoped to exactly one organization and may only send for it
+  // (ADR 0011). With a single organization there is nothing to choose, so it is
+  // preselected rather than made into a required step that has one answer.
+  const [organizationId, setOrganizationId] = React.useState(
+    organizations.length === 1 ? organizations[0].id : ""
+  );
   const [permissions, setPermissions] = React.useState<string[]>(DEFAULT_PERMISSIONS);
   const [isPending, startTransition] = React.useTransition();
   const [created, setCreated] = React.useState<APIKeyCreated | null>(null);
 
   function resetState() {
     setName("");
+    setOrganizationId(organizations.length === 1 ? organizations[0].id : "");
     setPermissions(DEFAULT_PERMISSIONS);
     setCreated(null);
   }
@@ -69,6 +87,7 @@ export function CreateAPIKeyDialog() {
       try {
         const result = await createAPIKey({
           name,
+          organization_id: organizationId,
           permissions: permissions.length > 0 ? permissions : undefined,
         });
         setCreated(result);
@@ -147,6 +166,28 @@ export function CreateAPIKeyDialog() {
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="api-key-organization">Organization</Label>
+                <Select
+                  value={organizationId}
+                  onValueChange={(value) => setOrganizationId(value ?? "")}
+                >
+                  <SelectTrigger id="api-key-organization" className="w-full">
+                    <SelectValue placeholder="Select organization..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  This key can only send notifications for the selected organization.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label>Permissions</Label>
                 <div className="space-y-2">
@@ -169,7 +210,10 @@ export function CreateAPIKeyDialog() {
               </div>
 
               <DialogFooter>
-                <Button type="submit" disabled={isPending || !name.trim()}>
+                <Button
+                  type="submit"
+                  disabled={isPending || !name.trim() || !organizationId}
+                >
                   <KeyRoundIcon />
                   {isPending ? "Creating..." : "Create Key"}
                 </Button>
