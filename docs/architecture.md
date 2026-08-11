@@ -74,7 +74,7 @@ flowchart LR
     WS -->|"HTTP webhook"| SMSGW["SMS gateway"]
     WI -->|"HTTP API"| Cent
 
-    Dispatch -.->|"notification.events"| EW
+    Dispatch -->|"notification.events"| EW
     WE -->|"notification.events"| EW
     WS -->|"notification.events"| EW
     WI -->|"notification.events"| EW
@@ -281,6 +281,23 @@ flowchart TD
   retried, except on the last attempt, where the notification is marked `failed`. Routing and
   rendering failures are permanent, recorded against the notification with a typed event
   (`template.not_found`, `render.failed`, `routing.failed`), and not retried.
+
+**Publishing to `notification.events` is best-effort, by design.** Both dispatch and the
+workers publish events fire-and-forget: a failed publish is logged and nothing else. The
+durable artifacts are the notification record in Postgres and the delivery messages on the
+`DELIVERY` stream; the event log is observability and status rollup layered on top.
+
+The trade is deliberate, because the alternatives are worse. If dispatch propagated an
+event-publish failure the handler would either mark the notification `failed` and dead-letter
+it (the permanent path) *while its emails are being delivered*, or nack it for redelivery —
+and redelivery re-runs the fan-out, so a lost status event would be paid for with duplicate
+emails and SMS. Losing a rollup event costs less than either.
+
+The visible consequence: if the `notification.sent` publish fails, the notification stays
+`pending` until a worker's `<channel>.sent` moves it to `delivered`, and stays `pending`
+if every delivery also fails. In practice the same NATS outage usually takes the delivery
+publishes with it, in which case nothing was dispatched and no `notification.sent` is due.
+Making the transition durable would need a transactional outbox — worth an ADR, not a patch.
 
 ## Key design patterns
 
