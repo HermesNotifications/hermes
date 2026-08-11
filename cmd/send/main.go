@@ -43,6 +43,7 @@ func main() {
 	st := postgres.New(pool)
 
 	srv := send.NewServer(st, natsClient, redisClient, pool, cfg.APIKeyHMACSecret, logger)
+	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }

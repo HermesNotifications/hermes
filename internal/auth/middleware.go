@@ -7,6 +7,8 @@ package auth
 import (
 	"net/http"
 	"strings"
+
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
 // APIKeyValidator validates a raw API key and returns the validated key on success.
@@ -43,14 +45,14 @@ func APIKeyMiddleware(validate APIKeyValidator) func(http.Handler) http.Handler 
 
 			key := r.Header.Get("Authorization")
 			if key == "" {
-				http.Error(w, `{"error":"missing api key"}`, http.StatusUnauthorized)
+				httputil.ClientError(w, http.StatusUnauthorized, "missing api key")
 				return
 			}
 			key = strings.TrimPrefix(key, "Bearer ")
 
 			validated := validate(key)
 			if validated == nil {
-				http.Error(w, `{"error":"invalid api key"}`, http.StatusUnauthorized)
+				httputil.ClientError(w, http.StatusUnauthorized, "invalid api key")
 				return
 			}
 

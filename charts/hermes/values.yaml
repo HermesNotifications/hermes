@@ -99,6 +99,14 @@ admin:
     tag: ""
   # -- Container port
   port: 8080
+  # -- Per-replica HTTP rate limit, keyed by API key. Leave burst/perSecond
+  # empty to keep the service default (1000 burst, 500/s). Enforcement is per
+  # replica, so the cluster ceiling is these numbers times `replicas` — size
+  # them per pod, not per fleet.
+  rateLimit:
+    enabled: true
+    burst: ""
+    perSecond: ""
   # -- Resource requests and limits
   resources: {}
   # -- Horizontal pod autoscaler configuration
@@ -125,6 +133,14 @@ send:
     repository: hermes-send
     tag: ""
   port: 8088
+  # -- Per-replica HTTP rate limit, keyed by API key. Leave burst/perSecond
+  # empty to keep the service default (5000 burst, 2000/s). Enforcement is per
+  # replica, so the cluster ceiling is these numbers times `replicas` — size
+  # them per pod, not per fleet.
+  rateLimit:
+    enabled: true
+    burst: ""
+    perSecond: ""
   resources: {}
   autoscaling:
     enabled: false
@@ -163,6 +179,14 @@ inbox:
     repository: hermes-inbox
     tag: ""
   port: 8086
+  # -- Per-replica HTTP rate limit, keyed by the JWT's user ID. Leave
+  # burst/perSecond empty to keep the service default (50 burst, 20/s).
+  # Enforcement is per replica, so the cluster ceiling is these numbers times
+  # `replicas` — size them per pod, not per fleet.
+  rateLimit:
+    enabled: true
+    burst: ""
+    perSecond: ""
   resources: {}
   autoscaling:
     enabled: false
@@ -182,6 +206,14 @@ user:
     repository: hermes-user
     tag: ""
   port: 8087
+  # -- Per-replica HTTP rate limit, keyed by the JWT's user ID. Leave
+  # burst/perSecond empty to keep the service default (50 burst, 20/s).
+  # Enforcement is per replica, so the cluster ceiling is these numbers times
+  # `replicas` — size them per pod, not per fleet.
+  rateLimit:
+    enabled: true
+    burst: ""
+    perSecond: ""
   resources: {}
   autoscaling:
     enabled: false

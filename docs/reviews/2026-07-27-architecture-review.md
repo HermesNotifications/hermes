@@ -435,8 +435,12 @@ and user 50/20 per user — returning HTTP 429. Nothing in `docs/` mentions rate
 these numbers, so integrators get no documented retry contract. Two properties matter
 especially and appear nowhere: the limiter is **in-process with no Redis backing**, so the
 effective cluster limit multiplies by replica count (silently interacting with the HPA
-guidance at `deployment-guide.md:420-422`), and **no env var tunes it**. *(Still open. Not the
-empty-Centrifugo-password defect, which was briefly misnumbered 39 and is now
+guidance at `deployment-guide.md:420-422`), and **no env var tunes it**. *(Resolved 2026-08-10 —
+`HERMES_RATELIMIT_ENABLED` / `_BURST` / `_PER_SECOND` per service, plumbed through the chart and
+the overlays; per-replica multiplication is now stated explicitly in `docs/configuration.md` and
+the client contract in `docs/integration-guide.md`. See the amendment below for the ordering
+claim in this finding, which was wrong, and for the credential-doubling defect found in its
+place. Not the empty-Centrifugo-password defect, which was briefly misnumbered 39 and is now
 [53](#open-finding-53--an-empty-hermes_centrifugo_nats_password-authenticates).)*
 
 **40. Missing documentation coverage.** PII and retention — only `notification_events`
@@ -867,6 +871,25 @@ example for a scenario that cannot occur.
   API-key services apply `RateLimit` *outside* `APIKeyMiddleware`, so buckets are keyed on the
   raw unvalidated `Authorization` header — every garbage token gets its own bucket, bounded
   only by the 30-minute eviction sweep. Fixing this interacts with finding 3's enforcement work.
+
+  *(Correction, 2026-08-10 — the ordering half of this was wrong when written. Both API-key
+  services wrap the limiter with `APIKeyMiddleware`, not inside it: the `h = mw(h)` idiom makes
+  the last assignment outermost, so auth runs first and an invalid key is rejected with 401
+  before reaching the limiter. Garbage tokens never allocated a bucket. The real key defect was
+  the opposite of unbounded growth — `keyFunc` returned the raw header while `APIKeyMiddleware`
+  stripped the `Bearer ` prefix before validating, so one credential presented both ways got two
+  buckets and twice its limit.*
+
+  *Resolved 2026-08-10. Limiter rebuilt on `golang.org/x/time/rate`: keyed on the validated key
+  ID (which removes both the doubling and the need to hash a secret into a map key), 429 now
+  carries `Retry-After` and `RateLimit-*` headers plus the `{"error": …}` envelope, rejected
+  reservations are cancelled so a retry loop cannot starve itself, health probes are exempt, and
+  limits are configurable via `HERMES_RATELIMIT_*` through both the chart and the overlays. The
+  limiter is now built once per server rather than per `Handler()` call — it had been allocating
+  a fresh bucket map on every call, which made it inert under test and leaked a ticker goroutine
+  each time. Per-replica enforcement is now documented in `docs/configuration.md` and
+  `docs/integration-guide.md` rather than fixed; making it cluster-exact needs shared state and
+  is deferred.)*
 - **11 / 31** — `deployment-guide.md:476` deletes a Job named `hermes-migration`; the Job is
   `hermes-migrate`, so the documented recovery step silently no-ops and the subsequent apply
   fails identically. *(Resolved 2026-07-30 — and the corrected command was still wrong in a
