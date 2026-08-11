@@ -283,7 +283,7 @@ func TestSetupStreams_WorkStreamsAreBoundedAndRejectRatherThanDrop(t *testing.T)
 	}
 	defer client.Close()
 
-	if err := client.SetupStreams(context.Background()); err != nil {
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 
@@ -328,7 +328,11 @@ func TestSetupStreams_StreamMaxBytesIsConfigurable(t *testing.T) {
 	}
 	defer client.Close()
 
-	if err := client.SetupStreams(context.Background()); err != nil {
+	// Empty StreamOptions on purpose: this asserts the *connect option* still supplies the
+	// ceiling. The two APIs were merged so that an explicit StreamOptions.MaxBytes wins and
+	// WithStreamMaxBytes is the default behind it, so passing nothing here is what exercises
+	// the fallback rather than the override.
+	if err := client.SetupStreams(context.Background(), messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams: %v", err)
 	}
 
