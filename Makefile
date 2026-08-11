@@ -72,6 +72,15 @@ $(VENV): scripts/requirements.txt
 	$(VENV)/bin/pip install --quiet --disable-pip-version-check -r scripts/requirements.txt
 	@touch $(VENV)
 
+.PHONY: adr-new
+adr-new: $(VENV)   ## Scaffold an ADR with a number free locally, on main, and in open PRs
+	@test -n "$(TITLE)" || { echo 'usage: make adr-new TITLE="Short imperative title"'; exit 2; }
+	$(PYTHON) scripts/adr_new.py "$(TITLE)"
+
+.PHONY: adr-next
+adr-next: $(VENV)  ## Print the next free ADR number without creating anything
+	@$(PYTHON) scripts/adr_new.py --number-only
+
 .PHONY: verify verify-manifests
 verify:            ## Full local verification gate (no infra needed)
 	go build ./...
@@ -87,6 +96,11 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# Finding 47: a NetworkPolicy whose podSelector matches nothing is silently inert.
 	@# kustomize build and kubectl apply both accept it, so only this catches it.
 	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -t scripts
+	@# An ADR number is allocated at authoring time by writers who cannot see each other, so
+	@# two long-lived branches each add "the next one" and both are right until they meet.
+	@# PR #73 carried an 0010 against main's different 0010, and a branch stacked on it added
+	@# an 0011 and 0012 against main's own -- three collisions, found by reading.
+	$(PYTHON) scripts/check_adr_numbering.py
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	@# ADR 0005 phase 4: the CA private key must not render into the application namespace.

@@ -44,14 +44,54 @@ is cheap, and a missing one is expensive.
 
 ## How to write one
 
-1. Copy [`template.md`](template.md) to `NNNN-kebab-case-title.md`, where `NNNN` is the
-   next zero-padded number (one above the highest in the index).
+1. Scaffold it, rather than picking a number by hand:
+
+   ```bash
+   make adr-new TITLE="Bound the JetStream work streams"
+   ```
+
+   This copies [`template.md`](template.md) and fills in the number, date and author. See
+   [Numbering](#numbering) for why the number is not simply "one above the highest in the
+   index" — that instruction lived here for months and is what caused the collisions.
 2. Fill in Context → Decision → Consequences → Alternatives considered. Be honest about
    costs; an ADR that lists only upsides is not trustworthy.
-3. Add a row to the [Index](#index) table above.
+3. Add a row to the [Index](#index) table above. `make verify` fails if you forget.
 4. Cross-link: reference the ADR from the relevant PR, and if the decision spawns
    follow-up work, open an issue and link it from the ADR (and back).
 5. Open the PR with the ADR included. ADRs are reviewed like code.
+
+## Numbering
+
+An ADR number is a global identifier handed out at authoring time by people who cannot see each
+other. Your `docs/adr/` is a snapshot of the `main` you branched from: it cannot show you the
+ADR that landed there yesterday, nor the one sitting in an open PR that will land before yours.
+So "one above the highest" is right on every branch and wrong in aggregate, and nothing notices
+— each branch renders, reviews and merges cleanly, because the collision only exists relative to
+a `main` that neither has met yet.
+
+It has already happened. PR #73 carried an 0010 while `main` independently landed a different
+0010; a branch stacked on #73 then added an 0011 and an 0012 against `main`'s own 0011 and 0012.
+Three collisions, found by reading rather than by any tool.
+
+Two things now cover it:
+
+- **`make adr-new`** allocates against your tree, `origin/main`, *and* the ADRs in open pull
+  requests — the third being the one the other two cannot see. It warns and continues when it
+  cannot reach the network, so it never blocks you offline.
+- **`scripts/check_adr_numbering.py`**, run by `make verify` and in CI, fails when a number
+  means one thing here and another on `origin/main`, when two files claim one number, when a
+  heading disagrees with its filename, or when the index and the files drift apart. Run
+  `make adr-next` to see the next free number at any time.
+
+Neither is a lock — two people scaffolding in the same minute still race. The check is the
+backstop, and it runs on every PR.
+
+**Numbers may have gaps.** A withdrawn ADR leaves a hole, and renumbering the survivors to close
+it would break every reference to them. The check permits gaps deliberately.
+
+**If you do collide,** renumber *your* ADR rather than the one already on `main`: `git mv` the
+file, update its `# ADR NNNN:` heading, update its row in the index, and fix references
+(`grep -rn 'ADR 00NN' docs/ internal/ charts/ deploy/`). The check prints the next free number.
 
 ## Status lifecycle
 
