@@ -153,6 +153,15 @@ nightly, on demand, and per-PR behind an `e2e-live` label
 (`.github/workflows/e2e-live.yml`). `ci-web.yml` runs `playwright test --list` instead, which
 compiles every spec in seconds and catches most suite rot without launching anything.
 
+To opt a PR in, add the label — the workflow triggers on `labeled`, so it starts immediately:
+
+```bash
+gh pr edit <number> --add-label e2e-live
+```
+
+Worth knowing when a PR touches the widget, the SDKs or the demo: without the label the check
+reports as `skipping`, which reads a lot like "passed" in the checks list but means nothing ran.
+
 Conventions that differ from every other tier here:
 
 - **Read `smoke.spec.ts` first when it goes red.** It asserts the contract everything else depends
