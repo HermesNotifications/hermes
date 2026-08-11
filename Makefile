@@ -57,6 +57,13 @@ license-fix:       ## Insert the SPDX license header into files missing it
 #
 # `tf-check` is deliberately NOT part of this target; it runs in CI instead. The
 # reasoning is recorded in full above that target, under "Terraform".
+#
+# `license-check` IS part of it. It is enforced by the ci.yml Lint job, so a tree
+# that passes `verify` while failing the header policy is a green local gate that
+# fails CI -- which is exactly what happened on PR #96, where a new file carried
+# the pre-SPDX header and nothing local said so. The pre-commit hook covers the
+# same ground, but hooks are opt-in (`make hooks`) and this target is what agent
+# work and CONTRIBUTING both point at.
 # Provisions the interpreter every manifest gate runs on. Depending on requirements.txt
 # rather than order-only is deliberate: a pinned bump must rebuild the venv, and `touch`
 # updates the directory mtime make compares against.
@@ -70,6 +77,7 @@ verify:            ## Full local verification gate (no infra needed)
 	go build ./...
 	go test ./... -count=1
 	golangci-lint run
+	$(MAKE) license-check
 	$(MAKE) verify-manifests
 verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and CI YAML
 	kubectl kustomize deploy/k8s/overlays/local > /dev/null
