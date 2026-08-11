@@ -68,6 +68,7 @@ func main() {
 	}
 
 	srv := inbox.NewServer(inboxStore, centrifugoClient, redisClient, keyProvider, logger)
+	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }

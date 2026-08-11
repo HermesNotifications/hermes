@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
 type contextKey string
@@ -58,14 +59,14 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, `{"error":"missing authorization"}`, http.StatusUnauthorized)
+				httputil.ClientError(w, http.StatusUnauthorized, "missing authorization")
 				return
 			}
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 			configs := keyProvider()
 			if len(configs) == 0 {
-				http.Error(w, `{"error":"no signing keys configured"}`, http.StatusInternalServerError)
+				httputil.ClientError(w, http.StatusInternalServerError, "no signing keys configured")
 				return
 			}
 
@@ -101,7 +102,7 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 			}
 
 			if validClaims == nil || matchedCfg == nil {
-				http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
+				httputil.ClientError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 
@@ -122,7 +123,7 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 			organizationID, organizationOK := claimToString(organizationIDRaw)
 
 			if userID == "" || !organizationOK {
-				http.Error(w, `{"error":"missing claims"}`, http.StatusUnauthorized)
+				httputil.ClientError(w, http.StatusUnauthorized, "missing claims")
 				return
 			}
 

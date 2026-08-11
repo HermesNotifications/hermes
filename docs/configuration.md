@@ -28,6 +28,40 @@ configuration at all.
 | `HERMES_DISPATCH_CONCURRENCY` | `8` | Size of the **dispatch** worker pool — how many `notification.send` messages are processed in parallel. Distinct notifications are independent (status rollup is monotonic downstream), so raising this lifts dispatch throughput. The default of 8 is from the June 2026 load-test sweep ([docs/loadtest/dispatch-tuning-2026-06.md](loadtest/dispatch-tuning-2026-06.md)): throughput scales to ~16 workers, but 8 is the balanced point that leaves DB-pool headroom. Dispatch is I/O-bound, so the useful ceiling is the database pool, not CPU cores: the value is **clamped to the Postgres pool size** (`pool_max_conns`, default `max(4, NumCPU)`) and a warning is logged if set higher — raise `pool_max_conns` in `HERMES_DATABASE_URL` (and this value, toward 16) to push throughput further. |
 | `HERMES_DISPATCH_PREFETCH` | `64` | Dispatch fetcher's in-flight buffer (NATS `PullMaxMessages`) feeding the worker pool. Decouples fetching from processing so the pull pipeline stays full without one consumer hoarding the backlog. Auto-raised to at least `concurrency + 1`; the consumer's server-side `MaxAckPending` is raised to at least `prefetch + concurrency`. Tune against load tests. |
 
+### HTTP rate limiting
+
+Every HTTP service reads the same three variables. Because each service runs as its own
+Deployment, they are set **per service**, not fleet-wide.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_RATELIMIT_ENABLED` | `true` | Set `false` to disable rate limiting for that service entirely. |
+| `HERMES_RATELIMIT_BURST` | _(service default)_ | Requests admitted instantaneously per caller. Unset or `0` keeps the service default. |
+| `HERMES_RATELIMIT_PER_SECOND` | _(service default)_ | Sustained requests per second per caller. Unset or `0` keeps the service default. |
+
+Per-service defaults, and what the limit is keyed on:
+
+| Service | Burst | Per second | Keyed on |
+|---|---|---|---|
+| Send | 5000 | 2000 | API key ID |
+| Admin | 1000 | 500 | API key ID |
+| Inbox | 50 | 20 | JWT `user_id` |
+| User | 50 | 20 | JWT `user_id` |
+
+> **The limit is enforced per replica, not per cluster.** Each pod holds its own in-memory
+> buckets, so the cluster-wide ceiling is the configured rate **times the replica count** — and
+> under an [HPA](deployment-guide.md#autoscaling) that ceiling moves with the autoscaler. At the
+> production defaults, send's 2000/s is 6,000/s across 3 replicas and 40,000/s if it scales to 20.
+> Size these numbers per pod, and treat the cluster figure as a range rather than a guarantee.
+> Making the limit cluster-exact requires shared state and is tracked as future work.
+
+Rate limiting runs **after** authentication, so an unauthenticated flood is rejected with 401
+before it reaches the limiter and never allocates a bucket. That also means the limiter is not a
+defence against unauthenticated abuse — put per-IP limits on your ingress controller for that.
+`/healthz` and `/readyz` are never limited.
+
+See [the integration guide](integration-guide.md#rate-limits) for the client-facing contract.
+
 ### Store backend
 
 | Variable | Default | Purpose |

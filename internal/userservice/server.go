@@ -38,11 +38,33 @@ type Server struct {
 	api            huma.API
 	skipAuth       bool
 	jwtKeyProvider auth.JWTKeyProvider
+	limiter        *middleware.RateLimiter
 }
 
 // SetSkipAuth disables JWT authentication. Intended for use in tests only.
 func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
+}
+
+// Default per-process rate limit. Overridable via HERMES_RATELIMIT_USER_*; see
+// SetRateLimit and docs/configuration.md.
+const (
+	defaultRateLimitBurst     = 50
+	defaultRateLimitPerSecond = 20
+)
+
+// ConfigureRateLimit applies configured overrides on top of this service's
+// defaults. Call before serving. A zero override keeps the default; enabled
+// false turns limiting off.
+func (s *Server) ConfigureRateLimit(enabled bool, burst, perSecond int) {
+	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultRateLimitBurst, defaultRateLimitPerSecond)
+	s.limiter = middleware.NewRateLimiter(userLimitKey, b, p)
+}
+
+// userLimitKey buckets by the JWT-derived user ID, which is signature-derived
+// and so cannot be chosen by the caller.
+func userLimitKey(r *http.Request) string {
+	return auth.UserIDFromContext(r.Context())
 }
 
 func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
@@ -51,6 +73,7 @@ func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Lo
 		jwtKeyProvider: keyProvider,
 		logger:         logger,
 		router:         chi.NewRouter(),
+		limiter:        middleware.NewRateLimiter(userLimitKey, defaultRateLimitBurst, defaultRateLimitPerSecond),
 	}
 
 	config := huma.DefaultConfig("Hermes User API", "1.0.0")
@@ -78,9 +101,11 @@ func (s *Server) API() huma.API {
 
 func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.router
-	h = middleware.RateLimit(func(r *http.Request) string {
-		return auth.UserIDFromContext(r.Context())
-	}, 50, 20)(h)
+	// The limiter is built once in NewServer. Constructing it here would give
+	// every Handler() call a fresh, empty bucket map — which is what made the
+	// limiter silently inert under test, since the suites call Handler() per
+	// assertion.
+	h = s.limiter.Middleware(h)
 	if !s.skipAuth {
 		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}

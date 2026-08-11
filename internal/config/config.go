@@ -63,6 +63,19 @@ type Config struct {
 	// pipeline stays full without hoarding the backlog. Tunable for load-test sweeps.
 	DispatchPrefetch int
 
+	// RateLimit* tune the per-service HTTP rate limiter. Each service ships its
+	// own defaults, so these are overrides: a zero Burst or PerSecond keeps the
+	// service default, and RateLimitEnabled=false turns limiting off entirely.
+	// Every HTTP service reads the same three variables, and because each runs as
+	// its own Deployment they are set per service rather than fleet-wide.
+	//
+	// Enforcement is PER REPLICA. The cluster-wide ceiling is these numbers times
+	// the replica count, which under an HPA moves with the autoscaler — so size
+	// them per pod, not per fleet. See docs/configuration.md.
+	RateLimitEnabled   bool
+	RateLimitBurst     int
+	RateLimitPerSecond int
+
 	// DynamoDB / ExtendDB — set DynamoEndpoint to an ExtendDB URL for local dev and
 	// multi-cloud environments; leave empty to use native DynamoDB on AWS.
 	DynamoEndpoint string
@@ -99,6 +112,9 @@ func Load() Config {
 		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
 		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 8),
 		DispatchPrefetch:    envInt("HERMES_DISPATCH_PREFETCH", 64),
+		RateLimitEnabled:    envBool("HERMES_RATELIMIT_ENABLED", true),
+		RateLimitBurst:      envInt("HERMES_RATELIMIT_BURST", 0),
+		RateLimitPerSecond:  envInt("HERMES_RATELIMIT_PER_SECOND", 0),
 		DynamoEndpoint:      envStr("HERMES_DYNAMO_ENDPOINT", ""),
 		DynamoRegion:        envStr("HERMES_DYNAMO_REGION", "us-east-1"),
 		Environment:         envStr("HERMES_ENV", EnvDevelopment),
@@ -208,6 +224,18 @@ func envInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
+		}
+	}
+	return fallback
+}
+
+// envBool accepts the forms strconv.ParseBool does ("true"/"false", "1"/"0",
+// "t"/"f"). An unparseable value falls back rather than failing, matching envInt
+// — a typo in a limit knob must not stop a service from starting.
+func envBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return fallback

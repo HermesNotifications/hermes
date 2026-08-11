@@ -84,6 +84,7 @@ type Server struct {
 	skipAuth      bool
 	jwtSecret     []byte
 	hmacSecret    string
+	limiter       *middleware.RateLimiter
 }
 
 // requirePermission maps auth.CheckPermission onto Huma's error types.
@@ -109,6 +110,36 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
+// Default per-process rate limit. Overridable via HERMES_RATELIMIT_ADMIN_*; see
+// SetRateLimit and docs/configuration.md.
+const (
+	defaultRateLimitBurst     = 1000
+	defaultRateLimitPerSecond = 500
+)
+
+// ConfigureRateLimit applies configured overrides on top of this service's
+// defaults. Call before serving. A zero override keeps the default; enabled
+// false turns limiting off.
+func (s *Server) ConfigureRateLimit(enabled bool, burst, perSecond int) {
+	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultRateLimitBurst, defaultRateLimitPerSecond)
+	s.limiter = middleware.NewRateLimiter(apiKeyLimitKey, b, p)
+}
+
+// apiKeyLimitKey buckets by validated key ID rather than by the raw
+// Authorization header.
+//
+// The header is the wrong key twice over. APIKeyMiddleware strips the "Bearer "
+// prefix before validating, so "hms_x" and "Bearer hms_x" are one credential but
+// were two buckets — a free doubling of anyone's limit. And the raw header is
+// the secret itself, so it had to be hashed before it could be retained. A key
+// ID is neither ambiguous nor sensitive.
+func apiKeyLimitKey(r *http.Request) string {
+	if k := auth.GetValidatedKey(r.Context()); k != nil {
+		return k.ID
+	}
+	return ""
+}
+
 func NewServer(store AdminStore, organizations store.OrganizationRepository, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
 	s := &Server{
 		store:         store,
@@ -119,6 +150,7 @@ func NewServer(store AdminStore, organizations store.OrganizationRepository, cac
 		hmacSecret:    hmacSecret,
 		logger:        logger,
 		router:        chi.NewRouter(),
+		limiter:       middleware.NewRateLimiter(apiKeyLimitKey, defaultRateLimitBurst, defaultRateLimitPerSecond),
 	}
 
 	config := huma.DefaultConfig("Hermes Admin API", "1.0.0")
@@ -156,9 +188,11 @@ func (s *Server) API() huma.API {
 
 func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.router
-	h = middleware.RateLimit(func(r *http.Request) string {
-		return r.Header.Get("Authorization")
-	}, 1000, 500)(h)
+	// The limiter is built once in NewServer. Constructing it here would give
+	// every Handler() call a fresh, empty bucket map — which is what made the
+	// limiter silently inert under test, since the suites call Handler() per
+	// assertion.
+	h = s.limiter.Middleware(h)
 	if !s.skipAuth {
 		h = auth.APIKeyMiddleware(s.validateAPIKey)(h)
 	} else {

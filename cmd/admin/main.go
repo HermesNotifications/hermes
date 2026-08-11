@@ -53,6 +53,7 @@ func main() {
 	}
 
 	srv := admin.NewServer(adminStore, organizations, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
+	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }

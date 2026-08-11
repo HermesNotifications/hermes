@@ -59,6 +59,7 @@ func main() {
 	}
 
 	srv := userservice.NewServer(userStore, keyProvider, logger)
+	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 
 	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
 }

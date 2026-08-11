@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/hermes-notifications/hermes/internal/httputil"
 )
 
 func Recovery(logger *slog.Logger) func(http.Handler) http.Handler {
@@ -18,7 +20,11 @@ func Recovery(logger *slog.Logger) func(http.Handler) http.Handler {
 						"error", err,
 						"stack", string(debug.Stack()),
 					)
-					http.Error(w, "internal server error", http.StatusInternalServerError)
+					// Same envelope as every other error this API returns. A
+					// panic is the one response a client is least able to guess
+					// at, so it should not also be the one that breaks their
+					// error parsing.
+					httputil.ClientError(w, http.StatusInternalServerError, "internal server error")
 				}
 			}()
 			next.ServeHTTP(w, r)
