@@ -2,14 +2,6 @@
 
 Event-driven notification platform. Send notifications across email, SMS, and in-app inbox channels with real-time delivery via WebSocket.
 
-## Legal
-
-Hermes is developed non-commercially and supplied free of charge. It is **not designed,
-tested, or certified for use in safety-critical systems** and is **not intended for
-distribution or use within the European Economic Area**. Users are responsible for
-compliance with all applicable local laws. See [DISCLAIMER.md](./DISCLAIMER.md) for
-important usage information and [LICENSE](./LICENSE) for the license terms.
-
 ## Architecture
 
 Go monorepo of nine services connected via NATS JetStream:
@@ -215,7 +207,13 @@ The full documentation hub is **[docs/README.md](docs/README.md)**. Highlights:
 
 Run `make help` to see all available targets.
 
-## License
+## Legal
 
 Licensed under the Apache License 2.0 — see [LICENSE](./LICENSE). Important usage
 disclaimers are in [DISCLAIMER.md](./DISCLAIMER.md).
+
+Hermes is developed non-commercially and supplied free of charge. It is **not designed,
+tested, or certified for use in safety-critical systems** and is **not intended for
+distribution or use within the European Economic Area**. Users are responsible for
+compliance with all applicable local laws. See [DISCLAIMER.md](./DISCLAIMER.md) for
+important usage information and [LICENSE](./LICENSE) for the license terms.
