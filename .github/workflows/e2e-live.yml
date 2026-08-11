@@ -89,13 +89,16 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      # -n hermes is not optional: the workloads live in the `hermes` namespace, and without it
+      # every lookup resolved against `default` and returned "not found". This step produced
+      # nothing at all on the one run where it was needed.
       - name: Collect cluster logs on failure
         if: failure()
         run: |
           kubectl get pods -A || true
           for service in hermes-admin hermes-send hermes-dispatch hermes-worker-inbox hermes-inbox centrifugo; do
             echo "::group::$service"
-            kubectl logs "deployment/$service" --tail=200 || true
+            kubectl logs -n hermes "deployment/$service" --tail=200 || true
             echo "::endgroup::"
           done
 

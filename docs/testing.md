@@ -167,6 +167,14 @@ Conventions that differ from every other tier here:
 - **Read `smoke.spec.ts` first when it goes red.** It asserts the contract everything else depends
   on: the app renders, the element is registered (not merely present as an unknown tag), the inbox
   is empty, the socket connects. Its failure makes every other failure downstream noise.
+- **Centrifugo validates `Origin`, and only for browsers.** The demo runs on `localhost:5173` while
+  the socket is behind the ingress on `localhost:8888`, so every widget connection is cross-origin
+  and Centrifugo answers `403` at the handshake unless the origin is listed in `allowed_origins`
+  (`deploy/k8s/overlays/local/centrifugo-config.json`). Connections *without* an `Origin` header —
+  every curl, health probe and Node client — are permitted by design, so the service can look
+  entirely healthy while refusing the only connections that matter. `global-setup.ts` performs a
+  real handshake carrying an `Origin` for exactly this reason; serve the demo from a different port
+  and you must add that origin too.
 - **`global-setup.ts` probes the environment before any browser starts**, and each check names the
   command that fixes it. Without that, an absent cluster looks like a wall of widget bugs.
 - **Per-test organization and user.** Every test mints its own, so unread assertions are absolute

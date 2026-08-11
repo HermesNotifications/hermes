@@ -1,15 +1,26 @@
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
 // See LICENSE and NOTICE in the project root for full terms and restrictions.
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import http from "node:http";
+import https from "node:https";
 import {
   INBOX_URL,
   REALTIME_HEALTH_URL,
+  SOCKET_ENDPOINT,
   apiKey,
   listInbox,
   mintToken,
   sendNotification,
 } from "./fixtures/hermes-api.js";
+
+/**
+ * The origin the browser will present on the websocket handshake.
+ *
+ * Must match `use.baseURL` in playwright.config.ts — it is what Centrifugo validates against
+ * `allowed_origins`, and the whole point of the check below.
+ */
+const DEMO_ORIGIN = process.env.HERMES_DEMO_ORIGIN ?? "http://localhost:5173";
 
 /**
  * Assert the environment contract before a single browser starts.
@@ -28,6 +39,46 @@ function fail(what: string, fix: string): never {
     `\n\nLive E2E environment check failed: ${what}\n\n  Fix: ${fix}\n\n` +
       `  This suite needs the full stack running. See docs/testing.md.\n`
   );
+}
+
+/**
+ * Perform a real websocket handshake, carrying an `Origin` header, and report the status.
+ *
+ * Hand-rolled over `node:http` rather than done with a websocket client, because the status code
+ * *is* the result: a client library reports "connection failed" and swallows the 403 that says
+ * why. Resolves 101 on a successful upgrade, otherwise whatever the server answered.
+ */
+export async function websocketHandshake(endpoint: string, origin: string): Promise<number> {
+  const url = new URL(endpoint.replace(/^ws/, "http"));
+  const transport = url.protocol === "https:" ? https : http;
+
+  return new Promise<number>((resolve, reject) => {
+    const request = transport.request({
+      hostname: url.hostname,
+      port: url.port,
+      path: `${url.pathname}${url.search}`,
+      method: "GET",
+      headers: {
+        Connection: "Upgrade",
+        Upgrade: "websocket",
+        "Sec-WebSocket-Version": "13",
+        "Sec-WebSocket-Key": randomBytes(16).toString("base64"),
+        Origin: origin,
+      },
+    });
+
+    request.on("upgrade", (_response, socket) => {
+      socket.destroy();
+      resolve(101);
+    });
+    request.on("response", (response) => {
+      response.resume();
+      resolve(response.statusCode ?? 0);
+    });
+    request.on("error", reject);
+    request.setTimeout(10_000, () => request.destroy(new Error("handshake timed out")));
+    request.end();
+  });
 }
 
 async function probe(url: string): Promise<Response> {
@@ -85,7 +136,40 @@ export default async function globalSetup(): Promise<void> {
     );
   }
 
-  // 4. One real notification, end to end. /v1/send returns 202 before the row exists — dispatch
+  // 4. The same endpoint again, but as a *browser* would reach it: with an Origin header.
+  //
+  //    Check 3 cannot see this. It is a plain fetch, so it sends no Origin, and Centrifugo permits
+  //    origin-less connections by design — "they typically originate from non-browser
+  //    environments". So Centrifugo can be perfectly healthy, reachable and correctly routed while
+  //    refusing every connection the widget will ever make.
+  //
+  //    That is not hypothetical: it cost a 45-minute run in which 24 specs failed, each waiting 30s
+  //    for a realtime status that a 403 had already made impossible. This is the check that turns
+  //    that into a few seconds and one sentence.
+  let handshake: number;
+  try {
+    handshake = await websocketHandshake(SOCKET_ENDPOINT, DEMO_ORIGIN);
+  } catch (cause) {
+    fail(
+      `websocket handshake to ${SOCKET_ENDPOINT} failed: ` +
+        `${cause instanceof Error ? cause.message : String(cause)}`,
+      "check the realtime ingress forwards Upgrade headers to Centrifugo"
+    );
+  }
+  if (handshake !== 101) {
+    fail(
+      `a websocket handshake to ${SOCKET_ENDPOINT} from Origin ${DEMO_ORIGIN} returned ` +
+        `${handshake}, expected 101`,
+      handshake === 403
+        ? `Centrifugo refused the browser's Origin. Add ${DEMO_ORIGIN} to "allowed_origins" in ` +
+          `deploy/k8s/overlays/local/centrifugo-config.json, then 'tilt trigger centrifugo'. ` +
+          `Centrifugo validates Origin only for browser clients, which is why every non-browser ` +
+          `check above passes.`
+        : "check the realtime ingress rewrites /realtime/* and forwards Upgrade headers"
+    );
+  }
+
+  // 5. One real notification, end to end. /v1/send returns 202 before the row exists — dispatch
   //    creates it later — so this polls rather than trusting the status code.
   const organizationId = randomUUID();
   const externalUserId = `e2e-warmup-${Date.now()}`;
