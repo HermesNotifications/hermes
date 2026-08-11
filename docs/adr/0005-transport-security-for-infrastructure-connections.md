@@ -503,6 +503,128 @@ there. The behaviour is pinned meanwhile by
 `TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`, which is deliberately **not**
 flipped: it characterises nats-server's parser, which is upstream and unchanged.
 
+## Amendment 2026-08-10 — phase 5: the three residuals phases 1–4 named are closed
+
+No decision changes here. Phase 4 and the 2026-07-31 amendment each ended by naming something
+they had deliberately not fixed, with an owner but no implementation. All three are now
+implemented and verified. One correction to a previous amendment's reasoning is recorded below,
+and one new gap this phase created is named rather than left implicit.
+
+### 1. Finding 53 — the empty Centrifugo password now stops the pod
+
+The 2026-07-31 amendment determined the owner (an initContainer on the NATS StatefulSet) and
+argued why `internal/config` and `cmd/natsprovision` could not be it. That reasoning stands and
+is unchanged. `require-centrifugo-password` in `deploy/k8s/base/infra/nats.yaml` now runs before
+nats-server and fails the pod on an empty or unset value, so a half-provisioned cluster stays
+down rather than serving while accepting an unauthenticated `centrifugo` connection.
+
+**Correction to the 2026-07-31 amendment.** That amendment states that "a leading ASCII letter
+is always safe whatever follows". That is true of what `cmd/natskeys` emits and false in
+general: `nats-accounts.conf` itself lists `true` and `false` as failing shapes, because both
+lex cleanly as a conf boolean and reach the server as the wrong Go type with no parse error.
+`cmd/natskeys` cannot produce them — it emits 43 base64url characters — so the two statements
+never collided in practice. They collide precisely in the case the guard exists for: the human
+setting the Secret by hand with `kubectl create secret`, who is the audience the amendment
+identified. The guard therefore rejects `true` and `false` explicitly, not only the
+leading-character rule. Verified against every shape the amendment enumerates.
+
+The local overlay deletes the container by `$patch: delete` on its name, because it drops
+`-c nats.conf` and legitimately has no password. **That makes the container's name a contract
+between two files**, which is the one fragile edge this introduces:
+`scripts/check_nats_password_guard.py` gates it, and does so conditionally — it requires the
+guard exactly where the rendered server is given a config file, and demands its absence
+nowhere. The gate matches all four spellings of the flag (`-c`, `--config`, and their `=`
+forms) deliberately: it decides whether the guard is *required*, so a spelling it failed to
+recognise would not raise a false alarm, it would silently stop requiring the guard.
+
+**Operational consequence.** Adding an initContainer mutates the StatefulSet's pod template,
+so applying this **rolls the NATS cluster**. That is an ordinary `RollingUpdate` and needs no
+special handling — unlike phase 2's `podManagementPolicy` change, which was not updatable in
+place at all — but it is a restart of the bus on the deploy that carries this change, not a
+no-op config edit.
+
+### 2. Phase 4's CA residual — the internal CA is now namespace-scoped
+
+Phase 4 moved the CA private key out of `hermes` and stated plainly that the resulting residual
+— a ClusterIssuer can be referenced from any namespace — was not closed, needing "admission
+policy or cert-manager's CertificateRequest approval RBAC". It is the first of those:
+`deploy/k8s/pki/restrict-internal-ca.yaml`, a `ValidatingAdmissionPolicy` denying Certificates
+and CertificateRequests that name `hermes-internal-ca` from anywhere but `hermes`.
+
+**Why not cert-manager-approver-policy**, which is the more expressive option and cert-manager's
+own answer: it requires disabling cert-manager's built-in approver controller
+(`--controllers=*,-certificaterequests-approver`), which changes approval behaviour for **every**
+issuer on the cluster including the Let's Encrypt one Hermes does not own, plus a second Helm
+release in `bootstrap-cluster.sh`. ValidatingAdmissionPolicy has been GA since Kubernetes 1.30
+and `infra/terraform/variables.tf` targets 1.35, so this adds no component and touches nothing
+but this CA.
+
+Verified end to end against a throwaway k3s v1.33.6 cluster with cert-manager's CRDs installed —
+the API server compiled the CEL with no type-checking warnings, and four cases were executed
+rather than reasoned:
+
+- a `Certificate` in a foreign namespace with SAN `nats.hermes.svc` — **denied**;
+- a `CertificateRequest` created **directly** in a foreign namespace — **denied**. This is why
+  the policy covers both kinds: a CertificateRequest needs no Certificate object, so a policy
+  guarding only `Certificate` leaves the shorter path open;
+- the repository's own rendered `nats-server-tls` in `hermes` and `hermes-internal-ca` in
+  `cert-manager` — **both admitted**;
+- a Certificate in a foreign namespace naming a *different* issuer — **admitted**, confirming
+  the policy does not over-block.
+
+**The new gap, named because this phase creates it.** Anyone who can create a Certificate *in*
+`hermes` can still request a leaf for any identity, including `nats.hermes.svc`. The grant is
+narrowed from cluster-wide to one namespace; it is not per-identity. Constraining SANs is the
+thing a ValidatingAdmissionPolicy expresses badly and approver-policy expresses well, so that is
+the trigger for revisiting the choice above.
+
+### 3. Finding 41's second half — production Centrifugo reaches Redis authenticated and encrypted
+
+Phase 4 recorded that production's `centrifugo-env.yaml` still set neither
+`CENTRIFUGO_REDIS_PASSWORD` nor the Redis TLS variables that staging sets, while the production
+ExternalSecret had carried `HERMES_CENTRIFUGO_REDIS_PASSWORD` since phase 4. The infrastructure
+was provisioned correctly and the client was not using it — the same shape as finding 14, and
+the reason this record exists. The patch now consumes both.
+
+**`CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY` was deliberately NOT carried over from staging.**
+Staging sets it to `"true"` with no recorded rationale; it arrived in `65cdb5c` alongside
+enabling TLS at all, in a commit whose message is about transit encryption and says nothing
+about verification. Skipping verification keeps the encryption and discards the authentication,
+which is a weaker property than this overlay's own database and NATS settings enforce and is not
+one to inherit by copy-paste. **UNVERIFIED:** no AWS account was reachable from this change, so
+the belief that verification succeeds — ElastiCache serves a certificate for its configuration
+endpoint signed by Amazon Trust Services, whose roots are in the standard bundle — is reasoned
+from how ElastiCache issues certificates, not observed. If it is wrong the failure is loud
+(Centrifugo cannot reach Redis at startup) rather than silent, which is the right way round.
+**Staging's flag is left in place and is now an open item**: one of the two must be exercised
+against a real cluster, and whichever answer that gives should be applied to both.
+
+### 4. Six manifest gates were silently disabled, and that is fixed here
+
+Not a security decision, but it is why this phase can claim its gates work. Every check in
+`scripts/` treated a missing PyYAML as a reason to print `SKIP` and exit 0. On any machine
+without PyYAML — including the one this phase was written on — `make verify` ran six controls
+that verified nothing and passed. CI passed for an unrelated reason: GitHub's `ubuntu-latest`
+image happens to ship PyYAML for the system `python3`, and nothing in `ci.yml` asked for it, so
+a runner image change would have turned every gate off at once with no failing step.
+
+This is the same defect class the gates themselves exist to catch — finding 47's inert
+NetworkPolicy, finding 36's typo'd PDB selector: a control that is present and does nothing,
+indistinguishable from one that works. The gates now exit non-zero without PyYAML,
+`make verify-manifests` provisions `.venv` from a pinned `scripts/requirements.txt`, and both CI
+jobs install it explicitly.
+
+### What this phase could not check
+
+- **Nothing was applied to a real staging or production cluster**, as with phases 3 and 4. The
+  admission policy was verified on a throwaway k3s cluster, not on EKS 1.35, and the Redis TLS
+  change was not exercised against ElastiCache at all.
+- **The initContainer was verified by rendering and by executing its shell logic against every
+  password shape, not by running the pod.** No NATS StatefulSet was started with a bad Secret to
+  watch it stay down.
+- **Certificate renewal and the phase 2 note that NATS reloads certificates only on SIGHUP**
+  remain unexercised through an expiry cycle, unchanged from phase 4.
+
 ## Status history
 
 - 2026-07-29 — Accepted. Written before implementation, to unblock findings 1, 14 and 19,
@@ -539,3 +661,15 @@ flipped: it characterises nats-server's parser, which is upstream and unchanged.
 - 2026-08-05 — Amended (correction, no decision changed): the two review findings referenced
   above were filed as 38 and 39, numbers already held by other findings, and are now **52**
   (the unquoted `$VARIABLE`) and **53** (the empty password). Only the references changed.
+- 2026-08-10 — Amended: **phase 5**, closing the three residuals phases 1–4 named and left with
+  an owner but no implementation. Finding 53 is closed by the initContainer the 2026-07-31
+  amendment specified; phase 4's CA residual is closed by a `ValidatingAdmissionPolicy`, verified
+  in four cases against a real API server; finding 41's second half is closed by the production
+  Centrifugo patch consuming the Redis password and TLS. No decision is reversed. One
+  **correction**: the 2026-07-31 claim that "a leading ASCII letter is always safe whatever
+  follows" is false for exactly `true` and `false`, which `cmd/natskeys` cannot emit but a
+  hand-set Secret can — the guard rejects them explicitly. Two things are named rather than
+  closed: a Certificate created *inside* `hermes` can still name any SAN, and staging's
+  unexplained `CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY` is left in place pending a real-cluster
+  test. Also fixed here because it underpins every claim above: six manifest gates treated a
+  missing PyYAML as a reason to skip and pass.

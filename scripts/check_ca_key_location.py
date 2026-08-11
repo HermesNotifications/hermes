@@ -81,8 +81,15 @@ def main(argv):
     try:
         import yaml
     except ImportError:
-        print("SKIP: PyYAML not installed; CA key location check not run", file=sys.stderr)
-        return 0
+        for line in (
+            "ERROR: PyYAML is not installed, so this gate can verify nothing.",
+            "A gate that verified nothing must not report success -- the same rule these",
+            "checks already apply to empty input. Install it with:",
+            "    python3 -m pip install -r scripts/requirements.txt",
+            "or run `make verify-manifests`, which provisions .venv from that file.",
+        ):
+            print(line, file=sys.stderr)
+        return 1
 
     paths = []
     app_namespace = DEFAULT_APP_NAMESPACE
