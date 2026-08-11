@@ -27,6 +27,26 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0015](0015-lifecycle-and-jetstream-durability.md) | Drain before shutdown, and replicate the streams the cluster can lose | Accepted | 2026-08-10 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
+> `scripts/check_adr_numbering.py`, run by `make verify`, now enforces it.
+
+### If your number collides on the way in
+
+Taking "one above the highest in the index" is correct, and it is also how every collision so
+far has happened: two open branches both take the same next number, both correctly, and the
+duplicate only exists once they meet. It has happened three times.
+
+**The branch that merges second renumbers.** The number that reached `main` first keeps it,
+because references to it may already exist in commit messages, PR descriptions and other ADRs,
+none of which can be rewritten. Renumbering is four edits, and the gate fails if you stop
+after any of them:
+
+1. `git mv` the file to the new number.
+2. Update the `# ADR NNNN:` heading.
+3. Update the front-matter `id:`, if the ADR has front matter — four of these do.
+4. Fix every inbound link. These are the ones that rot silently: a stale
+   `[ADR 0011](0011-….md)` still renders as text, and only a reader clicking it finds out.
+
+Then add the row to the index above.
 
 ## When to write one
 
