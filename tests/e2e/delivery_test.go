@@ -60,7 +60,7 @@ func TestDeliveryPipeline(t *testing.T) {
 		t.Fatalf("nats: %v", err)
 	}
 	defer natsClient.Close()
-	if err := natsClient.SetupStreams(ctx); err != nil {
+	if err := natsClient.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("setup streams: %v", err)
 	}
 
@@ -130,7 +130,7 @@ func TestDeliveryPipeline(t *testing.T) {
 	emailWorker := delivery.NewWorker(natsClient, emailProvider, "email", "email-worker", logger)
 
 	centrifugoClient := centrifugo.NewClient(centrifugoServer.URL, "test-api-key")
-	inboxProvider := delivery.NewInboxProvider(centrifugoClient, nil)
+	inboxProvider := delivery.NewInboxProvider(centrifugoClient, nil, nil)
 	inboxWorker := delivery.NewWorker(natsClient, inboxProvider, "inbox", "inbox-worker", logger)
 
 	// ── Seed Data ───────────────────────────────────────────────────────

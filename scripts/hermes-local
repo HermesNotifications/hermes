@@ -12,7 +12,7 @@
 #   HERMES_ADMIN_URL      (default: http://localhost:8888 — k3d ingress)
 #   HERMES_API_KEY        (default: read from web/admin/.env.local)
 #   HERMES_INBOX_URL      (default: http://localhost:8888)
-#   HERMES_CENTRIFUGO_URL (default: ws://localhost:8888/centrifugo)
+#   HERMES_WS_URL         (default: ws://localhost:8888/realtime/connection/websocket)
 
 set -euo pipefail
 
@@ -24,8 +24,12 @@ fi
 : "${HERMES_ADMIN_URL:=http://localhost:8888}"
 : "${HERMES_API_KEY:?HERMES_API_KEY is required — run 'make seed' or set it manually}"
 : "${HERMES_INBOX_URL:=http://localhost:8888}"
-: "${HERMES_CENTRIFUGO_URL:=ws://localhost:8888/centrifugo/connection/websocket}"
+# The CLI reads HERMES_WS_URL (internal/cli/inbox.go), and the realtime ingress serves
+# /realtime, not /centrifugo. This previously exported HERMES_CENTRIFUGO_URL with the wrong
+# path, so the variable was dead and `inbox listen` fell back to a default — which meant the
+# CLI could not be used as an independent oracle for realtime delivery.
+: "${HERMES_WS_URL:=ws://localhost:8888/realtime/connection/websocket}"
 
-export HERMES_ADMIN_URL HERMES_API_KEY HERMES_INBOX_URL HERMES_CENTRIFUGO_URL
+export HERMES_ADMIN_URL HERMES_API_KEY HERMES_INBOX_URL HERMES_WS_URL
 
 exec go run ./cmd/hermes "$@"

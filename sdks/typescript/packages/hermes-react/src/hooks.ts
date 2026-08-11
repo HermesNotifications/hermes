@@ -2,152 +2,165 @@
 // SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   HermesClient,
+  InboxStore,
+  initialInboxState,
   type HermesClientConfig,
-  type Notification,
-  type InboxPage,
-  type NewNotificationEvent,
-  type InboxUpdatedEvent,
+  type InboxState,
 } from "@hermes-notifications/client";
 
-export function useHermesClient(config: HermesClientConfig): HermesClient | null {
-  const clientRef = useRef<HermesClient | null>(null);
-
-  if (!clientRef.current) {
-    clientRef.current = new HermesClient(config);
-  }
-
-  useEffect(() => {
-    const client = clientRef.current;
-    return () => {
-      client?.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    clientRef.current?.setToken(config.token);
-  }, [config.token]);
-
-  return clientRef.current;
+/** Everything `useHermesInbox` returns: the state, plus the actions that change it. */
+export interface UseHermesInboxResult extends Readonly<InboxState> {
+  markRead(id: string): Promise<void>;
+  markUnread(id: string): Promise<void>;
+  archive(id: string): Promise<void>;
+  unarchive(id: string): Promise<void>;
+  remove(id: string): Promise<void>;
+  markAllRead(): Promise<void>;
+  loadMore(): Promise<void>;
+  refresh(): Promise<void>;
+  clearError(): void;
 }
 
+export interface UseHermesInboxOptions {
+  /** Defaults to the token's `sub` claim, which is what the Centrifugo channel needs. */
+  userId?: string;
+  pageSize?: number;
+  archived?: boolean;
+  /** Injected clock, so optimistic timestamps are exact in tests. */
+  now?: () => string;
+}
+
+/**
+ * Create and own a {@link HermesClient} for the lifetime of the component.
+ *
+ * Construction happens in a `useState` initializer rather than the render body. React's
+ * StrictMode double-invokes initializers and discards one result, which is harmless here only
+ * because constructing a client opens no socket — a property the client's own suite asserts,
+ * so it stays true.
+ *
+ * The client is rebuilt if `apiUrl` or `socketUrl` change, and `token` changes are pushed in
+ * without a rebuild.
+ */
+export function useHermesClient(config: HermesClientConfig): HermesClient {
+  const identity = `${config.apiUrl}\u0000${config.socketUrl ?? ""}`;
+
+  const [current, setCurrent] = useState(() => ({
+    client: new HermesClient(config),
+    identity,
+  }));
+
+  useEffect(() => {
+    if (current.identity === identity) return;
+    current.client.dispose();
+    setCurrent({ client: new HermesClient(config), identity });
+    // `config` is read only when the identity changes; including it here would rebuild the
+    // client on every render for callers passing an inline object literal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity, current]);
+
+  useEffect(() => {
+    current.client.setToken(config.token);
+  }, [current.client, config.token]);
+
+  useEffect(() => {
+    const { client } = current;
+    return () => {
+      client.dispose();
+    };
+  }, [current]);
+
+  return current.client;
+}
+
+const NOOP_SUBSCRIBE = () => () => {};
+
+/**
+ * Drive an inbox: the current page, live updates, and the actions that change it.
+ *
+ * A thin adapter over the client's `InboxStore` — the state logic lives there, shared with the
+ * `<hermes-inbox>` custom element, rather than being reimplemented here.
+ *
+ * The store is created per mount and disposed on unmount, so a component that goes away stops
+ * reacting to the socket immediately.
+ */
 export function useHermesInbox(
   client: HermesClient | null,
-  options?: { userId?: string }
-) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [cursor, setCursor] = useState<string | undefined>();
+  options: UseHermesInboxOptions = {}
+): UseHermesInboxResult {
+  const { userId, pageSize, archived, now } = options;
+
+  const store = useMemo(() => {
+    if (!client) return null;
+    return new InboxStore({
+      client,
+      ...(userId ? { userId } : {}),
+      ...(pageSize !== undefined ? { pageSize } : {}),
+      ...(archived !== undefined ? { archived } : {}),
+      ...(now ? { now } : {}),
+    });
+    // `now` is deliberately excluded: it is a clock, and an inline arrow would otherwise
+    // rebuild the store on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, userId, pageSize, archived]);
 
   useEffect(() => {
-    if (!client) return;
+    if (!store) return;
+    void store.start();
+    // `stop`, not `dispose`. StrictMode runs effect -> cleanup -> effect on the same memoized store,
+    // and a disposed store refuses to restart — which would leave the inbox permanently inert in
+    // every StrictMode app, loading nothing and receiving no realtime updates. `stop` closes the
+    // socket and unsubscribes while remaining restartable; the store is garbage once the component
+    // is gone.
+    return () => store.stop();
+  }, [store]);
 
-    let cancelled = false;
+  const subscribe = useCallback(
+    (listener: () => void) => (store ? store.subscribe(listener) : NOOP_SUBSCRIBE()),
+    [store]
+  );
+  const getSnapshot = useCallback(
+    () => store?.getSnapshot() ?? initialInboxState,
+    [store]
+  );
+  const getServerSnapshot = useCallback(() => initialInboxState, []);
 
-    async function load() {
-      setLoading(true);
-      try {
-        const page = await client!.inbox.list({ limit: 20 });
-        if (!cancelled) {
-          setNotifications(page.data);
-          setUnreadCount(page.unreadCount);
-          setCursor(page.cursor);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
+  const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-    load();
-
-    const unsub1 = client.on("notification", (e: NewNotificationEvent) => {
-      const notif: Notification = {
-        id: e.id,
-        title: e.title,
-        body: e.body,
-        status: "delivered",
-        channels: ["inbox"],
-        created_at: e.createdAt,
-        organization_id: "",
-        user_id: "",
-        category_id: "",
-      };
-      setNotifications((prev) => [notif, ...prev]);
-      setUnreadCount((c) => c + 1);
-    });
-
-    const unsub2 = client.on("update", (e: InboxUpdatedEvent) => {
-      setUnreadCount(e.unreadCount);
-      if (e.action === "delete") {
-        setNotifications((prev) => prev.filter((n) => n.id !== e.notificationId));
-      } else if (e.action === "read") {
-        setNotifications((prev) =>
-          prev.map((n) =>
-            n.id === e.notificationId
-              ? { ...n, read_at: new Date().toISOString() }
-              : n
-          )
-        );
-      } else if (e.action === "read-all") {
-        setNotifications((prev) =>
-          prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() }))
-        );
-      }
-    });
-
-    if (options?.userId) {
-      client.connect(options.userId).catch(console.error);
-    }
-
-    return () => {
-      cancelled = true;
-      unsub1();
-      unsub2();
-    };
-  }, [client, options?.userId]);
-
-  const markRead = useCallback(
-    async (id: string) => {
-      await client?.inbox.markRead(id);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === id ? { ...n, read_at: new Date().toISOString() } : n
-        )
-      );
-      setUnreadCount((c) => Math.max(0, c - 1));
-    },
-    [client]
+  const actions = useMemo(
+    () => ({
+      markRead: (id: string) => store?.markRead(id) ?? Promise.resolve(),
+      markUnread: (id: string) => store?.markUnread(id) ?? Promise.resolve(),
+      archive: (id: string) => store?.archive(id) ?? Promise.resolve(),
+      unarchive: (id: string) => store?.unarchive(id) ?? Promise.resolve(),
+      remove: (id: string) => store?.remove(id) ?? Promise.resolve(),
+      markAllRead: () => store?.markAllRead() ?? Promise.resolve(),
+      loadMore: () => store?.loadMore() ?? Promise.resolve(),
+      refresh: () => store?.refresh() ?? Promise.resolve(),
+      clearError: () => store?.clearError(),
+    }),
+    [store]
   );
 
-  const archive = useCallback(
-    async (id: string) => {
-      await client?.inbox.archive(id);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    },
-    [client]
-  );
-
-  const markAllRead = useCallback(async () => {
-    await client?.inbox.markAllRead();
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() }))
-    );
-    setUnreadCount(0);
-  }, [client]);
-
-  return { notifications, unreadCount, loading, cursor, markRead, archive, markAllRead };
+  return { ...state, ...actions };
 }
 
+/**
+ * Just the unread count — for a badge rendered somewhere other than the inbox itself.
+ *
+ * Correct from the first load, not only after the user's first mutation, because the store
+ * pushes every count change back through the client.
+ */
 export function useUnreadCount(client: HermesClient | null): number {
-  const [count, setCount] = useState(0);
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      client ? client.on("unreadCountChange", () => listener()) : NOOP_SUBSCRIBE(),
+    [client]
+  );
+  const getSnapshot = useCallback(() => client?.unreadCount ?? 0, [client]);
+  const getServerSnapshot = useCallback(() => 0, []);
 
-  useEffect(() => {
-    if (!client) return;
-    return client.on("unreadCountChange", setCount);
-  }, [client]);
-
-  return count;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

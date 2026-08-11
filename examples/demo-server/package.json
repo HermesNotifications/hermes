@@ -1,0 +1,25 @@
+{
+  "name": "@hermes/demo-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Token-minting and proxy backend shared by every Hermes integration demo",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "dev": "tsc -p tsconfig.build.json && node dist/main.js",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hermes-notifications/client": "workspace:*",
+    "@hermes-notifications/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "license": "MIT"
+}

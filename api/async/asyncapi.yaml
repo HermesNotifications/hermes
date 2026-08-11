@@ -496,7 +496,10 @@ components:
         unread_count:
           type: integer
           minimum: 0
-          description: Current unread count after this action (cached in Redis)
+          maximum: 1000
+          description: >-
+            Unread count after this action. Exact below 1000; a value of 1000 means at least
+            1000. Served from the Redis cache, recomputed from the database periodically.
         timestamp:
           type: integer
           format: int64
@@ -529,6 +532,20 @@ components:
           type: integer
           format: int64
           description: Unix milliseconds
+        unread_count:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: >-
+            Unread count after this arrival. Exact below 1000; a value of 1000 means at least
+            1000.
+
+            Optional, and absent more often than you might expect. The inbox worker publishing
+            this event has no database connection -- it wires NATS, Redis and Centrifugo and
+            nothing else -- so when the Redis count has expired it genuinely does not know the
+            number, and omits the field rather than inventing one. A client that sees it absent
+            should increment its local count by one and let the next inbox.updated, or the next
+            list, correct it.
         action:
           type: object
           properties:

@@ -46,6 +46,15 @@ configMapGenerator:
       # another's file. Empty means "connect anonymously", which is the local dev setting.
       - HERMES_NATS_NKEY_SEED=/etc/nats-nkey/seed.nk
       - HERMES_CENTRIFUGO_API_URL=http://centrifugo:8000
+      # JetStream replication factor, read only by cmd/natsprovision. One is correct for the
+      # single-node bus the base and staging run; the production overlay raises it to 3.
+      #
+      # The default has to be the safe-to-create value rather than the safe-to-lose one: asking
+      # for 3 replicas on a one-node server fails outright, so a base of 3 would break every
+      # non-clustered install. The cost is that a clustered deployment which forgets to override
+      # this keeps all four streams on a single peer — which is why check_nats_stream_replicas.py
+      # fails the render when the NATS StatefulSet has more replicas than the streams do.
+      - HERMES_NATS_STREAM_REPLICAS=1
       # OpenTelemetry — cluster-local Collector in the observability namespace.
       # Overlays may override to an out-of-cluster endpoint.
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-opentelemetry-collector.observability.svc:4317

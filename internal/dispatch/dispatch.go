@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -68,6 +69,11 @@ func (d *Dispatch) Start(workers, prefetch int) error {
 		MaxAckPending: 256,
 		Workers:       workers,
 		Prefetch:      prefetch,
+		// Persisting the notification, resolving a template and fanning out is database and
+		// Redis work, so this is generous rather than tight — but bounded, so a saturated pool
+		// waiting on a connection cannot pin every worker indefinitely.
+		HandlerTimeout: 30 * time.Second,
+		AckWait:        60 * time.Second,
 	}, func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
 		return d.handleSend(ctx, data, info)
 	})

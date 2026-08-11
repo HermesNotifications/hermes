@@ -1,0 +1,22 @@
+{
+  "name": "@hermes/browser-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Live end-to-end browser tests for the embeddable Hermes inbox",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "// test:list": "Compiles every spec and resolves the config without launching a browser — the cheap CI proxy for the expensive live job. Not named `list`, which shadows a pnpm builtin.",
+    "test:list": "playwright test --list",
+    "install-browsers": "playwright install --with-deps chromium",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^24.10.1",
+    "centrifuge": "^5.5.3",
+    "typescript": "^5.9.3"
+  },
+  "license": "MIT"
+}

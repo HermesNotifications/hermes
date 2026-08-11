@@ -46,6 +46,11 @@ func (w *Writer) Start(_ context.Context) error {
 		MaxAckPending: 1000,
 		Workers:       1,
 		Prefetch:      256,
+		// Short, because this handler only appends to an in-memory batch — the database write
+		// happens on the flush timer, not here. Anything approaching ten seconds means the batch
+		// itself is wedged, and redelivering is the right answer.
+		HandlerTimeout: 10 * time.Second,
+		AckWait:        30 * time.Second,
 	}, func(ctx context.Context, data []byte, _ messaging.DeliveryInfo) error {
 		msg, err := hermenats.UnmarshalEvent(data)
 		if err != nil {

@@ -8,6 +8,19 @@ spec:
       containers:
         - name: centrifugo
           env:
+            # Origins allowed to open a realtime websocket, space-separated (v5 env form).
+            # Substituted at deploy time like DOMAIN_PLACEHOLDER above it in the ingress.
+            #
+            # This is not optional and it is not about the Hermes domain. The inbox widget is
+            # embedded in a customer's application, so the browser presents *their* origin
+            # while the socket lives here — cross-origin by construction. Centrifugo answers
+            # 403 at the websocket handshake to any origin not listed.
+            #
+            # It fails quietly: Centrifugo permits connections carrying no Origin header at
+            # all, so health probes, curl and every server-side client keep succeeding while
+            # no browser can connect. scripts/check_centrifugo_origins.py gates the shape.
+            - name: CENTRIFUGO_ALLOWED_ORIGINS
+              value: "ALLOWED_ORIGINS_PLACEHOLDER"
             - name: CENTRIFUGO_TOKEN_HMAC_SECRET_KEY
               valueFrom:
                 secretKeyRef:

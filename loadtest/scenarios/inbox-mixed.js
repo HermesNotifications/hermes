@@ -65,6 +65,11 @@ export const options = {
     send_ack_latency: ['p(99)<200'],
     ws_push_e2e_latency: ['p(95)<1000'],
     http_req_failed: ['rate<0.01'],
+    // The read path this scenario spends most of its requests on had no objective at all.
+    // Set after ADR 0011 took the uncached COUNT(*) off it; see docs/loadtest/slo.md for
+    // which of these numbers are measured and which are still estimates.
+    inbox_list_latency: ['p(95)<150', 'p(99)<400'],
+    ws_connect_latency: ['p(95)<500'],
   },
   tags: {
     scenario: 'inbox-mixed',

@@ -62,7 +62,7 @@ func TestSendNotification_E2E(t *testing.T) {
 		t.Fatalf("nats: %v", err)
 	}
 	defer natsClient.Close()
-	natsClient.SetupStreams(ctx)
+	natsClient.SetupStreams(ctx, messaging.StreamOptions{})
 
 	redisClient, err := cache.Connect(redisURL)
 	if err != nil {

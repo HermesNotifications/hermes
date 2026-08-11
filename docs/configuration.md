@@ -63,6 +63,40 @@ defence against unauthenticated abuse — put per-IP limits on your ingress cont
 
 See [the integration guide](integration-guide.md#rate-limits) for the client-facing contract.
 
+### HTTP rate limiting
+
+Every HTTP service reads the same three variables. Because each service runs as its own
+Deployment, they are set **per service**, not fleet-wide.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_RATELIMIT_ENABLED` | `true` | Set `false` to disable rate limiting for that service entirely. |
+| `HERMES_RATELIMIT_BURST` | _(service default)_ | Requests admitted instantaneously per caller. Unset or `0` keeps the service default. |
+| `HERMES_RATELIMIT_PER_SECOND` | _(service default)_ | Sustained requests per second per caller. Unset or `0` keeps the service default. |
+
+Per-service defaults, and what the limit is keyed on:
+
+| Service | Burst | Per second | Keyed on |
+|---|---|---|---|
+| Send | 5000 | 2000 | API key ID |
+| Admin | 1000 | 500 | API key ID |
+| Inbox | 50 | 20 | JWT `user_id` |
+| User | 50 | 20 | JWT `user_id` |
+
+> **The limit is enforced per replica, not per cluster.** Each pod holds its own in-memory
+> buckets, so the cluster-wide ceiling is the configured rate **times the replica count** — and
+> under an [HPA](deployment-guide.md#autoscaling) that ceiling moves with the autoscaler. At the
+> production defaults, send's 2000/s is 6,000/s across 3 replicas and 40,000/s if it scales to 20.
+> Size these numbers per pod, and treat the cluster figure as a range rather than a guarantee.
+> Making the limit cluster-exact requires shared state and is tracked as future work.
+
+Rate limiting runs **after** authentication, so an unauthenticated flood is rejected with 401
+before it reaches the limiter and never allocates a bucket. That also means the limiter is not a
+defence against unauthenticated abuse — put per-IP limits on your ingress controller for that.
+`/healthz` and `/readyz` are never limited.
+
+See [the integration guide](integration-guide.md#rate-limits) for the client-facing contract.
+
 ### Store backend
 
 | Variable | Default | Purpose |
@@ -180,6 +214,40 @@ ASCII letter, and the two values a leading letter does *not* save, `true` and `f
 overlay deletes the container by name: it drops `-c nats.conf`, never reads this file, and
 legitimately has no password. This does not help you outside Kubernetes — the constraint is
 still yours to honour if you run nats-server directly.
+
+### Centrifugo allowed origins
+
+**Realtime does not work in a browser until this is set.** It is not a Hermes variable — it is
+Centrifugo's own, and it is the one piece of realtime configuration whose absence is invisible
+from every direction except a real browser.
+
+| Where | Setting |
+|---|---|
+| `deploy/k8s/overlays/local` | `allowed_origins` in `centrifugo-config.json` (top-level: the v5 image) |
+| `deploy/k8s/overlays/{staging,production}` | `CENTRIFUGO_ALLOWED_ORIGINS` on the Centrifugo Deployment, space-separated, substituted at deploy time like `DOMAIN_PLACEHOLDER` |
+| Helm chart | `centrifugo.config.client.allowed_origins` (nested under `client`: the sub-chart ships v6) |
+
+The inbox widget is embedded in **your** application, so the browser presents your origin while
+the socket lives on the Hermes domain. Every connection is cross-origin by construction, and
+Centrifugo answers `403` at the websocket handshake to any origin not listed.
+
+What makes it expensive to diagnose is the asymmetry: Centrifugo **permits connections that
+carry no `Origin` header at all**, "as they typically originate from non-browser environments".
+So `/health` returns 200, `curl` connects, every server-side client connects, the pods are Ready
+and stay Ready — and no browser can connect. The service looks perfect and serves nobody.
+
+Two gates now hold this:
+
+- `scripts/check_centrifugo_origins.py`, run by `make verify-manifests` against all three
+  overlays, fails when the key is absent or empty. Pass `--forbid-placeholder` in a deploy
+  pipeline to also reject an unsubstituted `ALLOWED_ORIGINS_PLACEHOLDER`.
+- `tests/browser/global-setup.ts` performs a real handshake carrying an `Origin` before any spec
+  runs, so the live suite reports this in seconds rather than as a wall of widget failures.
+
+Note the version split: the kustomize overlays run `centrifugo/centrifugo:v5`, where the option
+is top-level and the env var is `CENTRIFUGO_ALLOWED_ORIGINS`. The Helm sub-chart ships
+Centrifugo 6.6.2, where it moved under `client` and the env var became
+`CENTRIFUGO_CLIENT_ALLOWED_ORIGINS`. Config written for one is silently ignored by the other.
 
 ### Email (`worker-email`)
 

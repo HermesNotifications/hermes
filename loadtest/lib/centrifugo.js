@@ -6,9 +6,14 @@ import ws from 'k6/ws';
 import { jwtFor } from './auth.js';
 import {
   wsConnectLatency, wsConnectionsOpened, wsConnectionsClosed, wsConnectionDrops,
-  pushReceived, wsPushE2ELatency,
+  pushReceived, wsPushE2ELatency, wsReconnectDuration,
 } from './metrics.js';
 import { takeSent } from './shared.js';
+
+// When this VU's previous socket closed, or 0 on its first iteration. Module scope is per-VU in
+// k6, so this needs no keying. It is how the churn scenario measures reconnect time: a VU whose
+// pod was restarted ends its iteration early, and constant-vus immediately starts another.
+let lastCloseAt = 0;
 
 // centrifugoURL defaults to the local Centrifugo exposed by tilt.
 // Override with CENTRIFUGO_URL.
@@ -28,6 +33,10 @@ export function connect(userID, organizationID, onPush) {
     socket.on('open', function () {
       wsConnectionsOpened.add(1);
       wsConnectLatency.add(Date.now() - start);
+      if (lastCloseAt > 0) {
+        wsReconnectDuration.add(Date.now() - lastCloseAt);
+        lastCloseAt = 0;
+      }
       // Centrifugo v5 client protocol: connect + subscribe.
       socket.send(JSON.stringify({ id: 1, connect: { token: token, name: 'k6-loadtest' } }));
       socket.send(JSON.stringify({ id: 2, subscribe: { channel: `user#${userID}` } }));
@@ -46,11 +55,19 @@ export function connect(userID, organizationID, onPush) {
       if (msg.push && msg.push.pub && msg.push.pub.data) {
         pushReceived.add(1);
         const payload = msg.push.pub.data;
-        if (payload.notification_id) onPush(payload.notification_id);
+        // `id` first: an arrival is a `notification.new`, whose id field is `id`. Only
+        // `inbox.updated` uses `notification_id`, and the load test never generates one — so
+        // reading only `notification_id` meant ws_push_e2e_latency recorded nothing at all
+        // while reporting itself as a configured metric.
+        const id = payload.id || payload.notification_id;
+        if (id) onPush(id);
       }
     });
 
-    socket.on('close', function () { wsConnectionsClosed.add(1); });
+    socket.on('close', function () {
+      wsConnectionsClosed.add(1);
+      lastCloseAt = Date.now();
+    });
     socket.on('error', function (_e) { wsConnectionDrops.add(1); });
 
     socket.setTimeout(function () { socket.close(); },

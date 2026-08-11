@@ -99,7 +99,8 @@ type EventRepository interface {
 
 // InboxRepository defines operations for the user-facing inbox read path.
 type InboxRepository interface {
-	ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, int, string, error)
+	ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error)
+	// UnreadCount saturates at models.UnreadCountCap: a returned cap means "at least that many".
 	UnreadCount(ctx context.Context, userID string) (int, error)
 	MarkRead(ctx context.Context, userID, notificationID string) (bool, error)
 	MarkUnread(ctx context.Context, userID, notificationID string) (bool, error)

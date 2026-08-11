@@ -31,14 +31,16 @@ func main() {
 		messaging.WithIdentity("hermes-worker-inbox", cfg.NATSNKeySeedPath))
 	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
 	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-worker-inbox", logger)
-	defer natsClient.Close()
+	// No `defer natsClient.Close()`: it ran after the HTTP server had already stopped, so the
+	// consumer pool kept pulling new work for the whole shutdown window. Draining is registered
+	// as a shutdown callback below instead.
 
-	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
+	redisClient := bootstrap.MustConnectRedis(cfg, logger)
 	defer redisClient.Close()
 
 	centrifugoClient := centrifugo.NewClient(cfg.CentrifugoAPIURL, cfg.CentrifugoAPIKey)
 
-	provider := delivery.NewInboxProvider(centrifugoClient, redisClient)
+	provider := delivery.NewInboxProvider(centrifugoClient, redisClient, logger)
 
 	worker := delivery.NewWorker(natsClient, provider, "inbox", "worker-inbox", logger)
 	if err := worker.Start(context.Background()); err != nil {
@@ -46,9 +48,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The bus, not Redis: a worker that cannot consume has nothing to do, whereas one whose
+	// cache is down still delivers (it just cannot attach an unread count).
+	readiness := bootstrap.NewReadiness(bootstrap.NATSCheck(natsClient))
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
+	mux.HandleFunc("GET /readyz", readiness.Handler())
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger)
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+			OnShutdown:      []func(){bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger)},
+		})
 }

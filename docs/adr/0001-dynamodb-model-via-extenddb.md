@@ -214,6 +214,14 @@ the filter into the index — deferred to Phase 2 benchmarking.
 
 Already Redis-backed (10-min TTL). No change needed.
 
+> **Amended 2026-08-10 by [ADR 0014](0014-cache-first-unread-count.md).** This was wrong, and
+> wrong in a way that reading the code did not reveal: the cache was written on every list and
+> read by nothing, so the count was recomputed from the store on every page of every scroll —
+> on this path an unbounded paginated `Query` with a `FilterExpression`, billed for every item
+> scanned. ADR 0011 makes the read cache-first, bounds the count at
+> `models.UnreadCountCap`, and page-bounds the DynamoDB loop. A sparse `unread_uid` GSI, which
+> would make scanned equal counted here, remains outstanding.
+
 ### Cursor-based inbox pagination
 
 Postgres keyset pagination uses a compound cursor `(created_at, id) < (cursor_ts, cursor_id)`

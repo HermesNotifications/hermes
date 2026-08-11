@@ -5,17 +5,34 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "unpkg": "./dist/hermes-inbox.js",
+  "jsdelivr": "./dist/hermes-inbox.js",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
+    },
+    "./define": {
+      "types": "./dist/define.d.ts",
+      "import": "./dist/define.js",
+      "default": "./dist/define.js"
+    },
+    "./standalone": {
+      "types": "./dist/define.d.ts",
+      "default": "./dist/hermes-inbox.js"
     }
   },
+  "sideEffects": [
+    "./dist/define.js",
+    "./dist/hermes-inbox.js"
+  ],
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && pnpm bundle",
+    "bundle": "esbuild src/define.ts --bundle --format=esm --platform=browser --minify --sourcemap --target=es2022 --outfile=dist/hermes-inbox.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --environment jsdom"
@@ -25,6 +42,7 @@
     "lit": "^3.3.2"
   },
   "devDependencies": {
+    "esbuild": "^0.27.2",
     "jsdom": "^30.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

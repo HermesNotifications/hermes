@@ -1,0 +1,6 @@
+{
+  // Emit config: tests are type-checked by `tsc --noEmit` against tsconfig.json, but kept out
+  // of dist so they are neither shipped nor collected as a second copy of the suite.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

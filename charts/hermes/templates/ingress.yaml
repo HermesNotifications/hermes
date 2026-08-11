@@ -99,6 +99,13 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # Required, and its absence is silent. The path below is a regex with two capture groups and
+    # rewrite-target refers to the second; without use-regex nginx treats the path as a literal
+    # prefix, $2 captures nothing, and every websocket request is rewritten to "/" — so the
+    # realtime route simply does not work in a chart install. The kustomize overlays set this;
+    # the chart did not. scripts/check_helm_render.py now refuses any rewrite-target containing
+    # $ that is not paired with it.
+    nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}

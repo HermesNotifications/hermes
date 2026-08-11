@@ -31,7 +31,8 @@ func main() {
 		messaging.WithIdentity("hermes-worker-email", cfg.NATSNKeySeedPath))
 	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
 	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-worker-email", logger)
-	defer natsClient.Close()
+	// Drained as a shutdown callback below rather than deferred here — a deferred Close ran
+	// after the HTTP server stopped, so the pool kept pulling work it would then abandon.
 
 	emailCfg := email.Config{
 		Provider:     cfg.Email.Provider,
@@ -59,9 +60,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The bus only. An unreachable SMTP or SES endpoint is a per-message failure that retries
+	// and eventually dead-letters; marking the pod unready for it would delete delivery capacity
+	// at exactly the moment the backlog is growing.
+	readiness := bootstrap.NewReadiness(bootstrap.NATSCheck(natsClient))
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
+	mux.HandleFunc("GET /readyz", readiness.Handler())
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger)
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+			OnShutdown:      []func(){bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger)},
+		})
 }

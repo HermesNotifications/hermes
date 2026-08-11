@@ -45,6 +45,7 @@ type Server struct {
 	skipAuth   bool
 	hmacSecret string
 	limiter    *middleware.RateLimiter
+	readiness  *httputil.Readiness
 }
 
 // Default per-process rate limit. Overridable via HERMES_RATELIMIT_SEND_*; see
@@ -106,13 +107,25 @@ func NewServer(store SendStore, nats Publisher, cache *cache.Client, pool *pgxpo
 func (s *Server) routes() {
 	// Health checks registered directly on chi (not in OpenAPI spec)
 	s.router.Get("/healthz", httputil.HealthzHandler())
-	if s.pool != nil {
-		s.router.Get("/readyz", httputil.ReadyzHandler(s.pool.Ping))
-	} else {
-		s.router.Get("/readyz", httputil.ReadyzHandler())
-	}
+	// Resolved per request, so SetReadiness can install a probe after the routes are built.
+	s.router.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if s.readiness != nil {
+			s.readiness.Handler()(w, r)
+			return
+		}
+		if s.pool != nil {
+			httputil.ReadyzHandler(s.pool.Ping)(w, r)
+			return
+		}
+		httputil.ReadyzHandler()(w, r)
+	})
 
 	s.registerSendRoutes()
+}
+
+// SetReadiness installs the readiness probe /readyz answers with, replacing the bare pool ping.
+func (s *Server) SetReadiness(r *httputil.Readiness) {
+	s.readiness = r
 }
 
 // API returns the huma API instance for spec generation.

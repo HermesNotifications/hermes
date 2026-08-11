@@ -84,7 +84,7 @@ func TestTLSClusterConnectAndPublish(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := client.SetupStreams(ctx); err != nil {
+	if err := client.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("SetupStreams over TLS: %v", err)
 	}
 	if err := client.Publish(ctx, "notification.send", []byte(`{"tls":true}`)); err != nil {

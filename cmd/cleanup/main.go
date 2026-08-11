@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hermes-notifications/hermes/internal/bootstrap"
+	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 )
 
@@ -37,7 +38,12 @@ func main() {
 	logger := bootstrap.NewLogger()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	pool := bootstrap.MustConnectDB(ctx, *dbURL, logger)
+	// A short-lived batch job, not a service: a small pool is plenty, and taking a service-sized
+	// one would count against the same max_connections budget for the length of the run.
+	cleanupCfg := config.Load()
+	cleanupCfg.DatabaseURL = *dbURL
+	cleanupCfg.DatabaseMaxConns = 4
+	pool := bootstrap.MustConnectDB(ctx, cleanupCfg, logger)
 	cancel()
 	defer pool.Close()
 

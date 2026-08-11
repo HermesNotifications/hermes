@@ -7,19 +7,30 @@ package delivery
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/hermes-notifications/hermes/internal/cache"
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
+
+// unreadCountedTTL bounds how long a notification is remembered as already counted. It only has
+// to outlive the redelivery window -- MaxDeliver attempts with backoff capped at 240s -- and an
+// hour clears that comfortably without holding a key per notification indefinitely.
+const unreadCountedTTL = time.Hour
 
 type InboxProvider struct {
 	centrifugo *centrifugo.Client
 	cache      *cache.Client
+	logger     *slog.Logger
 }
 
-func NewInboxProvider(c *centrifugo.Client, cacheClient *cache.Client) *InboxProvider {
-	return &InboxProvider{centrifugo: c, cache: cacheClient}
+func NewInboxProvider(c *centrifugo.Client, cacheClient *cache.Client, logger *slog.Logger) *InboxProvider {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &InboxProvider{centrifugo: c, cache: cacheClient, logger: logger}
 }
 
 func (p *InboxProvider) Name() string { return "inbox" }
@@ -44,10 +55,31 @@ func (p *InboxProvider) Send(ctx context.Context, req DeliveryRequest) (Delivery
 		payload["action"] = action
 	}
 
-	// Increment cached unread count for the user
+	// Attach the user's unread count to the arrival, so the client does not have to guess it.
+	//
+	// The increment is guarded on the notification ID because delivery is at-least-once: if the
+	// publish below fails, this message is nacked and redelivered, and a second unguarded
+	// increment would overcount the user until the entry expires.
+	//
+	// Claiming the guard before incrementing rather than after is deliberate. Either order has a
+	// crash window; this one loses an increment, the other repeats one. An undercount is the
+	// better failure: refresh-ahead recomputes from the database within the refresh window,
+	// whereas an overcount compounds with every retry.
+	//
+	// The field is omitted when the cache had no live entry. This process has no database --
+	// see cmd/worker-inbox/main.go, which wires NATS, Redis and Centrifugo and nothing else --
+	// so on a miss it genuinely does not know the count, and a guess here is how a badge
+	// becomes confidently wrong. Clients treat an absent value as "increment locally".
 	if p.cache != nil {
-		if _, err := p.cache.IncrUnreadCount(ctx, req.UserID); err != nil {
-			_ = err // Non-fatal: cache will self-correct on next ListInbox
+		first, err := p.cache.MarkUnreadCounted(ctx, req.NotificationID, unreadCountedTTL)
+		if err != nil {
+			p.logger.Warn("unread count dedup check failed", "error", err, "notification_id", req.NotificationID)
+		} else if first {
+			if n, err := p.cache.IncrUnreadCount(ctx, req.UserID, models.UnreadCountCap); err != nil {
+				p.logger.Warn("unread count increment failed", "error", err, "user_id", req.UserID)
+			} else if n >= 0 {
+				payload["unread_count"] = n
+			}
 		}
 	}
 

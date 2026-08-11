@@ -23,7 +23,9 @@ spec:
         app.kubernetes.io/component: api
     spec:
       serviceAccountName: hermes
-      terminationGracePeriodSeconds: 30
+      # 60, not 30: this pod drains NATS on the way out, flushing buffered publishes before it
+      # exits. See worker-email for the arithmetic.
+      terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

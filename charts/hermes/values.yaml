@@ -32,6 +32,25 @@ hermes:
   # When set, the chart will not create its own Secret.
   existingSecret: ""
 
+  # Graceful shutdown. These values and the HERMES_SHUTDOWN_* / HERMES_NATS_DRAIN_TIMEOUT
+  # environment variables form one budget: the sum of the drain steps must fit inside the
+  # grace period, or the kubelet SIGKILLs the process partway through — which is worse than
+  # not draining, because it has already stopped accepting work and now abandons what it was
+  # finishing. scripts/check_shutdown_budget.py enforces the arithmetic over the render.
+  shutdown:
+    # -- Default grace period, in seconds. Services that drain a NATS consumer override this
+    # to 60 (5s drain delay + up to 30s for in-flight handlers + 15s HTTP shutdown = 50s).
+    # The API-only services need 5 + 15 = 20 and so fit comfortably in 30.
+    terminationGracePeriodSeconds: 30
+    # -- Seconds to sleep before SIGTERM, via a preStop SleepAction.
+    #
+    # Zero (the default) disables it, because SleepAction needs Kubernetes 1.30+ and rendering
+    # it on an older cluster is rejected. It is *belt and braces only*: every Hermes image is
+    # FROM scratch, so a `preStop: exec` hook has no shell to run `sleep` in, and the drain
+    # delay that actually matters runs in-process via HERMES_SHUTDOWN_DRAIN_DELAY. Raising
+    # this to 5 on a new enough cluster closes the endpoint-propagation race a little tighter.
+    preStopSleepSeconds: 0
+
   jwt:
     # -- HMAC secret used to verify user JWTs (required)
     secret: ""
@@ -108,7 +127,27 @@ admin:
     burst: ""
     perSecond: ""
   # -- Resource requests and limits
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
   # -- Horizontal pod autoscaler configuration
   autoscaling:
     enabled: false
@@ -141,7 +180,30 @@ send:
     enabled: true
     burst: ""
     perSecond: ""
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
+  # -- 60, not the 30s shared default: this service drains a NATS consumer on the way out
+  # (5s drain delay + up to 30s for in-flight handlers + 15s HTTP shutdown = 50s).
+  terminationGracePeriodSeconds: 60
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -160,7 +222,30 @@ dispatch:
     repository: hermes-dispatch
     tag: ""
   port: 8081
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
+  # -- 60, not the 30s shared default: this service drains a NATS consumer on the way out
+  # (5s drain delay + up to 30s for in-flight handlers + 15s HTTP shutdown = 50s).
+  terminationGracePeriodSeconds: 60
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -187,7 +272,27 @@ inbox:
     enabled: true
     burst: ""
     perSecond: ""
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -214,7 +319,27 @@ user:
     enabled: true
     burst: ""
     perSecond: ""
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -233,7 +358,30 @@ workerEmail:
     repository: hermes-worker-email
     tag: ""
   port: 8083
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
+  # -- 60, not the 30s shared default: this service drains a NATS consumer on the way out
+  # (5s drain delay + up to 30s for in-flight handlers + 15s HTTP shutdown = 50s).
+  terminationGracePeriodSeconds: 60
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -252,7 +400,30 @@ workerSms:
     repository: hermes-worker-sms
     tag: ""
   port: 8084
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
+  # -- 60, not the 30s shared default: this service drains a NATS consumer on the way out
+  # (5s drain delay + up to 30s for in-flight handlers + 15s HTTP shutdown = 50s).
+  terminationGracePeriodSeconds: 60
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -271,7 +442,30 @@ workerInbox:
     repository: hermes-worker-inbox
     tag: ""
   port: 8085
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
+  # -- 60, not the 30s shared default: this service drains a NATS consumer on the way out
+  # (5s drain delay + up to 30s for in-flight handlers + 15s HTTP shutdown = 50s).
+  terminationGracePeriodSeconds: 60
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -290,7 +484,30 @@ workerEvents:
     repository: hermes-worker-events
     tag: ""
   port: 8082
-  resources: {}
+  resources:
+    # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
+    # first evicted under node pressure -- precisely the churn this is meant to survive -- and
+    # an HPA measuring a resource its target declares no request for reports
+    # ScalingActive=False / FailedGetResourceMetric and silently never scales. Matches the
+    # kustomize base; raise for production traffic.
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      # Memory only. A CPU limit throttles latency-sensitive work at exactly the moment it
+      # matters; see deploy/k8s/overlays/production/patches/resources.yaml.
+      memory: 256Mi
+  podDisruptionBudget:
+    # -- Protect this service during voluntary disruptions (node drains, cluster upgrades).
+    # Off by default so a single-replica evaluation install is not blocked from draining.
+    enabled: false
+    # maxUnavailable rather than minAvailable: expressed as a ceiling on disruptions it always
+    # permits at least one eviction, so it paces a node drain instead of wedging it at
+    # replicas: 1. See deploy/k8s/overlays/production/pdb/README.md.
+    maxUnavailable: 1
+  # -- 60, not the 30s shared default: this service drains a NATS consumer on the way out
+  # (5s drain delay + up to 30s for in-flight handlers + 15s HTTP shutdown = 50s).
+  terminationGracePeriodSeconds: 60
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -579,3 +796,23 @@ centrifugo:
   config:
     engine:
       type: memory
+    client:
+      # -- Origins permitted to open a realtime websocket, e.g.
+      # `["https://app.example.com", "https://*.example.com"]`.
+      #
+      # **Set this or realtime does not work.** The inbox widget is embedded in *your*
+      # application, so the browser's `Origin` is your app's domain while the socket lives on
+      # the Hermes domain — cross-origin by construction. Centrifugo answers `403` at the
+      # websocket handshake to any origin not listed here.
+      #
+      # The failure is quiet in the worst way: Centrifugo permits connections that carry *no*
+      # `Origin` header at all, "as they typically originate from non-browser environments".
+      # So health checks, curl and every server-side client succeed while every browser is
+      # refused. The service looks healthy and serves nobody.
+      #
+      # Empty (the default) means same-origin only, which suits a local evaluation where the
+      # page and the socket share a host, and nothing else.
+      #
+      # Note the nesting: this sub-chart ships Centrifugo v6, where the option lives under
+      # `client`. The kustomize overlays in deploy/k8s run the v5 image, where it is top-level.
+      allowed_origins: []

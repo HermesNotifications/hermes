@@ -24,6 +24,7 @@ spec:
       labels:
         {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 8 }}
     spec:
+      {{- include "hermes.terminationGracePeriod" (dict "root" . "service" "inbox") | nindent 6 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -38,6 +39,12 @@ spec:
           env:
             - name: HERMES_HTTP_PORT
               value: {{ .Values.inbox.port | quote }}
+            # This service holds no NATS client, so there is nothing to drain and the
+            # default budget would reserve 30s of the grace period for a step that never
+            # runs. Stated rather than defaulted, so check_shutdown_budget.py measures the
+            # sequence that actually happens.
+            - name: HERMES_NATS_DRAIN_TIMEOUT
+              value: "0s"
             {{- include "hermes.otelServiceEnv" $svcCtx | nindent 12 }}
             {{- include "hermes.rateLimitEnv" .Values.inbox | nindent 12 }}
             {{- if .Values.hermes.jwt.existingSecret }}
@@ -99,8 +106,14 @@ spec:
               port: http
             initialDelaySeconds: 3
             periodSeconds: 5
+            # One, not the default three: shutdown flips /readyz to 503 and then keeps
+            # serving for the drain delay, so the pod must leave the Service endpoints on
+            # the very next probe. Dependency blips are debounced in-process instead,
+            # where the drain flag can bypass the debounce.
+            failureThreshold: 1
           resources:
             {{- toYaml .Values.inbox.resources | nindent 12 }}
+          {{- include "hermes.preStop" . | nindent 10 }}
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

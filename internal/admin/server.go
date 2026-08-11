@@ -86,6 +86,12 @@ type Server struct {
 	jwtSecret     []byte
 	hmacSecret    string
 	limiter       *middleware.RateLimiter
+	readiness     *httputil.Readiness
+}
+
+// SetReadiness installs the readiness probe /readyz answers with, replacing the bare pool ping.
+func (s *Server) SetReadiness(r *httputil.Readiness) {
+	s.readiness = r
 }
 
 // requirePermission maps auth.CheckPermission onto Huma's error types.
@@ -166,11 +172,18 @@ func NewServer(store AdminStore, organizations store.OrganizationRepository, cac
 func (s *Server) routes() {
 	// Health checks registered directly on chi (not in OpenAPI spec)
 	s.router.Get("/healthz", httputil.HealthzHandler())
-	if s.pool != nil {
-		s.router.Get("/readyz", httputil.ReadyzHandler(s.pool.Ping))
-	} else {
-		s.router.Get("/readyz", httputil.ReadyzHandler())
-	}
+	// Resolved per request, so SetReadiness can install a probe after the routes are built.
+	s.router.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if s.readiness != nil {
+			s.readiness.Handler()(w, r)
+			return
+		}
+		if s.pool != nil {
+			httputil.ReadyzHandler(s.pool.Ping)(w, r)
+			return
+		}
+		httputil.ReadyzHandler()(w, r)
+	})
 
 	s.registerCategoryRoutes()
 	s.registerSubscriptionRoutes()

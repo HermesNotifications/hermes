@@ -33,8 +33,9 @@ const (
 // using the hermes-notifications DynamoDB table.
 //
 // Table: hermes-notifications
-//   PK (pk):  NOTIF#<notification_id>
-//   SK (sk):  NOTIF#<notification_id>
+//
+//	PK (pk):  NOTIF#<notification_id>
+//	SK (sk):  NOTIF#<notification_id>
 //
 // GSI gsi-by-user  PK=user_id SK=notif_id  — inbox listing (time-sorted via sortable IDs)
 // GSI gsi-by-idempotency  PK=idem_pk SK=created_at  — dispatch dedup (sparse; only set when key present)
@@ -73,17 +74,17 @@ func (s *NotificationStore) CreateNotification(ctx context.Context, n *models.No
 	}
 
 	item := map[string]types.AttributeValue{
-		"pk":          strVal("NOTIF#" + n.ID),
-		"sk":          strVal("NOTIF#" + n.ID),
-		"notif_id":    strVal(n.ID),
-		"user_id":     strVal(n.UserID),
-		"organization_id":   strVal(n.OrganizationID),
-		"title":       strVal(n.Title),
-		"body":        strVal(n.Body),
-		"status":      strVal(string(n.Status)),
-		"status_rank": numVal(fmt.Sprintf("%d", n.Status.Rank())),
-		"created_at":  strVal(n.CreatedAt.UTC().Format(time.RFC3339Nano)),
-		"inbox_state": strVal(inboxStateActive),
+		"pk":              strVal("NOTIF#" + n.ID),
+		"sk":              strVal("NOTIF#" + n.ID),
+		"notif_id":        strVal(n.ID),
+		"user_id":         strVal(n.UserID),
+		"organization_id": strVal(n.OrganizationID),
+		"title":           strVal(n.Title),
+		"body":            strVal(n.Body),
+		"status":          strVal(string(n.Status)),
+		"status_rank":     numVal(fmt.Sprintf("%d", n.Status.Rank())),
+		"created_at":      strVal(n.CreatedAt.UTC().Format(time.RFC3339Nano)),
+		"inbox_state":     strVal(inboxStateActive),
 	}
 
 	if len(n.Channels) > 0 {
@@ -331,8 +332,12 @@ func (s *NotificationStore) BatchUpdateNotificationStatuses(ctx context.Context,
 // ── InboxRepository ───────────────────────────────────────────────────────────
 
 // ListInbox returns cursor-paginated notifications for a user's inbox or archive.
-// Cursor is base64(notif_id of last returned item). Returns (items, unreadCount, nextCursor, error).
-func (s *NotificationStore) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, int, string, error) {
+// Cursor is base64(notif_id of last returned item). Returns (items, nextCursor, error).
+//
+// It no longer returns the unread count. On this store that mattered more than on Postgres: the
+// count is a paginated Query, so every page of a scroll paid for a fresh walk of the user's
+// history. See UnreadCount.
+func (s *NotificationStore) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -358,7 +363,7 @@ func (s *NotificationStore) ListInbox(ctx context.Context, userID string, archiv
 	if cursor != "" {
 		lastID, err := decodeCursorNotif(cursor)
 		if err != nil {
-			return nil, 0, "", fmt.Errorf("invalid cursor: %w", err)
+			return nil, "", fmt.Errorf("invalid cursor: %w", err)
 		}
 		input.ExclusiveStartKey = map[string]types.AttributeValue{
 			"user_id":  strVal(userID),
@@ -370,14 +375,14 @@ func (s *NotificationStore) ListInbox(ctx context.Context, userID string, archiv
 
 	out, err := s.client.db.Query(ctx, input)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("list inbox: %w", err)
+		return nil, "", fmt.Errorf("list inbox: %w", err)
 	}
 
 	var notifications []models.Notification
 	for _, item := range out.Items {
 		n, err := unmarshalNotif(item)
 		if err != nil {
-			return nil, 0, "", fmt.Errorf("list inbox scan: %w", err)
+			return nil, "", fmt.Errorf("list inbox scan: %w", err)
 		}
 		notifications = append(notifications, *n)
 	}
@@ -388,19 +393,27 @@ func (s *NotificationStore) ListInbox(ctx context.Context, userID string, archiv
 		nextCursor = encodeCursorNotif(notifications[limit-1].ID)
 	}
 
-	unreadCount, err := s.UnreadCount(ctx, userID)
-	if err != nil {
-		return nil, 0, "", err
-	}
-	return notifications, unreadCount, nextCursor, nil
+	return notifications, nextCursor, nil
 }
 
-// UnreadCount returns the number of unread, active, non-deleted notifications for a user.
+// maxUnreadCountQueries bounds the case models.UnreadCountCap alone cannot: a user whose unread
+// rows are sparse within a very large history.
+//
+// Select: COUNT with a FilterExpression is billed for every item *scanned*, not every item
+// counted, so this loop can burn a great deal of read capacity while count barely moves --
+// and it is on the path of a badge. Twenty pages is roughly 20 MB scanned; past that we return
+// what we have, because a bounded-but-low count beats a request that never returns.
+//
+// The real fix is a sparse GSI so that scanned == counted; see ADR 0011.
+const maxUnreadCountQueries = 20
+
+// UnreadCount returns the number of unread, active, non-deleted notifications for a user,
+// saturating at models.UnreadCountCap.
 func (s *NotificationStore) UnreadCount(ctx context.Context, userID string) (int, error) {
 	var count int
 	var lastKey map[string]types.AttributeValue
 
-	for {
+	for page := 0; page < maxUnreadCountQueries; page++ {
 		input := &dynamodb.QueryInput{
 			TableName:              aws.String(s.client.NotificationsTable),
 			IndexName:              aws.String(gsiByUser),
@@ -420,6 +433,9 @@ func (s *NotificationStore) UnreadCount(ctx context.Context, userID string) (int
 			return 0, fmt.Errorf("unread count: %w", err)
 		}
 		count += int(out.Count)
+		if count >= models.UnreadCountCap {
+			return models.UnreadCountCap, nil
+		}
 		if out.LastEvaluatedKey == nil {
 			break
 		}
@@ -435,10 +451,10 @@ func (s *NotificationStore) MarkRead(ctx context.Context, userID, notificationID
 
 	// Common case: unread and status rank < read (3). Advance status to read.
 	_, err := s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.client.NotificationsTable),
-		Key:                 notifKey(notificationID),
-		ConditionExpression: aws.String("user_id = :uid AND attribute_not_exists(read_at) AND (status_rank < :r3 OR attribute_not_exists(status_rank))"),
-		UpdateExpression:    aws.String("SET read_at = :now, #s = :read, status_rank = :r3"),
+		TableName:                aws.String(s.client.NotificationsTable),
+		Key:                      notifKey(notificationID),
+		ConditionExpression:      aws.String("user_id = :uid AND attribute_not_exists(read_at) AND (status_rank < :r3 OR attribute_not_exists(status_rank))"),
+		UpdateExpression:         aws.String("SET read_at = :now, #s = :read, status_rank = :r3"),
 		ExpressionAttributeNames: map[string]string{"#s": "status"},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":uid":  strVal(userID),
@@ -480,10 +496,10 @@ func (s *NotificationStore) MarkRead(ctx context.Context, userID, notificationID
 // Returns true if the notification was actually changed (was read).
 func (s *NotificationStore) MarkUnread(ctx context.Context, userID, notificationID string) (bool, error) {
 	_, err := s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.client.NotificationsTable),
-		Key:                 notifKey(notificationID),
-		ConditionExpression: aws.String("user_id = :uid AND attribute_exists(read_at)"),
-		UpdateExpression:    aws.String("REMOVE read_at SET #s = :delivered, status_rank = :r2"),
+		TableName:                aws.String(s.client.NotificationsTable),
+		Key:                      notifKey(notificationID),
+		ConditionExpression:      aws.String("user_id = :uid AND attribute_exists(read_at)"),
+		UpdateExpression:         aws.String("REMOVE read_at SET #s = :delivered, status_rank = :r2"),
 		ExpressionAttributeNames: map[string]string{"#s": "status"},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":uid":       strVal(userID),
@@ -505,10 +521,10 @@ func (s *NotificationStore) MarkUnread(ctx context.Context, userID, notification
 // (so the caller can decrement the unread count cache).
 func (s *NotificationStore) Archive(ctx context.Context, userID, notificationID string) (bool, error) {
 	out, err := s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.client.NotificationsTable),
-		Key:                 notifKey(notificationID),
-		ConditionExpression: aws.String("user_id = :uid AND inbox_state = :active"),
-		UpdateExpression:    aws.String("SET archived_at = :now, inbox_state = :archived, #s = :archived_status, status_rank = :r4"),
+		TableName:                aws.String(s.client.NotificationsTable),
+		Key:                      notifKey(notificationID),
+		ConditionExpression:      aws.String("user_id = :uid AND inbox_state = :active"),
+		UpdateExpression:         aws.String("SET archived_at = :now, inbox_state = :archived, #s = :archived_status, status_rank = :r4"),
 		ExpressionAttributeNames: map[string]string{"#s": "status"},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":uid":             strVal(userID),
@@ -540,10 +556,10 @@ func (s *NotificationStore) Archive(ctx context.Context, userID, notificationID 
 func (s *NotificationStore) Unarchive(ctx context.Context, userID, notificationID string) (bool, error) {
 	// Path A: was read before archiving — restore to read state.
 	_, err := s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.client.NotificationsTable),
-		Key:                 notifKey(notificationID),
-		ConditionExpression: aws.String("user_id = :uid AND inbox_state = :archived AND attribute_exists(read_at)"),
-		UpdateExpression:    aws.String("REMOVE archived_at SET inbox_state = :active, #s = :read, status_rank = :r3"),
+		TableName:                aws.String(s.client.NotificationsTable),
+		Key:                      notifKey(notificationID),
+		ConditionExpression:      aws.String("user_id = :uid AND inbox_state = :archived AND attribute_exists(read_at)"),
+		UpdateExpression:         aws.String("REMOVE archived_at SET inbox_state = :active, #s = :read, status_rank = :r3"),
 		ExpressionAttributeNames: map[string]string{"#s": "status"},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":uid":      strVal(userID),
@@ -563,10 +579,10 @@ func (s *NotificationStore) Unarchive(ctx context.Context, userID, notificationI
 
 	// Path B: was unread when archived — restore to delivered state.
 	_, err = s.client.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.client.NotificationsTable),
-		Key:                 notifKey(notificationID),
-		ConditionExpression: aws.String("user_id = :uid AND inbox_state = :archived AND attribute_not_exists(read_at)"),
-		UpdateExpression:    aws.String("REMOVE archived_at SET inbox_state = :active, #s = :delivered, status_rank = :r2"),
+		TableName:                aws.String(s.client.NotificationsTable),
+		Key:                      notifKey(notificationID),
+		ConditionExpression:      aws.String("user_id = :uid AND inbox_state = :archived AND attribute_not_exists(read_at)"),
+		UpdateExpression:         aws.String("REMOVE archived_at SET inbox_state = :active, #s = :delivered, status_rank = :r2"),
 		ExpressionAttributeNames: map[string]string{"#s": "status"},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":uid":       strVal(userID),
@@ -749,4 +765,3 @@ func unmarshalNotif(item map[string]types.AttributeValue) (*models.Notification,
 
 	return n, nil
 }
-

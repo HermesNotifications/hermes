@@ -8,8 +8,15 @@ on:
       # Kargo's automated image-tag commits: skip CI (and thus CD, which now
       # triggers on CI completion) so deploys don't rebuild/republish images.
       - 'deploy/k8s/overlays/*/images/kustomization.yaml'
+  # No `branches:` filter, deliberately. Gating on [main] meant a PR stacked on another PR --
+  # targeting its parent's branch rather than main -- ran no CI at all, and said so only as an
+  # absence: `gh pr checks` reports "no checks reported", which reads much like a queue that has
+  # not started yet. A stacked PR is where CI is needed most, because it is the one whose base
+  # is itself unmerged and moving.
+  #
+  # The push trigger above stays pinned to main: every branch push building the full matrix is
+  # cost with no reader, and the PR run already covers the branch.
   pull_request:
-    branches: [main]
 
 # Cancel superseded runs on the same ref. PR runs are cancellable (a new push
 # obsoletes the previous run); main-branch runs are not, so every commit on main

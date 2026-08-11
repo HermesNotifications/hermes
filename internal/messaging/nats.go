@@ -15,6 +15,8 @@ import (
 	"github.com/hermes-notifications/hermes/internal/observability"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type Client struct {
@@ -28,6 +30,13 @@ type Client struct {
 	// started by Subscribe so they exit instead of leaking. closeOnce guards it.
 	done      chan struct{}
 	closeOnce sync.Once
+
+	// mu guards consumeCtxs, which Subscribe appends to and Drain reads.
+	mu          sync.Mutex
+	consumeCtxs []jetstream.ConsumeContext
+	// inflight counts messages handed to a worker pool but not yet finished, so Drain can
+	// wait for them instead of the process exiting mid-handler.
+	inflight sync.WaitGroup
 }
 
 // DefaultStreamMaxBytes bounds each of the three work streams on disk.
@@ -50,6 +59,11 @@ var Streams = []StreamConfig{
 	{Name: "DELIVERY", Subjects: []string{"delivery.email", "delivery.sms", "delivery.inbox"}},
 	{Name: "EVENTS", Subjects: []string{"notification.events"}},
 }
+
+// natsDrainTimeout bounds the connection-level flush at the end of Drain. Distinct from, and
+// deliberately shorter than, the caller's overall drain budget: by the time it runs, handlers
+// have already finished and only buffered acks and publishes remain.
+const natsDrainTimeout = 10 * time.Second
 
 // Option configures a Connect call. Options exist so the transport security added in
 // ADR 0005 phase 2 is supplied by the caller from configuration rather than hardcoded
@@ -103,6 +117,9 @@ func Connect(url string, opts ...Option) (*Client, error) {
 		return nil, err
 	}
 
+	// Bounds conn.Drain() in Drain(), which otherwise waits indefinitely for the flush.
+	co.nats = append(co.nats, nats.DrainTimeout(natsDrainTimeout))
+
 	nc, err := nats.Connect(url, co.nats...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
@@ -115,19 +132,48 @@ func Connect(url string, opts ...Option) (*Client, error) {
 	return &Client{conn: nc, js: js, streamMaxBytes: co.streamMaxBytes, done: make(chan struct{})}, nil
 }
 
-func (c *Client) SetupStreams(ctx context.Context) error {
-	maxBytes := c.streamMaxBytes
+// StreamOptions are the deployment-shaped properties of the streams: how many peers hold each
+// one, and how much disk it may occupy. Both are environment decisions rather than code
+// decisions, so they arrive from configuration instead of being hardcoded here.
+type StreamOptions struct {
+	// Replicas is the JetStream replication factor. 0 or 1 means a single peer.
+	//
+	// Deliberately explicit rather than derived from the observed cluster size: a provisioner
+	// Job that happened to run during a NATS rolling restart could see one server and silently
+	// downgrade every stream to R=1.
+	Replicas int
+	// MaxBytes caps each work stream's on-disk size. 0 uses DefaultStreamMaxBytes.
+	MaxBytes int64
+	// AllowReplicaChange permits altering the replication factor of a stream that already
+	// exists. Off by default: see the comment in SetupStreams.
+	AllowReplicaChange bool
+}
+
+// SetupStreams creates or updates the pipeline's streams.
+func (c *Client) SetupStreams(ctx context.Context, opts StreamOptions) error {
+	replicas := opts.Replicas
+	if replicas < 1 {
+		replicas = 1
+	}
+	// Either API may supply the ceiling, and both are in use: this call's StreamOptions, or
+	// the WithStreamMaxBytes connect option that cmd/natsprovision passes. The explicit
+	// per-call value wins; the connect option is the deployment-wide default behind it.
+	maxBytes := opts.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = c.streamMaxBytes
+	}
 	if maxBytes <= 0 {
 		maxBytes = DefaultStreamMaxBytes
 	}
 
 	for _, s := range Streams {
-		_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		cfg := jetstream.StreamConfig{
 			Name:      s.Name,
 			Subjects:  s.Subjects,
 			Retention: jetstream.WorkQueuePolicy,
 			Storage:   jetstream.FileStorage,
 			MaxAge:    7 * 24 * time.Hour,
+			Replicas:  replicas,
 			MaxBytes:  maxBytes,
 			// DiscardNew, not DiscardOld. These streams carry accepted work: a
 			// notification the API already returned 202 for. Discarding the oldest
@@ -140,15 +186,21 @@ func (c *Client) SetupStreams(ctx context.Context) error {
 			// is waiting on a dead letter, so there keeping the oldest evidence
 			// beats keeping the newest.
 			Discard: jetstream.DiscardNew,
-		})
-		if err != nil {
-			return fmt.Errorf("create stream %s: %w", s.Name, err)
+		}
+		if err := c.upsertStream(ctx, cfg, opts.AllowReplicaChange); err != nil {
+			return err
 		}
 	}
+
 	// The DLQ stream is deliberately NOT in Streams: nothing Subscribes to it
 	// in-process (operators consume it manually via the nats CLI), and keeping
 	// it out of the subject→stream lookup prevents accidental consumers.
-	_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+	//
+	// DiscardOld here, unlike the work streams: the DLQ is a forensic record, and one that has
+	// filled up must keep accepting new dead letters rather than reject them — a rejected dead
+	// letter is a message destroyed with no trace, which is the one outcome the DLQ exists to
+	// prevent.
+	dlq := jetstream.StreamConfig{
 		Name:      dlqStreamName,
 		Subjects:  []string{"dlq.>"},
 		Retention: jetstream.LimitsPolicy,
@@ -156,9 +208,42 @@ func (c *Client) SetupStreams(ctx context.Context) error {
 		MaxAge:    7 * 24 * time.Hour,
 		MaxBytes:  1 << 30, // 1 GiB; oldest dead letters discarded first
 		Discard:   jetstream.DiscardOld,
-	})
-	if err != nil {
-		return fmt.Errorf("create stream %s: %w", dlqStreamName, err)
+		Replicas:  replicas,
+	}
+	return c.upsertStream(ctx, dlq, opts.AllowReplicaChange)
+}
+
+// upsertStream creates the stream, or updates it — but refuses to change an existing stream's
+// replication factor unless explicitly allowed.
+//
+// Changing Replicas on a file-backed stream holding days of messages is a peer catch-up that
+// moves real bytes between servers. That is a maintenance operation someone should choose and
+// watch, not something a routine deploy starts unattended. The reverse matters more: without
+// this guard, pointing a single-node staging config at production would quietly strip every
+// stream back to one replica and nothing would report it.
+func (c *Client) upsertStream(ctx context.Context, cfg jetstream.StreamConfig, allowReplicaChange bool) error {
+	existing, err := c.js.Stream(ctx, cfg.Name)
+	switch {
+	case errors.Is(err, jetstream.ErrStreamNotFound):
+		if _, err := c.js.CreateStream(ctx, cfg); err != nil {
+			return fmt.Errorf("create stream %s: %w", cfg.Name, err)
+		}
+		return nil
+	case err != nil:
+		return fmt.Errorf("inspect stream %s: %w", cfg.Name, err)
+	}
+
+	if current := existing.CachedInfo().Config.Replicas; current != cfg.Replicas && !allowReplicaChange {
+		return fmt.Errorf(
+			"stream %s has %d replica(s) but the configuration asks for %d: changing the "+
+				"replication factor migrates the whole stream between peers, so it is a "+
+				"maintenance operation rather than a deploy. Run it deliberately with "+
+				"HERMES_NATS_STREAM_REPLICAS_ALLOW_CHANGE=true, or with `nats stream update`",
+			cfg.Name, current, cfg.Replicas)
+	}
+
+	if _, err := c.js.UpdateStream(ctx, cfg); err != nil {
+		return fmt.Errorf("update stream %s: %w", cfg.Name, err)
 	}
 	return nil
 }
@@ -226,6 +311,46 @@ type SubscribeConfig struct {
 	// Prefetch is the fetcher's in-flight buffer (PullMaxMessages). < 1 uses
 	// defaultPrefetch. Batching consumers (event-writer) set this high.
 	Prefetch int
+	// HandlerTimeout bounds a single handler invocation. < 1 uses defaultHandlerTimeout.
+	//
+	// Without it a handler derives from context.Background() and a wedged provider call --
+	// an SMTP server that accepts the connection and then says nothing -- occupies a pool
+	// worker forever, so the consumer quietly loses capacity one stuck message at a time.
+	HandlerTimeout time.Duration
+	// AckWait is how long JetStream waits for an ack before redelivering. < 1 derives it
+	// from HandlerTimeout.
+	//
+	// It must exceed HandlerTimeout or the server redelivers a message that is still being
+	// processed, and the handler's side effect -- an email, a webhook, a Centrifugo publish
+	// -- happens twice. The JetStream default of 30s is shorter than several of Hermes'
+	// providers can take, which is why leaving this unset was a live duplicate source.
+	AckWait time.Duration
+}
+
+const (
+	// defaultHandlerTimeout is generous enough for an SMTP conversation or a customer's
+	// webhook endpoint, and short enough that a hung one frees its worker the same minute.
+	defaultHandlerTimeout = 30 * time.Second
+	// ackWaitMultiplier derives AckWait from HandlerTimeout when a caller does not set it.
+	// Double leaves room for the handler to run to its own deadline and still ack.
+	ackWaitMultiplier = 2
+)
+
+// resolveTimeouts fills in the defaults and enforces the one invariant that matters:
+// AckWait must outlast HandlerTimeout, or every slow message is processed twice.
+func (cfg SubscribeConfig) resolveTimeouts() (handlerTimeout, ackWait time.Duration) {
+	handlerTimeout = cfg.HandlerTimeout
+	if handlerTimeout < 1 {
+		handlerTimeout = defaultHandlerTimeout
+	}
+	ackWait = cfg.AckWait
+	if ackWait < 1 {
+		ackWait = handlerTimeout * ackWaitMultiplier
+	}
+	if ackWait <= handlerTimeout {
+		ackWait = handlerTimeout * ackWaitMultiplier
+	}
+	return handlerTimeout, ackWait
 }
 
 func streamForSubject(subject string) string {
@@ -261,12 +386,15 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 		maxAckPending = minPending
 	}
 
+	handlerTimeout, ackWait := cfg.resolveTimeouts()
+
 	cons, err := c.js.CreateOrUpdateConsumer(context.Background(), streamName, jetstream.ConsumerConfig{
 		Durable:       cfg.Consumer,
 		FilterSubject: cfg.Subject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		MaxAckPending: maxAckPending,
 		MaxDeliver:    maxDeliveries,
+		AckWait:       ackWait,
 	})
 	if err != nil {
 		return fmt.Errorf("create consumer: %w", err)
@@ -283,7 +411,8 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 			for {
 				select {
 				case msg := <-work:
-					c.processMessage(streamName, cfg.Consumer, cfg.Subject, msg, handler)
+					c.processMessage(streamName, cfg.Consumer, cfg.Subject, msg, handler, handlerTimeout)
+					c.inflight.Done()
 				case <-c.done:
 					return
 				}
@@ -291,25 +420,45 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 		}()
 	}
 
-	_, err = cons.Consume(func(msg jetstream.Msg) {
+	consumeCtx, err := cons.Consume(func(msg jetstream.Msg) {
+		// Counted here, in the fetcher, rather than in the worker that picks the message up.
+		// A worker cannot increment until it has been scheduled, which leaves a window where a
+		// message has left the fetcher but is not yet counted -- and Drain, waiting on the
+		// counter, would sail straight past it. Stop() guarantees this callback is no longer
+		// invoked, so counting here means the total can only fall once draining begins.
+		c.inflight.Add(1)
 		select {
 		case work <- msg:
 		case <-c.done:
 			// Shutting down: drop without ack; the message is redelivered later.
+			c.inflight.Done()
 		}
 	}, jetstream.PullMaxMessages(prefetch))
 	if err != nil {
 		return fmt.Errorf("start consumer: %w", err)
 	}
+
+	// Retained so Drain can stop the fetcher. Discarding this was why nothing could stop
+	// consuming short of closing the whole connection: the pool kept pulling *new* work for
+	// the entire shutdown window.
+	c.mu.Lock()
+	c.consumeCtxs = append(c.consumeCtxs, consumeCtx)
+	c.mu.Unlock()
 	return nil
 }
 
 // processMessage runs one message through the handler and applies the ack policy.
 // Success acks; a terminal error is dead-lettered then terminated; any other
 // error (including a recovered handler panic) is nak'd for retry with backoff.
-func (c *Client) processMessage(streamName, consumer, subject string, msg jetstream.Msg, handler func(ctx context.Context, data []byte, info DeliveryInfo) error) {
+func (c *Client) processMessage(streamName, consumer, subject string, msg jetstream.Msg, handler func(ctx context.Context, data []byte, info DeliveryInfo) error, handlerTimeout time.Duration) {
 	ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
 	defer span.End()
+
+	// Bounded so one unresponsive provider cannot hold a pool worker indefinitely, and so the
+	// handler is guaranteed to return before AckWait expires and JetStream redelivers underneath
+	// it. A handler that respects its context turns a hang into an ordinary retryable error.
+	ctx, cancel := context.WithTimeout(ctx, handlerTimeout)
+	defer cancel()
 
 	meta, _ := msg.Metadata()
 	attempt := uint64(1)
@@ -321,8 +470,29 @@ func (c *Client) processMessage(streamName, consumer, subject string, msg jetstr
 		LastAttempt: attempt >= uint64(maxDeliveries),
 	}
 
+	consumerAttrs := metric.WithAttributes(
+		attribute.String("stream", streamName),
+		attribute.String("consumer", consumer),
+	)
+	if attempt > 1 {
+		redeliveries.Add(ctx, 1, consumerAttrs)
+	}
+	inflightGauge.Add(ctx, 1, consumerAttrs)
+	started := time.Now()
+	result := "ok"
+	defer func() {
+		inflightGauge.Add(ctx, -1, consumerAttrs)
+		handlerDuration.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(
+			attribute.String("stream", streamName),
+			attribute.String("consumer", consumer),
+			attribute.String("result", result),
+		))
+	}()
+
 	if err := safeHandle(ctx, handler, msg.Data(), info); err != nil {
+		result = "retry"
 		if dead, reason := classify(err, attempt); dead {
+			result = "dead_letter"
 			if dlqErr := c.publishDeadLetter(ctx, streamName, consumer, subject, reason, attempt, err, msg.Data()); dlqErr != nil {
 				// Never destroy a message we failed to preserve. Past MaxDeliver
 				// the Nak is a no-op and the message lingers in the source stream
@@ -355,6 +525,78 @@ func safeHandle(ctx context.Context, handler func(ctx context.Context, data []by
 	return handler(ctx, data, info)
 }
 
+// ErrDrainTimeout reports that handlers were still running when Drain's budget ran out. The
+// messages they held are not lost -- they were never acked, so JetStream redelivers them after
+// AckWait -- but their side effects will be repeated, which is worth alerting on.
+var ErrDrainTimeout = errors.New("messaging: drain timed out with handlers still in flight")
+
+// Drain stops consuming, waits for in-flight handlers, then flushes the connection.
+//
+// This is the graceful counterpart to Close, and the ordering is the whole point:
+//
+//  1. Stop every fetcher, so no *new* message is pulled. Previously nothing did this -- the
+//     ConsumeContext was discarded -- so a shutting-down pod kept accepting work it had no
+//     intention of finishing.
+//  2. Close done, releasing any hand-off blocked on a busy pool. Those messages are dropped
+//     unacked and redelivered.
+//  3. Wait for handlers already running. Without this the process exits mid-handler, and every
+//     rolling restart re-executes whatever side effects were in progress -- a sent email, a
+//     published Centrifugo event -- when JetStream redelivers.
+//  4. Flush pending publishes, so acks and dead letters produced in step 3 actually leave.
+//
+// Call it before the HTTP server drains, not after: this releases work, that releases traffic.
+func (c *Client) Drain(timeout time.Duration) error {
+	c.mu.Lock()
+	ctxs := make([]jetstream.ConsumeContext, len(c.consumeCtxs))
+	copy(ctxs, c.consumeCtxs)
+	c.mu.Unlock()
+
+	for _, cc := range ctxs {
+		cc.Stop()
+	}
+	c.closeOnce.Do(func() { close(c.done) })
+
+	if !waitTimeout(&c.inflight, timeout) {
+		c.conn.Close()
+		return ErrDrainTimeout
+	}
+	if err := c.conn.Drain(); err != nil {
+		return fmt.Errorf("nats drain: %w", err)
+	}
+	return nil
+}
+
+// waitTimeout reports whether wg reached zero before timeout elapsed.
+func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+// Healthy reports whether the client currently holds a usable connection to the bus.
+//
+// A local status read, not a round trip: nats.go maintains this from the connection's own
+// state, so a readiness probe calling it every few seconds adds no traffic to a bus that may
+// already be the thing in trouble.
+func (c *Client) Healthy() error {
+	if status := c.conn.Status(); status != nats.CONNECTED {
+		return fmt.Errorf("nats connection is %s", status)
+	}
+	return nil
+}
+
+// Close tears the connection down immediately, abandoning in-flight handlers. Prefer Drain on
+// any path where the process is shutting down on purpose.
 func (c *Client) Close() {
 	c.closeOnce.Do(func() { close(c.done) })
 	c.conn.Close()

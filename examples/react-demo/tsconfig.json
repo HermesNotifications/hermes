@@ -1,0 +1,13 @@
+{
+  "extends": "../../sdks/typescript/tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // Vite compiles the app; tsc is only ever a checker here, so there is no rootDir/outDir to
+    // set — and setting rootDir would exclude vite.config.ts from being checked at all.
+    "noEmit": true,
+    "types": ["node"]
+  },
+  // Tests are included on purpose so `tsc --noEmit` checks them against the real SDK types.
+  "include": ["src", "vite.config.ts"]
+}

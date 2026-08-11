@@ -186,3 +186,38 @@ perSecond keeps the service's compiled-in default.
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Termination grace period for a Hermes pod. Call with (dict "root" . "service" "inbox").
+
+The grace period has to cover the whole shutdown sequence -- the optional preStop sleep, the
+in-process drain delay, the NATS drain, and the HTTP shutdown -- or the kubelet SIGKILLs the
+process partway through. That is worse than not draining at all: the process has already
+stopped accepting work and now abandons what it was finishing, so those messages are
+redelivered with their side effects repeated. scripts/check_shutdown_budget.py enforces it.
+
+Services that drain a NATS consumer need materially longer than ones that do not, which is why
+each service may override the shared default.
+*/}}
+{{- define "hermes.terminationGracePeriod" -}}
+{{- $svc := index .root.Values .service -}}
+{{- $grace := $svc.terminationGracePeriodSeconds | default .root.Values.hermes.shutdown.terminationGracePeriodSeconds -}}
+terminationGracePeriodSeconds: {{ $grace }}
+{{- end }}
+
+{{/*
+Container preStop hook, rendered only when the operator opts in. Call with the root context.
+
+Every Hermes image is FROM scratch (deploy/docker/Dockerfile), so there is no shell and the
+conventional `preStop: exec: ["/bin/sh", "-c", "sleep 5"]` cannot run. The drain delay is
+therefore in-process (HERMES_SHUTDOWN_DRAIN_DELAY) and works everywhere; this SleepAction is
+belt and braces on top, and is opt-in because it needs Kubernetes 1.30+ (beta in 1.29).
+*/}}
+{{- define "hermes.preStop" -}}
+{{- if .Values.hermes.shutdown.preStopSleepSeconds }}
+lifecycle:
+  preStop:
+    sleep:
+      seconds: {{ .Values.hermes.shutdown.preStopSleepSeconds }}
+{{- end }}
+{{- end }}

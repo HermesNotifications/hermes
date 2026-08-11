@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/hermes-notifications/hermes/internal/cache"
+	"github.com/hermes-notifications/hermes/internal/config"
 	"github.com/hermes-notifications/hermes/internal/database"
 	"github.com/hermes-notifications/hermes/internal/messaging"
 	"github.com/hermes-notifications/hermes/internal/observability"
@@ -24,13 +25,24 @@ func NewLogger() *slog.Logger {
 	return slog.New(observability.WrapJSONHandler(slog.NewJSONHandler(os.Stdout, nil)))
 }
 
-// MustConnectDB connects to Postgres or exits the process.
-func MustConnectDB(ctx context.Context, url string, logger *slog.Logger) *pgxpool.Pool {
-	pool, err := database.NewPool(ctx, url)
+// MustConnectDB connects to Postgres with bounds taken from cfg, or exits the process.
+//
+// The bounds are not optional detail. pgx sizes its pool from the node's core count by default,
+// so before this the same image opened anywhere from 4 to 16 connections depending on where the
+// scheduler placed it — which made the cluster-wide connection total unknowable, and
+// unknowable is how you find max_connections by hitting it.
+func MustConnectDB(ctx context.Context, cfg config.Config, logger *slog.Logger) *pgxpool.Pool {
+	pool, err := database.NewPoolWithConfig(ctx, cfg.DatabaseURL, database.PoolConfig{
+		MaxConns:        int32(cfg.DatabaseMaxConns),
+		MinConns:        int32(cfg.DatabaseMinConns),
+		MaxConnLifetime: cfg.DatabaseMaxConnLifetime,
+		MaxConnIdleTime: cfg.DatabaseMaxConnIdleTime,
+	})
 	if err != nil {
 		logger.Error("database connection failed", "error", err)
 		os.Exit(1)
 	}
+	logger.Info("database connected", "max_conns", pool.Config().MaxConns)
 	return pool
 }
 
@@ -63,9 +75,12 @@ func MustEnsureStreams(ctx context.Context, client *messaging.Client, service st
 	}
 }
 
-// MustConnectRedis connects to Redis or exits the process.
-func MustConnectRedis(url string, logger *slog.Logger) *cache.Client {
-	client, err := cache.Connect(url)
+// MustConnectRedis connects to Redis with bounds taken from cfg, or exits the process.
+func MustConnectRedis(cfg config.Config, logger *slog.Logger) *cache.Client {
+	client, err := cache.ConnectWithOptions(cfg.RedisURL, cache.Options{
+		PoolSize: cfg.RedisPoolSize,
+		Timeout:  cfg.RedisTimeout,
+	})
 	if err != nil {
 		logger.Error("redis connection failed", "error", err)
 		os.Exit(1)

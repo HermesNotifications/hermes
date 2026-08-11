@@ -5,10 +5,12 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -24,9 +26,16 @@
     "@hermes-notifications/client": "workspace:*"
   },
   "peerDependencies": {
+    "@hermes-notifications/web": "workspace:*",
     "react": "^18.0.0 || ^19.0.0"
   },
+  "peerDependenciesMeta": {
+    "@hermes-notifications/web": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@hermes-notifications/web": "workspace:*",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

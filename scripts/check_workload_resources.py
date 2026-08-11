@@ -102,19 +102,30 @@ def metric_resources(hpa_spec):
     return names
 
 
-def evaluate(docs):
+def evaluate(docs, skip_names=()):
     """Return (failures, workloads checked, HPAs checked).
 
     `failures` is a list of (subject, reason), where subject is `Kind/name`. Split out from
     main() so the gate's decision is testable without rendering YAML, as the other gates in
     this directory do it.
+
+    `skip_names` exempts workloads whose name contains any of the given substrings. It exists
+    for one case: the Helm chart's bundled sub-charts (NATS, Centrifugo, and their sidecars)
+    are third-party workloads whose resources are governed by those charts' own values, and
+    charts/hermes/templates/_validate.tpl refuses to render them at all outside development —
+    so they never reach a production cluster. The kustomize overlays, which are the production
+    path, render none of them and pass no exemptions.
     """
     failures = []
     workloads = {}
 
     for doc in docs:
-        if doc.get("kind") in WORKLOAD_KINDS:
-            workloads[(doc["kind"], (doc.get("metadata") or {}).get("name", "?"))] = doc
+        if doc.get("kind") not in WORKLOAD_KINDS:
+            continue
+        name = (doc.get("metadata") or {}).get("name", "?")
+        if any(skip in name for skip in skip_names):
+            continue
+        workloads[(doc["kind"], name)] = doc
 
     for (kind, name), doc in workloads.items():
         for section, container in containers_of(doc):
@@ -220,9 +231,12 @@ def main(argv):
 
     paths = []
     require_hpa = False
+    skip_names = []
     for arg in argv:
         if arg == "--require-hpa":
             require_hpa = True
+        elif arg.startswith("--skip="):
+            skip_names.extend(part for part in arg.split("=", 1)[1].split(",") if part)
         else:
             paths.append(arg)
 
@@ -231,7 +245,7 @@ def main(argv):
         stream = sys.stdin if path == "-" else open(path)
         docs.extend(doc for doc in yaml.safe_load_all(stream) if doc)
 
-    failures, workloads, hpas = evaluate(docs)
+    failures, workloads, hpas = evaluate(docs, skip_names=tuple(skip_names))
     return report(failures, workloads, hpas, require_hpa)
 
 

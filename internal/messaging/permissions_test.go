@@ -274,10 +274,10 @@ func TestAccounts_PipelineRunsUnderPerServiceCredentials(t *testing.T) {
 	// purpose — the second call exercises the STREAM.UPDATE path against streams that already
 	// exist, a different permission from STREAM.CREATE that a first-boot-only test misses.
 	provisioner := connectAs(t, messaging.ProvisionerService)
-	if err := provisioner.SetupStreams(ctx); err != nil {
+	if err := provisioner.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("the provisioner could not declare the streams: %v", err)
 	}
-	if err := provisioner.SetupStreams(ctx); err != nil {
+	if err := provisioner.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("the provisioner could not re-declare the streams: %v", err)
 	}
 
@@ -592,7 +592,7 @@ func TestProvisioning_SetupStreamsFailsForAServiceThroughTheClient(t *testing.T)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	if err := connectAs(t, "hermes-dispatch").SetupStreams(ctx); err == nil {
+	if err := connectAs(t, "hermes-dispatch").SetupStreams(ctx, messaging.StreamOptions{}); err == nil {
 		t.Fatal("dispatch declared the streams")
 	}
 }

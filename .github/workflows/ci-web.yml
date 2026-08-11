@@ -1,6 +1,7 @@
 name: CI (Web)
 
-# JavaScript/TypeScript CI for the pnpm workspace (web/admin + sdks/typescript).
+# JavaScript/TypeScript CI for the pnpm workspace (web/admin, sdks/typescript, examples/
+# and tests/browser).
 # The main `ci.yml` only covers the Go services, so dependency bumps and code
 # changes under web/admin and the TS SDKs previously shipped with zero CI. This
 # workflow closes that gap. Path-filtered so it only runs when JS sources, the
@@ -11,14 +12,18 @@ on:
     paths:
       - "web/admin/**"
       - "sdks/typescript/**"
+      - "examples/**"
+      - "tests/browser/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/ci-web.yml"
+  # No `branches:` filter — see the note in ci.yml. A PR stacked on another PR ran no CI at all.
   pull_request:
-    branches: [main]
     paths:
       - "web/admin/**"
       - "sdks/typescript/**"
+      - "examples/**"
+      - "tests/browser/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/ci-web.yml"
@@ -105,3 +110,44 @@ jobs:
       # this step is what fails.
       - name: Build
         run: pnpm --filter "@hermes/admin" build
+
+  examples:
+    name: Inbox demo (typecheck + build + spec compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      # The demo consumes the SDKs as workspace packages whose types resolve from dist/, so
+      # they must be compiled before anything here typechecks.
+      - name: Build workspace SDKs
+        run: pnpm --filter "./sdks/typescript/packages/*" build
+      - name: Typecheck and test the token server
+        run: |
+          pnpm --filter "@hermes/demo-server" run typecheck
+          pnpm --filter "@hermes/demo-server" test
+      - name: Typecheck and test the React demo
+        run: |
+          pnpm --filter "@hermes/react-demo" run typecheck
+          pnpm --filter "@hermes/react-demo" test
+      # A real production build, not just a typecheck: this is what catches an ESM resolution
+      # problem, a Lit decorator misconfiguration, or a broken dynamic import of the element —
+      # none of which a type check would notice.
+      - name: Build the React demo
+        run: pnpm --filter "@hermes/react-demo" build
+      # Compiles every browser spec and resolves the Playwright config without launching a
+      # browser: seconds of runtime, and it catches the bulk of suite rot (import errors, a
+      # renamed fixture, a deleted helper). The expensive live run is nightly and on-demand
+      # in e2e-live.yml, because it needs a k3d cluster this runner does not have.
+      - name: Compile the live E2E specs
+        run: |
+          pnpm --filter "@hermes/browser-tests" run typecheck
+          pnpm --filter "@hermes/browser-tests" run test:list

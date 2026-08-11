@@ -1,0 +1,139 @@
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
+
+import {
+  badge,
+  countInboxFetches,
+  expect,
+  openPanel,
+  rows,
+  test,
+  waitForRealtimeReady,
+} from "../fixtures/demo.js";
+
+/**
+ * The centrepiece of the suite, and the success criterion for this work: a notification sent by a
+ * process the browser knows nothing about appears in the widget, without a reload.
+ *
+ * The assertion that makes it meaningful is the *negative* one — that no `GET /v1/inbox` was issued
+ * while the row appeared. Without it, "the notification showed up" is equally satisfied by a
+ * background refetch on an interval, which would prove nothing about realtime at all.
+ */
+test.describe("realtime arrival", () => {
+  test("a notification appears with no refetch", async ({ demoPage, hermesUser }) => {
+    await waitForRealtimeReady(demoPage);
+
+    const fetches = countInboxFetches(demoPage);
+    const title = `Invoice ${Date.now()} is ready`;
+
+    // Sent from the test process, using the API key. The browser has no idea this happened.
+    await hermesUser.send({ title, body: "Payment due in 14 days." });
+
+    await expect(badge(demoPage)).toHaveText("1");
+    await openPanel(demoPage);
+    // Scoped to the widget on purpose. The demo's activity log echoes the title too, so an
+    // unscoped getByText matches two elements and fails strict mode — which says nothing about
+    // whether the widget rendered it.
+    await expect(demoPage.locator("hermes-inbox").getByText(title)).toBeVisible();
+
+    // The whole point.
+    expect(
+      fetches.get(),
+      "the notification arrived via a refetch, not over the websocket"
+    ).toBe(0);
+  });
+
+  test("an arrival lands at the top of an already-open panel", async ({ demoPage, hermesUser }) => {
+    await waitForRealtimeReady(demoPage);
+    await hermesUser.send({ title: "First", body: "one" });
+    await expect(badge(demoPage)).toHaveText("1");
+
+    await openPanel(demoPage);
+    await hermesUser.send({ title: "Second", body: "two" });
+
+    await expect(rows(demoPage)).toHaveCount(2);
+    // Newest first: an arrival prepends.
+    await expect(rows(demoPage).first()).toContainText("Second");
+  });
+
+  test("three sends produce a count of three, in order", async ({ demoPage, hermesUser }) => {
+    await waitForRealtimeReady(demoPage);
+
+    await hermesUser.send({ title: "Alpha", body: "1" });
+    await expect(badge(demoPage)).toHaveText("1");
+    await hermesUser.send({ title: "Bravo", body: "2" });
+    await expect(badge(demoPage)).toHaveText("2");
+    await hermesUser.send({ title: "Charlie", body: "3" });
+    await expect(badge(demoPage)).toHaveText("3");
+
+    await openPanel(demoPage);
+    await expect(rows(demoPage)).toHaveCount(3);
+    const titles = await rows(demoPage).allInnerTexts();
+    expect(titles[0]).toContain("Charlie");
+    expect(titles[2]).toContain("Alpha");
+  });
+
+  test("an arriving notification carries its action url through", async ({
+    demoPage,
+    hermesUser,
+  }) => {
+    // The realtime payload carries the action, and the old synthesizers dropped it — so a
+    // notification that arrived live could never show its call to action, while the same
+    // notification after a reload could.
+    await waitForRealtimeReady(demoPage);
+
+    await hermesUser.send({
+      title: "Action arrival",
+      body: "has an action",
+      actionUrl: "/invoices/9001",
+      actionLabel: "Open invoice",
+    });
+
+    await expect(badge(demoPage)).toHaveText("1");
+    await openPanel(demoPage);
+
+    const link = demoPage.locator("hermes-inbox").locator("css=a.row-target");
+    await expect(link).toHaveAttribute("href", "/invoices/9001");
+    await expect(demoPage.getByText("Open invoice")).toBeVisible();
+  });
+
+  test("the widget records the arrival in the host app's own log", async ({
+    demoPage,
+    hermesUser,
+  }) => {
+    // Proves the CustomEvent crossed the shadow boundary into React. Without composed: true the
+    // host's onNotification callback never fires, and the widget would be an island.
+    await waitForRealtimeReady(demoPage);
+
+    await hermesUser.send({ title: "Bridged event", body: "b" });
+
+    // Gate on the widget seeing the arrival before asserting the host did.
+    //
+    // These are two different failures wearing one face. This test flaked once in CI with an empty
+    // activity log — and the screenshot showed the badge still at 0, meaning nothing had arrived at
+    // all: a slow delivery, not a broken bridge. Asserting only the log reports that as "the
+    // CustomEvent never crossed the shadow boundary", which sends the next person into the React
+    // wrapper, the one place the fault cannot be. Splitting it puts the blame where it belongs.
+    await expect(badge(demoPage)).toHaveText("1");
+
+    await expect(demoPage.getByTestId("activity-log")).toContainText(
+      "arrived over websocket: Bridged event"
+    );
+  });
+
+  test("a standalone badge elsewhere on the page agrees with the widget", async ({
+    demoPage,
+    hermesUser,
+  }) => {
+    // The page renders a second count from useUnreadCount over the shared client. It used to read
+    // zero until the user's first mutation, because the client only learned the count from a
+    // server-side update event.
+    await waitForRealtimeReady(demoPage);
+
+    await hermesUser.send({ title: "Count check", body: "c" });
+
+    await expect(badge(demoPage)).toHaveText("1");
+    await expect(demoPage.getByTestId("hook-unread")).toHaveText("1");
+  });
+});

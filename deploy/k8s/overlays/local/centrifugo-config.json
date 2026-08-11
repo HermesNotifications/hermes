@@ -11,5 +11,6 @@
   "history_ttl": "1h",
   "user_subscribe_to_personal": true,
   "allow_user_limited_channels": true,
+  "allowed_origins": ["http://localhost:5173"],
   "health": true
 }

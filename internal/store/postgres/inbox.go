@@ -39,8 +39,13 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 }
 
 // ListInbox returns cursor-paginated notifications for a user's inbox.
-// Returns notifications, unread_count, next_cursor, error.
-func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, int, string, error) {
+// Returns notifications, next_cursor, error.
+//
+// It deliberately does not return the unread count. The count is a property of the user, not of
+// a page: computing it here meant paying for it again on page 7 of a scroll, and it put the same
+// aggregate in two places that had to agree. Callers that need it call UnreadCount, which the
+// inbox service fronts with a cache.
+func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -64,7 +69,7 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 	if cursor != "" {
 		cursorTime, cursorID, err := decodeCursor(cursor)
 		if err != nil {
-			return nil, 0, "", fmt.Errorf("invalid cursor: %w", err)
+			return nil, "", fmt.Errorf("invalid cursor: %w", err)
 		}
 		query += fmt.Sprintf(` AND (created_at, id) < ($%d, $%d)`, argIdx, argIdx+1)
 		args = append(args, cursorTime, cursorID)
@@ -77,7 +82,7 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("list inbox: %w", err)
+		return nil, "", fmt.Errorf("list inbox: %w", err)
 	}
 	defer rows.Close()
 
@@ -85,12 +90,12 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 	for rows.Next() {
 		var n models.Notification
 		if err := scanNotification(rows.Scan, &n); err != nil {
-			return nil, 0, "", fmt.Errorf("scan inbox notification: %w", err)
+			return nil, "", fmt.Errorf("scan inbox notification: %w", err)
 		}
 		notifications = append(notifications, n)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, "", fmt.Errorf("list inbox rows: %w", err)
+		return nil, "", fmt.Errorf("list inbox rows: %w", err)
 	}
 
 	// Determine next cursor
@@ -101,29 +106,28 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 		nextCursor = encodeCursor(last.CreatedAt, last.ID)
 	}
 
-	// Unread count (always for non-archived, non-deleted)
-	var unreadCount int
-	err = s.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM notifications
-		 WHERE user_id = $1 AND read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL`,
-		userID,
-	).Scan(&unreadCount)
-	if err != nil {
-		return nil, 0, "", fmt.Errorf("unread count: %w", err)
-	}
-
-	return notifications, unreadCount, nextCursor, nil
+	return notifications, nextCursor, nil
 }
 
-// UnreadCount returns the number of unread, non-archived, non-deleted notifications for a user.
+// unreadCountSQL counts through a bounded subquery rather than counting the whole set.
+//
+// COUNT(*) has no early exit, so a user with 400k unread rows scans 400k index entries every
+// time a badge is drawn. LIMIT does have one: with idx_notifications_unread (migration 000018)
+// this is an index-only scan that stops at the cap, so the pathological user costs the same as
+// the ordinary one.
+const unreadCountSQL = `
+	SELECT count(*) FROM (
+		SELECT 1 FROM notifications
+		WHERE user_id = $1
+		  AND read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL
+		LIMIT $2
+	) capped`
+
+// UnreadCount returns the number of unread, non-archived, non-deleted notifications for a user,
+// saturating at models.UnreadCountCap.
 func (s *Store) UnreadCount(ctx context.Context, userID string) (int, error) {
 	var count int
-	err := s.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM notifications
-		 WHERE user_id = $1 AND read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL`,
-		userID,
-	).Scan(&count)
-	if err != nil {
+	if err := s.pool.QueryRow(ctx, unreadCountSQL, userID, models.UnreadCountCap).Scan(&count); err != nil {
 		return 0, fmt.Errorf("unread count: %w", err)
 	}
 	return count, nil

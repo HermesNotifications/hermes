@@ -73,7 +73,7 @@ func TestEnsureStreams_PassesOnceTheProvisionerHasRun(t *testing.T) {
 	defer cancel()
 
 	provisioner := connectAs(t, messaging.ProvisionerService)
-	if err := provisioner.SetupStreams(ctx); err != nil {
+	if err := provisioner.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("provisioner could not declare the streams: %v", err)
 	}
 

@@ -136,6 +136,34 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# closes it has two silent-inert shapes -- unbound, or bound with Warn instead of Deny.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_ca_issuer_policy.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_ca_issuer_policy.py -
+	@# Centrifugo 403s any websocket whose Origin is not listed, but permits connections with
+	@# no Origin at all -- so /health, curl and every server-side client succeed while no
+	@# browser can connect. The local overlay shipped with no allowed_origins and the first
+	@# live browser run spent 45 minutes failing 24 specs to say only "connecting".
+	@# All three overlays: this is the one control whose absence is invisible everywhere else.
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_centrifugo_origins.py -
+	@# The memory engine gives each Centrifugo node its own subscription registry, so above one
+	@# replica a publication reaches only the clients on the node that received it -- silently,
+	@# with nothing in any log or health check to say so. production.md has said this in prose
+	@# since the chart shipped; prose does not fail a render.
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_centrifugo_engine.py -
+	@# JetStream defaults to one replica when Replicas is unset, which is what every stream ran
+	@# with on a three-node cluster: `nats stream ls` looks healthy, every publish succeeds, and
+	@# the first evidence is a node going away and taking NOTIFICATIONS or DELIVERY with it.
+	@# All three overlays -- staging and local are the single-node cases the gate must also pass.
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_nats_stream_replicas.py -
+	@# Every Hermes image is FROM scratch, so preStop.exec cannot run `sleep` and the drain
+	@# delay lives in-process instead. That splits one budget across a manifest and an env var,
+	@# which is precisely the pairing that drifts: exceed terminationGracePeriodSeconds and the
+	@# kubelet SIGKILLs mid-drain, which is strictly worse than not draining at all.
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_shutdown_budget.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_shutdown_budget.py -
 	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
 	@# or rejects. It shipped with 17 passing tests that nothing ran.
 	./infra/scripts/test-lib.sh
@@ -162,6 +190,17 @@ verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	@# The same two gates the kustomize overlays get. Running them only over kustomize is
+	@# exactly how the chart drifted into shipping no PDBs, no grace periods and empty
+	@# resource requests while the overlays had all three.
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  | $(PYTHON) scripts/check_workload_resources.py - --skip=nats,centrifugo,postgresql,redis
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  | $(PYTHON) scripts/check_shutdown_budget.py -
 	@# Optional features render into workloads the default install never produces, so they
 	@# need their own pass -- hermes-cleanup was missing from the cd.yml publish matrix and
 	@# only shows up when the CronJob renders.
@@ -217,13 +256,19 @@ asyncapi-check:    ## Validate AsyncAPI spec
 	npx --yes @asyncapi/cli validate api/async/asyncapi.yaml
 
 # --- SDKs ---
-.PHONY: sdk-ts-generate sdk-ts-build sdk-generate
+.PHONY: sdk-ts-generate sdk-ts-build sdk-ts-typecheck sdk-ts-test sdk-generate
 sdk-ts-generate:   ## Generate TypeScript types from OpenAPI specs
 	pnpm --filter @hermes-notifications/server generate
 	pnpm --filter @hermes-notifications/client generate
+# All four packages, not just server+client. The narrower version is why a `group_id` ->
+# `category_id` rename once left hermes-react and hermes-web unable to build at all while
+# `make` reported success — only ci-web.yml noticed.
 sdk-ts-build:      ## Build TypeScript SDKs
-	pnpm --filter @hermes-notifications/server build
-	pnpm --filter @hermes-notifications/client build
+	pnpm --filter "./sdks/typescript/packages/*" build
+sdk-ts-typecheck:  ## Typecheck the TypeScript SDKs, tests included
+	pnpm --filter "./sdks/typescript/packages/*" --parallel run --if-present typecheck
+sdk-ts-test:       ## Run the TypeScript SDK unit tests
+	pnpm --filter "./sdks/typescript/packages/*" --parallel run --if-present test
 sdk-python:        ## Generate Python server SDK
 	npx @openapitools/openapi-generator-cli generate \
 		-i api/admin/openapi.yaml -g python \
@@ -327,6 +372,34 @@ admin-install:     ## Install admin portal dependencies
 	cd web/admin && pnpm install
 dev-admin:         ## Start the admin portal dev server (port 3000)
 	cd web/admin && pnpm dev
+
+# --- Inbox demo (examples/) ---
+.PHONY: demo-install dev-demo demo-check demo-e2e demo-e2e-install demo-e2e-ui demo-e2e-full
+# Builds the SDKs as well as installing: the packages are ESM compiled to dist/, so the demo
+# cannot resolve them from source. ci-web.yml carries the same step for the admin portal.
+demo-install:      ## Install demo deps and build the workspace SDKs
+	pnpm install
+	pnpm --filter "./sdks/typescript/packages/*" build
+dev-demo:          ## Start the inbox demo (app on :5173, token server on :8899)
+	scripts/demo-env sh -c 'pnpm --filter @hermes/demo-server dev & pnpm --filter @hermes/react-demo dev; kill %1'
+demo-check:        ## Typecheck, test and build the demo packages (no cluster needed)
+	pnpm --filter @hermes/demo-server run typecheck
+	pnpm --filter @hermes/demo-server test
+	pnpm --filter @hermes/react-demo run typecheck
+	pnpm --filter @hermes/react-demo test
+	pnpm --filter @hermes/react-demo build
+	pnpm --filter @hermes/browser-tests run typecheck
+	pnpm --filter @hermes/browser-tests run test:list
+demo-e2e-install:  ## Install the Playwright browser (one-time)
+	pnpm --filter @hermes/browser-tests run install-browsers
+demo-e2e:          ## Run the live browser E2E suite (requires make dev-up)
+	scripts/demo-env pnpm --filter @hermes/browser-tests test
+demo-e2e-ui:       ## Open the Playwright UI runner against the live stack
+	scripts/demo-env pnpm --filter @hermes/browser-tests run test:ui
+demo-e2e-full:     ## Bring up the cluster, run the live E2E suite, tear it down
+	$(MAKE) dev-up-ci
+	$(MAKE) demo-e2e-install
+	$(MAKE) demo-e2e; status=$$?; $(MAKE) dev-down; exit $$status
 
 # --- Docker ---
 .PHONY: docker-%

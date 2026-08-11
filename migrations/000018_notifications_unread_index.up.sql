@@ -1,0 +1,40 @@
+-- Index the unread count.
+--
+-- The count behind every inbox badge is
+--
+--   WHERE user_id = $1 AND read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL
+--
+-- and until now nothing covered it. idx_notifications_inbox (000006) comes closest, but its
+-- predicate omits read_at, so answering the count meant walking every active row the user has
+-- ever received and filtering. That cost grows with a user's lifetime history and is paid on
+-- every page of every scroll.
+--
+-- Extending that index instead of adding this one is not an option: read_at belongs in the
+-- predicate, not the key, and putting it there would exclude read rows from the index the
+-- listing query depends on.
+--
+-- Keyed on user_id alone and predicated on all three NULLs, this index contains only unread
+-- rows -- so it *shrinks as users read*, which is the opposite of the table's growth curve.
+-- It also covers MarkAllRead's WHERE clause, which has the same shape.
+--
+-- CONCURRENTLY because notifications is the largest table in the system and a plain CREATE
+-- INDEX takes an ACCESS EXCLUSIVE lock for the whole build. Migrations run as an ArgoCD
+-- PreSync hook (ADR 0006), so that lock would block the deploy and every live inbox read with
+-- it.
+--
+-- ONE STATEMENT IN THIS FILE, DELIBERATELY. golang-migrate's postgres driver runs a migration
+-- as a single un-transacted ExecContext (database/postgres/postgres.go runStatement), and
+-- x-multi-statement is off by default -- so the whole file arrives as one simple query. Postgres
+-- wraps a multi-statement simple query in an implicit transaction block, and CREATE INDEX
+-- CONCURRENTLY is rejected inside one. Adding a second statement here, even a COMMENT, breaks
+-- this migration.
+--
+-- If a build ever fails partway, Postgres leaves an INVALID index behind and IF NOT EXISTS will
+-- then skip it silently forever -- a useless index and no error. Check for that with:
+--
+--   SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
+--
+-- and DROP INDEX CONCURRENTLY the invalid one before re-running.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_notifications_unread
+    ON notifications (user_id)
+    WHERE read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL;

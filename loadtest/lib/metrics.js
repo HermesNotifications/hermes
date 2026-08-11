@@ -13,3 +13,7 @@ export const wsConnectionsClosed  = new Counter('ws_connections_closed');
 export const wsConnectionDrops    = new Counter('ws_connection_drops');
 export const sendErrors           = new Counter('send_errors');
 export const pushReceived         = new Counter('ws_push_received');
+// Gap between a socket closing and the same VU having a live one again. Only meaningful in the
+// churn scenario, where pods are restarted underneath the run: in a steady-state scenario
+// sockets close once, at the end, and nothing reconnects.
+export const wsReconnectDuration  = new Trend('ws_reconnect_duration', true);

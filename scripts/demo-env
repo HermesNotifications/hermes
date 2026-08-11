@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+# See LICENSE and NOTICE in the project root for full terms and restrictions.
+#
+# Run a command with the local dev environment's Hermes settings in scope.
+#
+# This plumbing lives outside examples/ on purpose. The demo server reads plain environment
+# variables, because it is example code an integrator copies into their own backend and must
+# not contain knowledge of this repository's layout. Finding the dev key is this script's job.
+#
+# Usage:
+#   scripts/demo-env pnpm --filter @hermes/browser-tests test
+#   scripts/demo-env pnpm --filter @hermes/demo-server dev
+#
+# Override any of these by exporting them first:
+#   HERMES_API_KEY     (default: read from web/admin/.env.local, written by `make seed`)
+#   HERMES_API_URL     (default: http://localhost:8888 — the k3d ingress)
+#   HERMES_SOCKET_URL  (default: http://localhost:8888/realtime)
+#
+# Without an ingress — each service on its own port — set the per-service overrides instead:
+#   HERMES_ADMIN_URL HERMES_INBOX_URL HERMES_USER_URL HERMES_SEND_URL HERMES_WS_URL
+
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ -z "${HERMES_API_KEY:-}" ] && [ -f "$root/web/admin/.env.local" ]; then
+  HERMES_API_KEY=$(grep '^HERMES_API_KEY=' "$root/web/admin/.env.local" | cut -d= -f2-)
+fi
+
+if [ -z "${HERMES_API_KEY:-}" ]; then
+  echo "HERMES_API_KEY is not set and web/admin/.env.local has no key." >&2
+  echo "Run 'make seed' to generate a dev API key, or export HERMES_API_KEY yourself." >&2
+  exit 1
+fi
+
+# Deliberately NOT the HERMES_API_URL that `make seed` writes into web/admin/.env.local: that
+# value is http://localhost:8080, the admin service's port-forward, which does not serve
+# /v1/send. The ingress on :8888 routes every path. Take the key from that file, not the URL.
+: "${HERMES_API_URL:=http://localhost:8888}"
+: "${HERMES_SOCKET_URL:=http://localhost:8888/realtime}"
+: "${DEMO_COOKIE_SECRET:=hermes-demo-cookie-secret}"
+
+export HERMES_API_KEY HERMES_API_URL HERMES_SOCKET_URL DEMO_COOKIE_SECRET
+
+exec "$@"
