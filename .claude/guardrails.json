@@ -1,5 +1,18 @@
 {
   "_comment": [
+    "policy.verify_command:",
+    "  The completion gate. Until this was set, nothing checked that the suite was green",
+    "  before work was marked done — the gate existed but was disarmed, so 'done' rested on",
+    "  the agent's own account of it. On PR #96 that produced a task reported complete",
+    "  against a tree that failed CI.",
+    "  `make verify` is the right command because it is already what CONTRIBUTING points at",
+    "  and it needs no cluster, cloud or database credentials: build, the full unit suite,",
+    "  golangci-lint, the SPDX header policy and the manifest gates. Integration and E2E are",
+    "  deliberately NOT in it — they need `make infra-up`, so a machine without Docker",
+    "  Compose could never satisfy the gate and the pressure would be to disable it.",
+    "  Green here is necessary, not sufficient: it says nothing about whether the tests",
+    "  assert anything. Mutation-check before reporting done regardless.",
+    "",
     "TDD gate exemptions — plain glob strings.",
     "",
     "web/admin/app/**/layout.tsx:",
@@ -16,6 +29,9 @@
     "  prerender authenticated pages and fails. The build is the assertion, and it now",
     "  runs in CI."
   ],
+  "policy": {
+    "verify_command": "make verify"
+  },
   "tdd": {
     "exempt": [
       "web/admin/app/**/layout.tsx"
