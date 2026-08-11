@@ -26,6 +26,10 @@ func TestInboxProvider_Send_Success(t *testing.T) {
 		capturedChannel, _ = payload["channel"].(string)
 		capturedData, _ = payload["data"].(map[string]any)
 		w.WriteHeader(http.StatusOK)
+		// What real Centrifugo answers on success. A double that returns a bare 200 still
+		// passes — the client accepts a stripped envelope — but it cannot tell a working
+		// client from one that ignores the body, which is how the logical-error bug survived.
+		w.Write([]byte(`{"result":{}}`))
 	}))
 	defer server.Close()
 
