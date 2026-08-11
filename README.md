@@ -4,21 +4,49 @@ Event-driven notification platform. Send notifications across email, SMS, and in
 
 ## Architecture
 
-Go monorepo of nine services connected via NATS JetStream:
+Go monorepo of nine services connected via NATS JetStream. For the full picture — message
+contracts, channel resolution, the status model, the retry/dead-letter ladder and the auth
+model — see **[docs/architecture.md](docs/architecture.md)**.
 
-```
-API Client ──> Send ──> NATS ──> Dispatch ──> NATS ──> Workers ──> NATS ──> Event Writer ──> Postgres
-                                           │
-                                     ┌─────┼─────┐
-                                     │     │     │
-                                   Email  SMS  Inbox
-                                  Worker Worker Worker
-                                     │     │     │
-                                  Webhook Webhook Centrifugo
-                                                  (WebSocket)
+```mermaid
+flowchart LR
+    Client["API client"]
+    Browser["Browser / app"]
+
+    subgraph write["Write path — API key"]
+        direction LR
+        Send["Send"] -->|"notification.send"| Dispatch["Dispatch"]
+        Dispatch -->|"delivery.email"| WE["Email Worker"]
+        Dispatch -->|"delivery.sms"| WS["SMS Worker"]
+        Dispatch -->|"delivery.inbox"| WI["Inbox Worker"]
+        WE -->|"notification.events"| EW["Event Writer"]
+        WS -->|"notification.events"| EW
+        WI -->|"notification.events"| EW
+    end
+
+    subgraph readpath["Read path — JWT"]
+        direction LR
+        InboxSvc["Inbox Service"]
+        UserSvc["User Service"]
+        Cent["Centrifugo"]
+    end
+
+    PG[("Postgres")]
+
+    Client -->|"POST /v1/send"| Send
+    WE -->|"SMTP / SES"| Mail["Mail server"]
+    WS -->|"HTTP webhook"| SMSGW["SMS gateway"]
+    WI -->|"push"| Cent
+    Dispatch --> PG
+    EW -->|"events + status rollup"| PG
+    Browser --> InboxSvc
+    Browser --> UserSvc
+    Browser <-->|"WebSocket"| Cent
+    InboxSvc --> PG
+    UserSvc --> PG
 ```
 
-**Write path (API key auth):** The Send service authenticates the request and publishes it to NATS (a thin ingestion layer). Dispatch persists the notification, resolves templates and channels, and fans out to delivery workers. Workers deliver via webhooks (email/SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status. The Admin service is the separate management API (organizations, keys, categories, templates, JWT issuance).
+**Write path (API key auth):** The Send service authenticates the request and publishes it to NATS (a thin ingestion layer). Dispatch persists the notification, resolves templates and channels, and fans out to delivery workers. Workers deliver via SMTP/SES (email), a webhook (SMS) or Centrifugo push (inbox). Event Writer batch-inserts delivery events and updates notification status. The Admin service is the separate management API (organizations, keys, categories, templates, JWT issuance).
 
 **Read path (JWT auth):** Inbox Service serves paginated inbox. User Service manages profiles and notification preferences. Centrifugo provides real-time WebSocket push.
 
@@ -30,7 +58,7 @@ API Client ──> Send ──> NATS ──> Dispatch ──> NATS ──> Worke
 | Admin | 8080 | Server-to-server management API — organizations, categories, templates, API keys, JWT issuance |
 | Dispatch | 8081 | Resolves channels and templates, fans out to workers |
 | Event Writer | 8082 | Batch-inserts delivery events, updates notification status |
-| Email Worker | 8083 | Delivers email notifications via webhook |
+| Email Worker | 8083 | Delivers email notifications via SMTP or AWS SES |
 | SMS Worker | 8084 | Delivers SMS notifications via webhook |
 | Inbox Worker | 8085 | Pushes inbox notifications via Centrifugo |
 | Inbox Service | 8086 | User-facing inbox API (list, read, archive) |
@@ -41,7 +69,7 @@ API Client ──> Send ──> NATS ──> Dispatch ──> NATS ──> Worke
 | Component | Purpose |
 |-----------|---------|
 | PostgreSQL | Shared database for all services |
-| NATS JetStream | Async messaging (3 streams: NOTIFICATIONS, DELIVERY, EVENTS) |
+| NATS JetStream | Async messaging (4 streams: NOTIFICATIONS, DELIVERY, EVENTS, plus DLQ for terminal failures) |
 | Redis/Valkey | Template cache, idempotency dedup, Centrifugo engine |
 | Centrifugo | Real-time WebSocket push to user inboxes |
 
