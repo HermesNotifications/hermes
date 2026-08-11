@@ -98,8 +98,9 @@ components:
             - array
             - "null"
         unread_count:
-          description: Total unread notification count
+          description: Unread notification count. Exact below 1000; a value of 1000 means at least 1000.
           format: int64
+          maximum: 1000
           type: integer
       required:
         - data
@@ -164,6 +165,24 @@ components:
         - channels
         - status
         - created_at
+      type: object
+    UnreadCountOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - //schemas/UnreadCountOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        unread_count:
+          description: Unread notification count. Exact below 1000; a value of 1000 means at least 1000.
+          format: int64
+          maximum: 1000
+          type: integer
+      required:
+        - unread_count
       type: object
 info:
   description: User-facing API for inbox notification management.
@@ -234,6 +253,31 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: Mark all notifications as read
+      tags:
+        - Inbox
+  /v1/inbox/unread-count:
+    get:
+      description: |-
+        Returns just the unread count, without fetching any notifications.
+
+        This exists for a host application that renders a bell badge on its own, with no inbox panel mounted: such a client would otherwise have to request a page of notifications purely to read the number off it.
+
+        Cache-backed and deliberately cheap — on a warm cache it is a single Redis read and touches no database. It is safe to call on page load, but it is not a substitute for the realtime channel and is not intended to be polled: it shares the same per-user rate limit as the rest of the inbox API.
+      operationId: get-unread-count
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnreadCountOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get the unread notification count
       tags:
         - Inbox
   /v1/inbox/{id}:

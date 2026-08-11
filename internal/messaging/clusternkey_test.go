@@ -60,7 +60,7 @@ func TestNKeyClusterPipeline(t *testing.T) {
 	defer cancel()
 
 	send := connectClusterAs(t, "hermes-send")
-	if err := send.SetupStreams(ctx); err != nil {
+	if err := send.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
 		t.Fatalf("send could not declare the streams: %v", err)
 	}
 	if err := send.Publish(ctx, "notification.send", []byte(`{"nkey":"send"}`)); err != nil {

@@ -19,7 +19,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
+	pool := bootstrap.MustConnectDB(ctx, cfg, logger)
 	defer pool.Close()
 
 	// "hermes-send" is not decoration: it selects this service's user, and therefore its
@@ -31,9 +31,10 @@ func main() {
 	// ADR 0005 phase 4. Verify, do not declare: cmd/natsprovision owns stream creation, and
 	// this service holds no permission to create one. Exits if the streams are not there yet.
 	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-send", logger)
-	defer natsClient.Close()
+	// Drained as a shutdown callback below rather than deferred here, so buffered publishes are
+	// flushed before the process exits.
 
-	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
+	redisClient := bootstrap.MustConnectRedis(cfg, logger)
 	defer redisClient.Close()
 
 	st := postgres.New(pool)
@@ -41,5 +42,19 @@ func main() {
 	srv := send.NewServer(st, natsClient, redisClient, pool, cfg.APIKeyHMACSecret, logger)
 	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger)
+	// Publishing is this service's entire job, so an unusable bus makes it unready. Postgres
+	// too, for the API key lookup behind the cache.
+	readiness := bootstrap.NewReadiness(
+		bootstrap.PostgresCheck(pool),
+		bootstrap.NATSCheck(natsClient),
+	)
+	srv.SetReadiness(readiness)
+
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+			OnShutdown:      []func(){bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger)},
+		})
 }

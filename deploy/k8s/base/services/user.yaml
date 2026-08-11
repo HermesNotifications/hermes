@@ -40,6 +40,10 @@ spec:
           env:
             - name: HERMES_HTTP_PORT
               value: "8087"
+            # No NATS client in this service, so there is nothing to drain. Stated rather than
+            # defaulted, so check_shutdown_budget.py measures the sequence that actually runs.
+            - name: HERMES_NATS_DRAIN_TIMEOUT
+              value: "0s"
             - name: DD_SERVICE
               value: hermes-user
             - name: OTEL_SERVICE_NAME

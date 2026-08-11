@@ -36,6 +36,20 @@
             "perSecond": { "type": ["integer", "string"], "minimum": 1 }
           }
         },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "maxUnavailable only, no minAvailable. minAvailable at or above the replica count pins disruptionsAllowed to zero permanently and blocks every node drain, which is why the production overlay moved off it; not offering the option is cheaper than documenting the footgun.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "maxUnavailable": { "type": ["integer", "string"] }
+          }
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Overrides hermes.shutdown.terminationGracePeriodSeconds for this service. It must cover the whole shutdown sequence — preStop sleep, in-process drain delay, NATS drain, HTTP shutdown — or the kubelet SIGKILLs the process partway through. scripts/check_shutdown_budget.py enforces the arithmetic over the rendered manifests."
+        },
         "podAnnotations": { "type": "object" },
         "nodeSelector": { "type": "object" },
         "tolerations": { "type": "array" },
@@ -100,6 +114,18 @@
           "description": "Deployment environment, published as HERMES_ENV. internal/config/config.go treats ONLY the literal \"development\" as relaxed, so any other value — including a typo like \"prod\" or \"staging\" — takes the strict path in Config.Validate() and every workload exits unless all three datastores use TLS and all three secrets are real. The enum exists to turn such a typo into a clear install-time rejection rather than nine pods in CrashLoopBackOff with a validation error in their logs. If you genuinely need a third environment name, widen this enum and remember it will behave exactly like \"production\"."
         },
         "existingSecret": { "type": "string" },
+        "shutdown": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 },
+            "preStopSleepSeconds": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Renders a preStop SleepAction, which needs Kubernetes 1.30+ (beta in 1.29) — hence the default of 0. Belt and braces only: the images are FROM scratch, so a preStop exec hook has no shell to run sleep in, and the drain delay that actually runs is in-process via HERMES_SHUTDOWN_DRAIN_DELAY."
+            }
+          }
+        },
         "jwt": {
           "type": "object",
           "additionalProperties": false,

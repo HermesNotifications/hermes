@@ -38,6 +38,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/inbox/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the unread notification count
+         * @description Returns just the unread count, without fetching any notifications.
+         *
+         *     This exists for a host application that renders a bell badge on its own, with no inbox panel mounted: such a client would otherwise have to request a page of notifications purely to read the number off it.
+         *
+         *     Cache-backed and deliberately cheap — on a warm cache it is a single Redis read and touches no database. It is safe to call on page load, but it is not a substitute for the realtime channel and is not intended to be polled: it shares the same per-user rate limit as the rest of the inbox API.
+         */
+        get: operations["get-unread-count"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/inbox/{id}": {
         parameters: {
             query?: never;
@@ -168,7 +192,7 @@ export interface components {
             data: components["schemas"]["Notification"][] | null;
             /**
              * Format: int64
-             * @description Total unread notification count
+             * @description Unread notification count. Exact below 1000; a value of 1000 means at least 1000.
              */
             unread_count: number;
         };
@@ -197,6 +221,19 @@ export interface components {
             template_id?: string;
             title: string;
             user_id: string;
+        };
+        UnreadCountOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example //schemas/UnreadCountOutputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Unread notification count. Exact below 1000; a value of 1000 means at least 1000.
+             */
+            unread_count: number;
         };
     };
     responses: never;
@@ -259,6 +296,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCountOutputBody"];
                 };
             };
             /** @description Error */

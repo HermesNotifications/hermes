@@ -21,7 +21,7 @@ type listInboxInput struct {
 type listInboxOutput struct {
 	Body struct {
 		Data        []models.Notification `json:"data" doc:"List of notifications"`
-		UnreadCount int                   `json:"unread_count" doc:"Total unread notification count"`
+		UnreadCount int                   `json:"unread_count" maximum:"1000" doc:"Unread notification count. Exact below 1000; a value of 1000 means at least 1000."`
 		Cursor      string                `json:"cursor,omitempty" doc:"Cursor for next page"`
 	}
 }
@@ -39,16 +39,9 @@ func (s *Server) registerListRoutes() {
 			return nil, huma.Error401Unauthorized("missing user")
 		}
 
-		notifications, unreadCount, nextCursor, err := s.store.ListInbox(ctx, userID, input.Archived, input.Cursor, input.Limit)
+		notifications, nextCursor, err := s.store.ListInbox(ctx, userID, input.Archived, input.Cursor, input.Limit)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("internal server error")
-		}
-
-		// Populate unread count cache from the authoritative DB result
-		if s.cache != nil {
-			if err := s.cache.SetUnreadCount(ctx, userID, unreadCount, unreadCountTTL); err != nil {
-				s.logger.Error("failed to cache unread count", "error", err)
-			}
 		}
 
 		// Ensure we return [] not null in JSON
@@ -58,7 +51,7 @@ func (s *Server) registerListRoutes() {
 
 		resp := &listInboxOutput{}
 		resp.Body.Data = notifications
-		resp.Body.UnreadCount = unreadCount
+		resp.Body.UnreadCount = s.unreadCount(ctx, userID)
 		resp.Body.Cursor = nextCursor
 		return resp, nil
 	})

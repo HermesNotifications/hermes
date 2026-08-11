@@ -217,6 +217,66 @@ describe("HermesClient: unread count", () => {
     hermes.setUnreadCount(5);
     expect(hermes.unreadCount).toBe(5);
   });
+
+  it("fetches and publishes the count on refreshUnreadCount", async () => {
+    // The path that makes a standalone bell badge correct on first paint. Without it a host
+    // with no inbox panel mounted has nothing driving the count until the user's first
+    // mutation, so the badge reads zero however many notifications are waiting.
+    const requested: string[] = [];
+    const fakeFetch: typeof fetch = async (input) => {
+      // openapi-fetch hands the middleware a Request, not a URL string.
+      const url = input instanceof Request ? input.url : String(input);
+      requested.push(new URL(url).pathname);
+      return new Response(JSON.stringify({ unread_count: 8 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const { hermes } = client({ fetch: fakeFetch });
+    const counts: number[] = [];
+    hermes.on("unreadCountChange", (count) => counts.push(count));
+
+    await expect(hermes.refreshUnreadCount()).resolves.toBe(8);
+
+    expect(requested).toEqual(["/v1/inbox/unread-count"]);
+    expect(counts).toEqual([8]);
+  });
+
+  it("moves the count on an arrival that carries one", async () => {
+    const { hermes, transports } = client();
+    await hermes.connect("usr_1");
+    const counts: number[] = [];
+    hermes.on("unreadCountChange", (count) => counts.push(count));
+
+    transports[0].latest.publish({
+      type: "notification.new",
+      id: "ntf_1",
+      title: "T",
+      body: "B",
+      unread_count: 4,
+    });
+
+    expect(counts).toEqual([4]);
+  });
+
+  it("leaves the count alone on an arrival that carries none", () => {
+    // The client must not invent a number here. The store's reducer owns the fallback
+    // arithmetic, because it has the notification list needed to dedupe a redelivery first.
+    const { hermes, transports } = client();
+    return hermes.connect("usr_1").then(() => {
+      const counts: number[] = [];
+      hermes.on("unreadCountChange", (count) => counts.push(count));
+
+      transports[0].latest.publish({
+        type: "notification.new",
+        id: "ntf_1",
+        title: "T",
+        body: "B",
+      });
+
+      expect(counts).toEqual([]);
+    });
+  });
 });
 
 describe("HermesClient: tokens", () => {

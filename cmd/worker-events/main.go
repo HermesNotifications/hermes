@@ -27,7 +27,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
+	pool := bootstrap.MustConnectDB(ctx, cfg, logger)
 	defer pool.Close()
 
 	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
@@ -35,7 +35,8 @@ func main() {
 		messaging.WithIdentity("hermes-worker-events", cfg.NATSNKeySeedPath))
 	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
 	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-worker-events", logger)
-	defer natsClient.Close()
+	// Drained as a shutdown callback below rather than deferred here — a deferred Close ran
+	// after the HTTP server stopped, so the pool kept pulling work it would then abandon.
 
 	pgStore := postgres.New(pool)
 
@@ -56,9 +57,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	readiness := bootstrap.NewReadiness(
+		bootstrap.PostgresCheck(pool),
+		bootstrap.NATSCheck(natsClient),
+	)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	mux.HandleFunc("GET /readyz", httputil.ReadyzHandler(pool.Ping))
+	mux.HandleFunc("GET /readyz", readiness.Handler())
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger, w.Stop)
+	// Order is load-bearing: drain the consumers first so every in-flight handler has finished
+	// adding to the batch, and only then flush it. Flushing first would write a batch that the
+	// still-running handlers are appending to, and those late events would be lost.
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+			OnShutdown: []func(){
+				bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger),
+				w.Stop,
+			},
+		})
 }

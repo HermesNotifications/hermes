@@ -125,6 +125,18 @@ export class FakeHermesClient {
     this.calls.push(`connect:${userId}`);
   }
 
+  /**
+   * Whether {@link waitUntilConnected} reports the channel as live. Set false to stand in for a
+   * socket that never subscribes -- a blocked websocket, a Centrifugo that is down -- which the
+   * store has to survive by loading the list anyway.
+   */
+  realtimeBecomesReady = true;
+
+  async waitUntilConnected(_timeoutMs: number): Promise<boolean> {
+    this.calls.push("waitUntilConnected");
+    return this.realtimeBecomesReady;
+  }
+
   disconnect(): void {
     this.calls.push("disconnect");
   }

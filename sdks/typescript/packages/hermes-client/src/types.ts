@@ -32,6 +32,14 @@ export interface NewNotificationEvent {
   createdAt: string;
   actionUrl?: string;
   actionLabel?: string;
+  /**
+   * Unread count after this arrival, when the server knows it.
+   *
+   * Absent is normal, not exceptional: the inbox worker that publishes this event has no
+   * database, so whenever the cached count has expired it cannot say what the number is, and
+   * omits it rather than guessing. The reducer falls back to incrementing locally in that case.
+   */
+  unreadCount?: number;
 }
 
 export type HermesEvent = InboxUpdatedEvent | NewNotificationEvent;

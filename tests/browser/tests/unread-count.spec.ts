@@ -1,7 +1,7 @@
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
 // See LICENSE and NOTICE in the project root for full terms and restrictions.
 
-import { badge, expect, test, waitForRealtimeReady } from "../fixtures/demo.js";
+import { badge, expect, loginAs, test, waitForRealtimeReady } from "../fixtures/demo.js";
 
 /**
  * Badge correctness, driven from *outside* the browser wherever possible.
@@ -77,9 +77,28 @@ test.describe("unread count", () => {
     hermesUser,
   }) => {
     // Sending 100 notifications through the real pipeline would be slow and pointless; the display
-    // cap itself is unit-tested. What is worth asserting live is that the server counts exactly.
+    // cap itself is unit-tested. What is worth asserting live is that the server counts exactly
+    // below the server-side cap of 1000, above which it reports "at least that many".
     await hermesUser.send({ title: "One", body: "1" });
     const page = await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
     expect(page.unread_count).toBe(1);
+  });
+
+  test("is right on load with the websocket blocked", async ({ page, hermesUser }) => {
+    // The only test that exercises the HTTP count path independently of realtime. Every other
+    // assertion here would still pass if the count were being delivered purely over the socket,
+    // which is exactly what makes them blind to a broken cache: a stale or fabricated cached
+    // count is invisible while live events keep overwriting it.
+    //
+    // So: send first, then load the page with the socket refused outright, and require the badge
+    // to be right anyway. That number can only have come from the server's cached count.
+    await hermesUser.send({ title: "Waiting", body: "sent before the page ever loaded" });
+    await hermesUser.waitFor((inbox) => inbox.unread_count === 1);
+
+    await page.route("**/connection/websocket**", (route) => route.abort());
+    await loginAs(page, hermesUser);
+    await page.goto("/");
+
+    await expect(badge(page)).toHaveText("1");
   });
 });

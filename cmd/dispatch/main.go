@@ -28,7 +28,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	pool := bootstrap.MustConnectDB(ctx, cfg.DatabaseURL, logger)
+	pool := bootstrap.MustConnectDB(ctx, cfg, logger)
 	defer pool.Close()
 
 	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
@@ -36,9 +36,10 @@ func main() {
 		messaging.WithIdentity("hermes-dispatch", cfg.NATSNKeySeedPath))
 	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
 	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-dispatch", logger)
-	defer natsClient.Close()
+	// Drained as a shutdown callback below rather than deferred here — a deferred Close ran
+	// after the HTTP server stopped, so the pool kept pulling work it would then abandon.
 
-	redisClient := bootstrap.MustConnectRedis(cfg.RedisURL, logger)
+	redisClient := bootstrap.MustConnectRedis(cfg, logger)
 	defer redisClient.Close()
 
 	pgStore := postgres.New(pool)
@@ -74,9 +75,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Both, because dispatch cannot do its job without either: it persists the notification to
+	// Postgres and fans out over the bus. Redis is excluded — template and channel lookups fall
+	// back to the database.
+	readiness := bootstrap.NewReadiness(
+		bootstrap.PostgresCheck(pool),
+		bootstrap.NATSCheck(natsClient),
+	)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
-	mux.HandleFunc("GET /readyz", httputil.ReadyzHandler())
+	mux.HandleFunc("GET /readyz", readiness.Handler())
 
-	bootstrap.ListenAndServe(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger)
+	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
+		bootstrap.ServeOptions{
+			Readiness:       readiness,
+			DrainDelay:      cfg.ShutdownDrainDelay,
+			ShutdownTimeout: cfg.ShutdownTimeout,
+			OnShutdown:      []func(){bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger)},
+		})
 }
