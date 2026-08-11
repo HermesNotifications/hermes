@@ -230,6 +230,17 @@
         "enabled": { "type": "boolean" },
         "className": { "type": "string" },
         "annotations": { "type": "object" },
+        "rateLimit": {
+          "$comment": "Applied to the API ingress only; the realtime ingress is deliberately excluded because its connections are long-lived WebSockets.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "rps": { "type": "integer", "minimum": 1 },
+            "burstMultiplier": { "type": "integer", "minimum": 1 },
+            "connections": { "type": "integer", "minimum": 1 }
+          }
+        },
         "tls": { "type": "array" }
       }
     },
