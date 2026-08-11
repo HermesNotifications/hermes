@@ -35,6 +35,89 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
+      # Finding 53 / ADR 0005 amendment 2026-07-31. nats-server treats an UNSET $VARIABLE as a
+      # parse error and refuses to start, which is the fail-closed behaviour the accounts file
+      # documents. An EMPTY one is not: `HERMES_CENTRIFUGO_NATS_PASSWORD=""` parses cleanly, the
+      # server starts, and a client connecting as `centrifugo` with no credential at all is
+      # accepted — verified on the wire, and pinned by
+      # internal/messaging/centrifugopassword_test.go. The conf language cannot express
+      # "must be non-empty", so the guarantee has to be delivered here.
+      #
+      # This is the only place that can deliver what nats-accounts.conf promises — a
+      # half-provisioned cluster failing to START rather than serving while unauthenticated.
+      # internal/config cannot (no Hermes Go process reads this variable; nats-server consumes
+      # it from its own environment) and cmd/natsprovision should not (it would have to
+      # impersonate `centrifugo` with an empty credential on every deploy, permanently poisoning
+      # the authorization-violation signal). Both alternatives are recorded in nats-accounts.conf.
+      #
+      # The second check is the cross-component contract from the same ADR amendment: a variable
+      # reference is resolved by RE-PARSING the value as its own conf document, so the password
+      # must lex as a bare conf value. A leading ASCII letter is the one shape that is always
+      # safe. cmd/natskeys already guarantees it; this catches the human who ran
+      # `kubectl create secret` by hand, who has no other way to learn the rule. Without it the
+      # failure is nats-server rejecting its own configuration with a message that names a parse
+      # error, not a password.
+      #
+      # The local overlay deletes this container by name — it drops `-c nats.conf`, never reads
+      # the accounts file, and legitimately has no password. See
+      # ../../overlays/local/patches/nats-local.yaml; renaming this container without renaming it
+      # there breaks `make dev-up`.
+      initContainers:
+        - name: require-centrifugo-password
+          # Reuses the server image rather than adding one: it is already pulled on this node,
+          # and the check needs nothing but a shell.
+          image: nats:2-alpine
+          command: ["/bin/sh", "-euc"]
+          args:
+            - |
+              if [ -z "${HERMES_CENTRIFUGO_NATS_PASSWORD:-}" ]; then
+                echo "FATAL: HERMES_CENTRIFUGO_NATS_PASSWORD is empty or unset." >&2
+                echo "nats-accounts.conf would start with a 'centrifugo' user that accepts any" >&2
+                echo "client presenting no credential. Populate the nats-nkeys Secret from" >&2
+                echo "'go run ./cmd/natskeys' before starting the cluster." >&2
+                exit 1
+              fi
+              case "${HERMES_CENTRIFUGO_NATS_PASSWORD}" in
+                true|false)
+                  # The one pair a leading letter does NOT save. These lex cleanly and reach
+                  # nats-server as a Go bool rather than a string, so there is no parse error
+                  # to notice. cmd/natskeys cannot emit them (43 base64url characters), but the
+                  # hand-set Secret this container exists for can.
+                  echo "FATAL: HERMES_CENTRIFUGO_NATS_PASSWORD must not be exactly 'true' or 'false'." >&2
+                  echo "Both lex as a conf boolean, so nats-server receives the wrong type with" >&2
+                  echo "no parse error. See ADR 0005, amendment 2026-07-31." >&2
+                  exit 1
+                  ;;
+                [A-Za-z]*) ;;
+                *)
+                  echo "FATAL: HERMES_CENTRIFUGO_NATS_PASSWORD must begin with an ASCII letter." >&2
+                  echo "nats-server resolves \$VARIABLE references by re-parsing the value as a" >&2
+                  echo "conf document, so other shapes fail to lex or arrive as the wrong type." >&2
+                  echo "See ADR 0005, amendment 2026-07-31. Regenerate with 'go run ./cmd/natskeys'." >&2
+                  exit 1
+                  ;;
+              esac
+          env:
+            # optional: true for the same reason the server container uses it — the local
+            # overlay has no such Secret. Absent therefore reaches the check as empty, and the
+            # check is what turns empty into a refusal.
+            - name: HERMES_CENTRIFUGO_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nats-nkeys
+                  key: HERMES_CENTRIFUGO_NATS_PASSWORD
+                  optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
       containers:
         - name: nats
           image: nats:2-alpine

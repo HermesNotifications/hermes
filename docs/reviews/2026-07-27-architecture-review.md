@@ -1781,6 +1781,17 @@ expiry cycle. **Finding 41's second half is still open** — production's `centr
 still sets no `CENTRIFUGO_REDIS_PASSWORD` or Redis TLS variables, though the ExternalSecret does
 now carry the value.
 
+> **Closed 2026-08-10 (ADR 0005 phase 5).** The production patch now sets
+> `CENTRIFUGO_REDIS_PASSWORD` from the key the ExternalSecret had been carrying since phase 4,
+> and `CENTRIFUGO_REDIS_TLS: "true"`. `CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY` was
+> deliberately **not** copied from staging: staging sets it with no recorded rationale (it
+> arrived in `65cdb5c` in a commit about transit encryption that says nothing about
+> verification), and skipping verification keeps the encryption while discarding the
+> authentication. **Unverified against a real ElastiCache** — no AWS account was reachable — but
+> the failure mode if the reasoning is wrong is loud rather than silent. **Staging's flag is now
+> the open item**: one of the two must be exercised against a real cluster and the answer applied
+> to both.
+
 ---
 
 ## Resolved 2026-07-30 — finding 11 closed, against a real ArgoCD
@@ -2503,10 +2514,26 @@ nkeys user public key is `U` + base32 `[A-Z2-7]`: always a leading letter, never
 asserted (`TestAccounts_NKeyVariablesCannotHitTheFailingShapes`) rather than assumed, so a key
 format change is a red test rather than a cluster that will not start.
 
-### Open finding 53 — an empty `HERMES_CENTRIFUGO_NATS_PASSWORD` authenticates
+### Finding 53 — an empty `HERMES_CENTRIFUGO_NATS_PASSWORD` authenticates *(CLOSED 2026-08-10)*
 
 **53. [P0] An empty `HERMES_CENTRIFUGO_NATS_PASSWORD` parses cleanly and authenticates on the
 wire.** Tracked as issue #82. *(Filed as "39" — renumbered 2026-08-05, see the note above.)*
+
+**Closed 2026-08-10** by `require-centrifugo-password`, an initContainer on the NATS StatefulSet
+(`deploy/k8s/base/infra/nats.yaml`) — exactly the owner the analysis below determined. It runs
+before nats-server and fails the pod on an empty or unset value, so a half-provisioned cluster
+stays down instead of serving while unauthenticated. It also rejects `true` and `false`: ADR
+0005's 2026-07-31 amendment said a leading ASCII letter is "always safe whatever follows", which
+is true of what `cmd/natskeys` emits (43 base64url characters) and false for exactly those two,
+which lex as a conf boolean and reach the server as the wrong type. The hand-set Secret this
+guard exists for is precisely where the two statements collide. The local overlay deletes the
+container by name — it drops `-c nats.conf` and legitimately has no password — and
+`scripts/check_nats_password_guard.py` gates the pair. See ADR 0005, phase 5.
+
+The characterisation test stays unflipped: it pins nats-server's parser, which is unchanged.
+
+The original analysis follows, because the reasoning about *why* the other candidates cannot work
+is what makes the initContainer the only answer.
 
 **Not fixed here; belongs to whoever owns the Secret/ESO path.** `nats-accounts.conf` claims:
 
@@ -2624,7 +2651,7 @@ That the wiring bites was checked rather than assumed: running the excluded
 `test-connection` pod deliberately exits `helm test` with `1` and
 `Error: 1 error occurred: * pod hermes-test-connection failed`.
 
-### Finding 53 — owner determined, not closed
+### Finding 53 — owner determined, not closed *(implemented 2026-08-10, see ADR 0005 phase 5)*
 
 The claim in `nats-accounts.conf`'s header was corrected: it asserted that a half-provisioned
 cluster fails to start, which is true for an unset variable and **false for an empty one**.
@@ -2641,10 +2668,12 @@ intrusion — and a rejection is anyway indistinguishable from a not-yet-ready s
 failure, or a missing account. Decisively, both can only observe the problem *after* nats-server
 is already serving; only a guard on the NATS pod delivers the "fails to start" the header claims.
 
-**Not implemented, for a stated reason.** The local overlay drops `-c nats.conf` and legitimately
-has no password, so the guard needs a matching removal patch in
+**Not implemented at the time, for a stated reason.** The local overlay drops `-c nats.conf` and
+legitimately has no password, so the guard needs a matching removal patch in
 `overlays/local/patches/nats-local.yaml` or it blocks `make dev-up`. That is two files outside
-this change's ownership.
+this change's ownership. *(Both landed 2026-08-10; the removal patch uses `$patch: delete` keyed
+on the container name, which makes that name a contract between the two files —
+`scripts/check_nats_password_guard.py` is the gate on it.)*
 
 The characterisation test is kept **unflipped on purpose**. It pins nats-server's parser
 behaviour, which is upstream and unchanged; the fix prevents an empty value from reaching it.

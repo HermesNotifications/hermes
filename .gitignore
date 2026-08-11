@@ -80,3 +80,7 @@ node_modules/
 # Python bytecode — scripts/ holds the manifest checks run by `make verify-manifests`
 __pycache__/
 *.pyc
+
+# The interpreter `make verify-manifests` provisions from scripts/requirements.txt. The gates
+# need PyYAML and now fail rather than skip without it, so this is created on demand.
+/.venv/

@@ -136,6 +136,16 @@ Also: an **unset** variable is a parse error, but an **empty** one is not. Setti
 starts the server and lets anyone connect as the `centrifugo` user with no credential. Verified
 on the wire; see `TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`.
 
+**On Kubernetes, the NATS StatefulSet now refuses to start rather than accepting either
+mistake.** An initContainer (`require-centrifugo-password` in
+`deploy/k8s/base/infra/nats.yaml`) checks the variable before nats-server runs and fails the pod
+with a message naming the rule — so a half-provisioned cluster stays down instead of serving
+while unauthenticated. It rejects an empty or unset value, a first character that is not an
+ASCII letter, and the two values a leading letter does *not* save, `true` and `false`. The local
+overlay deletes the container by name: it drops `-c nats.conf`, never reads this file, and
+legitimately has no password. This does not help you outside Kubernetes — the constraint is
+still yours to honour if you run nats-server directly.
+
 ### Email (`worker-email`)
 
 | Variable | Default | Purpose |

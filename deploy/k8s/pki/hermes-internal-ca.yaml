@@ -31,8 +31,17 @@
 #     CertificateRequest approval RBAC.
 #
 # Trading an unbounded, invisible compromise for a bounded, auditable one is worth it. The
-# residual — any namespace may request a certificate this CA signs — is NOT closed here and is
-# recorded in ADR 0005 as the remaining gap.
+# residual phase 4 named — any namespace may request a certificate this CA signs — is now
+# closed by restrict-internal-ca.yaml beside this file, a ValidatingAdmissionPolicy that denies
+# Certificates and CertificateRequests naming this ClusterIssuer from anywhere but `hermes`.
+# Verified on a k3s v1.33.6 cluster in both directions, including the direct-CertificateRequest
+# path that bypasses Certificate entirely.
+#
+# What remains open is narrower and is NOT addressed: anyone who can create a Certificate IN
+# `hermes` can still request a leaf for any identity, including SAN nats.hermes.svc. That is a
+# SAN constraint rather than a namespace one, and it is the line a ValidatingAdmissionPolicy
+# cannot express well and cert-manager-approver-policy can. See restrict-internal-ca.yaml for
+# why approver-policy was not adopted for this.
 #
 # THIS DIRECTORY IS NOT UNDER base/. base/kustomization.yaml sets `namespace: hermes`, and the
 # kustomize namespace transformer would rewrite the `namespace: cert-manager` below — putting

@@ -193,6 +193,11 @@ jobs:
       - run: helm dependency build charts/hermes/
       - run: helm lint charts/hermes/ --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test --set global.domain=test.example.com
       - run: jq . charts/hermes/values.schema.json > /dev/null
+      # check_helm_render.py parses rendered YAML and now fails rather than skips without
+      # PyYAML. See the same step in the manifests job for why relying on the runner image
+      # shipping it was a latent way to turn the gate off.
+      - name: Install the manifest gates' Python dependencies
+        run: python3 -m pip install --disable-pip-version-check -r scripts/requirements.txt
       - name: Unit-test the chart render gate
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
       # This step replaces `helm template ... > /dev/null`, which proved the chart renders
@@ -241,6 +246,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # Every gate below parses rendered YAML and so needs PyYAML. Nothing declared it: the
+      # steps passed because ubuntu-latest happens to ship PyYAML for the system python3, and
+      # the gates treated its absence as a reason to SKIP and exit 0. A runner image change
+      # would therefore have turned six controls off at once with no failing step. The gates
+      # now fail closed on a missing PyYAML, which makes this step load-bearing rather than
+      # belt-and-braces.
+      - name: Install the manifest gates' Python dependencies
+        run: python3 -m pip install --disable-pip-version-check -r scripts/requirements.txt
 
       - name: Validate all overlays render cleanly
         run: |
@@ -291,6 +305,26 @@ jobs:
         run: |
           kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_workload_resources.py -
           kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_workload_resources.py - --require-hpa
+
+      # Finding 53. An EMPTY $HERMES_CENTRIFUGO_NATS_PASSWORD is not a parse error — the
+      # server starts and accepts a `centrifugo` client presenting no credential at all. The
+      # guard is an initContainer, so a cluster missing it looks perfectly healthy and there
+      # is no runtime signal to alert on. Local is checked too, and legitimately passes
+      # without the guard: it drops `-c nats.conf` and never reads the accounts file.
+      - name: NATS must refuse to start on an empty Centrifugo password
+        run: |
+          kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_nats_password_guard.py -
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_nats_password_guard.py -
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_nats_password_guard.py -
+
+      # ADR 0005 phase 4's named residual. A `ca` ClusterIssuer can be referenced from ANY
+      # namespace, and a leaf it signs is trusted by every Hermes service — enough to
+      # impersonate the NATS server. The policy closing it has two silently-inert shapes:
+      # unbound, or bound with Warn instead of Deny.
+      - name: The internal CA must only be usable from the hermes namespace
+        run: |
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_ca_issuer_policy.py -
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_ca_issuer_policy.py -
 
   infra-scripts:
     name: Infra Shell Library
