@@ -183,9 +183,10 @@ export class InboxStore {
     //
     // The other order loses anything published between the list response and the subscription
     // going live: Centrifugo has no channel to deliver it to yet, so the publication is
-    // discarded outright rather than queued. `recoverable: true` covers that gap only on a
-    // deployment whose engine keeps history, which the bundled Helm Centrifugo -- memory engine,
-    // no history configured -- does not.
+    // discarded outright rather than queued. Subscription-level recovery would cover that gap
+    // only on a deployment whose broker keeps history — which neither the bundled Helm
+    // Centrifugo (memory engine) nor the k8s overlays (`broker: nats`, at-most-once) do, which
+    // is why the client no longer asks for it. See {@link reconcile} and issue #102.
     //
     // Listing after the channel is live turns that lost update into a harmless duplicate
     // instead: an arrival that also appears in the page is deduped by id in the reducer, and
