@@ -26,8 +26,10 @@ spec:
 # trips) and spends its time blocked rather than running.
 #
 # What differs is the rate. The rate limiter admits 2000 req/s sustained with a 5000 burst per
-# credential (internal/send/server.go:94), four times admin's 500/s and 1000
-# (internal/admin/server.go:161) — and admin's ceiling is really Postgres, not the limiter. CPU is
+# credential (send's defaultRateLimitPerSecond/defaultRateLimitBurst in internal/send/server.go),
+# four times admin's 500/s and 1000 — and admin's ceiling is really Postgres, not the limiter.
+# Both are overridable per Deployment via HERMES_RATELIMIT_BURST / HERMES_RATELIMIT_PER_SECOND,
+# and both are enforced PER REPLICA, so the cluster ceiling scales with the HPA below. CPU is
 # therefore both the binding resource and the right autoscaling signal, which is why the
 # request is 300m rather than admin's 200m: the HPA targets 70% of it, so a higher request
 # means each replica absorbs more before a scale-up, and the committed floor is honest about

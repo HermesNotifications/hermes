@@ -88,6 +88,52 @@ func TestHandler_AllowsSendWithTheSendPermission(t *testing.T) {
 	}
 }
 
+// The rate limiter used to bucket on the raw Authorization header while
+// APIKeyMiddleware stripped the "Bearer " prefix before validating. One
+// credential presented both ways therefore authenticated as the same key but
+// drew from two separate buckets — a free doubling of its limit, available to
+// anyone who noticed. Bucketing on the validated key ID is what closes it.
+func TestHandler_BearerPrefixDoesNotBuyASecondRateLimitBucket(t *testing.T) {
+	raw, keyID, err := auth.GenerateAPIKey("")
+	if err != nil {
+		t.Fatalf("generate api key: %v", err)
+	}
+	_, secret, err := auth.ParseAPIKey(raw)
+	if err != nil {
+		t.Fatalf("parse api key: %v", err)
+	}
+
+	store := &mockStore{apiKeys: []models.APIKey{{
+		ID:          keyID,
+		KeyHash:     auth.HMACHashAPIKey(secret, testHMACSecret),
+		Permissions: []string{auth.PermNotificationsSend},
+	}}}
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	srv := send.NewServer(store, &mockPublisher{}, nil, nil, testHMACSecret, logger)
+	srv.ConfigureRateLimit(true, 1, 1) // one request, then the bucket is empty
+	handler := srv.Handler()
+
+	sendWith := func(authorization string) int {
+		body := `{"to":{"organization_id":"org_1","user_id":"usr_1"},` +
+			`"content":{"title":"t","body":"b"},"channels":["inbox"]}`
+		req := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", authorization)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if code := sendWith("Bearer " + raw); code == http.StatusTooManyRequests {
+		t.Fatalf("the first request should have been admitted, got %d", code)
+	}
+	if code := sendWith(raw); code != http.StatusTooManyRequests {
+		t.Errorf("the same credential without the Bearer prefix got a second bucket: "+
+			"expected 429, got %d", code)
+	}
+}
+
 func TestHandler_RejectsAnUnauthenticatedSend(t *testing.T) {
 	handler, _ := authenticatedServer(t, auth.PermNotificationsSend)
 

@@ -253,6 +253,44 @@ Hermes rejects rather than silently dropping work that it has already acknowledg
 [ADR 0010](adr/0010-bounded-work-streams-reject-rather-than-drop.md). A `202` therefore remains
 a real commitment.
 
+### Rate Limits
+
+Requests are rate limited per credential — per API key on the Send and Admin APIs, per user on
+the Inbox and User APIs. Exceeding the limit returns `429 Too Many Requests`:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 3
+RateLimit-Limit: 2000
+RateLimit-Remaining: 0
+RateLimit-Reset: 3
+
+{"error": "rate limit exceeded"}
+```
+
+| Header | Meaning |
+|---|---|
+| `Retry-After` | Whole seconds to wait before retrying. Always at least `1`. |
+| `RateLimit-Limit` | Sustained requests per second allowed for this credential. |
+| `RateLimit-Remaining` | Requests available right now. Sent on successful responses too. |
+| `RateLimit-Reset` | Seconds until capacity is available. Sent only on a 429. |
+
+**Honour `Retry-After`.** Retrying sooner does not shorten the wait, and retrying in a tight loop
+wastes your own quota. Back off, ideally with jitter so a fleet of your workers does not
+synchronise.
+
+Defaults are 2000 req/s (5000 burst) for Send, 500/s (1000 burst) for Admin, and 20/s (50 burst)
+per user for Inbox and User. Operators can change these per deployment — see
+[configuration](configuration.md#http-rate-limiting) — so treat the values in `RateLimit-Limit`
+as authoritative over anything hardcoded in your client.
+
+If you are self-hosting or running against a multi-replica deployment, note that the limit is
+enforced per replica; the effective ceiling is higher than the per-replica figure and varies with
+autoscaling. Do not build a client that depends on hitting an exact threshold.
+
+`/healthz` and `/readyz` are never rate limited.
+
 ### Checking Notification Status
 
 ```bash

@@ -160,3 +160,29 @@ Render per-service OpenTelemetry service identity. Call with
   value: hermes-{{ .service }}
 {{- end }}
 {{- end }}
+
+{{/*
+Render the HTTP rate-limit env for one service. Call with the service's own
+values block, e.g. (include "hermes.rateLimitEnv" .Values.send).
+
+The knobs are per service because each service is its own Deployment. Note that
+enforcement is PER REPLICA: the cluster-wide ceiling is the configured rate times
+the replica count, so size these per pod, not per fleet. An empty burst or
+perSecond keeps the service's compiled-in default.
+*/}}
+{{- define "hermes.rateLimitEnv" -}}
+{{- with .rateLimit }}
+{{- if hasKey . "enabled" }}
+- name: HERMES_RATELIMIT_ENABLED
+  value: {{ .enabled | quote }}
+{{- end }}
+{{- if .burst }}
+- name: HERMES_RATELIMIT_BURST
+  value: {{ .burst | quote }}
+{{- end }}
+{{- if .perSecond }}
+- name: HERMES_RATELIMIT_PER_SECOND
+  value: {{ .perSecond | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
