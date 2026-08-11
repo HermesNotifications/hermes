@@ -13,6 +13,20 @@ import (
 	"github.com/hermes-notifications/hermes/internal/auth"
 	id "github.com/hermes-notifications/hermes/internal/id/v2"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermes-notifications/hermes/internal/observability"
+	"go.opentelemetry.io/otel/metric"
+)
+
+var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/send")
+
+// publishRejectionCounter is the signal that the pipeline is refusing work.
+// Before the work streams were bounded this could only mean NATS was
+// unreachable; it now also means a stream hit its ceiling, which is the
+// condition an operator needs to see before callers start reporting 503s.
+var publishRejectionCounter, _ = meter.Int64Counter(
+	"hermes.send.publish_rejections",
+	metric.WithDescription("Send requests refused because the notification could not be published to NATS."),
+	metric.WithUnit("1"),
 )
 
 type sendRecipient struct {
@@ -130,7 +144,20 @@ func (s *Server) registerSendRoutes() {
 
 		if err := s.nats.Publish(ctx, "notification.send", msgBytes); err != nil {
 			s.logger.Error("failed to publish to NATS", "error", err, "notification_id", notifID)
-			return nil, huma.NewError(http.StatusServiceUnavailable, "service temporarily unavailable")
+			publishRejectionCounter.Add(ctx, 1)
+			// Now that the work streams are bounded with DiscardNew, a publish can
+			// fail because the pipeline is saturated rather than because NATS is
+			// unreachable. Both are "we could not accept this, try later", so the
+			// status stays 503 — a 429 would blame the caller for a backlog that a
+			// stalled consumer, not their request rate, most likely caused.
+			//
+			// What was missing is the "try later" half: a 503 with no Retry-After
+			// leaves a client to invent a backoff, and the ones that invent badly
+			// retry hardest exactly when the pipeline is already behind.
+			return nil, huma.ErrorWithHeaders(
+				huma.NewError(http.StatusServiceUnavailable, "service temporarily unavailable"),
+				http.Header{"Retry-After": []string{"5"}},
+			)
 		}
 
 		resp := &sendOutput{}

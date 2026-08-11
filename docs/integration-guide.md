@@ -227,6 +227,28 @@ curl -X POST https://hermes.example.com/admin/v1/send \
 
 If the same organization + idempotency key has been seen before, Hermes returns the existing notification ID with a `202 Accepted` status.
 
+### When Hermes cannot accept a send
+
+`POST /v1/send` returns `503 Service Unavailable` with a `Retry-After` header when the
+notification cannot be handed to the pipeline — either the message bus is unreachable, or the
+delivery backlog has reached its configured ceiling because something downstream has stalled.
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/problem+json
+Retry-After: 5
+```
+
+**Retry, honouring `Retry-After`.** A 503 here means the notification was *not* accepted — no
+notification ID was issued and nothing will be delivered — so unlike a timeout there is no
+ambiguity about whether the send happened. Retrying with the same `X-Idempotency-Key` is safe
+and is the recommended pattern: if an earlier attempt did in fact succeed, the retry returns
+that attempt's notification ID instead of creating a second notification.
+
+Hermes rejects rather than silently dropping work that it has already acknowledged; see
+[ADR 0010](adr/0010-bounded-work-streams-reject-rather-than-drop.md). A `202` therefore remains
+a real commitment.
+
 ### Checking Notification Status
 
 ```bash

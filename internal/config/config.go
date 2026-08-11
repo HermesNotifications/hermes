@@ -64,6 +64,13 @@ type Config struct {
 	// pipeline stays full without hoarding the backlog. Tunable for load-test sweeps.
 	DispatchPrefetch int
 
+	// NATSStreamMaxBytes bounds each JetStream work stream on disk. Only the
+	// provisioner Job's value takes effect — under ADR 0005 phase 4 it is the one
+	// identity permitted to create or update a stream. Zero keeps
+	// messaging.DefaultStreamMaxBytes. Size it against the NATS volume: three
+	// work streams plus the 1 GiB DLQ must fit with room to spare.
+	NATSStreamMaxBytes int64
+
 	// DynamoDB / ExtendDB — set DynamoEndpoint to an ExtendDB URL for local dev and
 	// multi-cloud environments; leave empty to use native DynamoDB on AWS.
 	DynamoEndpoint string
@@ -100,6 +107,7 @@ func Load() Config {
 		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
 		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 8),
 		DispatchPrefetch:    envInt("HERMES_DISPATCH_PREFETCH", 64),
+		NATSStreamMaxBytes:  int64(envInt("HERMES_NATS_STREAM_MAX_BYTES", 0)),
 		DynamoEndpoint:      envStr("HERMES_DYNAMO_ENDPOINT", ""),
 		DynamoRegion:        envStr("HERMES_DYNAMO_REGION", "us-east-1"),
 		Environment:         envStr("HERMES_ENV", EnvDevelopment),

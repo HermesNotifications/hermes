@@ -21,11 +21,24 @@ type Client struct {
 	conn *nats.Conn
 	js   jetstream.JetStream
 
+	// streamMaxBytes bounds each work stream. Zero means DefaultStreamMaxBytes.
+	streamMaxBytes int64
+
 	// done is closed by Close to unblock the worker pools and fetcher callbacks
 	// started by Subscribe so they exit instead of leaking. closeOnce guards it.
 	done      chan struct{}
 	closeOnce sync.Once
 }
+
+// DefaultStreamMaxBytes bounds each of the three work streams on disk.
+//
+// The NATS PVC is 5Gi (deploy/k8s/base/infra/nats.yaml). Three work streams at
+// 512 MiB plus the 1 GiB DLQ is 2.5 GiB, half the volume, which leaves room for
+// the store's own overhead and for a stream to sit at its ceiling without
+// crowding the others. At roughly 1 KiB per message that is ~500k queued
+// messages per stream — orders of magnitude beyond a healthy backlog, so it
+// binds only when something downstream is genuinely broken.
+const DefaultStreamMaxBytes int64 = 512 << 20
 
 type StreamConfig struct {
 	Name     string
@@ -44,7 +57,8 @@ var Streams = []StreamConfig{
 type Option func(*connectOptions)
 
 type connectOptions struct {
-	nats []nats.Option
+	nats           []nats.Option
+	streamMaxBytes int64
 	// errs collects option failures that cannot be expressed as a nats.Option — loading
 	// an NKey seed happens eagerly, unlike a CA bundle, which nats.go reads at dial
 	// time. Collected rather than returned so Connect reports every problem at once.
@@ -68,6 +82,17 @@ func WithCABundle(path string) Option {
 	}
 }
 
+// WithStreamMaxBytes overrides the per-work-stream disk ceiling. Zero or less
+// keeps DefaultStreamMaxBytes. Only the provisioner's value has any effect,
+// since it is the one identity permitted to create or update a stream.
+func WithStreamMaxBytes(n int64) Option {
+	return func(o *connectOptions) {
+		if n > 0 {
+			o.streamMaxBytes = n
+		}
+	}
+}
+
 func Connect(url string, opts ...Option) (*Client, error) {
 	var co connectOptions
 	for _, opt := range opts {
@@ -87,10 +112,15 @@ func Connect(url string, opts ...Option) (*Client, error) {
 		nc.Close()
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
-	return &Client{conn: nc, js: js, done: make(chan struct{})}, nil
+	return &Client{conn: nc, js: js, streamMaxBytes: co.streamMaxBytes, done: make(chan struct{})}, nil
 }
 
 func (c *Client) SetupStreams(ctx context.Context) error {
+	maxBytes := c.streamMaxBytes
+	if maxBytes <= 0 {
+		maxBytes = DefaultStreamMaxBytes
+	}
+
 	for _, s := range Streams {
 		_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 			Name:      s.Name,
@@ -98,6 +128,18 @@ func (c *Client) SetupStreams(ctx context.Context) error {
 			Retention: jetstream.WorkQueuePolicy,
 			Storage:   jetstream.FileStorage,
 			MaxAge:    7 * 24 * time.Hour,
+			MaxBytes:  maxBytes,
+			// DiscardNew, not DiscardOld. These streams carry accepted work: a
+			// notification the API already returned 202 for. Discarding the oldest
+			// message to make room would silently destroy that work, and the
+			// caller would have been told it was accepted. Rejecting the newest
+			// instead pushes the failure back to the publisher, which can still
+			// tell its caller — see the 503 in internal/send/handler_send.go.
+			//
+			// The DLQ takes the opposite choice for the opposite reason: nothing
+			// is waiting on a dead letter, so there keeping the oldest evidence
+			// beats keeping the newest.
+			Discard: jetstream.DiscardNew,
 		})
 		if err != nil {
 			return fmt.Errorf("create stream %s: %w", s.Name, err)
