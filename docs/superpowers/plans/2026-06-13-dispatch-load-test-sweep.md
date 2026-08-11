@@ -41,7 +41,7 @@
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
 
@@ -106,7 +106,7 @@ Expected: FAIL — `undefined: Summarize` / `undefined: tValue`.
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 // Package dispatchbench measures dispatch consumer throughput across a matrix of
 // worker-pool / prefetch / backend configurations and summarizes the results.
@@ -191,7 +191,7 @@ git commit -m "feat(dispatchbench): throughput statistics (mean, CI95, CV)"
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
 
@@ -241,7 +241,7 @@ Expected: FAIL — `undefined: Cells` / `undefined: Shuffle`.
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
 
@@ -300,7 +300,7 @@ git commit -m "feat(dispatchbench): sweep matrix and seeded shuffle"
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
 
@@ -365,7 +365,7 @@ Expected: FAIL — `undefined: Result` / `Recommend` / `WriteCSV` / `Markdown`.
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
 
@@ -500,7 +500,7 @@ The runner does the actual measurement against real infra. It is exercised by a 
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
 
@@ -597,7 +597,7 @@ func (r *Runner) waitDrained(ctx context.Context) error {
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 //go:build integration
 
@@ -650,7 +650,7 @@ This is the composition root: flags, infra, seed, the sweep loop, and the three 
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package main
 

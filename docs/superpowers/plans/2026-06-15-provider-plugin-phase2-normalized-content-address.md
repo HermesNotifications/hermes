@@ -116,7 +116,7 @@ incrementally.
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -240,7 +240,7 @@ git commit -m "feat(provider): add per-channel content schema to the registry"
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package models_test
 
@@ -381,7 +381,7 @@ DROP TABLE IF EXISTS template_channel_content;
 //go:build integration
 
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -443,7 +443,7 @@ template's fixed fields via the registry schema, so both representations agree.
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -612,7 +612,7 @@ Place this block after the `for rows.Next()` loop and after `rows.Err()` is know
 //go:build integration
 
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -700,7 +700,7 @@ git commit -m "feat(store): dual-write and load normalized template content"
 
 ```go
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -813,7 +813,7 @@ templates): replace the final `return users, rows.Err()` with:
 //go:build integration
 
 // Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 

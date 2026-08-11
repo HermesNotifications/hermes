@@ -4,10 +4,11 @@ Event-driven notification platform. Send notifications across email, SMS, and in
 
 ## Legal
 
-This software is provided as-is for non-commercial use. It is **not approved for use in
-safety-critical, medical, financial, or infrastructure systems**, and is **not intended
-for use in the European Economic Area**. Users are responsible for compliance with all
-applicable local laws. See [NOTICE](./NOTICE) and [LICENSE](./LICENSE) for full terms.
+Hermes is developed non-commercially and supplied free of charge. It is **not designed,
+tested, or certified for use in safety-critical systems** and is **not intended for
+distribution or use within the European Economic Area**. Users are responsible for
+compliance with all applicable local laws. See [DISCLAIMER.md](./DISCLAIMER.md) for
+important usage information and [LICENSE](./LICENSE) for the license terms.
 
 ## Architecture
 
@@ -216,4 +217,5 @@ Run `make help` to see all available targets.
 
 ## License
 
-Apache License 2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for full terms and restrictions.
+Licensed under the Apache License 2.0 — see [LICENSE](./LICENSE). Important usage
+disclaimers are in [DISCLAIMER.md](./DISCLAIMER.md).
