@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 //go:build integration
 
@@ -267,6 +268,90 @@ func TestSetupStreams_CreatesDLQ(t *testing.T) {
 	}
 	if cfg.Storage != jetstream.FileStorage {
 		t.Errorf("Storage = %v, want FileStorage", cfg.Storage)
+	}
+}
+
+// The work streams carry accepted work — a notification the API already returned
+// 202 for. Unbounded, they grow until the NATS volume fills; bounded with
+// DiscardOld they would silently destroy notifications the caller was told were
+// accepted. DiscardNew is the only option that pushes the failure back to a
+// publisher that can still report it.
+func TestSetupStreams_WorkStreamsAreBoundedAndRejectRatherThanDrop(t *testing.T) {
+	client, err := messaging.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+
+	nc, err := nats.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+
+	for _, s := range messaging.Streams {
+		stream, err := js.Stream(context.Background(), s.Name)
+		if err != nil {
+			t.Errorf("%s stream not found: %v", s.Name, err)
+			continue
+		}
+		info, err := stream.Info(context.Background())
+		if err != nil {
+			t.Errorf("%s Info: %v", s.Name, err)
+			continue
+		}
+		if info.Config.MaxBytes != messaging.DefaultStreamMaxBytes {
+			t.Errorf("%s MaxBytes = %d, want %d (unbounded streams grow until the volume fills)",
+				s.Name, info.Config.MaxBytes, messaging.DefaultStreamMaxBytes)
+		}
+		if info.Config.Discard != jetstream.DiscardNew {
+			t.Errorf("%s Discard = %v, want DiscardNew — DiscardOld would drop accepted notifications",
+				s.Name, info.Config.Discard)
+		}
+	}
+}
+
+func TestSetupStreams_StreamMaxBytesIsConfigurable(t *testing.T) {
+	const custom = 64 << 20
+
+	client, err := messaging.Connect(testNATSUrl(t), messaging.WithStreamMaxBytes(custom))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer client.Close()
+
+	if err := client.SetupStreams(context.Background()); err != nil {
+		t.Fatalf("SetupStreams: %v", err)
+	}
+
+	nc, err := nats.Connect(testNATSUrl(t))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+
+	stream, err := js.Stream(context.Background(), "NOTIFICATIONS")
+	if err != nil {
+		t.Fatalf("NOTIFICATIONS stream not found: %v", err)
+	}
+	info, err := stream.Info(context.Background())
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.Config.MaxBytes != custom {
+		t.Errorf("MaxBytes = %d, want %d", info.Config.MaxBytes, custom)
 	}
 }
 

@@ -1,33 +1,4 @@
-NOTICE
-======
+Hermes
+Copyright 2026 Hermes Notifications
 
-This software is distributed under the Apache License 2.0. See LICENSE for terms.
-
-USE RESTRICTION
----------------
-This software is not designed, tested, or certified for use in safety-critical systems,
-including but not limited to: medical devices, nuclear facilities, aircraft navigation,
-life support systems, critical infrastructure, financial systems, or any application where
-failure could result in personal injury, death, or significant financial harm. Use in such
-systems is expressly prohibited.
-
-GEOGRAPHIC RESTRICTION
-----------------------
-This software is not intended for distribution or use within the European Economic Area
-(EEA). Users in EEA jurisdictions download and use this software at their own risk and
-are solely responsible for compliance with all applicable local law, including but not
-limited to the EU Cyber Resilience Act and the EU Product Liability Directive.
-
-USER RESPONSIBILITY
--------------------
-Users are solely responsible for determining the appropriateness of using this software
-in their jurisdiction, ensuring compliance with all applicable local, national, and
-international laws and regulations, and understanding all risks associated with its use.
-The author makes no representation that this software is appropriate or legally permitted
-for use in any specific jurisdiction.
-
-NO WARRANTY
------------
-This software is provided on an "AS IS" basis, free of charge, with no commercial
-relationship between the author and any user. No warranty, support, SLA, or fitness for
-any particular purpose is expressed or implied.
+Important usage information is available in the DISCLAIMER.md file, if present.

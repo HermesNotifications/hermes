@@ -4,6 +4,16 @@
 SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate natsprovision seed cleanup
 DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 
+# The manifest gates in scripts/ parse rendered YAML, so every one of them needs PyYAML.
+# Nothing used to declare that. On a machine without it each gate printed SKIP and exited 0 --
+# six controls off at once, inside a target whose whole job is catching controls that are
+# present and do nothing. CI passed for an unrelated reason: GitHub's ubuntu-latest image
+# happens to ship PyYAML for the system python3, so a runner image change would have turned
+# every gate off with no failing step. The gates now exit non-zero when it is missing, and
+# this venv is what stops that being a daily annoyance.
+VENV   := .venv
+PYTHON := $(VENV)/bin/python
+
 # --- Build ---
 GO_BUILD := go run github.com/DataDog/orchestrion go build
 ifdef FAST
@@ -29,6 +39,17 @@ test-e2e:          ## Run E2E tests only (requires make infra-up)
 lint:              ## Run golangci-lint
 	golangci-lint run
 
+# SPDX license headers (policy in .licenserc.yaml). Pinned so local and CI agree.
+LICENSE_EYE := go run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
+
+.PHONY: license-check
+license-check:     ## Check that covered source files carry the SPDX license header
+	$(LICENSE_EYE) header check
+
+.PHONY: license-fix
+license-fix:       ## Insert the SPDX license header into files missing it
+	$(LICENSE_EYE) header fix
+
 # --- Verify ---
 # The completion gate for parallel agent work (.claude/ownership.json). Everything
 # here must run without cluster or cloud credentials, so it proves manifests and
@@ -36,70 +57,99 @@ lint:              ## Run golangci-lint
 #
 # `tf-check` is deliberately NOT part of this target; it runs in CI instead. The
 # reasoning is recorded in full above that target, under "Terraform".
+#
+# `license-check` IS part of it. It is enforced by the ci.yml Lint job, so a tree
+# that passes `verify` while failing the header policy is a green local gate that
+# fails CI -- which is exactly what happened on PR #96, where a new file carried
+# the pre-SPDX header and nothing local said so. The pre-commit hook covers the
+# same ground, but hooks are opt-in (`make hooks`) and this target is what agent
+# work and CONTRIBUTING both point at.
+# Provisions the interpreter every manifest gate runs on. Depending on requirements.txt
+# rather than order-only is deliberate: a pinned bump must rebuild the venv, and `touch`
+# updates the directory mtime make compares against.
+$(VENV): scripts/requirements.txt
+	python3 -m venv $(VENV)
+	$(VENV)/bin/pip install --quiet --disable-pip-version-check -r scripts/requirements.txt
+	@touch $(VENV)
+
 .PHONY: verify verify-manifests
 verify:            ## Full local verification gate (no infra needed)
 	go build ./...
 	go test ./... -count=1
 	golangci-lint run
+	$(MAKE) license-check
 	$(MAKE) verify-manifests
-verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
+verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and CI YAML
 	kubectl kustomize deploy/k8s/overlays/local > /dev/null
 	kubectl kustomize deploy/k8s/overlays/staging > /dev/null
 	kubectl kustomize deploy/k8s/overlays/production > /dev/null
-	python3 -c "import yaml, glob; [list(yaml.safe_load_all(open(p))) for p in glob.glob('infra/crossplane/**/*.yaml', recursive=True) + glob.glob('deploy/kargo/**/*.yaml', recursive=True) + glob.glob('.github/workflows/*.yml')]"
+	$(PYTHON) -c "import yaml, glob; [list(yaml.safe_load_all(open(p))) for p in glob.glob('infra/crossplane/**/*.yaml', recursive=True) + glob.glob('deploy/kargo/**/*.yaml', recursive=True) + glob.glob('.github/workflows/*.yml')]"
 	@# Finding 47: a NetworkPolicy whose podSelector matches nothing is silently inert.
 	@# kustomize build and kubectl apply both accept it, so only this catches it.
-	python3 -m unittest discover -s scripts -p 'test_*.py' -t scripts
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_networkpolicy_selectors.py -
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_networkpolicy_selectors.py -
+	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py' -t scripts
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_networkpolicy_selectors.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	@# ADR 0005 phase 4: the CA private key must not render into the application namespace.
 	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_ca_key_location.py - --namespace hermes
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_ca_key_location.py - --namespace hermes
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_ca_key_location.py - --namespace hermes
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_ca_key_location.py - --namespace hermes
 	@# ADR 0006. A Job's spec.template is immutable and Kargo rewrites its image tag on every
 	@# promotion, so a Job that is not an ArgoCD hook applies once and fails the SECOND
 	@# promotion with `field is immutable` -- while the Application still reports Healthy.
 	@# Established by stashing the fix rather than assuming: every other step in this target
 	@# passes identically with that defect present and absent.
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_job_hooks.py -
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_job_hooks.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_job_hooks.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_job_hooks.py -
 	@# Finding 36. A one-character typo in a PDB selector (`hermes-sned`) took expectedPods
 	@# from 3 to 0 with no error from kustomize, kubectl or the API server.
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_pdb_selectors.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_pdb_selectors.py -
 	@# Finding 8. hermes-send rendered with no resource requests, no HPA and no PDB and
 	@# nothing objected. An HPA whose target declares no request for the resource it measures
 	@# reports ScalingActive=False / FailedGetResourceMetric and silently never scales.
 	@# The local overlay is deliberately exempt -- see the module docstring for why.
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_workload_resources.py -
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_workload_resources.py - --require-hpa
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_workload_resources.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_workload_resources.py - --require-hpa
+	@# Finding 53. An EMPTY $$HERMES_CENTRIFUGO_NATS_PASSWORD is not a parse error: the server
+	@# starts and accepts a `centrifugo` client presenting no credential at all. The guard is
+	@# an initContainer, so its absence has no runtime signal -- the cluster looks healthy.
+	@# Conditional on the server reading `-c nats.conf`, which is why local is checked too and
+	@# legitimately passes without the guard.
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_nats_password_guard.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_nats_password_guard.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_nats_password_guard.py -
+	@# ADR 0005 phase 4's named residual: a `ca` ClusterIssuer can be referenced from ANY
+	@# namespace, and a leaf it signs is trusted by every Hermes service. The policy that
+	@# closes it has two silent-inert shapes -- unbound, or bound with Warn instead of Deny.
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_ca_issuer_policy.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_ca_issuer_policy.py -
 	@# Centrifugo 403s any websocket whose Origin is not listed, but permits connections with
 	@# no Origin at all -- so /health, curl and every server-side client succeed while no
 	@# browser can connect. The local overlay shipped with no allowed_origins and the first
 	@# live browser run spent 45 minutes failing 24 specs to say only "connecting".
 	@# All three overlays: this is the one control whose absence is invisible everywhere else.
-	kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_centrifugo_origins.py -
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_centrifugo_origins.py -
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_centrifugo_origins.py -
 	@# The memory engine gives each Centrifugo node its own subscription registry, so above one
 	@# replica a publication reaches only the clients on the node that received it -- silently,
 	@# with nothing in any log or health check to say so. production.md has said this in prose
 	@# since the chart shipped; prose does not fail a render.
-	kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_centrifugo_engine.py -
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_centrifugo_engine.py -
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_centrifugo_engine.py -
 	@# JetStream defaults to one replica when Replicas is unset, which is what every stream ran
 	@# with on a three-node cluster: `nats stream ls` looks healthy, every publish succeeds, and
 	@# the first evidence is a node going away and taking NOTIFICATIONS or DELIVERY with it.
 	@# All three overlays -- staging and local are the single-node cases the gate must also pass.
-	kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_nats_stream_replicas.py -
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_nats_stream_replicas.py -
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_nats_stream_replicas.py -
 	@# Every Hermes image is FROM scratch, so preStop.exec cannot run `sleep` and the drain
 	@# delay lives in-process instead. That splits one budget across a manifest and an env var,
 	@# which is precisely the pairing that drifts: exceed terminationGracePeriodSeconds and the
 	@# kubelet SIGKILLs mid-drain, which is strictly worse than not draining at all.
-	kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_shutdown_budget.py -
-	kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_shutdown_budget.py -
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_shutdown_budget.py -
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_shutdown_budget.py -
 	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
 	@# or rejects. It shipped with 17 passing tests that nothing ran.
 	./infra/scripts/test-lib.sh
@@ -112,7 +162,7 @@ verify-manifests:  ## Static validation of k8s overlays, Crossplane and CI YAML
 # for /v1/templates, /v1/apikeys, /v1/organizations or /v1/subscriptions, and rendering
 # the bundled NATS images under the Hermes registry. All of it renders cleanly.
 .PHONY: verify-chart
-verify-chart:      ## Check the rendered Helm chart against the Go source it deploys
+verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it deploys
 	@# Absent helm must fail loudly. A gate that skips when its tool is missing is the
 	@# same class of defect as the one this target exists to close.
 	@command -v helm >/dev/null 2>&1 || { \
@@ -125,18 +175,18 @@ verify-chart:      ## Check the rendered Helm chart against the Go source it dep
 	helm template verify charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
-	  | python3 scripts/check_helm_render.py - --source-root=.
+	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
 	@# The same two gates the kustomize overlays get. Running them only over kustomize is
 	@# exactly how the chart drifted into shipping no PDBs, no grace periods and empty
 	@# resource requests while the overlays had all three.
 	helm template verify charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
-	  | python3 scripts/check_workload_resources.py - --skip=nats,centrifugo,postgresql,redis
+	  | $(PYTHON) scripts/check_workload_resources.py - --skip=nats,centrifugo,postgresql,redis
 	helm template verify charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
-	  | python3 scripts/check_shutdown_budget.py -
+	  | $(PYTHON) scripts/check_shutdown_budget.py -
 	@# Optional features render into workloads the default install never produces, so they
 	@# need their own pass -- hermes-cleanup was missing from the cd.yml publish matrix and
 	@# only shows up when the CronJob renders.
@@ -145,7 +195,7 @@ verify-chart:      ## Check the rendered Helm chart against the Go source it dep
 	  --set global.domain=verify.example.com \
 	  --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
 	  --set observability.enabled=true \
-	  | python3 scripts/check_helm_render.py - --source-root=.
+	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
 	@# The production posture must be refused at render time, not discovered as a
 	@# crash-loop. Bundled sub-charts cannot satisfy config.Validate(), so this must fail.
 	@if helm template verify charts/hermes/ \
@@ -211,11 +261,20 @@ sdk-python:        ## Generate Python server SDK
 		-o sdks/python/hermes-server-sdk \
 		--additional-properties=packageName=hermes_server_sdk,projectName=hermes-server-sdk \
 		--global-property=skipFormModel=true
+# The inner double quotes on licenseName are literal, and load-bearing. The npx wrapper joins
+# its argv back into a command string and re-splits it, so ordinary shell quoting is already
+# gone by the time the generator parses anything: `licenseName="Apache License 2.0"` arrives as
+# three arguments and the run dies with `Found unexpected parameters: [License, 2.0]`. Quoting
+# the whole key=value, so the quotes survive *into* the wrapper, is what keeps the space
+# intact. This is the only additional-property here whose value contains a space, which is why
+# it is the only one that needs it.
 sdk-java:          ## Generate Java server SDK
 	npx @openapitools/openapi-generator-cli generate \
 		-i api/admin/openapi.yaml -g java \
 		-o sdks/java/hermes-server-sdk \
 		--additional-properties=artifactId=hermes-server-sdk,groupId=com.hermes,invokerPackage=com.hermes.sdk,apiPackage=com.hermes.sdk.api,modelPackage=com.hermes.sdk.model,hideGenerationTimestamp=true \
+		--additional-properties='"licenseName=Apache License 2.0"' \
+		--additional-properties=licenseUrl=https://www.apache.org/licenses/LICENSE-2.0.txt \
 		--global-property=skipFormModel=true
 sdk-dotnet:        ## Generate .NET server SDK
 	npx @openapitools/openapi-generator-cli generate \

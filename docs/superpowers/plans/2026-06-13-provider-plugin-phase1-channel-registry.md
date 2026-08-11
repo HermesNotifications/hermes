@@ -51,8 +51,9 @@
 Create `internal/provider/registry_test.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -121,8 +122,9 @@ Expected: FAIL — build error, `undefined: NewRegistry`, `ChannelDescriptor`, `
 Create `internal/provider/channel.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -180,8 +182,9 @@ type ChannelDescriptor struct {
 Create `internal/provider/manifest.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -199,8 +202,9 @@ type Manifest struct {
 Create `internal/provider/registry.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -274,8 +278,9 @@ Expected: PASS (4 tests).
 Create `internal/provider/builtins_test.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -350,8 +355,9 @@ Expected: FAIL — `undefined: Builtins`.
 Create `internal/provider/builtins.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -436,8 +442,9 @@ These two tiny accessors are the boundary between the registry's string keys and
 Create `internal/dispatch/channels_internal_test.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatch
 

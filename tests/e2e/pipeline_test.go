@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 //go:build integration
 
@@ -23,6 +24,7 @@ import (
 	"github.com/hermes-notifications/hermes/internal/dispatch"
 	"github.com/hermes-notifications/hermes/internal/eventwriter"
 	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermes-notifications/hermes/internal/models"
 	"github.com/hermes-notifications/hermes/internal/send"
 	"github.com/hermes-notifications/hermes/internal/store/postgres"
 	"github.com/nats-io/nats.go"
@@ -162,8 +164,8 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	rec := doRequest("POST", "/v1/send", map[string]any{
 		"to": map[string]any{
 			"organization_id": organizationID,
-			"user_id":   "pipeline-user-" + runID,
-			"contacts":  map[string]any{"email": "pipeline-user-" + runID + "@example.com"},
+			"user_id":         "pipeline-user-" + runID,
+			"contacts":        map[string]any{"email": "pipeline-user-" + runID + "@example.com"},
 		},
 		"template": templateSlug,
 		"data":     map[string]string{"name": "Alice"},
@@ -234,16 +236,30 @@ func TestPipeline_DispatchAndEventWriter(t *testing.T) {
 	}
 	t.Logf("notification channels: %v", notif.Channels)
 
-	// The dispatch service publishes "routing.dispatched" events which don't trigger a status
-	// update (only email.routed, inbox.routed etc. do). Without a delivery worker
-	// running, status stays "pending". This is correct behavior — the pipeline
-	// delivered the message to the delivery streams but no worker consumed them.
-	t.Logf("notification status: %s (expected pending — no delivery worker running)", notif.Status)
-	if notif.Status != "pending" {
-		// If a delivery worker happens to be running, status could advance.
-		// Either way, it should not be empty.
-		if notif.Status == "" {
-			t.Fatal("notification status is empty")
+	// No delivery worker is running here, so nothing publishes "<channel>.sent" and the
+	// status cannot reach "delivered". It must still reach "sent": dispatch publishes
+	// "notification.sent" once it has handed the notification to the delivery subjects, and
+	// that is what occupies rank 1 of the ladder. Before that event existed the status sat at
+	// "pending" through a completely successful dispatch, which is what this assertion pins.
+	//
+	// Polled rather than read once: the status update rides the event writer's batch flush,
+	// which is a separate round trip from the events read above.
+	deadline = time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if notif.Status != "pending" {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+		notif, err = st.GetNotificationByID(ctx, notifID)
+		if err != nil {
+			t.Fatalf("get notification: %v", err)
+		}
+	}
+	t.Logf("notification status: %s", notif.Status)
+	if notif.Status != "sent" {
+		// A delivery worker running alongside would push it further, which is fine.
+		if notif.Status.Rank() < models.StatusSent.Rank() {
+			t.Fatalf("notification status: got %q, want %q (or beyond)", notif.Status, models.StatusSent)
 		}
 	}
 

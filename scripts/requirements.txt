@@ -1,0 +1,16 @@
+# Python dependencies for the manifest gates in this directory (`make verify-manifests`).
+#
+# These gates parse rendered Kubernetes YAML, so every one of them needs PyYAML. They used to
+# treat its absence as a reason to SKIP and exit 0 — which meant that on any machine without it,
+# `make verify` printed a handful of SKIP lines among hundreds of lines of output and passed.
+# Six gates, all no-ops, all green. That is the same failure this directory exists to catch
+# (finding 47's inert NetworkPolicy, finding 36's typo'd PDB selector): a control that is present
+# and does nothing, indistinguishable from one that works.
+#
+# CI was passing for an unrelated reason — GitHub's ubuntu-latest image happens to ship PyYAML
+# for the system python3, and nothing in .github/workflows/ci.yml asked for it. A runner image
+# change would have turned every gate off at once with no failing step.
+#
+# Both halves are now fixed: the gates exit non-zero when PyYAML is missing, and `make
+# verify-manifests` provisions .venv from this file so that never happens locally.
+PyYAML==6.0.3

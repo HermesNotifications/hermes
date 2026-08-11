@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-# See LICENSE and NOTICE in the project root for full terms and restrictions.
+# Copyright Hermes Notifications
+# SPDX-License-Identifier: Apache-2.0
+# See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 """Fail if a workload has no resource requests, or an HPA can never read its metric.
 
@@ -218,8 +219,15 @@ def main(argv):
     try:
         import yaml
     except ImportError:
-        print("SKIP: PyYAML not installed; workload resource check not run", file=sys.stderr)
-        return 0
+        for line in (
+            "ERROR: PyYAML is not installed, so this gate can verify nothing.",
+            "A gate that verified nothing must not report success -- the same rule these",
+            "checks already apply to empty input. Install it with:",
+            "    python3 -m pip install -r scripts/requirements.txt",
+            "or run `make verify-manifests`, which provisions .venv from that file.",
+        ):
+            print(line, file=sys.stderr)
+        return 1
 
     paths = []
     require_hpa = False

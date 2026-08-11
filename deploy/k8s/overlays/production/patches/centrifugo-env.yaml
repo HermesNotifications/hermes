@@ -36,6 +36,41 @@ spec:
                 secretKeyRef:
                   name: hermes-secrets
                   key: HERMES_CENTRIFUGO_REDIS_ADDRESS
+            # Finding 41's second half. ElastiCache is provisioned with transitEncryption and an
+            # auth token (infra/crossplane/compositions/aws/cache.yaml), and the ExternalSecret
+            # beside this file has carried HERMES_CENTRIFUGO_REDIS_PASSWORD since ADR 0005 phase
+            # 4 — but nothing consumed it here, so production Centrifugo was reaching Redis
+            # unauthenticated and in the clear while staging did neither. The infrastructure was
+            # right and the client was not, which is the same shape as finding 14.
+            - name: CENTRIFUGO_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_REDIS_PASSWORD
+            - name: CENTRIFUGO_REDIS_TLS
+              value: "true"
+            # DELIBERATELY ABSENT: CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY.
+            #
+            # The staging patch sets it to "true" and does not say why; it arrived in 65cdb5c
+            # alongside enabling TLS at all, with a message about transit encryption and nothing
+            # about verification. Skipping verification keeps the encryption and discards the
+            # authentication, which leaves the connection open to an undetectable MITM — a
+            # weaker property than this overlay's own database and NATS settings enforce, and
+            # not one to inherit by copy-paste.
+            #
+            # It should not be needed: ElastiCache serves a certificate for its configuration
+            # endpoint signed by Amazon Trust Services, whose roots are in the standard bundle
+            # Centrifugo's image carries, and HERMES_CENTRIFUGO_REDIS_ADDRESS is that hostname.
+            # UNVERIFIED — no AWS account was reachable from this change, so this is reasoned
+            # from how ElastiCache issues certificates, not observed. If it turns out to be
+            # wrong the failure is loud (Centrifugo cannot reach Redis at startup) rather than
+            # silent, which is the right way round for a security setting. Staging's flag is
+            # left in place and is tracked as a separate item to remove once one of the two has
+            # actually been exercised against a real cluster.
+            #
+            # Note the asymmetry with NATS below: CENTRIFUGO_REDIS_TLS is a plain bool, while
+            # the NATS equivalent is a nested `nats_tls` map in centrifugo-config.json. That is
+            # Centrifugo's inconsistency, not ours — see the staging patch.
             # ADR 0005 phase 4. The full bus URL including Centrifugo's password — see the
             # staging patch for why this cannot live in centrifugo-config.json and why the
             # NATS TLS setting is a nested map there rather than a bool here.

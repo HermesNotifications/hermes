@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatch
 
@@ -21,8 +22,21 @@ import (
 	"github.com/hermes-notifications/hermes/internal/store"
 )
 
+// eventNotificationSent is published once per notification, after the fan-out, and is the
+// only event that advances a notification to StatusSent. The string is a cross-package
+// contract with eventwriter.eventToStatus, which is why it is named rather than inlined.
+const eventNotificationSent = "notification.sent"
+
+// bus is the slice of the NATS client dispatch uses. Declared as an interface so the fan-out
+// and the events that accompany it can be exercised without a broker; *messaging.Client
+// satisfies it, and cmd/dispatch still passes one.
+type bus interface {
+	Publish(ctx context.Context, subject string, data []byte) error
+	Subscribe(cfg messaging.SubscribeConfig, handler func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error) error
+}
+
 type Dispatch struct {
-	nats             *messaging.Client
+	nats             bus
 	store            store.NotificationRepository
 	users            store.UserRepository
 	organizations    store.OrganizationRepository
@@ -31,7 +45,7 @@ type Dispatch struct {
 	logger           *slog.Logger
 }
 
-func NewDispatch(nats *messaging.Client, store store.NotificationRepository, users store.UserRepository, organizations store.OrganizationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
+func NewDispatch(nats bus, store store.NotificationRepository, users store.UserRepository, organizations store.OrganizationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
 	return &Dispatch{
 		nats:             nats,
 		store:            store,
@@ -312,6 +326,7 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	}
 
 	// Fan out to delivery channels
+	var dispatched []string
 	for _, ch := range channels {
 		deliveryContent := contentForChannel(ch, content, rendered)
 
@@ -342,7 +357,23 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 		}
 
 		log.Info("published to delivery", "channel", ch)
+		dispatched = append(dispatched, ch)
 		d.publishEvent(ctx, msg.NotificationID, ch, "routing.dispatched", "info", nil)
+	}
+
+	// The hand-off to the channels is what "sent" means, and this is the event that records
+	// it. eventwriter.eventToStatus has always mapped notification.sent to StatusSent, but
+	// nothing published it: dispatch emitted only the per-channel routing.dispatched, which
+	// maps to no status. Rank 1 of the status ladder was therefore dead, and a notification
+	// jumped pending -> delivered on the first worker's "<channel>.sent".
+	//
+	// Published after the fan-out, and only when a delivery message actually reached the bus:
+	// a notification nothing was handed to has not been sent, and advancing it to "sent"
+	// would promise a delivery no worker will ever attempt.
+	if len(dispatched) > 0 {
+		d.publishEvent(ctx, msg.NotificationID, "", eventNotificationSent, "info", map[string]any{
+			"channels": dispatched,
+		})
 	}
 
 	return nil

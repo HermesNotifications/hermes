@@ -214,7 +214,7 @@ the filter into the index — deferred to Phase 2 benchmarking.
 
 Already Redis-backed (10-min TTL). No change needed.
 
-> **Amended 2026-08-10 by [ADR 0011](0011-cache-first-unread-count.md).** This was wrong, and
+> **Amended 2026-08-10 by [ADR 0014](0014-cache-first-unread-count.md).** This was wrong, and
 > wrong in a way that reading the code did not reveal: the cache was written on every list and
 > read by nothing, so the count was recomputed from the store on every page of every scroll —
 > on this path an unbounded paginated `Query` with a `FilterExpression`, billed for every item

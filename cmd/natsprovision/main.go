@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 // Command natsprovision declares the JetStream streams the pipeline runs on, then exits.
 //
@@ -39,7 +40,8 @@ func main() {
 	// the bus that can shape a stream.
 	client := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
 		messaging.WithCABundle(cfg.NATSCABundlePath),
-		messaging.WithIdentity(messaging.ProvisionerService, cfg.NATSNKeySeedPath))
+		messaging.WithIdentity(messaging.ProvisionerService, cfg.NATSNKeySeedPath),
+		messaging.WithStreamMaxBytes(cfg.NATSStreamMaxBytes))
 	defer client.Close()
 
 	opts := messaging.StreamOptions{

@@ -6,6 +6,20 @@ spec:
   replicas: 1
   template:
     spec:
+      # Finding 53. The base StatefulSet refuses to start unless
+      # HERMES_CENTRIFUGO_NATS_PASSWORD is set and begins with an ASCII letter. That guard
+      # protects the accounts file, and the args replacement below drops `-c nats.conf`, so
+      # this overlay never reads that file and legitimately has no password — the guard would
+      # block `make dev-up` for a risk that does not exist here.
+      #
+      # `$patch: delete` matches on the container's `name`, which is therefore a contract with
+      # ../../../base/infra/nats.yaml: rename it there without renaming it here and this patch
+      # silently stops matching. The failure is loud rather than silent — the local pod would
+      # sit in Init:CrashLoopBackOff with the FATAL message — but it is still a rename that
+      # breaks a second file.
+      initContainers:
+        - name: require-centrifugo-password
+          $patch: delete
       containers:
         - name: nats
           # ADR 0005 phase 2 keeps local development working without certificates, and

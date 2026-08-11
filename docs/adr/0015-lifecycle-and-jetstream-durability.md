@@ -1,14 +1,8 @@
-# ADR 0012: Drain before shutdown, and replicate the streams the cluster can lose
+# ADR 0015: Drain before shutdown, and replicate the streams the cluster can lose
 
 **Status:** Accepted
 **Date:** 2026-08-10
 **Author:** Daryl Robbins
-
-> **Numbering:** this branch is cut from PR #73, whose ADR sequence ends at its own 0010 (the
-> embeddable inbox contract). `main` has since landed a *different* 0010 (bounded work streams)
-> and an 0011 (organization-scoped API keys). Both this ADR and 0011 will therefore need
-> renumbering when #73 lands on `main` — as will #73's own 0010. Numbered against the base this
-> PR actually targets, rather than guessing at how that reconciliation will go.
 
 ---
 

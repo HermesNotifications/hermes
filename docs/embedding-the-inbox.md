@@ -215,7 +215,7 @@ Centrifugo performs its own `Origin` check via `allowed_origins`; set it for you
 
 > Cross-origin support without a proxy is a genuine gap for an embeddable widget, and is tracked
 > separately — it changes the security surface of two public services and needs its own review. See
-> [ADR 0010](adr/0010-embeddable-inbox-widget-contract.md).
+> [ADR 0013](adr/0013-embeddable-inbox-widget-contract.md).
 
 ---
 

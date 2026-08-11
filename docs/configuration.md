@@ -27,6 +27,41 @@ configuration at all.
 | `HERMES_EVENT_RETENTION_DAYS` | `90` | Age threshold for `cmd/cleanup` to delete `notification_events`. |
 | `HERMES_DISPATCH_CONCURRENCY` | `8` | Size of the **dispatch** worker pool — how many `notification.send` messages are processed in parallel. Distinct notifications are independent (status rollup is monotonic downstream), so raising this lifts dispatch throughput. The default of 8 is from the June 2026 load-test sweep ([docs/loadtest/dispatch-tuning-2026-06.md](loadtest/dispatch-tuning-2026-06.md)): throughput scales to ~16 workers, but 8 is the balanced point that leaves DB-pool headroom. Dispatch is I/O-bound, so the useful ceiling is the database pool, not CPU cores: the value is **clamped to the Postgres pool size** (`pool_max_conns`, default `max(4, NumCPU)`) and a warning is logged if set higher — raise `pool_max_conns` in `HERMES_DATABASE_URL` (and this value, toward 16) to push throughput further. |
 | `HERMES_DISPATCH_PREFETCH` | `64` | Dispatch fetcher's in-flight buffer (NATS `PullMaxMessages`) feeding the worker pool. Decouples fetching from processing so the pull pipeline stays full without one consumer hoarding the backlog. Auto-raised to at least `concurrency + 1`; the consumer's server-side `MaxAckPending` is raised to at least `prefetch + concurrency`. Tune against load tests. |
+| `HERMES_NATS_STREAM_MAX_BYTES` | `536870912` (512 MiB) | Disk ceiling for **each** of the three JetStream work streams. At the ceiling, publishes are rejected rather than old messages dropped — see [ADR 0010](adr/0010-bounded-work-streams-reject-rather-than-drop.md); a rejected publish becomes a `503` with `Retry-After` from `/v1/send`. **Only the `natsprovision` Job's value has any effect** — under [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md) phase 4 it is the sole identity permitted to create or update a stream, so setting this on a service Deployment does nothing. Size it against the NATS volume: three work streams plus the 1 GiB DLQ must fit with headroom. At the 5Gi default that is 2.5 GiB used. Raising this without growing the volume re-creates the unbounded-growth failure it exists to prevent. |
+
+### HTTP rate limiting
+
+Every HTTP service reads the same three variables. Because each service runs as its own
+Deployment, they are set **per service**, not fleet-wide.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_RATELIMIT_ENABLED` | `true` | Set `false` to disable rate limiting for that service entirely. |
+| `HERMES_RATELIMIT_BURST` | _(service default)_ | Requests admitted instantaneously per caller. Unset or `0` keeps the service default. |
+| `HERMES_RATELIMIT_PER_SECOND` | _(service default)_ | Sustained requests per second per caller. Unset or `0` keeps the service default. |
+
+Per-service defaults, and what the limit is keyed on:
+
+| Service | Burst | Per second | Keyed on |
+|---|---|---|---|
+| Send | 5000 | 2000 | API key ID |
+| Admin | 1000 | 500 | API key ID |
+| Inbox | 50 | 20 | JWT `user_id` |
+| User | 50 | 20 | JWT `user_id` |
+
+> **The limit is enforced per replica, not per cluster.** Each pod holds its own in-memory
+> buckets, so the cluster-wide ceiling is the configured rate **times the replica count** — and
+> under an [HPA](deployment-guide.md#autoscaling) that ceiling moves with the autoscaler. At the
+> production defaults, send's 2000/s is 6,000/s across 3 replicas and 40,000/s if it scales to 20.
+> Size these numbers per pod, and treat the cluster figure as a range rather than a guarantee.
+> Making the limit cluster-exact requires shared state and is tracked as future work.
+
+Rate limiting runs **after** authentication, so an unauthenticated flood is rejected with 401
+before it reaches the limiter and never allocates a bucket. That also means the limiter is not a
+defence against unauthenticated abuse — put per-IP limits on your ingress controller for that.
+`/healthz` and `/readyz` are never limited.
+
+See [the integration guide](integration-guide.md#rate-limits) for the client-facing contract.
 
 ### HTTP rate limiting
 
@@ -169,6 +204,16 @@ line, and a credential that is committed in git.
 Also: an **unset** variable is a parse error, but an **empty** one is not. Setting this to `""`
 starts the server and lets anyone connect as the `centrifugo` user with no credential. Verified
 on the wire; see `TestCentrifugoPassword_EmptyVariableIsAcceptedAndAuthenticates`.
+
+**On Kubernetes, the NATS StatefulSet now refuses to start rather than accepting either
+mistake.** An initContainer (`require-centrifugo-password` in
+`deploy/k8s/base/infra/nats.yaml`) checks the variable before nats-server runs and fails the pod
+with a message naming the rule — so a half-provisioned cluster stays down instead of serving
+while unauthenticated. It rejects an empty or unset value, a first character that is not an
+ASCII letter, and the two values a leading letter does *not* save, `true` and `false`. The local
+overlay deletes the container by name: it drops `-c nats.conf`, never reads this file, and
+legitimately has no password. This does not help you outside Kubernetes — the constraint is
+still yours to honour if you run nats-server directly.
 
 ### Centrifugo allowed origins
 

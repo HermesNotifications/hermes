@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package messaging
 
@@ -22,6 +23,9 @@ type Client struct {
 	conn *nats.Conn
 	js   jetstream.JetStream
 
+	// streamMaxBytes bounds each work stream. Zero means DefaultStreamMaxBytes.
+	streamMaxBytes int64
+
 	// done is closed by Close to unblock the worker pools and fetcher callbacks
 	// started by Subscribe so they exit instead of leaking. closeOnce guards it.
 	done      chan struct{}
@@ -34,6 +38,16 @@ type Client struct {
 	// wait for them instead of the process exiting mid-handler.
 	inflight sync.WaitGroup
 }
+
+// DefaultStreamMaxBytes bounds each of the three work streams on disk.
+//
+// The NATS PVC is 5Gi (deploy/k8s/base/infra/nats.yaml). Three work streams at
+// 512 MiB plus the 1 GiB DLQ is 2.5 GiB, half the volume, which leaves room for
+// the store's own overhead and for a stream to sit at its ceiling without
+// crowding the others. At roughly 1 KiB per message that is ~500k queued
+// messages per stream — orders of magnitude beyond a healthy backlog, so it
+// binds only when something downstream is genuinely broken.
+const DefaultStreamMaxBytes int64 = 512 << 20
 
 type StreamConfig struct {
 	Name     string
@@ -57,7 +71,8 @@ const natsDrainTimeout = 10 * time.Second
 type Option func(*connectOptions)
 
 type connectOptions struct {
-	nats []nats.Option
+	nats           []nats.Option
+	streamMaxBytes int64
 	// errs collects option failures that cannot be expressed as a nats.Option — loading
 	// an NKey seed happens eagerly, unlike a CA bundle, which nats.go reads at dial
 	// time. Collected rather than returned so Connect reports every problem at once.
@@ -78,6 +93,17 @@ func WithCABundle(path string) Option {
 			return
 		}
 		o.nats = append(o.nats, nats.RootCAs(path))
+	}
+}
+
+// WithStreamMaxBytes overrides the per-work-stream disk ceiling. Zero or less
+// keeps DefaultStreamMaxBytes. Only the provisioner's value has any effect,
+// since it is the one identity permitted to create or update a stream.
+func WithStreamMaxBytes(n int64) Option {
+	return func(o *connectOptions) {
+		if n > 0 {
+			o.streamMaxBytes = n
+		}
 	}
 }
 
@@ -103,7 +129,7 @@ func Connect(url string, opts ...Option) (*Client, error) {
 		nc.Close()
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
-	return &Client{conn: nc, js: js, done: make(chan struct{})}, nil
+	return &Client{conn: nc, js: js, streamMaxBytes: co.streamMaxBytes, done: make(chan struct{})}, nil
 }
 
 // StreamOptions are the deployment-shaped properties of the streams: how many peers hold each
@@ -123,24 +149,19 @@ type StreamOptions struct {
 	AllowReplicaChange bool
 }
 
-// DefaultStreamMaxBytes bounds each of the three work streams on disk.
-//
-// Unbounded is not a safe default: under WorkQueue retention the streams sit near empty in
-// steady state, so the omission is invisible until a consumer falls behind — and then the
-// backlog grows until the NATS volume fills, at which point JetStream fails writes for *every*
-// stream on it, including the DLQ that exists to capture failures.
-//
-// 512 MiB × 3 work streams + the DLQ's 1 GiB is 2.5 GiB of the 5Gi PVC. Raising this without
-// growing the volume recreates the original failure with extra steps.
-const DefaultStreamMaxBytes int64 = 512 << 20
-
 // SetupStreams creates or updates the pipeline's streams.
 func (c *Client) SetupStreams(ctx context.Context, opts StreamOptions) error {
 	replicas := opts.Replicas
 	if replicas < 1 {
 		replicas = 1
 	}
+	// Either API may supply the ceiling, and both are in use: this call's StreamOptions, or
+	// the WithStreamMaxBytes connect option that cmd/natsprovision passes. The explicit
+	// per-call value wins; the connect option is the deployment-wide default behind it.
 	maxBytes := opts.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = c.streamMaxBytes
+	}
 	if maxBytes <= 0 {
 		maxBytes = DefaultStreamMaxBytes
 	}
@@ -154,10 +175,16 @@ func (c *Client) SetupStreams(ctx context.Context, opts StreamOptions) error {
 			MaxAge:    7 * 24 * time.Hour,
 			Replicas:  replicas,
 			MaxBytes:  maxBytes,
-			// DiscardNew, not DiscardOld. On a work queue the messages are jobs nobody has done
-			// yet, so discarding the oldest silently drops notifications that were accepted.
-			// Rejecting the *publish* instead surfaces as a 503 at the edge, where the caller
-			// can retry and where it is visible. Only meaningful alongside MaxBytes.
+			// DiscardNew, not DiscardOld. These streams carry accepted work: a
+			// notification the API already returned 202 for. Discarding the oldest
+			// message to make room would silently destroy that work, and the
+			// caller would have been told it was accepted. Rejecting the newest
+			// instead pushes the failure back to the publisher, which can still
+			// tell its caller — see the 503 in internal/send/handler_send.go.
+			//
+			// The DLQ takes the opposite choice for the opposite reason: nothing
+			// is waiting on a dead letter, so there keeping the oldest evidence
+			// beats keeping the newest.
 			Discard: jetstream.DiscardNew,
 		}
 		if err := c.upsertStream(ctx, cfg, opts.AllowReplicaChange); err != nil {

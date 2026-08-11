@@ -1,3 +1,7 @@
+# Copyright Hermes Notifications
+# SPDX-License-Identifier: Apache-2.0
+# See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
+
 output "repository_urls" {
   description = "Map of service name to ECR repository URL"
   value       = { for k, v in aws_ecr_repository.services : k => v.repository_url }

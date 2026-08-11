@@ -14,3 +14,7 @@ kind: Kustomization
 
 resources:
   - hermes-internal-ca.yaml
+  # Closes the residual hermes-internal-ca.yaml names but does not fix: a ClusterIssuer can be
+  # referenced from any namespace. Cluster-scoped, so it belongs here rather than under base/
+  # for the same reason the CA does — nothing for the namespace transformer to rewrite.
+  - restrict-internal-ca.yaml

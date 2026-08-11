@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package messaging_test
 
@@ -51,8 +52,14 @@ func TestConnect_TLSWithoutCABundleIsRejected(t *testing.T) {
 		client.Close()
 		t.Fatal("expected verification against the system trust store to fail, got a connection")
 	}
-	if !strings.Contains(err.Error(), "certificate signed by unknown authority") {
-		t.Errorf("expected an x509 trust failure, got: %v", err)
+	// Match on the crypto/tls wrapper rather than the x509 detail inside it. The
+	// detail is platform-specific: Linux's pure-Go verifier says "certificate
+	// signed by unknown authority", while macOS defers to the system verifier and
+	// says "certificate is not trusted". Asserting the Linux phrasing made this
+	// test pass in CI and fail on every macOS dev machine, which is the worst of
+	// both — a red test locally that everyone learns to scroll past.
+	if !strings.Contains(err.Error(), "failed to verify certificate") {
+		t.Errorf("expected a certificate verification failure, got: %v", err)
 	}
 }
 

@@ -377,17 +377,26 @@ components:
           type: string
         channel:
           type: string
-          enum: [email, sms, inbox]
+          description: |
+            The channel the event is about. Empty for events scoped to the whole
+            notification rather than one delivery — notification.sent,
+            routing.no_channels, routing.failed, render.failed, template.not_found.
+          enum: ["", email, sms, inbox]
         event:
           type: string
           description: |
-            Event type. Dispatch events: routing.dispatched, routing.failed,
-            routing.no_channels. Worker events: {channel}.sent, {channel}.failed.
+            Event type. Dispatch events: notification.sent, routing.dispatched,
+            routing.failed, routing.no_channels, routing.no_contact,
+            delivery.publish_failed, render.failed, template.not_found.
+            Worker events: {channel}.sent, {channel}.failed.
+
+            Only two of these move the notification's status: notification.sent
+            advances it to "sent", and {channel}.sent advances it to "delivered".
           examples:
+            - notification.sent
             - routing.dispatched
             - email.sent
             - sms.failed
-            - inbox.delivered
         severity:
           type: string
           enum: [info, warn, error]

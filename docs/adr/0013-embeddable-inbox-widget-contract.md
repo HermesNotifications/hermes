@@ -1,5 +1,5 @@
 ---
-id: 0010
+id: 0013
 title: Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React
 status: Accepted
 affects:
@@ -12,7 +12,7 @@ affects:
 source: docs/reviews/2026-07-27-architecture-review.md — finding 46; web inbox hardening pass 2026-07-30
 ---
 
-# ADR 0010: The embeddable inbox contract
+# ADR 0013: The embeddable inbox contract
 
 **Status:** Accepted (2026-07-30)  
 **Date:** 2026-07-30  
@@ -96,7 +96,7 @@ synthesized from a live arrival has empty strings there; the honest fix is a ric
 tracked separately. Aliasing the element under a second tag name registers a subclass, because
 `customElements.define` refuses one constructor under two names.
 
-> **Update 2026-08-10 ([ADR 0011](0011-cache-first-unread-count.md)).** The count half of that
+> **Update 2026-08-10 ([ADR 0014](0014-cache-first-unread-count.md)).** The count half of that
 > richer payload now exists: `notification.new` carries an optional `unread_count`, so the
 > reducer no longer has to invent one by incrementing locally — which is the arithmetic that
 > diverged between the two implementations this ADR consolidated. It is optional because the

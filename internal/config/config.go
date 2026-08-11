@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package config
 
@@ -55,11 +56,6 @@ type Config struct {
 	// holding a stream takes the pipeline down despite the PDB and the anti-affinity rules
 	// that exist to prevent exactly that.
 	NATSStreamReplicas int
-	// NATSStreamMaxBytes caps each work stream's on-disk size. 0 (the default) is unbounded,
-	// which is only safe while nothing fills the volume: a JetStream file store that hits the
-	// disk limit fails *every* publish, including the dead-letter publishes that are supposed
-	// to be the safety net. Set it to roughly 60% of the JetStream PVC.
-	NATSStreamMaxBytes int64
 	// NATSStreamReplicasAllowChange permits natsprovision to alter the replication factor of a
 	// stream that already exists. Off by default because that migration moves the whole stream
 	// between peers; see messaging.SetupStreams.
@@ -121,6 +117,13 @@ type Config struct {
 	// that feeds the worker pool. Decouples fetching from processing so the pull
 	// pipeline stays full without hoarding the backlog. Tunable for load-test sweeps.
 	DispatchPrefetch int
+
+	// NATSStreamMaxBytes bounds each JetStream work stream on disk. Only the
+	// provisioner Job's value takes effect — under ADR 0005 phase 4 it is the one
+	// identity permitted to create or update a stream. Zero keeps
+	// messaging.DefaultStreamMaxBytes. Size it against the NATS volume: three
+	// work streams plus the 1 GiB DLQ must fit with room to spare.
+	NATSStreamMaxBytes int64
 
 	// RateLimit* tune the per-service HTTP rate limiter. Each service ships its
 	// own defaults, so these are overrides: a zero Burst or PerSecond keeps the

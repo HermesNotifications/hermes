@@ -612,6 +612,18 @@ ingress:
   className: ""
   # -- Additional ingress annotations
   annotations: {}
+  # -- Per-IP flood shielding on the API ingress (nginx ingress controller only;
+  # other controllers ignore these annotations). Deliberately NOT applied to the
+  # realtime ingress, where connections are long-lived WebSockets and a per-IP
+  # connection cap would count concurrent users behind a shared NAT rather than
+  # abuse. `rps` defaults to send's per-credential ceiling so it bounds floods
+  # without making the documented API limit unreachable — see
+  # docs/configuration.md#http-rate-limiting.
+  rateLimit:
+    enabled: true
+    rps: 2000
+    burstMultiplier: 5
+    connections: 500
   # -- TLS configuration
   tls: []
   #  - secretName: hermes-tls

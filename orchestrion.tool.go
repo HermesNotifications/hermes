@@ -1,3 +1,7 @@
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
+
 // This file was created by `orchestrion pin`, and is used to ensure the
 // `go.mod` file contains the necessary entries to ensure repeatable builds when
 // using `orchestrion`. It is also used to set up which integrations are enabled.

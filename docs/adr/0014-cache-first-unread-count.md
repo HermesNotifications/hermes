@@ -1,4 +1,4 @@
-# ADR 0011: Serve the unread count from cache, and keep it off the websocket's critical path
+# ADR 0014: Serve the unread count from cache, and keep it off the websocket's critical path
 
 **Status:** Accepted
 **Date:** 2026-08-10
@@ -6,10 +6,7 @@
 
 Amends [ADR 0001](0001-dynamodb-model-via-extenddb.md) ("Unread count: Already Redis-backed
 (10-min TTL). No change needed."). Closes a gap recorded in
-[ADR 0010](0010-embeddable-inbox-widget-contract.md).
-
-> **Numbering:** numbered against PR #73, the base this branch targets. `main` has since landed
-> its own 0010 and 0011, so this will need renumbering when #73 lands there. See ADR 0012's note.
+[ADR 0013](0013-embeddable-inbox-widget-contract.md).
 
 ---
 
@@ -38,7 +35,7 @@ ListInbox", which was true precisely because the list path ignored the cache and
 That property is the one a cache-first read removes.
 
 Separately, `notification.new` carried no count even though the worker had just computed one,
-so clients incremented locally — ADR 0010 named this ("the honest fix is a richer server
+so clients incremented locally — ADR 0013 named this ("the honest fix is a richer server
 payload, tracked separately") after count arithmetic diverging between two client
 implementations was the defect that motivated the shared reducer.
 
@@ -157,7 +154,7 @@ network hop, it adds one — browser → Centrifugo → Hermes — and costs the
 already carries authentication and rate limiting, the `otelhttp` metrics the existing alerts are
 built on, and the property that Centrifugo being down does not stop a user reading their inbox.
 The one genuine advantage, that websockets are exempt from CORS while the HTTP API is not, is
-better bought by adding CORS, which ADR 0010 already earmarks for its own ADR.
+better bought by adding CORS, which ADR 0013 already earmarks for its own ADR.
 
 **Leaving the cache write-only and simply adding the index.** Cheaper, and it would have fixed
 the query cost. It leaves the TTL-less-key bug in place and leaves DynamoDB paying for a

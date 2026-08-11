@@ -1,0 +1,103 @@
+# Closing ADR 0005 phase 4's named residual: any namespace may request a certificate the
+# Hermes internal CA signs.
+#
+# WHY THE RESIDUAL EXISTS. Phase 4 moved the CA private key out of `hermes` by making the CA a
+# ClusterIssuer whose signing Secret lives in cert-manager's cluster-resource namespace. That
+# was a deliberate trade — an unbounded, invisible compromise (read the key, mint anything,
+# forever, with no trace) for a bounded, auditable one (a logged API write that yields one
+# 90-day leaf). ADR 0005 records the trade and states plainly that the second half is NOT
+# closed: a ClusterIssuer can be referenced by a Certificate in ANY namespace, and phase 4
+# verified exactly that by minting a certificate with SAN nats.hermes.svc from a namespace
+# that is not `hermes`. A leaf from this CA is trusted by every Hermes service, so that is
+# enough to impersonate the NATS server to any client.
+#
+# What phase 4 said would close it: "admission policy or cert-manager's CertificateRequest
+# approval RBAC". This is the first of those.
+#
+# WHY ValidatingAdmissionPolicy AND NOT approver-policy. cert-manager-approver-policy is
+# cert-manager's own answer and is more expressive — a CertificateRequestPolicy can constrain
+# SANs, key algorithm and duration, not just the requesting namespace. It was not used because
+# it costs a second Helm release in infra/scripts/bootstrap-cluster.sh AND requires disabling
+# cert-manager's built-in approver controller (--controllers=*,-certificaterequests-approver),
+# which changes approval behaviour for EVERY issuer on the cluster, including the Let's Encrypt
+# one Hermes does not own. ValidatingAdmissionPolicy has been GA since Kubernetes 1.30 and the
+# EKS clusters target 1.35 (infra/terraform/variables.tf), so this needs no new component and
+# affects nothing but this CA. Revisit if constraining SANs rather than namespaces becomes the
+# requirement — that is the line this cannot express and approver-policy can.
+#
+# WHAT THIS DOES NOT CLOSE. Anyone who can create a Certificate IN `hermes` can still request a
+# leaf for any identity, including SAN nats.hermes.svc. The grant this narrows is cluster-wide
+# to single-namespace; it is not a per-identity control. That is the SAN constraint above, and
+# it remains open.
+#
+# NOT EXERCISED LOCALLY. `make dev-up`'s k3d cluster has no cert-manager and local NATS runs
+# plaintext, so the local overlay does not reference this directory and these objects are never
+# applied there — the same gap the rest of the PKI already has. What IS checked without a
+# cluster is that both objects render into staging and production, by
+# scripts/check_ca_issuer_policy.py in `make verify`.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hermes-internal-ca-namespace-scope
+  labels:
+    app.kubernetes.io/part-of: hermes
+    app.kubernetes.io/component: pki
+spec:
+  # Fail, not Ignore. An expression that errors or an API server that cannot evaluate the
+  # policy must deny the request: an admission control that fails open is the shape of defect
+  # ADR 0005 exists to remove. The blast radius of Fail is bounded by matchConstraints, which
+  # covers only cert-manager's two request kinds — nothing else on the cluster can be denied by
+  # this policy being broken.
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      # CertificateRequest is included as well as Certificate, and not as belt-and-braces:
+      # cert-manager creates a CertificateRequest for each Certificate, but a CertificateRequest
+      # can also be created DIRECTLY, referencing an issuer with no Certificate object at all.
+      # Policing only Certificate would leave the shorter path open.
+      - apiGroups: ["cert-manager.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["certificates", "certificaterequests"]
+  matchConditions:
+    # Scope to this CA alone. Every other issuer on the cluster — the Let's Encrypt
+    # ClusterIssuer for ingress, hermes-selfsigned-bootstrap, anything a platform team adds —
+    # is unaffected, and a request that does not match here is not evaluated further.
+    #
+    # `kind` and `group` are optional in an issuerRef and default to Issuer / cert-manager.io.
+    # The defaults are applied by the API server before admission, but this does not rely on
+    # that: an absent kind is treated as the namespaced Issuer it means, which is a DIFFERENT
+    # object from the ClusterIssuer this guards and correctly falls outside the policy.
+    - name: targets-the-hermes-internal-ca
+      expression: >-
+        has(object.spec.issuerRef) &&
+        object.spec.issuerRef.name == 'hermes-internal-ca' &&
+        has(object.spec.issuerRef.kind) &&
+        object.spec.issuerRef.kind == 'ClusterIssuer'
+  validations:
+    - expression: "request.namespace == 'hermes'"
+      messageExpression: >-
+        'ClusterIssuer hermes-internal-ca signs certificates trusted by every Hermes service ' +
+        'and may only be requested from the hermes namespace (ADR 0005). This request came ' +
+        'from namespace ' + request.namespace + '.'
+      reason: Forbidden
+---
+# The policy is inert without a binding — a ValidatingAdmissionPolicy with no
+# ValidatingAdmissionPolicyBinding is defined and never evaluated, which looks identical to a
+# working policy in a rendered diff. Same failure class as finding 47's inert NetworkPolicy,
+# and the reason check_ca_issuer_policy.py asserts the pair rather than the policy.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hermes-internal-ca-namespace-scope
+  labels:
+    app.kubernetes.io/part-of: hermes
+    app.kubernetes.io/component: pki
+spec:
+  policyName: hermes-internal-ca-namespace-scope
+  # Deny, not Warn or Audit. The point is to stop the request, not to record it.
+  validationActions: [Deny]
+  # No matchResources: the binding applies to everything matchConstraints selects, across all
+  # namespaces. Narrowing it here by namespaceSelector would defeat the policy — the namespaces
+  # this is meant to stop are precisely the ones a selector would have to enumerate in advance.

@@ -115,8 +115,9 @@ incrementally.
 - [ ] **Step 1: Write the failing test** — create `internal/provider/content_test.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package provider
 
@@ -239,8 +240,9 @@ git commit -m "feat(provider): add per-channel content schema to the registry"
 - [ ] **Step 1: Write the failing test.** Check whether `internal/models/models_test.go` exists; create it (package `models_test`) or append. Add:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package models_test
 
@@ -380,8 +382,9 @@ DROP TABLE IF EXISTS template_channel_content;
 ```go
 //go:build integration
 
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -442,8 +445,9 @@ template's fixed fields via the registry schema, so both representations agree.
 - [ ] **Step 2: Implement the content row helpers** — create `internal/store/postgres/template_content.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -611,8 +615,9 @@ Place this block after the `for rows.Next()` loop and after `rows.Err()` is know
 ```go
 //go:build integration
 
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -699,8 +704,9 @@ git commit -m "feat(store): dual-write and load normalized template content"
 - [ ] **Step 2: Implement the contact helpers** — create `internal/store/postgres/user_contacts.go`:
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 
@@ -812,8 +818,9 @@ templates): replace the final `return users, rows.Err()` with:
 ```go
 //go:build integration
 
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package postgres
 

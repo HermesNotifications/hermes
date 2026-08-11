@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 //go:build integration
 
@@ -211,8 +212,8 @@ func TestDeliveryPipeline(t *testing.T) {
 	rec := doRequest("POST", "/v1/send", map[string]any{
 		"to": map[string]any{
 			"organization_id": organizationID,
-			"user_id":   "delivery-user-" + runID,
-			"contacts":  map[string]any{"email": "delivery-user-" + runID + "@example.com"},
+			"user_id":         "delivery-user-" + runID,
+			"contacts":        map[string]any{"email": "delivery-user-" + runID + "@example.com"},
 		},
 		"template": templateSlug,
 		"data":     map[string]string{"name": "Alice"},
@@ -257,26 +258,30 @@ func TestDeliveryPipeline(t *testing.T) {
 			continue
 		}
 		// We expect at least: routing.dispatched (email), routing.dispatched (inbox),
-		// email.sent, inbox.sent — that's 4 events minimum.
-		if len(dbEvents) >= 4 {
+		// notification.sent, email.sent, inbox.sent — that's 5 events minimum.
+		if len(dbEvents) >= 5 {
 			break
 		}
-		t.Logf("polling: found %d events so far, waiting for >= 4", len(dbEvents))
+		t.Logf("polling: found %d events so far, waiting for >= 5", len(dbEvents))
 	}
 
-	if len(dbEvents) < 4 {
-		t.Fatalf("expected at least 4 notification events, got %d", len(dbEvents))
+	if len(dbEvents) < 5 {
+		t.Fatalf("expected at least 5 notification events, got %d", len(dbEvents))
 	}
 	t.Logf("found %d notification events", len(dbEvents))
 
 	// Log all events for debugging
 	hasEmailSent := false
 	hasInboxSent := false
+	hasNotificationSent := false
 	dispatchedCount := 0
 	for _, e := range dbEvents {
 		t.Logf("event: channel=%s event=%s severity=%s", e.Channel, e.Event, e.Severity)
 		if e.Event == "routing.dispatched" {
 			dispatchedCount++
+		}
+		if e.Event == "notification.sent" {
+			hasNotificationSent = true
 		}
 		if e.Event == "email.sent" {
 			hasEmailSent = true
@@ -288,6 +293,11 @@ func TestDeliveryPipeline(t *testing.T) {
 
 	if dispatchedCount < 2 {
 		t.Fatalf("expected at least 2 routing.dispatched events (email+inbox), got %d", dispatchedCount)
+	}
+	// Dispatch's hand-off event. It is what advances the notification to "sent"; without it
+	// the status jumps pending -> delivered and rank 1 of the ladder is never occupied.
+	if !hasNotificationSent {
+		t.Fatal("expected notification.sent event from dispatch, not found")
 	}
 	if !hasEmailSent {
 		t.Fatal("expected email.sent event, not found")
