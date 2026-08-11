@@ -1,5 +1,6 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
-// See LICENSE and NOTICE in the project root for full terms and restrictions.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
+// See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 /** Renew this long before expiry, so a slow round trip cannot race the token running out. */
 export const REFRESH_MARGIN_MS = 5 * 60_000;
