@@ -89,18 +89,42 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      # -n hermes is not optional: the workloads live in the `hermes` namespace, and without it
-      # every lookup resolved against `default` and returned "not found". This step produced
-      # nothing at all on the one run where it was needed.
-      - name: Collect cluster logs on failure
-        if: failure()
+      # always(), not failure(). Retries are what made this a blind spot: a spec that fails
+      # twice and passes on the third attempt leaves the job green, so `failure()` never fired
+      # and the logs for the interesting runs were discarded. Both realtime flakes investigated
+      # so far were exactly that shape, and both were diagnosed from Playwright artifacts alone
+      # because no cluster logs existed.
+      #
+      # The delivery worker already logs `delivery failed` with `attempt` and `notification_id`
+      # on every NAK (internal/delivery/worker.go:90). That single line distinguishes a
+      # publication retried behind exponential backoff from one that was never retried at all,
+      # which is the open question about these flakes. It has been produced all along and
+      # thrown away.
+      #
+      # -n hermes is not optional either: the workloads live in the `hermes` namespace, and
+      # without it every lookup resolved against `default` and returned "not found".
+      - name: Collect cluster logs
+        if: always()
         run: |
-          kubectl get pods -A || true
-          for service in hermes-admin hermes-send hermes-dispatch hermes-worker-inbox hermes-inbox centrifugo; do
-            echo "::group::$service"
-            kubectl logs -n hermes "deployment/$service" --tail=200 || true
+          kubectl get pods -n hermes -o wide || true
+          # Enumerated per pod rather than per Deployment, for two reasons. `deployment/x`
+          # reads a single pod, so a publish handled by the *other* Centrifugo replica was
+          # invisible. And `--all-pods` would fix that only on newer kubectl — behind the
+          # `|| true` these steps need, an unsupported flag yields no logs at all, which is
+          # worse than the gap it closes. Enumerating works on every version.
+          for pod in $(kubectl get pods -n hermes -o name 2>/dev/null); do
+            echo "::group::$pod"
+            kubectl logs -n hermes "$pod" --tail=300 --timestamps || true
             echo "::endgroup::"
           done
+          # A container that crashed and restarted leaves its evidence only in the previous
+          # instance; the replacement starts clean and looks perfectly healthy. Almost always
+          # empty, which is the point — when it is not, that is the answer.
+          echo "::group::previous instances (present only if something restarted)"
+          for pod in $(kubectl get pods -n hermes -o name 2>/dev/null); do
+            kubectl logs -n hermes "$pod" --previous --tail=200 --timestamps 2>/dev/null || true
+          done
+          echo "::endgroup::"
 
       - name: Tear down
         if: always()
