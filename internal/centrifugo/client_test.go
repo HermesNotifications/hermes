@@ -162,3 +162,37 @@ func TestClient_Publish_UnparseableBodyIsAnError(t *testing.T) {
 		t.Fatal("expected an error for a non-envelope 200 body, got nil")
 	}
 }
+
+// Valid JSON that is not the envelope is the harder half of the same case: it unmarshals
+// cleanly into a zero-valued response, so an error-only check reads it as a delivered publish.
+// A gateway standing in front of Centrifugo is what produces these.
+func TestClient_Publish_ParseableNonEnvelopeIsAnError(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "empty object", body: `{}`},
+		{name: "gateway error json", body: `{"message":"upstream unavailable"}`},
+		{name: "json array", body: `[]`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL, "test-api-key")
+			err := client.Publish(context.Background(), "user#123", map[string]string{"t": "x"})
+			if err == nil {
+				t.Fatalf("expected an error for a parseable non-envelope body %s, got nil", tc.body)
+			}
+			if !strings.Contains(err.Error(), "user#123") {
+				t.Errorf("error should name the channel, got: %v", err)
+			}
+		})
+	}
+}

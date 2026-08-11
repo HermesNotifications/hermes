@@ -27,9 +27,12 @@ type apiError struct {
 }
 
 // apiResponse is the envelope every server-API reply uses: an `error` that is null on
-// success, and a `result` this client has no use for (publish returns an empty object).
+// success, and a `result` (an empty object for publish). The result is kept raw and unread —
+// its only use is proving the body came from Centrifugo at all, since exactly one of the two
+// is always present.
 type apiResponse struct {
-	Error *apiError `json:"error"`
+	Error  *apiError       `json:"error"`
+	Result json.RawMessage `json:"result"`
 }
 
 func NewClient(apiURL, apiKey string) *Client {
@@ -81,11 +84,22 @@ func (c *Client) Publish(ctx context.Context, channel string, data any) error {
 
 	var parsed apiResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return fmt.Errorf("decode centrifugo response (%s): %w", truncate(respBody), err)
+		return fmt.Errorf("decode centrifugo response to publish on %s (%s): %w",
+			channel, truncate(respBody), err)
 	}
 	if parsed.Error != nil {
 		return fmt.Errorf("centrifugo refused publish to %s: %s (code %d)",
 			channel, parsed.Error.Message, parsed.Error.Code)
+	}
+	// Parsing is not the same as recognising. A gateway answering `{}` or
+	// `{"message":"upstream unavailable"}` unmarshals cleanly into a zero-valued envelope and
+	// would be read as a delivered publish — the same silent drop the unparseable-body check
+	// above rejects, only wearing valid JSON. Centrifugo v5 always sends one of the two
+	// members (a successful publish is `{"result":{}}`, verified against the server), so a
+	// body carrying neither did not come from Centrifugo.
+	if parsed.Result == nil {
+		return fmt.Errorf("centrifugo response to publish on %s carried neither result nor error: %s",
+			channel, truncate(respBody))
 	}
 	return nil
 }
