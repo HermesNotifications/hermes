@@ -111,7 +111,12 @@ func TestDeliveryPipeline(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&payload)
 		t.Logf("centrifugo received inbox delivery: channel=%v", payload["channel"])
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{})
+		// The envelope real Centrifugo sends on success, verified against centrifugo:v5. This
+		// double used to answer a bare `{}`, which no Centrifugo ever sends and which the
+		// client now rejects: a body carrying neither `result` nor `error` did not come from
+		// Centrifugo, and reporting delivery for it is the silent drop this pipeline test is
+		// meant to catch.
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{}})
 		inboxDeliveryCount.Add(1)
 		select {
 		case inboxDeliveryCh <- struct{}{}:
