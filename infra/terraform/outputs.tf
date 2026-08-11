@@ -1,3 +1,7 @@
+# Copyright Hermes Notifications
+# SPDX-License-Identifier: Apache-2.0
+# See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
+
 output "ecr_registry_url" {
   description = "ECR registry URL (account/region prefix)"
   value       = module.ecr.registry_url

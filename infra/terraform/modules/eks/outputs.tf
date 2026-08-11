@@ -1,3 +1,7 @@
+# Copyright Hermes Notifications
+# SPDX-License-Identifier: Apache-2.0
+# See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
+
 output "cluster_name" {
   description = "Name of the EKS cluster"
   value       = aws_eks_cluster.main.name

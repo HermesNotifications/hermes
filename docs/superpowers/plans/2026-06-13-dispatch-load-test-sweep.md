@@ -40,7 +40,8 @@
 - [ ] **Step 1: Write the failing test**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
@@ -105,7 +106,8 @@ Expected: FAIL — `undefined: Summarize` / `undefined: tValue`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 // Package dispatchbench measures dispatch consumer throughput across a matrix of
@@ -190,7 +192,8 @@ git commit -m "feat(dispatchbench): throughput statistics (mean, CI95, CV)"
 - [ ] **Step 1: Write the failing test**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
@@ -240,7 +243,8 @@ Expected: FAIL — `undefined: Cells` / `undefined: Shuffle`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
@@ -299,7 +303,8 @@ git commit -m "feat(dispatchbench): sweep matrix and seeded shuffle"
 - [ ] **Step 1: Write the failing test**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
@@ -364,7 +369,8 @@ Expected: FAIL — `undefined: Result` / `Recommend` / `WriteCSV` / `Markdown`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
@@ -499,7 +505,8 @@ The runner does the actual measurement against real infra. It is exercised by a 
 - [ ] **Step 1: Write the implementation**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package dispatchbench
@@ -596,7 +603,8 @@ func (r *Runner) waitDrained(ctx context.Context) error {
 - [ ] **Step 2: Write the integration smoke test**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 //go:build integration
@@ -649,7 +657,8 @@ This is the composition root: flags, infra, seed, the sweep loop, and the three 
 - [ ] **Step 1: Write the harness**
 
 ```go
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 package main

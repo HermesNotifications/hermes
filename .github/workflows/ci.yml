@@ -37,6 +37,9 @@ jobs:
         with:
           version: "v2.11.3"
 
+      - name: Check license headers
+        run: make license-check
+
   test-unit:
     name: Unit Tests
     runs-on: ubuntu-latest
