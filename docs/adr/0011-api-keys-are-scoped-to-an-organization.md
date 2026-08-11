@@ -1,6 +1,6 @@
 # ADR 0011: Scope API keys to an organization, and derive the organization from the key
 
-**Status:** Accepted  
+**Status:** Superseded by [0012](0012-api-keys-are-not-scoped-to-organizations.md) (2026-08-11)  
 **Date:** 2026-08-10  
 **Author:** Daryl Robbins
 

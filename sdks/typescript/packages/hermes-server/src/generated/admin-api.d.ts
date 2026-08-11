@@ -265,7 +265,6 @@ export interface components {
             created_at: string;
             id: string;
             name: string;
-            organization_id: string;
             permissions: string[] | null;
             raw_key: string;
         };
@@ -278,8 +277,6 @@ export interface components {
             readonly $schema?: string;
             /** @description Human-readable key name */
             name: string;
-            /** @description Organization this key may act for */
-            organization_id: string;
             /** @description Permission set (defaults to all except apikeys:manage) */
             permissions?: string[] | null;
         };
@@ -408,7 +405,6 @@ export interface components {
             created_at: string;
             id: string;
             name: string;
-            organization_id?: string;
             permissions: string[] | null;
         };
         Notification: {

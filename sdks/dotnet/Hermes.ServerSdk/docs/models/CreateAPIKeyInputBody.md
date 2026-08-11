@@ -5,7 +5,6 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Name** | **string** | Human-readable key name | 
-**OrganizationId** | **string** | Organization this key may act for | 
 **Schema** | **string** | A URL to the JSON Schema for this object. | [optional] [readonly] 
 **Permissions** | **List&lt;string&gt;** | Permission set (defaults to all except apikeys:manage) | [optional] 
 

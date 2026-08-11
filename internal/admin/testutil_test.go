@@ -14,7 +14,6 @@ import (
 
 	"github.com/hermes-notifications/hermes/internal/admin"
 	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/jackc/pgx/v5"
 )
 
 // mockStore implements admin.AdminStore with in-memory storage.
@@ -58,12 +57,7 @@ func (m *mockStore) GetOrganizationByID(ctx context.Context, id string) (*models
 			return &t, nil
 		}
 	}
-	// Wraps pgx.ErrNoRows because that is the contract the real store has — see
-	// postgres.Store.GetOrganizationByID. Returning a bare error here made the mock
-	// disagree with production about how "not found" is signalled, which is exactly
-	// the kind of difference that lets a handler's not-found branch be wrong and
-	// still pass its tests.
-	return nil, fmt.Errorf("organization not found %q: %w", id, pgx.ErrNoRows)
+	return nil, fmt.Errorf("organization not found: %s", id)
 }
 
 func (m *mockStore) EnsureOrganization(ctx context.Context, id string) (*models.Organization, error) {
@@ -330,14 +324,13 @@ func (m *mockStore) GetNotificationEvents(ctx context.Context, notificationID st
 
 // --- API Keys ---
 
-func (m *mockStore) CreateAPIKey(ctx context.Context, id, keyHash, name, organizationID string, permissions []string) (*models.APIKey, error) {
+func (m *mockStore) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error) {
 	k := models.APIKey{
-		ID:             id,
-		KeyHash:        keyHash,
-		Name:           name,
-		OrganizationID: organizationID,
-		Permissions:    permissions,
-		CreatedAt:      time.Now(),
+		ID:          id,
+		KeyHash:     keyHash,
+		Name:        name,
+		Permissions: permissions,
+		CreatedAt:   time.Now(),
 	}
 	m.apiKeys = append(m.apiKeys, k)
 	return &k, nil

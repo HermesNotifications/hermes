@@ -11,7 +11,6 @@
 |**createdAt** | **OffsetDateTime** |  |  |
 |**id** | **String** |  |  |
 |**name** | **String** |  |  |
-|**organizationId** | **String** |  |  |
 |**permissions** | **List&lt;String&gt;** |  |  |
 |**rawKey** | **String** |  |  |
 

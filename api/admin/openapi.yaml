@@ -17,8 +17,6 @@ components:
           type: string
         name:
           type: string
-        organization_id:
-          type: string
         permissions:
           items:
             type: string
@@ -30,7 +28,6 @@ components:
       required:
         - id
         - name
-        - organization_id
         - raw_key
         - permissions
         - created_at
@@ -49,10 +46,6 @@ components:
           description: Human-readable key name
           minLength: 1
           type: string
-        organization_id:
-          description: Organization this key may act for
-          minLength: 1
-          type: string
         permissions:
           description: Permission set (defaults to all except apikeys:manage)
           items:
@@ -62,7 +55,6 @@ components:
             - "null"
       required:
         - name
-        - organization_id
       type: object
     CreateCategoryInputBody:
       additionalProperties: false
@@ -255,8 +247,6 @@ components:
         id:
           type: string
         name:
-          type: string
-        organization_id:
           type: string
         permissions:
           items:
