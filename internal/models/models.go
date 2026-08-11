@@ -18,11 +18,15 @@ type Organization struct {
 }
 
 type APIKey struct {
-	ID          string    `json:"id"`
-	KeyHash     string    `json:"-"`
-	Name        string    `json:"name"`
-	Permissions []string  `json:"permissions"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID      string `json:"id"`
+	KeyHash string `json:"-"`
+	Name    string `json:"name"`
+	// OrganizationID is the organization this key may act for. Empty means the key
+	// predates scoping (migration 000018 added the column nullable) and is not
+	// constrained — see ADR 0011. New keys always carry one.
+	OrganizationID string    `json:"organization_id,omitempty"`
+	Permissions    []string  `json:"permissions"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type User struct {

@@ -6,36 +6,44 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/jackc/pgx/v5"
 )
 
 type createAPIKeyInput struct {
 	Body struct {
-		Name        string   `json:"name" required:"true" minLength:"1" doc:"Human-readable key name"`
-		Permissions []string `json:"permissions,omitempty" doc:"Permission set (defaults to all except apikeys:manage)"`
+		Name string `json:"name" required:"true" minLength:"1" doc:"Human-readable key name"`
+		// Required: a key that names no organization can act for all of them, which
+		// is the hole ADR 0011 closes. Existing keys may still have none, but nothing
+		// mints another one.
+		OrganizationID string   `json:"organization_id" required:"true" minLength:"1" doc:"Organization this key may act for"`
+		Permissions    []string `json:"permissions,omitempty" doc:"Permission set (defaults to all except apikeys:manage)"`
 	}
 }
 
 type apiKeyCreatedOutput struct {
 	Body struct {
-		ID          string    `json:"id"`
-		Name        string    `json:"name"`
-		RawKey      string    `json:"raw_key"`
-		Permissions []string  `json:"permissions"`
-		CreatedAt   time.Time `json:"created_at"`
+		ID             string    `json:"id"`
+		Name           string    `json:"name"`
+		OrganizationID string    `json:"organization_id"`
+		RawKey         string    `json:"raw_key"`
+		Permissions    []string  `json:"permissions"`
+		CreatedAt      time.Time `json:"created_at"`
 	}
 }
 
 type listAPIKeysOutput struct {
 	Body []struct {
-		ID          string    `json:"id"`
-		Name        string    `json:"name"`
-		Permissions []string  `json:"permissions"`
-		CreatedAt   time.Time `json:"created_at"`
+		ID             string    `json:"id"`
+		Name           string    `json:"name"`
+		OrganizationID string    `json:"organization_id,omitempty"`
+		Permissions    []string  `json:"permissions"`
+		CreatedAt      time.Time `json:"created_at"`
 	}
 }
 
@@ -65,15 +73,17 @@ func (s *Server) registerAPIKeyRoutes() {
 		out := &listAPIKeysOutput{}
 		for _, k := range keys {
 			out.Body = append(out.Body, struct {
-				ID          string    `json:"id"`
-				Name        string    `json:"name"`
-				Permissions []string  `json:"permissions"`
-				CreatedAt   time.Time `json:"created_at"`
+				ID             string    `json:"id"`
+				Name           string    `json:"name"`
+				OrganizationID string    `json:"organization_id,omitempty"`
+				Permissions    []string  `json:"permissions"`
+				CreatedAt      time.Time `json:"created_at"`
 			}{
-				ID:          k.ID,
-				Name:        k.Name,
-				Permissions: k.Permissions,
-				CreatedAt:   k.CreatedAt,
+				ID:             k.ID,
+				Name:           k.Name,
+				OrganizationID: k.OrganizationID,
+				Permissions:    k.Permissions,
+				CreatedAt:      k.CreatedAt,
 			})
 		}
 		return out, nil
@@ -115,7 +125,18 @@ func (s *Server) registerAPIKeyRoutes() {
 
 		keyHash := auth.HMACHashAPIKey(secret, s.hmacSecret)
 
-		k, err := s.store.CreateAPIKey(ctx, keyID, keyHash, input.Body.Name, permissions)
+		// Reject an unknown organization here rather than letting the foreign key
+		// surface as a 500. A caller who mistypes an organization ID should be told
+		// which input was wrong.
+		org, err := s.organizations.GetOrganizationByID(ctx, input.Body.OrganizationID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows), err == nil && org == nil:
+			return nil, huma.Error400BadRequest("organization not found")
+		case err != nil:
+			return nil, huma.Error500InternalServerError("failed to look up organization")
+		}
+
+		k, err := s.store.CreateAPIKey(ctx, keyID, keyHash, input.Body.Name, input.Body.OrganizationID, permissions)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to create api key")
 		}
@@ -123,6 +144,7 @@ func (s *Server) registerAPIKeyRoutes() {
 		out := &apiKeyCreatedOutput{}
 		out.Body.ID = k.ID
 		out.Body.Name = k.Name
+		out.Body.OrganizationID = k.OrganizationID
 		out.Body.RawKey = rawKey
 		out.Body.Permissions = k.Permissions
 		out.Body.CreatedAt = k.CreatedAt

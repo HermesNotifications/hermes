@@ -65,7 +65,7 @@ type AdminStore interface {
 	ListRecentNotifications(ctx context.Context, limit int) ([]models.Notification, error)
 
 	// API Keys
-	CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error)
+	CreateAPIKey(ctx context.Context, id, keyHash, name, organizationID string, permissions []string) (*models.APIKey, error)
 	ListAPIKeys(ctx context.Context) ([]models.APIKey, error)
 	GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
 	DeleteAPIKey(ctx context.Context, id string) error

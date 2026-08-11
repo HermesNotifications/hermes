@@ -20,6 +20,7 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0008](0008-helm-chart-provisioning-jobs-are-not-hooks.md) | Run the Helm chart's provisioning Jobs as plain resources, not Helm hooks | Accepted | 2026-07-31 |
 | [0009](0009-bundled-datastores-as-plain-manifests-on-official-images.md) | Ship the bundled evaluation Postgres and Redis as plain manifests on Docker Official Images | Accepted | 2026-07-31 |
 | [0010](0010-bounded-work-streams-reject-rather-than-drop.md) | Bound the JetStream work streams and reject new work when they fill | Accepted | 2026-08-10 |
+| [0011](0011-api-keys-are-scoped-to-an-organization.md) | Scope API keys to an organization, and derive the organization from the key | Accepted | 2026-08-10 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

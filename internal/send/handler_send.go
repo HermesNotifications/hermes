@@ -29,6 +29,16 @@ var publishRejectionCounter, _ = meter.Int64Counter(
 	metric.WithUnit("1"),
 )
 
+// unscopedKeyUseCounter counts sends by API keys that predate organization
+// scoping (ADR 0011). It is the migration's completion signal: while it is
+// non-zero there are keys in use that can address any organization, and
+// api_keys.organization_id cannot be tightened to NOT NULL.
+var unscopedKeyUseCounter, _ = meter.Int64Counter(
+	"hermes.send.unscoped_key_uses",
+	metric.WithDescription("Sends authenticated by an API key with no organization, which is therefore unconstrained."),
+	metric.WithUnit("1"),
+)
+
 type sendRecipient struct {
 	OrganizationID string            `json:"organization_id" required:"true" minLength:"1" doc:"Organization identifier"`
 	UserID         string            `json:"user_id" required:"true" minLength:"1" doc:"External user identifier"`
@@ -76,6 +86,28 @@ func (s *Server) registerSendRoutes() {
 		}
 
 		req := &input.Body
+
+		// ADR 0011. The organization arrives in the request body, so until keys were
+		// scoped nothing stopped a key from addressing an organization that was not
+		// its own: the permission check gates *whether* you may send, never *for
+		// whom*. A key that names an organization may only act for that one.
+		//
+		// A key with no organization predates migration 000018 and is left
+		// unconstrained rather than broken — there is no way to infer which
+		// organization it belongs to, and guessing would either break a working
+		// integration or mis-attribute its sends. Each such use is counted so
+		// operators can find them; the column goes NOT NULL once that reads zero.
+		if key := auth.GetValidatedKey(ctx); key != nil {
+			switch {
+			case key.OrganizationID == "":
+				unscopedKeyUseCounter.Add(ctx, 1)
+			case key.OrganizationID != req.To.OrganizationID:
+				// Deliberately not "organization not found": the caller authenticated
+				// fine and the organization may well exist. Saying which would let a
+				// key probe for valid organization IDs.
+				return nil, huma.Error403Forbidden("api key cannot send for this organization")
+			}
+		}
 
 		// Validate: exactly one of template or content
 		if (req.Template == "" && req.Content == nil) || (req.Template != "" && req.Content != nil) {

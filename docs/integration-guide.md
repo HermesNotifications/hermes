@@ -104,6 +104,29 @@ Use the returned `id` as `organization_id` in subsequent calls.
 
 API keys authenticate server-to-server calls to the Admin API (`POST /admin/v1/apikeys`). The raw key is shown **once** on creation -- store it securely. Only an HMAC-SHA256 hash is persisted, so it cannot be retrieved later.
 
+Every key is **scoped to one organization**, which is required at creation:
+
+```bash
+curl -X POST https://hermes.example.com/admin/v1/apikeys \
+  -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "billing-service",
+    "organization_id": "9f8c1e0a-...",
+    "permissions": ["notifications:send"]
+  }'
+```
+
+The key may only act for that organization. `POST /v1/send` returns `403` if the
+`organization_id` in the request body is any other organization, so the `organization_id` you
+send must match the one the key was issued for. See
+[ADR 0011](adr/0011-api-keys-are-scoped-to-an-organization.md).
+
+> **Keys created before this was introduced carry no organization and are not constrained.**
+> They keep working unchanged, but they can address any organization, so they should be
+> replaced with scoped keys. Operators can see whether any remain in use via the
+> `hermes.send.unscoped_key_uses` metric.
+
 ### 3. Create Subscription Categories
 
 Categories group related notifications and define default delivery channels and a default opt-in state. Three categories (`account`, `general`, `marketing`) are seeded by default; create more as needed.
