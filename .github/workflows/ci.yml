@@ -40,6 +40,25 @@ jobs:
       - name: Check license headers
         run: make license-check
 
+      # An ADR number is allocated at authoring time by writers who cannot see each other, so
+      # two long-lived branches each add "the next one" against the main they branched from and
+      # both are right until they meet. Nothing notices locally: the collision only exists
+      # relative to a main neither branch has met. PR #73 carried an 0010 against main's
+      # different 0010, and a branch stacked on it added an 0011 and 0012 against main's own.
+      #
+      # The explicit fetch is what makes this gate do anything. actions/checkout takes a shallow
+      # clone of the PR merge ref, so `origin/main` is not a ref here — and the check treats an
+      # unreadable base as a skip, which would have made this step a decoration.
+      - name: Fetch the base branch for the ADR numbering check
+        run: git fetch --depth=1 origin main
+
+      # No dependency install: this gate and its tests are pure stdlib, unlike the manifest
+      # gates that need PyYAML.
+      - name: ADR numbers must not collide with main
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_check_adr_numbering.py' -t scripts
+          python3 scripts/check_adr_numbering.py --base origin/main --require-base
+
   test-unit:
     name: Unit Tests
     runs-on: ubuntu-latest
