@@ -6,6 +6,7 @@
 .idea/
 .vscode/
 .claude/settings.local.json
+.claude/state/
 .claude/worktrees/
 *.swp
 
