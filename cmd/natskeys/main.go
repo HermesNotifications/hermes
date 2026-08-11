@@ -1,4 +1,5 @@
-// Copyright 2026 Hermes Notifications. Licensed under the Apache License, Version 2.0.
+// Copyright Hermes Notifications
+// SPDX-License-Identifier: Apache-2.0
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 // Command natskeys generates the NATS NKey set that ADR 0005 phase 3 needs: one user

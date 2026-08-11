@@ -29,6 +29,17 @@ test-e2e:          ## Run E2E tests only (requires make infra-up)
 lint:              ## Run golangci-lint
 	golangci-lint run
 
+# SPDX license headers (policy in .licenserc.yaml). Pinned so local and CI agree.
+LICENSE_EYE := go run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
+
+.PHONY: license-check
+license-check:     ## Check that covered source files carry the SPDX license header
+	$(LICENSE_EYE) header check
+
+.PHONY: license-fix
+license-fix:       ## Insert the SPDX license header into files missing it
+	$(LICENSE_EYE) header fix
+
 # --- Verify ---
 # The completion gate for parallel agent work (.claude/ownership.json). Everything
 # here must run without cluster or cloud credentials, so it proves manifests and

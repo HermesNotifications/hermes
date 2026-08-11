@@ -1,0 +1,44 @@
+# License-header policy, enforced by Apache SkyWalking Eyes (license-eye).
+#
+#   make license-check   verify every covered file carries the header (CI + pre-commit)
+#   make license-fix     insert the header into files that lack it
+#
+# The header is informational: LICENSE and NOTICE at the repo root do the legal
+# work, and DISCLAIMER.md holds the usage disclaimers. Deliberately no year in
+# the copyright line — it goes stale and causes annual mass diffs.
+header:
+  license:
+    spdx-id: Apache-2.0
+    copyright-owner: Hermes Notifications
+    content: |
+      Copyright Hermes Notifications
+      SPDX-License-Identifier: Apache-2.0
+      See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
+
+  # Hand-written source code only. Manifests (YAML), docs, SQL migrations, and
+  # build files are out of scope; generated code is excluded below because the
+  # generators clobber inserted headers on every regeneration.
+  paths:
+    - '**/*.go'
+    - '**/*.ts'
+    - '**/*.tsx'
+    - '**/*.js'
+    - '**/*.jsx'
+    - '**/*.mjs'
+    - '**/*.py'
+    - '**/*.sh'
+    - '**/*.tf'
+
+  paths-ignore:
+    - '**/node_modules/**'
+    - '**/dist/**'
+    - 'bin/**'
+    - 'sdks/python/**'          # generated (openapi-generator)
+    - 'sdks/java/**'            # generated (openapi-generator)
+    - 'sdks/dotnet/**'          # generated (openapi-generator)
+    - '**/src/generated/**'     # generated (openapi-typescript)
+    - '**/*.d.ts'
+    - 'web/admin/.next/**'
+    - 'infra/terraform/.terraform/**'
+
+  comment: on-failure
