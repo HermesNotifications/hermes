@@ -19,7 +19,8 @@ flowchart LR
         Dispatch -->|"delivery.email"| WE["Email Worker"]
         Dispatch -->|"delivery.sms"| WS["SMS Worker"]
         Dispatch -->|"delivery.inbox"| WI["Inbox Worker"]
-        WE -->|"notification.events"| EW["Event Writer"]
+        Dispatch -->|"notification.events"| EW["Event Writer"]
+        WE -->|"notification.events"| EW
         WS -->|"notification.events"| EW
         WI -->|"notification.events"| EW
     end
