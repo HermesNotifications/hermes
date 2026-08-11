@@ -49,7 +49,8 @@ regress status (`internal/eventwriter`).
 User-facing inbox API: cursor-paginated list plus per-notification actions (read, unread,
 archive, unarchive, delete) and mark-all-read; serves the unread count (Redis-cached).
 Spec: `api/inbox/openapi.yaml`.
-- **Depends on:** Postgres, Redis, NATS, Centrifugo
+- **Depends on:** Postgres, Redis, Centrifugo. It holds **no NATS client** — it reads the store
+  and pushes state changes straight to Centrifugo's HTTP API.
 
 ### User — `cmd/user` (port 8087, JWT auth)
 User-facing profile and preferences API: read/update profile (email, phone, locale) and manage
@@ -62,7 +63,8 @@ All services expose unauthenticated `GET /healthz` and `GET /readyz` probes.
 
 | Tool | Path | Purpose | Typical invocation |
 |---|---|---|---|
-| `migrate` | `cmd/migrate` | Run golang-migrate against Postgres | `make migrate` |
+| `migrate` | `cmd/migrate` | Run golang-migrate against Postgres | `make migrate` (k8s Job in prod) |
+| `natsprovision` | `cmd/natsprovision` | Declare the JetStream streams, then exit. The only identity holding `STREAM.CREATE`/`UPDATE`; services only verify (see [architecture.md](architecture.md#streams-are-provisioned-not-self-declared)) | k8s Job in prod |
 | `seed` | `cmd/seed` | Insert a dev API key | `make seed` |
 | `cleanup` | `cmd/cleanup` | Delete `notification_events` older than the retention window | `make cleanup` (k8s CronJob in prod) |
 | `loadseed` | `cmd/loadseed` | Generate the load-test dataset (organizations/users) | `make loadseed` |
@@ -75,12 +77,13 @@ All services expose unauthenticated `GET /healthz` and `GET /readyz` probes.
 | Package | Role |
 |---|---|
 | `internal/store`, `internal/store/postgres` | Repository interfaces and the Postgres implementation all services use |
+| `internal/store/cached` | Redis-fronted repository decorators (e.g. organizations) |
 | `internal/store/dynamo` | Optional DynamoDB-model store for the hot notification and event path, enabled by `HERMES_DYNAMO_ENDPOINT`. Delegates to the Postgres store, so Postgres stays required — see [architecture.md](architecture.md#the-dual-store) and [ADR 0001](adr/0001-dynamodb-model-via-extenddb.md) |
 | `internal/provider` | Channel/provider registry (per [ADR 0002](adr/0002-provider-plugin-model-bus-native-isolation.md)). `Builtins` is constructed at package-init and read-only thereafter; delivery subjects remain per-channel, not per-provider |
 | `internal/models` | Shared domain types and the notification status model (`status.go`) |
-| `internal/nats` (`hermenats`) | NATS message contracts (`SendMessage`, `DeliveryMessage`, `EventMessage`) |
-| `internal/messaging` | NATS JetStream client and stream setup |
-| `internal/auth` | API-key (HMAC-SHA256) and multi-key JWT validation |
+| `internal/nats` (`hermenats`) | NATS message contracts (`SendMessage`, `DeliveryMessage`, `EventMessage`, `DeadLetter`) |
+| `internal/messaging` | NATS JetStream client: connect (TLS + NKey identity), stream declaration/verification, the consumer pool, and the retry/dead-letter ladder |
+| `internal/auth` | API-key (HMAC-SHA256) with permissions, and multi-key JWT validation |
 | `internal/config` | `HERMES_*` environment configuration (see [configuration.md](configuration.md)) |
 | `internal/cache` | Redis client + caching helpers |
 | `internal/centrifugo` | Centrifugo HTTP API client for real-time push |

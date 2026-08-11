@@ -11,22 +11,31 @@ managed with [golang-migrate](https://github.com/golang-migrate/migrate): number
 
 ## Entities
 
-```
-organizations ──< users ──< user_subscriptions >── subscriptions >── subscription_categories
-   │                │                             │                      │
-   │                └──< user_contact_points       │                      │
-   │                                               │                      │
-   └──< notifications >── notification_templates ──┘                      │
-              │           (template_id, nullable)  │                      │
-              │                                    └──< template_channel_content
-              │                                                           │
-              ├── category_id (nullable) ──────────────────────────────── ┘
-              │
-              └──< notification_events
+```mermaid
+erDiagram
+    organizations ||--o{ users : "has"
+    organizations ||--o{ notifications : "has"
+    users ||--o{ user_contact_points : "has"
+    users ||--o{ user_subscriptions : "has"
+    users ||--o{ notifications : "receives"
+    subscriptions ||--o{ user_subscriptions : "opted into by"
+    subscription_categories ||--o{ subscriptions : "groups"
+    subscriptions ||--o{ notification_templates : "gates"
+    notification_templates ||--o{ template_channel_content : "renders per channel"
+    notification_templates ||--o{ notifications : "template_id (nullable)"
+    subscription_categories ||--o{ notifications : "category_id (nullable)"
+    notifications ||--o{ notification_events : "logs (no FK)"
 
-api_keys          (standalone)
-jwt_signing_keys  (standalone)
+    api_keys {
+        text id PK
+    }
+    jwt_signing_keys {
+        text id PK
+    }
 ```
+
+`api_keys` and `jwt_signing_keys` stand alone — neither references an organization
+(see [architecture.md](architecture.md#authentication-and-authorization) for why).
 
 ### `organizations`
 The isolation boundary. **UUID** primary key (the one entity not using a base62 ID).
@@ -102,7 +111,7 @@ Indexed by `(notification_id, created_at)` to render a timeline. (The FK back to
 ### `api_keys`
 `id` (the `key_…` ID embedded in the raw key), `key_hash` (HMAC-SHA256, unique), `name`,
 `permissions` (text[]), `created_at`. Only the hash is stored — see
-[architecture.md](architecture.md#authentication-details).
+[architecture.md](architecture.md#authentication-and-authorization).
 
 ### `jwt_signing_keys`
 Accepted JWT signing keys (multiple may be active for rotation). `id`, `name`, `algorithm`
@@ -113,7 +122,7 @@ Accepted JWT signing keys (multiple may be active for rotation). `id`, `name`, `
 
 ## Notification status model
 
-Status **only advances, never regresses** (`internal/models/status.go`):
+The **event-driven rollup** only advances, never regresses (`internal/models/status.go`):
 
 | Status | Rank | Meaning |
 |---|---|---|
@@ -125,7 +134,18 @@ Status **only advances, never regresses** (`internal/models/status.go`):
 | `archived` | 4 | User archived it |
 
 `worker-events` updates `status` with a rank comparison in the SQL `WHERE` clause, so events
-that arrive out of order can never move a notification backward.
+that arrive out of order can never move a notification backward. Because `failed` shares rank 0
+with `pending`, the rollup can never *set* it — `failed` is written directly by dispatch.
+
+Two caveats, expanded in [architecture.md](architecture.md#notification-status):
+
+- **Only two events move status.** `notification.sent` (dispatch, once per notification after
+  the fan-out) advances to `sent`; `<channel>.sent` (a worker) advances to `delivered`. Every
+  other event on the stream is timeline detail. A delivery that completes inside one event-writer
+  flush window collapses the two into a single `delivered` write — `sent_at` is still stamped.
+- **The read path deliberately regresses status.** Mark-unread moves `read → delivered` and
+  unarchive moves `archived → read`/`delivered`. Those are explicit user actions, not rollup
+  events, and the monotonic rule does not apply to them.
 
 ## Retention
 

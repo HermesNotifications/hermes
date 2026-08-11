@@ -6,7 +6,7 @@ see the **[Integration Guide](../integration-guide.md)**.
 
 ## Authentication
 
-Two modes (details in [architecture.md](../architecture.md#authentication-details)):
+Two modes (details in [architecture.md](../architecture.md#authentication-and-authorization)):
 
 | API | Auth | Header |
 |---|---|---|

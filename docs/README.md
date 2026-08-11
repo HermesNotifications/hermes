@@ -4,18 +4,40 @@ Hermes is an event-driven, multi-channel notification platform: a Go monorepo of
 services that accept notification requests, fan them out across email / SMS / in-app inbox
 channels, and push to users in real time over WebSockets.
 
-```
-SaaS backend ──▶ Send ──▶ NATS[notification.send] ──▶ Dispatch ──▶ NATS[delivery.*]
-                                                                       │
-                                                  ┌────────────────────┼────────────────────┐
-                                                  ▼                    ▼                    ▼
-                                            worker-email          worker-sms          worker-inbox
-                                                  │                    │                    │
-                                                  └──── NATS[notification.events] ──────────┘
-                                                                       │
-                                                                worker-events ──▶ Postgres
-                                                                       │
-                                  Inbox / User services ◀── read path (JWT) ──▶ Centrifugo (WebSocket push)
+```mermaid
+flowchart LR
+    Backend["SaaS backend"]
+    Browser["Browser / app"]
+
+    subgraph write["Write path (API key)"]
+        direction LR
+        Send["send"] -->|"notification.send"| Dispatch["dispatch"]
+        Dispatch -->|"delivery.email"| WE["worker-email"]
+        Dispatch -->|"delivery.sms"| WS["worker-sms"]
+        Dispatch -->|"delivery.inbox"| WI["worker-inbox"]
+        WE -->|"notification.events"| EW["worker-events"]
+        WS -->|"notification.events"| EW
+        WI -->|"notification.events"| EW
+    end
+
+    subgraph read["Read path (JWT)"]
+        direction LR
+        Inbox["inbox"]
+        User["user"]
+        Cent["Centrifugo"]
+    end
+
+    PG[("Postgres")]
+
+    Backend -->|"POST /v1/send"| Send
+    EW --> PG
+    Dispatch --> PG
+    WI -->|"push"| Cent
+    Browser --> Inbox
+    Browser --> User
+    Browser <-->|"WebSocket"| Cent
+    Inbox --> PG
+    User --> PG
 ```
 
 ## Where do I start?

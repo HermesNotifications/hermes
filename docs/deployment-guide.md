@@ -44,43 +44,43 @@ End-to-end guide for provisioning infrastructure and deploying Hermes to staging
 
 ## Architecture Overview
 
+```mermaid
+flowchart TB
+    subgraph aws["AWS Account"]
+        direction TB
+        subgraph vpc["VPC (10.0.0.0/16)"]
+            direction TB
+            subgraph public["Public subnets"]
+                NAT["NAT Gateway"]
+                NLB["NLB (nginx ingress)"]
+            end
+            subgraph private["Private subnets"]
+                direction TB
+                subgraph eks["EKS cluster"]
+                    NS["hermes namespace<br/>9 services + NATS + Centrifugo"]
+                end
+                Aurora[("Aurora PostgreSQL 16")]
+                Valkey[("Valkey — ElastiCache")]
+            end
+        end
+        ECR["ECR — 10 repos"]
+        S3["S3 bucket — TF state"]
+    end
+
+    NLB --> NS
+    NS --> Aurora
+    NS --> Valkey
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  AWS Account                                                    │
-│                                                                 │
-│  ┌──────────────── VPC (10.0.0.0/16) ───────────────────────┐  │
-│  │                                                           │  │
-│  │  Public Subnets          Private Subnets                  │  │
-│  │  ┌─────────────┐        ┌────────────────────────────┐   │  │
-│  │  │ NAT Gateway │        │  EKS Cluster               │   │  │
-│  │  │ NLB (nginx) │───────>│  ┌──────────────────────┐  │   │  │
-│  │  └─────────────┘        │  │ hermes namespace     │  │   │  │
-│  │                         │  │  9 services + NATS   │  │   │  │
-│  │                         │  │  + Centrifugo        │  │   │  │
-│  │                         │  └──────┬───────┬───────┘  │   │  │
-│  │                         └─────────┼───────┼──────────┘   │  │
-│  │                                   │       │              │  │
-│  │                         ┌─────────┘       └─────────┐    │  │
-│  │                         │                           │    │  │
-│  │                    ┌────▼────┐              ┌───────▼┐   │  │
-│  │                    │ Aurora  │              │Valkey  │   │  │
-│  │                    │Postgres │              │(ElastiC│   │  │
-│  │                    │  16     │              │ache)   │   │  │
-│  │                    └─────────┘              └────────┘   │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌─────────────┐  ┌─────────────────┐                          │
-│  │     ECR     │  │    S3 bucket    │                          │
-│  │  10 repos   │  │  TF state       │                          │
-│  └─────────────┘  └─────────────────┘                          │
-└─────────────────────────────────────────────────────────────────┘
 
-Aurora PostgreSQL, ElastiCache Valkey, and Secrets Manager are managed
-by Crossplane (in-cluster) rather than Terraform. Terraform only manages
-VPC, EKS, ECR, and the CICD OIDC role.
+Aurora PostgreSQL, ElastiCache Valkey, and Secrets Manager are managed by Crossplane
+(in-cluster) rather than Terraform. Terraform only manages VPC, EKS, ECR, and the CI/CD OIDC
+role.
 
-Deployment Pipeline:
-  git push → CI (build) → CD (push to ECR) → Kargo (promote) → ArgoCD (sync)
+**Deployment pipeline:**
+
+```mermaid
+flowchart LR
+    Push["git push"] --> CI["CI — build"] --> CD["CD — push to ECR"] --> Kargo["Kargo — promote"] --> Argo["ArgoCD — sync"]
 ```
 
 **Key infrastructure decisions:**
