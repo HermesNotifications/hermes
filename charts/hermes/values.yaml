@@ -616,8 +616,13 @@ rateLimit:
   # burst/perSecond keeps each service's compiled-in default (send and admin
   # default to their per-credential ceiling; inbox and user default well above
   # their per-user rate, because many users share one NAT).
+  # OFF by default, and deliberately so: behind an ingress controller every request
+  # carries the controller's pod IP unless trustedProxyCIDRs is set, which collapses the
+  # whole fleet into one bucket — an outage delivered by the feature meant to prevent
+  # one. Enable it together with trustedProxyCIDRs below. Services log a warning at
+  # startup if you enable it without them.
   perIP:
-    enabled: true
+    enabled: false
     burst: ""
     perSecond: ""
   # -- Proxies whose `X-Forwarded-For` may be believed, as CIDRs or bare IPs.

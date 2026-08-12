@@ -94,8 +94,10 @@ func TestLoad_RateLimitDefaults(t *testing.T) {
 	if !cfg.RateLimitEnabled {
 		t.Error("expected credential rate limiting to default on")
 	}
-	if !cfg.RateLimitIPEnabled {
-		t.Error("expected per-IP rate limiting to default on")
+	// Off by default: enabled without HERMES_TRUSTED_PROXY_CIDRS, every request behind an
+	// ingress presents the controller's address and the whole fleet shares one bucket.
+	if cfg.RateLimitIPEnabled {
+		t.Error("expected per-IP rate limiting to default off")
 	}
 	if cfg.RateLimitDistributedEnabled {
 		t.Error("expected distributed rate limiting to default off")
@@ -124,13 +126,13 @@ func TestLoad_TrustedProxyCIDRs(t *testing.T) {
 }
 
 func TestLoad_RateLimitOverridesFromEnv(t *testing.T) {
-	t.Setenv("HERMES_RATELIMIT_IP_ENABLED", "false")
+	t.Setenv("HERMES_RATELIMIT_IP_ENABLED", "true")
 	t.Setenv("HERMES_RATELIMIT_IP_PER_SECOND", "50")
 	t.Setenv("HERMES_RATELIMIT_DISTRIBUTED_ENABLED", "true")
 
 	cfg := config.Load()
-	if cfg.RateLimitIPEnabled {
-		t.Error("expected per-IP limiting to be disabled")
+	if !cfg.RateLimitIPEnabled {
+		t.Error("expected per-IP limiting to be enabled")
 	}
 	if cfg.RateLimitIPPerSecond != 50 {
 		t.Errorf("expected 50/s, got %d", cfg.RateLimitIPPerSecond)

@@ -71,6 +71,7 @@ const (
 func (s *Server) ConfigureRateLimit(enabled bool, burst, perSecond int) {
 	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultRateLimitBurst, defaultRateLimitPerSecond)
 	s.limiter = middleware.NewRateLimiter(middleware.APIKeyLimitKey, b, p).
+		WithService("send").
 		WithScope(middleware.ScopeCredential).
 		WithLimitFunc(middleware.APIKeyLimits)
 }

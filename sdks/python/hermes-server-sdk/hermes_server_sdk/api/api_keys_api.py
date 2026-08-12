@@ -842,7 +842,7 @@ class APIKeysApi:
     ) -> ApiKeyView:
         """Set or clear a key's rate limit
 
-        Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+        Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key's cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
 
         :param id: API key ID (required)
         :type id: str
@@ -914,7 +914,7 @@ class APIKeysApi:
     ) -> ApiResponse[ApiKeyView]:
         """Set or clear a key's rate limit
 
-        Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+        Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key's cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
 
         :param id: API key ID (required)
         :type id: str
@@ -986,7 +986,7 @@ class APIKeysApi:
     ) -> RESTResponseType:
         """Set or clear a key's rate limit
 
-        Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+        Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key's cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
 
         :param id: API key ID (required)
         :type id: str

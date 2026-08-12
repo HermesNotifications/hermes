@@ -108,7 +108,7 @@ namespace Hermes.ServerSdk.Api
         /// Set or clear a key&#39;s rate limit
         /// </summary>
         /// <remarks>
-        /// Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+        /// Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
         /// </remarks>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
         /// <param name="id">API key ID</param>
@@ -121,7 +121,7 @@ namespace Hermes.ServerSdk.Api
         /// Set or clear a key&#39;s rate limit
         /// </summary>
         /// <remarks>
-        /// Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+        /// Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
         /// </remarks>
         /// <param name="id">API key ID</param>
         /// <param name="setAPIKeyRateLimitInputBody"></param>
@@ -1333,7 +1333,7 @@ namespace Hermes.ServerSdk.Api
         partial void OnErrorSetApiKeyRateLimit(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody);
 
         /// <summary>
-        /// Set or clear a key&#39;s rate limit Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+        /// Set or clear a key&#39;s rate limit Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
         /// </summary>
         /// <param name="id">API key ID</param>
         /// <param name="setAPIKeyRateLimitInputBody"></param>
@@ -1352,7 +1352,7 @@ namespace Hermes.ServerSdk.Api
         }
 
         /// <summary>
-        /// Set or clear a key&#39;s rate limit Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+        /// Set or clear a key&#39;s rate limit Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
         /// </summary>
         /// <exception cref="ApiException">Thrown when fails to make API call</exception>
         /// <param name="id">API key ID</param>
