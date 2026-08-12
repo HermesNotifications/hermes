@@ -85,13 +85,19 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="ICreateOrganizationApiResponse"/>
     /// </summary>
-    public interface ICreateOrganizationApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.OrganizationItem?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface ICreateOrganizationApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.OrganizationItem?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 201 Created
         /// </summary>
         /// <returns></returns>
         bool IsCreated { get; }
+
+        /// <summary>
+        /// Returns true if the response is 429 TooManyRequests
+        /// </summary>
+        /// <returns></returns>
+        bool IsTooManyRequests { get; }
 
         /// <summary>
         /// Returns true if the response is the default response type
@@ -103,13 +109,19 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IListOrganizationsApiResponse"/>
     /// </summary>
-    public interface IListOrganizationsApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<OrganizationItem>?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IListOrganizationsApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<OrganizationItem>?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
         /// </summary>
         /// <returns></returns>
         bool IsOk { get; }
+
+        /// <summary>
+        /// Returns true if the response is 429 TooManyRequests
+        /// </summary>
+        /// <returns></returns>
+        bool IsTooManyRequests { get; }
 
         /// <summary>
         /// Returns true if the response is the default response type
@@ -449,10 +461,48 @@ namespace Hermes.ServerSdk.Api
             }
 
             /// <summary>
+            /// Returns true if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public bool IsTooManyRequests => 429 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsTooManyRequests
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = TooManyRequests();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)429);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
             /// Returns true if the response is the default response type
             /// </summary>
             /// <returns></returns>
-            public bool IsDefault => !IsCreated;
+            public bool IsDefault => !IsCreated && !IsTooManyRequests;
 
             /// <summary>
             /// Deserializes the response if the response is 0 Default
@@ -706,10 +756,48 @@ namespace Hermes.ServerSdk.Api
             }
 
             /// <summary>
+            /// Returns true if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public bool IsTooManyRequests => 429 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsTooManyRequests
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = TooManyRequests();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)429);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
             /// Returns true if the response is the default response type
             /// </summary>
             /// <returns></returns>
-            public bool IsDefault => !IsOk;
+            public bool IsDefault => !IsOk && !IsTooManyRequests;
 
             /// <summary>
             /// Deserializes the response if the response is 0 Default

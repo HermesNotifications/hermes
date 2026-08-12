@@ -12,6 +12,8 @@
 |**id** | **String** |  |  |
 |**name** | **String** |  |  |
 |**permissions** | **List&lt;String&gt;** |  |  |
+|**rateLimitBurst** | **Long** |  |  [optional] |
+|**rateLimitPerSecond** | **Long** |  |  [optional] |
 |**rawKey** | **String** |  |  |
 
 

@@ -7,6 +7,7 @@ Method | HTTP request | Description
 [**create_api_key**](APIKeysApi.md#create_api_key) | **POST** /v1/apikeys | Create a new API key
 [**delete_api_key**](APIKeysApi.md#delete_api_key) | **DELETE** /v1/apikeys/{id} | Revoke an API key
 [**list_api_keys**](APIKeysApi.md#list_api_keys) | **GET** /v1/apikeys | List all API keys
+[**set_api_key_rate_limit**](APIKeysApi.md#set_api_key_rate_limit) | **PUT** /v1/apikeys/{id}/rate-limit | Set or clear a key&#39;s rate limit
 
 
 # **create_api_key**
@@ -73,6 +74,7 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 **201** | Created |  -  |
+**429** | Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. |  * RateLimit-Limit - Sustained requests per second allowed for this credential. <br>  * RateLimit-Remaining - Requests available right now. <br>  * RateLimit-Reset - Seconds until capacity is available. <br>  * Retry-After - Whole seconds to wait before retrying. Always at least 1. <br>  |
 **0** | Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -130,19 +132,20 @@ No authorization required
 ### HTTP request headers
 
  - **Content-Type**: Not defined
- - **Accept**: application/problem+json
+ - **Accept**: application/json, application/problem+json
 
 ### HTTP response details
 
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 **204** | No Content |  -  |
+**429** | Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. |  * RateLimit-Limit - Sustained requests per second allowed for this credential. <br>  * RateLimit-Remaining - Requests available right now. <br>  * RateLimit-Reset - Seconds until capacity is available. <br>  * Retry-After - Whole seconds to wait before retrying. Always at least 1. <br>  |
 **0** | Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **list_api_keys**
-> List[Item] list_api_keys()
+> List[ApiKeyView] list_api_keys()
 
 List all API keys
 
@@ -151,7 +154,7 @@ List all API keys
 
 ```python
 import hermes_server_sdk
-from hermes_server_sdk.models.item import Item
+from hermes_server_sdk.models.api_key_view import ApiKeyView
 from hermes_server_sdk.rest import ApiException
 from pprint import pprint
 
@@ -184,7 +187,7 @@ This endpoint does not need any parameter.
 
 ### Return type
 
-[**List[Item]**](Item.md)
+[**List[ApiKeyView]**](ApiKeyView.md)
 
 ### Authorization
 
@@ -200,6 +203,80 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 **200** | OK |  -  |
+**429** | Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. |  * RateLimit-Limit - Sustained requests per second allowed for this credential. <br>  * RateLimit-Remaining - Requests available right now. <br>  * RateLimit-Reset - Seconds until capacity is available. <br>  * Retry-After - Whole seconds to wait before retrying. Always at least 1. <br>  |
+**0** | Error |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **set_api_key_rate_limit**
+> ApiKeyView set_api_key_rate_limit(id, set_api_key_rate_limit_input_body)
+
+Set or clear a key's rate limit
+
+Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+
+### Example
+
+
+```python
+import hermes_server_sdk
+from hermes_server_sdk.models.api_key_view import ApiKeyView
+from hermes_server_sdk.models.set_api_key_rate_limit_input_body import SetAPIKeyRateLimitInputBody
+from hermes_server_sdk.rest import ApiException
+from pprint import pprint
+
+# Defining the host is optional and defaults to http://localhost
+# See configuration.py for a list of all supported configuration parameters.
+configuration = hermes_server_sdk.Configuration(
+    host = "http://localhost"
+)
+
+
+# Enter a context with an instance of the API client
+with hermes_server_sdk.ApiClient(configuration) as api_client:
+    # Create an instance of the API class
+    api_instance = hermes_server_sdk.APIKeysApi(api_client)
+    id = 'id_example' # str | API key ID
+    set_api_key_rate_limit_input_body = hermes_server_sdk.SetAPIKeyRateLimitInputBody() # SetAPIKeyRateLimitInputBody | 
+
+    try:
+        # Set or clear a key's rate limit
+        api_response = api_instance.set_api_key_rate_limit(id, set_api_key_rate_limit_input_body)
+        print("The response of APIKeysApi->set_api_key_rate_limit:\n")
+        pprint(api_response)
+    except Exception as e:
+        print("Exception when calling APIKeysApi->set_api_key_rate_limit: %s\n" % e)
+```
+
+
+
+### Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **id** | **str**| API key ID | 
+ **set_api_key_rate_limit_input_body** | [**SetAPIKeyRateLimitInputBody**](SetAPIKeyRateLimitInputBody.md)|  | 
+
+### Return type
+
+[**ApiKeyView**](ApiKeyView.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json, application/problem+json
+
+### HTTP response details
+
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+**200** | OK |  -  |
+**429** | Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. |  * RateLimit-Limit - Sustained requests per second allowed for this credential. <br>  * RateLimit-Remaining - Requests available right now. <br>  * RateLimit-Reset - Seconds until capacity is available. <br>  * Retry-After - Whole seconds to wait before retrying. Always at least 1. <br>  |
 **0** | Error |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

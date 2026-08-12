@@ -11,6 +11,7 @@ docs/apis/SubscriptionsApi.md
 docs/apis/TemplatesApi.md
 docs/apis/UsersApi.md
 docs/models/ApiKeyCreatedOutputBody.md
+docs/models/ApiKeyView.md
 docs/models/CreateAPIKeyInputBody.md
 docs/models/CreateCategoryInputBody.md
 docs/models/CreateOrganizationInputBody.md
@@ -18,7 +19,7 @@ docs/models/CreateSubscriptionInputBody.md
 docs/models/CreateTemplateInputBody.md
 docs/models/ErrorDetail.md
 docs/models/ErrorModel.md
-docs/models/Item.md
+docs/models/ListApiKeys429Response.md
 docs/models/Notification.md
 docs/models/NotificationEvent.md
 docs/models/NotificationItem.md
@@ -29,6 +30,7 @@ docs/models/SendContent.md
 docs/models/SendInputBody.md
 docs/models/SendOutputBody.md
 docs/models/SendRecipient.md
+docs/models/SetAPIKeyRateLimitInputBody.md
 docs/models/Subscription.md
 docs/models/SubscriptionCategory.md
 docs/models/TokenInputBody.md
@@ -41,6 +43,9 @@ docs/scripts/git_push.ps1
 docs/scripts/git_push.sh
 src/Hermes.ServerSdk.Test/Api/DependencyInjectionTests.cs
 src/Hermes.ServerSdk.Test/Hermes.ServerSdk.Test.csproj
+src/Hermes.ServerSdk.Test/Model/ApiKeyViewTests.cs
+src/Hermes.ServerSdk.Test/Model/ListApiKeys429ResponseTests.cs
+src/Hermes.ServerSdk.Test/Model/SetAPIKeyRateLimitInputBodyTests.cs
 src/Hermes.ServerSdk.Test/README.md
 src/Hermes.ServerSdk/Api/APIKeysApi.cs
 src/Hermes.ServerSdk/Api/AuthApi.cs
@@ -73,6 +78,7 @@ src/Hermes.ServerSdk/Extensions/IHttpClientBuilderExtensions.cs
 src/Hermes.ServerSdk/Extensions/IServiceCollectionExtensions.cs
 src/Hermes.ServerSdk/Hermes.ServerSdk.csproj
 src/Hermes.ServerSdk/Model/ApiKeyCreatedOutputBody.cs
+src/Hermes.ServerSdk/Model/ApiKeyView.cs
 src/Hermes.ServerSdk/Model/CreateAPIKeyInputBody.cs
 src/Hermes.ServerSdk/Model/CreateCategoryInputBody.cs
 src/Hermes.ServerSdk/Model/CreateOrganizationInputBody.cs
@@ -80,7 +86,7 @@ src/Hermes.ServerSdk/Model/CreateSubscriptionInputBody.cs
 src/Hermes.ServerSdk/Model/CreateTemplateInputBody.cs
 src/Hermes.ServerSdk/Model/ErrorDetail.cs
 src/Hermes.ServerSdk/Model/ErrorModel.cs
-src/Hermes.ServerSdk/Model/Item.cs
+src/Hermes.ServerSdk/Model/ListApiKeys429Response.cs
 src/Hermes.ServerSdk/Model/Notification.cs
 src/Hermes.ServerSdk/Model/NotificationEvent.cs
 src/Hermes.ServerSdk/Model/NotificationItem.cs
@@ -91,6 +97,7 @@ src/Hermes.ServerSdk/Model/SendContent.cs
 src/Hermes.ServerSdk/Model/SendInputBody.cs
 src/Hermes.ServerSdk/Model/SendOutputBody.cs
 src/Hermes.ServerSdk/Model/SendRecipient.cs
+src/Hermes.ServerSdk/Model/SetAPIKeyRateLimitInputBody.cs
 src/Hermes.ServerSdk/Model/Subscription.cs
 src/Hermes.ServerSdk/Model/SubscriptionCategory.cs
 src/Hermes.ServerSdk/Model/TokenInputBody.cs

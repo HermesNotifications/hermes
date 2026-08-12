@@ -16,10 +16,45 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: "#/components/schemas/Item"
+                  $ref: "#/components/schemas/ApiKeyView"
                 nullable: true
                 type: array
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -44,6 +79,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiKeyCreatedOutputBody"
           description: Created
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -69,6 +139,41 @@ paths:
       responses:
         "204":
           description: No Content
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -76,6 +181,80 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: Revoke an API key
+      tags:
+      - API Keys
+  /v1/apikeys/{id}/rate-limit:
+    put:
+      description: "Replaces this key's rate limit. Omitted fields reset to the service\
+        \ default, so an empty body clears the override entirely. Takes effect within\
+        \ the API key cache TTL; this endpoint invalidates that entry so the change\
+        \ is immediate."
+      operationId: set-api-key-rate-limit
+      parameters:
+      - description: API key ID
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          description: API key ID
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetAPIKeyRateLimitInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyView"
+          description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Set or clear a key's rate limit
       tags:
       - API Keys
   /v1/auth/token:
@@ -94,6 +273,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/TokenOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -129,6 +343,41 @@ paths:
                 nullable: true
                 type: array
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -158,6 +407,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotificationStatusOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -180,6 +464,41 @@ paths:
                 nullable: true
                 type: array
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -204,6 +523,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/OrganizationItem"
           description: Created
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -239,6 +593,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/SendOutputBody"
           description: Accepted
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -261,6 +650,41 @@ paths:
                 nullable: true
                 type: array
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -285,6 +709,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/SubscriptionCategory"
           description: Created
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -317,6 +776,41 @@ paths:
                 nullable: true
                 type: array
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -351,6 +845,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/Subscription"
           description: Created
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -376,6 +905,41 @@ paths:
       responses:
         "204":
           description: No Content
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -410,6 +974,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/SubscriptionCategory"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -435,6 +1034,41 @@ paths:
       responses:
         "204":
           description: No Content
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -469,6 +1103,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/Subscription"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -491,6 +1160,41 @@ paths:
                 nullable: true
                 type: array
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -515,6 +1219,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotificationTemplate"
           description: Created
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -540,6 +1279,41 @@ paths:
       responses:
         "204":
           description: No Content
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -574,6 +1348,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotificationTemplate"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -606,6 +1415,41 @@ paths:
                 nullable: true
                 type: array
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/list_api_keys_429_response"
+          description: "Too Many Requests. The caller exceeded its rate limit. Honour\
+            \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
+            \ pre-authentication per-address bound carries only Retry-After, without\
+            \ the RateLimit-* headers."
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Remaining:
+              description: Requests available right now.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              explode: false
+              schema:
+                type: integer
+              style: simple
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least
+                1.
+              explode: false
+              schema:
+                type: integer
+              style: simple
         default:
           content:
             application/problem+json:
@@ -621,9 +1465,11 @@ components:
       additionalProperties: false
       example:
         $schema: https://openapi-generator.tech
+        rate_limit_burst: 0
         permissions:
         - permissions
         - permissions
+        rate_limit_per_second: 6
         name: name
         created_at: 2000-01-23T04:56:07.000+00:00
         id: id
@@ -646,6 +1492,12 @@ components:
             type: string
           nullable: true
           type: array
+        rate_limit_burst:
+          format: int64
+          type: integer
+        rate_limit_per_second:
+          format: int64
+          type: integer
         raw_key:
           type: string
       required:
@@ -654,13 +1506,58 @@ components:
       - name
       - permissions
       - raw_key
+    ApiKeyView:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        rate_limit_burst: 0
+        permissions:
+        - permissions
+        - permissions
+        rate_limit_per_second: 6
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: id
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        permissions:
+          items:
+            type: string
+          nullable: true
+          type: array
+        rate_limit_burst:
+          description: Absent means the service default applies.
+          format: int64
+          type: integer
+        rate_limit_per_second:
+          description: Absent means the service default applies.
+          format: int64
+          type: integer
+      required:
+      - created_at
+      - id
+      - name
+      - permissions
     CreateAPIKeyInputBody:
       additionalProperties: false
       example:
         $schema: https://openapi-generator.tech
+        rate_limit_burst: 1
         permissions:
         - permissions
         - permissions
+        rate_limit_per_second: 1
         name: name
       properties:
         $schema:
@@ -678,6 +1575,18 @@ components:
             type: string
           nullable: true
           type: array
+        rate_limit_burst:
+          description: Requests admitted instantaneously for this key. Omit to use
+            the service default.
+          format: int64
+          minimum: 1
+          type: integer
+        rate_limit_per_second:
+          description: Sustained requests per second for this key. Omit to use the
+            service default.
+          format: int64
+          minimum: 1
+          type: integer
       required:
       - name
     CreateCategoryInputBody:
@@ -862,33 +1771,6 @@ components:
           description: A URI reference to human-readable documentation for the error.
           format: uri
           type: string
-    Item:
-      additionalProperties: false
-      example:
-        permissions:
-        - permissions
-        - permissions
-        name: name
-        created_at: 2000-01-23T04:56:07.000+00:00
-        id: id
-      properties:
-        created_at:
-          format: date-time
-          type: string
-        id:
-          type: string
-        name:
-          type: string
-        permissions:
-          items:
-            type: string
-          nullable: true
-          type: array
-      required:
-      - created_at
-      - id
-      - name
-      - permissions
     Notification:
       additionalProperties: false
       properties:
@@ -1244,6 +2126,30 @@ components:
       required:
       - organization_id
       - user_id
+    SetAPIKeyRateLimitInputBody:
+      additionalProperties: false
+      example:
+        $schema: https://openapi-generator.tech
+        per_second: 1
+        burst: 1
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          format: uri
+          readOnly: true
+          type: string
+        burst:
+          description: Requests admitted instantaneously. Omit to reset to the service
+            default.
+          format: int64
+          minimum: 1
+          type: integer
+        per_second:
+          description: Sustained requests per second. Omit to reset to the service
+            default.
+          format: int64
+          minimum: 1
+          type: integer
     Subscription:
       additionalProperties: false
       example:
@@ -1517,4 +2423,11 @@ components:
       - locale
       - organization_id
       - organization_name
+    list_api_keys_429_response:
+      example:
+        error: error
+      properties:
+        error:
+          description: Human-readable reason.
+          type: string
 

@@ -39,6 +39,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/apikeys/{id}/rate-limit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set or clear a key's rate limit
+         * @description Replaces this key's rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. Takes effect within the API key cache TTL; this endpoint invalidates that entry so the change is immediate.
+         */
+        put: operations["set-api-key-rate-limit"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/token": {
         parameters: {
             query?: never;
@@ -266,7 +286,34 @@ export interface components {
             id: string;
             name: string;
             permissions: string[] | null;
+            /** Format: int64 */
+            rate_limit_burst?: number;
+            /** Format: int64 */
+            rate_limit_per_second?: number;
             raw_key: string;
+        };
+        ApiKeyView: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example //schemas/ApiKeyView.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            name: string;
+            permissions: string[] | null;
+            /**
+             * Format: int64
+             * @description Absent means the service default applies.
+             */
+            rate_limit_burst?: number;
+            /**
+             * Format: int64
+             * @description Absent means the service default applies.
+             */
+            rate_limit_per_second?: number;
         };
         CreateAPIKeyInputBody: {
             /**
@@ -279,6 +326,16 @@ export interface components {
             name: string;
             /** @description Permission set (defaults to all except apikeys:manage) */
             permissions?: string[] | null;
+            /**
+             * Format: int64
+             * @description Requests admitted instantaneously for this key. Omit to use the service default.
+             */
+            rate_limit_burst?: number;
+            /**
+             * Format: int64
+             * @description Sustained requests per second for this key. Omit to use the service default.
+             */
+            rate_limit_per_second?: number;
         };
         CreateCategoryInputBody: {
             /**
@@ -399,13 +456,6 @@ export interface components {
              * @example https://example.com/errors/example
              */
             type: string;
-        };
-        Item: {
-            /** Format: date-time */
-            created_at: string;
-            id: string;
-            name: string;
-            permissions: string[] | null;
         };
         Notification: {
             action_label?: string;
@@ -553,6 +603,24 @@ export interface components {
             organization_id: string;
             /** @description External user identifier */
             user_id: string;
+        };
+        SetAPIKeyRateLimitInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example //schemas/SetAPIKeyRateLimitInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Requests admitted instantaneously. Omit to reset to the service default.
+             */
+            burst?: number;
+            /**
+             * Format: int64
+             * @description Sustained requests per second. Omit to reset to the service default.
+             */
+            per_second?: number;
         };
         Subscription: {
             /**
@@ -709,7 +777,27 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Item"][] | null;
+                    "application/json": components["schemas"]["ApiKeyView"][] | null;
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -745,6 +833,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApiKeyCreatedOutputBody"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -774,6 +882,82 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-api-key-rate-limit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description API key ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAPIKeyRateLimitInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyView"];
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
             };
             /** @description Error */
             default: {
@@ -808,6 +992,26 @@ export interface operations {
                     "application/json": components["schemas"]["TokenOutputBody"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -838,6 +1042,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationItem"][] | null;
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -872,6 +1096,26 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationStatusOutputBody"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -899,6 +1143,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationItem"][] | null;
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -932,6 +1196,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationItem"];
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -970,6 +1254,26 @@ export interface operations {
                     "application/json": components["schemas"]["SendOutputBody"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -997,6 +1301,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubscriptionCategory"][] | null;
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -1032,6 +1356,26 @@ export interface operations {
                     "application/json": components["schemas"]["SubscriptionCategory"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -1062,6 +1406,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Subscription"][] | null;
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -1100,6 +1464,26 @@ export interface operations {
                     "application/json": components["schemas"]["Subscription"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -1136,6 +1520,26 @@ export interface operations {
                     "application/json": components["schemas"]["SubscriptionCategory"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -1165,6 +1569,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
             };
             /** @description Error */
             default: {
@@ -1202,6 +1626,26 @@ export interface operations {
                     "application/json": components["schemas"]["Subscription"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -1232,6 +1676,26 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -1259,6 +1723,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationTemplate"][] | null;
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -1292,6 +1776,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationTemplate"];
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
@@ -1330,6 +1834,26 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationTemplate"];
                 };
             };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -1359,6 +1883,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
+                };
             };
             /** @description Error */
             default: {
@@ -1390,6 +1934,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserItem"][] | null;
+                };
+            };
+            /** @description Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers. */
+            429: {
+                headers: {
+                    /** @description Sustained requests per second allowed for this credential. */
+                    "RateLimit-Limit"?: number;
+                    /** @description Requests available right now. */
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until capacity is available. */
+                    "RateLimit-Reset"?: number;
+                    /** @description Whole seconds to wait before retrying. Always at least 1. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Human-readable reason. */
+                        error?: string;
+                    };
                 };
             };
             /** @description Error */
