@@ -1,6 +1,7 @@
 # ADR 0018: `dispose()` is terminal, `disconnect()` is the reusable one, and the store repairs its own wiring
 
-**Status:** Accepted (2026-08-12)  
+**Status:** Accepted (amended 2026-08-12: independently reproduced from the opposite direction; see
+the update at the end of Consequences)  
 **Date:** 2026-08-12  
 **Author:** Daryl Robbins
 
@@ -89,6 +90,46 @@ never fought.
 **Defence in depth, not one fix.** The store repair and the hook change each fix the observed bug
 alone. Keeping both is deliberate: the hook fix addresses this caller, the repair addresses the
 next one.
+
+> **Update 2026-08-12: independently reproduced, from the opposite direction.**
+>
+> While this ADR was being written, a separate investigation was hunting the same symptom from the
+> other end — starting from a flaky browser suite rather than from a reading of the lifecycle
+> contract, and without knowledge of this work. It arrived at the same cause. That is worth
+> recording, because the two routes leave different evidence and the second kind is what a future
+> reader will have when this recurs in some other guise.
+>
+> **The publication arrives; the client discards it.** With `page.on("websocket")` armed before
+> navigation, the frames say so directly — the channel subscribes, the initial list completes, the
+> `notification.new` push lands 14ms later, and the store's state is still
+> `{"unreadCount":0,"notifications":[]}`. Nothing upstream is at fault, which is why a long hunt
+> through Centrifugo, NATS and the ingress found nothing: every one of them was doing its job.
+>
+> **The race resolves the outcome, 10 times out of 10.** Instrumenting the two orderings and
+> correlating them against pass/fail removes the last doubt that this is a race rather than a
+> coincidence:
+>
+> | ordering | result |
+> |---|---|
+> | `disconnect` (from dispose) → `store.start` | pass, 6/6 |
+> | `store.start` → `disconnect` | fail, 4/4 — publication parses, one handler present, store never notified |
+>
+> **A sixth alternative, measured.** Beyond the five below, one more was tried and abandoned:
+> *rebuild the client React-side after disposing it*. It made things markedly worse — 14 of 16 runs
+> failed, against 4–6 of 16 before — because client churn multiplies the window rather than closing
+> it. It is the intuitive fix, so it is worth knowing it is the wrong one.
+>
+> **What the fix is worth, end to end.** The full browser suite went from 47 passed / 9 flaky / 3
+> failed to **64 of 64 with retries disabled**, measured on a stack carrying this change.
+>
+> **One thing this does not close.** `waitForRealtimeReady` in `tests/browser/fixtures/demo.ts`
+> still gates on the status reading `connected`, and under this bug that read `connected` while the
+> client was deaf — the socket genuinely reconnected and resubscribed, so the signal was true and
+> meaningless. The cause is fixed, so the gate is adequate today; the gate itself still cannot
+> distinguish "connected" from "will actually deliver". Making it prove delivery would change what
+> `hermes-connected` promises, which is public contract under
+> [ADR 0013](0013-embeddable-inbox-widget-contract.md) — so it is named here as a known limit
+> rather than changed in passing.
 
 ## Alternatives considered
 
