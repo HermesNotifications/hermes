@@ -21,7 +21,8 @@ import {
  * Must match `use.baseURL` in playwright.config.ts — it is what Centrifugo validates against
  * `allowed_origins`, and the whole point of the check below.
  */
-const DEMO_ORIGIN = process.env.HERMES_DEMO_ORIGIN ?? "http://localhost:5173";
+const DEMO_ORIGIN =
+  process.env.HERMES_DEMO_ORIGIN ?? `http://localhost:${process.env.DEMO_WEB_PORT ?? "5173"}`;
 
 /**
  * Assert the environment contract before a single browser starts.

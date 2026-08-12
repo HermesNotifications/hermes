@@ -16,19 +16,32 @@ import { defineConfig } from "vite";
  *
  * These entries just forward to that server so the browser sees a single origin.
  */
+/**
+ * Ports come from the environment so that several worktrees can run the demo at once.
+ *
+ * `scripts/demo-env` derives both from the worktree name, which is what keeps two agents from
+ * colliding without either having to pick a number. The defaults are the historical ones, so
+ * running vite directly still behaves exactly as before.
+ */
+const webPort = Number(process.env.DEMO_WEB_PORT ?? 5173);
+const serverPort = Number(process.env.DEMO_SERVER_PORT ?? 8899);
+const target = `http://localhost:${serverPort}`;
+
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
-    // Fail rather than silently picking another port: the browser suite's baseURL is fixed.
+    port: webPort,
+    // Fail rather than silently picking another port. A demo that quietly moved to 5174 would
+    // take the browser suite's baseURL with it and the failure would surface as "the app is
+    // empty" several minutes later.
     strictPort: true,
     proxy: {
-      "/api": { target: "http://localhost:8899", changeOrigin: false },
-      "/v1": { target: "http://localhost:8899", changeOrigin: false },
+      "/api": { target, changeOrigin: false },
+      "/v1": { target, changeOrigin: false },
     },
   },
   preview: {
-    port: 5173,
+    port: webPort,
     strictPort: true,
   },
 });

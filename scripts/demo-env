@@ -37,10 +37,40 @@ fi
 # Deliberately NOT the HERMES_API_URL that `make seed` writes into web/admin/.env.local: that
 # value is http://localhost:8080, the admin service's port-forward, which does not serve
 # /v1/send. The ingress on :8888 routes every path. Take the key from that file, not the URL.
+#
+# To point the demo at a per-worker sandbox instead of the shared stack:
+#   eval "$(make stack-env)" && scripts/demo-env pnpm --filter @hermes/react-demo dev
 : "${HERMES_API_URL:=http://localhost:8888}"
 : "${HERMES_SOCKET_URL:=http://localhost:8888/realtime}"
 : "${DEMO_COOKIE_SECRET:=hermes-demo-cookie-secret}"
 
+# Two worktrees running the demo at once would otherwise both want 5173 and 8899, and vite is
+# configured with strictPort so the second one simply refuses to start.
+#
+# The offset is derived from the worktree name rather than allocated: a deterministic port
+# survives a restart, can be printed in advance, and needs no lockfile or registry of who holds
+# what. Collisions are possible in principle -- it is a hash into 100 slots -- but two worktrees
+# would have to collide *and* be running the demo simultaneously, and the failure is a loud
+# "port in use" rather than anything subtle.
+#
+# 0 keeps the historical ports for the main checkout, so nothing about the documented workflow
+# changes for someone not using worktrees.
+if [ -z "${DEMO_PORT_OFFSET:-}" ]; then
+  worktree="$(basename "$root")"
+  if [ "$worktree" = "hermes" ]; then
+    DEMO_PORT_OFFSET=0
+  else
+    DEMO_PORT_OFFSET=$(printf '%s' "$worktree" | cksum | cut -d' ' -f1)
+    DEMO_PORT_OFFSET=$(( DEMO_PORT_OFFSET % 100 ))
+  fi
+fi
+
+: "${DEMO_WEB_PORT:=$(( 5173 + DEMO_PORT_OFFSET ))}"
+: "${DEMO_SERVER_PORT:=$(( 8899 + DEMO_PORT_OFFSET ))}"
+# demo-server reads PORT; vite reads DEMO_WEB_PORT and proxies to DEMO_SERVER_PORT.
+: "${PORT:=$DEMO_SERVER_PORT}"
+
 export HERMES_API_KEY HERMES_API_URL HERMES_SOCKET_URL DEMO_COOKIE_SECRET
+export DEMO_WEB_PORT DEMO_SERVER_PORT PORT
 
 exec "$@"

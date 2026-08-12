@@ -69,43 +69,105 @@ make build           # build all services into bin/<service>/service
 Then run individual services from `bin/`, or just use this mode to run integration tests
 (see [testing.md](testing.md)). `make infra-down` stops the infrastructure.
 
-## Parallel development sandboxes (one namespace per worker)
+## Running several agents or worktrees at once
 
-For several developers or agents working against one k3s cluster without colliding. Each
-worker gets a namespace holding Postgres, Redis, NATS with JetStream, Mailpit and
-DynamoDB-local:
+Everything below is per-worktree by default. `WORKER` derives from the worktree directory
+name, and the demo and Docker Compose host ports are derived from it too, so two checkouts can
+run the same commands simultaneously without either passing a flag.
+
+**Every local-dev target is pinned to the `k3d-hermes-dev` context.** They do not follow
+`kubectl config current-context`, deliberately: the context is global machine state that any
+other terminal or agent can change, including between two commands of one run. A full local
+stack was once applied to a remote cluster that way, with the migrate and seed steps running
+against its database, and nothing in the output mentioned a cluster at all. Aim elsewhere on
+purpose with `make <target> KUBE_CONTEXT=name`. `make loadtest-*` is excluded — it is meant to
+run against a real remote cluster.
+
+Pick the lightest thing that does the job:
+
+| You need | Use | Cost |
+|---|---|---|
+| Unit tests | nothing | — |
+| Integration tests, no cluster | `make infra-up` | 5 containers, ports offset per worktree |
+| Integration tests on the cluster | `make devworker-up` | ~6 pods, no host ports |
+| The demo, the browser suite, the whole pipeline | `make stack-up` | ~15 pods + an ingress hostname |
+
+### Infrastructure only
+
+A namespace holding Postgres, Redis, NATS with JetStream, Mailpit and DynamoDB-local:
 
 ```bash
-make devworker-up                      # namespace hermes-dev-$USER
+make devworker-up                      # namespace hermes-dev-<worktree>
 make devworker-up WORKER=alice         # or name it explicitly
 
 eval "$(make devworker-env WORKER=alice)"
-go run ./cmd/migrate/ -database-url "$HERMES_DATABASE_URL" -migrations-path ./migrations
-go test ./... -tags=integration -p 1 -count=1     # the whole suite, including e2e
+make migrate                           # follows HERMES_DATABASE_URL from the eval above
+go test ./... -tags=integration -p 1 -count=1
 
 make devworker-list
 make devworker-down WORKER=alice       # deletes the namespace and its volumes
 ```
 
-Verified: two sandboxes run concurrently with distinct addresses, and the full
-`-tags=integration` suite passes against one.
+**`devworker-env` emits ClusterIPs, and those only work when the host *is* the cluster node
+— i.e. k3s installed directly on Linux.** Under k3d, which is how `make dev-up` runs it, k3s
+lives inside a Docker container and the service CIDR lives in that container's network
+namespace; the host has no route to it. Connections do not refuse, they hang until they time
+out, which reads as "Postgres is broken" rather than "you cannot get there from here". On
+macOS or any k3d setup, use `kubectl port-forward` or prefer `make infra-up`, whose ports are
+offset per worktree.
 
-**`devworker-env` emits ClusterIPs, not `.svc` names.** Cluster DNS does not resolve from
-the host, but on a k3s node the host routes to both the service and pod CIDRs, so these
-URLs work from a plain shell with no port-forward. They are node-local — only reachable
-from the machine running the cluster.
+### A whole stack, per worker
+
+The nine services, Centrifugo and an ingress, in your own namespace — enough for the demo and
+the live browser suite:
+
+```bash
+make images-sandbox      # cross-compile and import into the k3d node (~30s)
+make stack-up            # namespace + ingress + bootstrap; prints your URL
+make stack-list          # every sandbox and the URL it answers on
+make stack-down
+```
+
+Each sandbox answers on its own hostname through the one ingress port the cluster publishes:
+
+```
+http://<worktree>.127.0.0.1.nip.io:8888/v1
+http://<worktree>.127.0.0.1.nip.io:8888/realtime
+```
+
+`nip.io` resolves `<anything>.127.0.0.1.nip.io` to 127.0.0.1 over public DNS, which is what
+makes one hostname work in both a browser and Node's resolver. `*.localhost` would not:
+browsers special-case it, Node does not. The trade is that it needs working DNS — offline, add
+the names to `/etc/hosts`.
+
+**Not Tilt, and no live reload.** `make dev-up` port-forwards 5432, 4222, 6379, 8000, 8025 and
+8001 to the host, so a second Tilt cannot start — the port-forwards are themselves a contention
+point. A sandbox publishes nothing to the host. After a code change, re-run
+`make images-sandbox stack-restart`.
+
+Images are **imported** into the node (`k3d image import`), not pushed to the k3d registry.
+There is no name that works on both sides: the node mirrors `k3d-hermes-registry:5111`, but
+from the host that name can resolve through your LAN's DNS search domain to an entirely
+different machine. Tilt sidesteps this by rewriting every image reference itself.
+
+Two things the sandbox overlay must set that `overlays/local` does not, both because Tilt
+supplies them: an explicit `command` (Dockerfile.dev bakes no ENTRYPOINT, so without it the
+container runs alpine's shell, exits 0, and reports CrashLoopBackOff with no logs) and
+`imagePullPolicy: IfNotPresent` (Kubernetes persists the policy it infers at creation, so a
+Deployment first created with an untagged image keeps `Always` forever and goes to Docker Hub
+for an image sitting in its own content store).
 
 **NATS is a headless Service**, so its variable carries the *pod* IP and changes if
 `nats-0` restarts. Re-run `devworker-env` after a restart.
 
 ### What a sandbox deliberately does not contain
 
-- **The Hermes services.** There is no image registry on the cluster and containerd is
-  separate from Docker, so service images would need `k3s ctr images import` per worker.
-  Every verification task so far needed only infrastructure plus lightweight stand-ins. If
-  you do need them: `make docker-<service>`, then
-  `docker save hermes-<service>:latest | sudo k3s ctr images import -`, and set
-  `imagePullPolicy: IfNotPresent`.
+- **The Hermes services**, by design — this sandbox is the cheap option. If you need them, use
+  `make stack-up` above, which is the same idea with the services and an ingress added.
+
+  (This used to say there was no image registry on the cluster and that images would need
+  `k3s ctr images import` per worker. That is no longer true: `deploy/k3d/config.yaml` creates
+  a registry, and `k3d image import` handles the loading in one command for all ten images.)
 - **NATS TLS.** `base/infra/nats-certificates.yaml` pins `dnsNames` to `nats.hermes`, and
   kustomize does not rewrite strings inside `dnsNames`, so per-namespace certificates need
   per-namespace SANs. Sandboxes run plaintext NATS. To test TLS, issue a leaf with SANs for
