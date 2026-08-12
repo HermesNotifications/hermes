@@ -1,5 +1,16 @@
 # Namespaces Design Spec
 
+> **STALE — do not implement from this document.** It scopes `notification_types` and
+> `notification_groups`, both dropped in migration `000011`; it predates the Send/Dispatch
+> split, so its send path no longer exists; and it says "tenant" where the code says
+> "organization" ([ADR 0003](../../adr/0003-rename-tenant-to-organization.md)).
+>
+> The two-axis model here is still right and is worth reading. The schema and API sections are
+> not. See [2026-08-11-namespaces-scoping-refresh.md](2026-08-11-namespaces-scoping-refresh.md)
+> for what survives, what replaced it, and the decisions still open — and
+> [ADR 0012](../../adr/0012-api-keys-are-not-scoped-to-organizations.md) for why
+> `api_keys.namespace_id` must not be added on its own.
+
 ## Context
 
 Hermes is deployed for a single company to manage notifications across their product suite. A SaaS company with multiple products (possibly acquired, on different tech stacks) needs each product to appear as part of a unified notification experience — the bell icon in any app shows notifications from all apps, emails look consistent — while still allowing per-product isolation of templates, API keys, and access control.

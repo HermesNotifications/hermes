@@ -1,5 +1,14 @@
 # Namespaces Implementation Plan
 
+> **STALE — DO NOT EXECUTE.** This plan alters `notification_types` and
+> `notification_groups`, both dropped in migration `000011`, so its migration steps would fail
+> outright; it predates the Send/Dispatch split; and it says "tenant" where the code says
+> "organization". An agent following it task-by-task would get a long way in before anything
+> failed loudly.
+>
+> Read [specs/2026-08-11-namespaces-scoping-refresh.md](../specs/2026-08-11-namespaces-scoping-refresh.md)
+> first. Five decisions are open, and until they are answered there is nothing here to execute.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add namespace-level organizational boundaries to Hermes so notification types, API keys, and notifications can be scoped to a product/app.
