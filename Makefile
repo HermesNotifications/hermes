@@ -112,11 +112,17 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# /v1/organizations and /v1/subscriptions unreachable in both environments, and /v1/users
 	@# pointed at the user service instead of admin -- because a strategic-merge patch adding
 	@# a `host` has to restate the whole atomic rules list. Rendering perfectly is exactly
-	@# what made it survive. --only excludes the image check: overlay tags are placeholders
-	@# until Kargo rewrites them at promotion, so that check belongs to the chart.
+	@# what made it survive.
+	@#
+	@# The deployed overlays get every check, including images: hermes-natsprovision and
+	@# hermes-cleanup rendered as bare names for want of a Kargo entry, which resolves to
+	@# docker.io/library/<name>:latest and cannot pull. Local is the exception and only gets
+	@# the routing checks -- Tilt builds its images (so they are untagged by design) and runs
+	@# stream provisioning as a local_resource instead of the in-cluster Job, both of which
+	@# overlays/local/kustomization.yaml patches out deliberately.
 	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
-	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
-	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_helm_render.py - --source-root=.
 	@# ADR 0005 phase 4: the CA private key must not render into the application namespace.
 	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_ca_key_location.py - --namespace hermes

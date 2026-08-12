@@ -312,13 +312,17 @@ jobs:
       # strategic-merge patch adding a `host` has to restate the whole atomic rules list,
       # so the copy drifted from base and rendered perfectly the entire time.
       #
-      # --only excludes the image check: overlay tags are SET_BY_CD_PIPELINE placeholders
-      # until Kargo rewrites them at promotion, so that check belongs to the chart job.
-      - name: Ingress rules must reach every Go route
+      # The deployed overlays get every check, including images: hermes-natsprovision and
+      # hermes-cleanup rendered as bare names for want of a Kargo entry, which resolves to
+      # docker.io/library/<name>:latest and cannot pull. Local is the exception and gets
+      # only the routing checks — Tilt builds its images (untagged by design) and runs
+      # stream provisioning as a local_resource rather than the in-cluster Job, both of
+      # which overlays/local/kustomization.yaml patches out deliberately.
+      - name: Rendered overlays must match the Go source
         run: |
           kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
-          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
-          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_helm_render.py - --source-root=.
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_helm_render.py - --source-root=.
 
       # ADR 0005 phase 4. This gate has been in `make verify` since it was written and was
       # never added here — the same "exists but does not run on the merge path" gap the

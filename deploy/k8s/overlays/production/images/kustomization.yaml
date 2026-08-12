@@ -1,5 +1,12 @@
 # This file is managed by Kargo — do not edit manually.
 # Kargo updates image tags here during promotions.
+#
+# Adding an entry by hand IS required when a new image starts being deployed: Kargo
+# rewrites the tags of images listed here and in deploy/kargo/stages/, and an image in
+# neither keeps whatever the overlay says. For a bare name like `hermes-cleanup` that means
+# docker.io/library/hermes-cleanup:latest, which does not exist — a render that passes
+# every gate and an ImagePullBackOff on apply. Add the image in three places together:
+# here, deploy/kargo/warehouse.yaml, and both files under deploy/kargo/stages/.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 images:
@@ -32,4 +39,10 @@ images:
   newTag: SET_BY_CD_PIPELINE
 - name: hermes-worker-sms
   newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
+  newTag: SET_BY_CD_PIPELINE
+- name: hermes-natsprovision
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-natsprovision
+  newTag: SET_BY_CD_PIPELINE
+- name: hermes-cleanup
+  newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-cleanup
   newTag: SET_BY_CD_PIPELINE

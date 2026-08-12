@@ -1,7 +1,13 @@
-# Kargo Warehouse watches ECR for new images across all 11 Hermes images:
-# the 9 long-running services plus the two run-to-completion Jobs, hermes-migrate
-# and hermes-natsprovision, which are subscribed below like any other and are why
-# the count is 11 rather than 9.
+# Kargo Warehouse watches ECR for new images across all 12 Hermes images:
+# the 9 long-running services, the two run-to-completion Jobs (hermes-migrate and
+# hermes-natsprovision) and the hermes-cleanup CronJob, all subscribed below like
+# any other and why the count is 12 rather than 9.
+#
+# The count is load-bearing. An image the CD pipeline publishes but this Warehouse
+# does not watch is never promoted, so the overlay keeps referencing it by bare
+# name — which resolves to docker.io/library/<name>:latest and fails to pull.
+# hermes-cleanup was exactly that: built by cd.yml, deployed by
+# deploy/k8s/base/cleanup-cronjob.yaml, and watched by nobody.
 # When any service publishes a new tag, Kargo creates a Freight that can
 # be promoted through the staging -> production pipeline.
 #
@@ -69,6 +75,11 @@ spec:
     # without the image that creates them.
     - image:
         repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-natsprovision
+        imageSelectionStrategy: NewestBuild
+        allowTags: ^[0-9a-f]{40}$
+        discoveryLimit: 5
+    - image:
+        repoURL: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-cleanup
         imageSelectionStrategy: NewestBuild
         allowTags: ^[0-9a-f]{40}$
         discoveryLimit: 5
