@@ -182,7 +182,7 @@ to equal `HERMES_JWT_SECRET`.
 
 ### What your Centrifugo has to be configured with
 
-Four of these are load-bearing in a way that is invisible when they are missing: the connection
+Most of these are load-bearing in a way that is invisible when they are missing: the connection
 succeeds, the widget reports itself connected, and notifications are quietly lost. Configure all
 of them.
 
@@ -190,8 +190,14 @@ of them.
 |---|---|
 | Redis engine + a broker | Hermes publishes through whichever Centrifugo node it reaches. Without a shared engine, a publication is delivered only to clients connected to *that* node. |
 | `allow_user_limited_channels` | Every subscription is to `user#<internal-user-id>`. Without this, Centrifugo does not treat the `user#` prefix as a user-limited channel and the subscription is refused. |
-| `history_size` / `history_ttl` | The SDK subscribes with `recoverable: true, positioned: true`, which asks Centrifugo to replay what was published while a socket was down. With no history configured that request is accepted and does nothing. |
-| `allowed_origins` | Centrifugo answers `403` at the handshake to any browser origin not listed — while permitting connections that carry no `Origin` at all, so health checks and `curl` succeed and only real browsers are refused. An embedded widget lives on *your* origin, not the Hermes one. |
+| `http_stream` + `sse` | The two fallback rungs of the client's transport ladder. Their absence is invisible to everyone whose network permits websockets — which includes you, your CI and your monitoring. It shows up only as a user on a corporate proxy whose inbox loads once and never updates again. Enabling either also enables the `/emulation` endpoint they both need, which your ingress must route. |
+| `allowed_origins` | Centrifugo answers `403` at the websocket handshake to any browser origin not listed — while permitting connections that carry no `Origin` at all, so health checks and `curl` succeed and only real browsers are refused. It also governs CORS for the two fallback transports above, so a wrong value now breaks all three. An embedded widget lives on *your* origin, not the Hermes one. |
+
+`presence`, `history_size` and `history_ttl` are conventional rather than load-bearing. The SDK
+deliberately does **not** subscribe with `recoverable`/`positioned`: Hermes publishes over a NATS
+broker, which is at-most-once and keeps no history, so a replay request would be accepted and
+silently do nothing. Gap repair happens a layer up instead — the client refetches from the Hermes
+API on every reconnect, which is also what covers a fallback transport dropping and re-establishing.
 
 Values for the v6 configuration schema (the v5 keys are flat and differ — check
 `centrifugo defaultconfig` against the image you are running):
@@ -205,6 +211,12 @@ client:
   allowed_origins: ["https://app.example.com"]
   token:
     hmac_secret_key: "<the same value as HERMES_JWT_SECRET>"
+# Fallback transports. Either one also enables /emulation, which carries the
+# client->server half and which your ingress must route alongside /connection.
+http_stream:
+  enabled: true
+sse:
+  enabled: true
 channel:
   without_namespace:
     presence: true
@@ -217,6 +229,11 @@ http_api:
 
 Run at least three replicas behind a PodDisruptionBudget. Do not add session affinity: with a
 shared engine any node can serve any user, and pinning would concentrate reconnects on one pod.
+That holds for the fallback transports too — each client→server command is an independent POST to
+`/emulation` that any node can answer, which is precisely why these replaced SockJS, whose
+long-polling did require sticky sessions. Do make sure your proxy does not buffer responses:
+`http_stream` and `sse` are single responses the server never finishes writing, and a buffering
+proxy holds each publication waiting for an end that never comes.
 Do give it a generous `terminationGracePeriodSeconds` — every socket on a terminating pod
 reconnects at once, and a graceful exit is what makes clients back off instead of hot-looping.
 

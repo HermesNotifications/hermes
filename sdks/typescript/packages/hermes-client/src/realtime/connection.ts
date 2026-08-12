@@ -38,8 +38,14 @@ export interface RealtimeTransportLike {
   disconnect(): void;
 }
 
+/** One rung of the transport ladder. */
+export interface TransportEndpoint {
+  transport: "websocket" | "http_stream" | "sse";
+  endpoint: string;
+}
+
 export type TransportFactory = (
-  endpoint: string,
+  endpoints: TransportEndpoint[],
   options: Record<string, unknown>
 ) => RealtimeTransportLike;
 
@@ -48,15 +54,70 @@ export type TransportFactory = (
  * event-emitter keyed by its own event names, which no structural interface can
  * express — it is confined to this one function so the rest of the file stays testable.
  */
-const centrifugeFactory: TransportFactory = (endpoint, options) =>
-  new Centrifuge(endpoint, options) as unknown as RealtimeTransportLike;
+const centrifugeFactory: TransportFactory = (endpoints, options) =>
+  new Centrifuge(endpoints, options) as unknown as RealtimeTransportLike;
 
-/** Turn an HTTP(S) base URL into the Centrifugo websocket endpoint. */
-function websocketEndpoint(socketUrl: string): string {
-  const wsUrl = socketUrl.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
-  return wsUrl.endsWith("/connection/websocket")
-    ? wsUrl
-    : `${wsUrl}/connection/websocket`;
+/**
+ * Derive the transport ladder from one base URL.
+ *
+ * The client tries these in order and stops at the first that connects, so a healthy
+ * network behaves exactly as it did when this was websocket-only. The rungs below exist
+ * for networks that break websockets specifically — TLS-intercepting corporate proxies,
+ * and middleboxes that strip the `Upgrade` header. Without them such a client loaded its
+ * inbox once over REST and then went permanently stale, with no error anywhere: the
+ * socket never opens, so no reconnect ever fires, so nothing ever reconciles.
+ *
+ * `http_stream` sits above `sse` deliberately. Both carry the same emulation layer, but
+ * SSE goes through `EventSource`, which under HTTP/1.1 competes for the browser's six
+ * connections per origin — a real constraint when the page shares an origin with the API.
+ *
+ * There is no long-polling rung. Centrifugo's only long-polling transport was SockJS,
+ * removed in v6; the emulation layer used here replaces it and, unlike SockJS, needs no
+ * sticky sessions, which is what makes it safe behind our round-robin ingress.
+ *
+ * All three are derived from a single `socketUrl` rather than configured separately, so
+ * the public contract stays one URL. Both scheme directions are normalized because the
+ * caller may hand us either — `ws://…` is accepted, and the HTTP rungs cannot use it.
+ */
+export function transportEndpoints(socketUrl: string): TransportEndpoint[] {
+  const base = socketUrl.replace(/\/connection\/websocket$/, "");
+  const ws = base.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
+  const http = httpBase(socketUrl);
+
+  return [
+    { transport: "websocket", endpoint: `${ws}/connection/websocket` },
+    { transport: "http_stream", endpoint: `${http}/connection/http_stream` },
+    { transport: "sse", endpoint: `${http}/connection/sse` },
+  ];
+}
+
+/**
+ * Where the fallback transports send their client→server commands.
+ *
+ * Both HTTP rungs are unidirectional on their own — the stream only flows server→client — so every
+ * command the client issues, including the `subscribe` without which no publication is ever
+ * delivered, goes out as a separate POST to this endpoint.
+ *
+ * It must be absolute, and that is the whole reason this function exists. centrifuge-js defaults
+ * `emulationEndpoint` to the *path* `/emulation`, which the browser resolves against the page's own
+ * origin. Hermes is cross-origin by construction — the widget is embedded in the customer's app
+ * while Centrifugo lives on the Hermes domain — so the default aims every command at the customer's
+ * own server, which answers 404. The transport then connects, streams nothing, and retries forever.
+ *
+ * That failure is invisible on a healthy network, because the websocket is bidirectional and never
+ * uses this endpoint at all. It surfaces only once a client has fallen down the ladder, which is
+ * exactly the population the ladder exists to serve. Caught by `tests/browser/transport-ladder`.
+ */
+export function emulationEndpoint(socketUrl: string): string {
+  return `${httpBase(socketUrl)}/emulation`;
+}
+
+/** The realtime base URL, normalized to http(s) and stripped of any websocket path. */
+function httpBase(socketUrl: string): string {
+  return socketUrl
+    .replace(/\/connection\/websocket$/, "")
+    .replace(/^ws:/, "http:")
+    .replace(/^wss:/, "https:");
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -124,6 +185,8 @@ export class RealtimeConnection {
   private statusHandlers: StatusHandler[] = [];
   private currentStatus: RealtimeStatus = "disconnected";
   private currentUserId: string | null = null;
+  /** Set by {@link dispose}. Terminal: a disposed connection never reopens. */
+  private disposed = false;
   /**
    * Serializes connect attempts. `connect()` has to await a token before it can build a
    * transport, and without this queue two calls landing in the same tick would each get
@@ -228,17 +291,30 @@ export class RealtimeConnection {
   }
 
   private async openConnection(userId: string): Promise<void> {
+    if (this.disposed) throw new Error("Hermes: this realtime connection has been disposed");
     if (this.transport && this.currentUserId === userId) return;
     if (this.transport) this.teardown();
 
     this.currentUserId = userId;
     this.setStatus("connecting");
 
-    const transport = this.factory(websocketEndpoint(this.socketUrl), {
-      token: await this.getToken(),
+    const token = await this.getToken();
+
+    // Re-checked after the await, and this is the whole point of the disposed flag rather than
+    // a doc comment. dispose() is synchronous, so it can land while the token is in flight —
+    // between a caller asking to connect and the transport existing. Without this check the
+    // connection then opens, subscribes and starts receiving publications *after* dispose()
+    // emptied the handler lists: a live socket delivering to nobody, which is precisely the
+    // zombie dispose() is supposed to rule out. Silent, and it looks healthy from every angle.
+    if (this.disposed) return;
+
+    const transport = this.factory(transportEndpoints(this.socketUrl), {
+      token,
       // Centrifuge calls this on reconnect, so a socket that outlives its token
       // re-authenticates instead of dropping permanently.
       getToken: async () => await this.getToken(),
+      // Absolute, not the library's page-relative default. See emulationEndpoint().
+      emulationEndpoint: emulationEndpoint(this.socketUrl),
     });
     this.transport = transport;
 
@@ -301,8 +377,15 @@ export class RealtimeConnection {
     this.setStatus("disconnected");
   }
 
-  /** Close the socket and drop every handler. */
+  /**
+   * Close the socket, drop every handler, and refuse to reconnect. Permanent.
+   *
+   * The refusal is the part that matters. A disposed connection that could still be reopened
+   * is a connection that delivers to nobody, because the handlers are gone — so `connect()`
+   * after this rejects rather than quietly succeeding.
+   */
   dispose(): void {
+    this.disposed = true;
     this.disconnect();
     this.handlers = [];
     this.statusHandlers = [];

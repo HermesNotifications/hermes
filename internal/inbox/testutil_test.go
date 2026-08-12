@@ -57,21 +57,33 @@ func (m *mockInboxStore) ListInbox(ctx context.Context, userID string, archived 
 	return result, nextCursor, nil
 }
 
-func (m *mockInboxStore) UnreadCount(ctx context.Context, userID string) (int, error) {
+// Returns the watermark alongside the count, from the same pass over the same slice — the
+// consistency the real stores go to some trouble to provide. It is the newest id in *any* state,
+// which is what makes an already-read arrival ineligible for a second increment.
+func (m *mockInboxStore) UnreadCount(ctx context.Context, userID string) (int, string, error) {
 	m.unreadCountCalls++
 	if m.unreadCountErr != nil {
-		return 0, m.unreadCountErr
+		return 0, "", m.unreadCountErr
 	}
 	count := 0
+	watermark := ""
+	capped := false
 	for _, n := range m.notifications {
-		if n.UserID == userID && n.ReadAt == nil && n.ArchivedAt == nil && n.DeletedAt == nil {
-			count++
+		if n.UserID != userID {
+			continue
 		}
-		if count >= models.UnreadCountCap {
-			return models.UnreadCountCap, nil
+		if n.ID > watermark {
+			watermark = n.ID
+		}
+		if !capped && n.ReadAt == nil && n.ArchivedAt == nil && n.DeletedAt == nil {
+			count++
+			if count >= models.UnreadCountCap {
+				count = models.UnreadCountCap
+				capped = true
+			}
 		}
 	}
-	return count, nil
+	return count, watermark, nil
 }
 
 func (m *mockInboxStore) MarkRead(ctx context.Context, userID, notificationID string) (bool, error) {

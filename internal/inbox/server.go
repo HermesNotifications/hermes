@@ -47,7 +47,9 @@ type InboxStore interface {
 	// Inbox
 	ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error)
 	// UnreadCount saturates at models.UnreadCountCap.
-	UnreadCount(ctx context.Context, userID string) (int, error)
+	// Returns the count and the newest notification id it accounts for. Both come from one
+	// snapshot; see the cache's watermark contract in internal/cache/redis.go.
+	UnreadCount(ctx context.Context, userID string) (int, string, error)
 	MarkRead(ctx context.Context, userID, notificationID string) (bool, error)
 	MarkUnread(ctx context.Context, userID, notificationID string) (bool, error)
 	Archive(ctx context.Context, userID, notificationID string) (bool, error)
@@ -67,8 +69,9 @@ type InboxStore interface {
 // make every one of those branches reachable only with a live Redis.
 type UnreadCache interface {
 	GetUnreadCountWithTTL(ctx context.Context, userID string) (int, time.Duration, bool, error)
-	SetUnreadCount(ctx context.Context, userID string, count int, ttl time.Duration) error
-	FillUnreadCount(ctx context.Context, userID string, count int, ttl time.Duration) (bool, error)
+	SetUnreadCount(ctx context.Context, userID string, count int, watermark string, ttl time.Duration) error
+	DeleteUnreadCount(ctx context.Context, userID string) error
+	FillUnreadCount(ctx context.Context, userID string, count int, watermark string, ttl time.Duration) (bool, error)
 	TryUnreadRefreshLease(ctx context.Context, userID string, ttl time.Duration) (bool, error)
 	IncrUnreadCount(ctx context.Context, userID string, maxCount int) (int64, error)
 	DecrUnreadCount(ctx context.Context, userID string) (int64, error)
@@ -257,12 +260,12 @@ func (s *Server) unreadCount(ctx context.Context, userID string) int {
 // one refresh interval. Closing it properly needs a separately-expiring delta key that the
 // filler reconciles against, which is a lot of moving parts for a badge.
 func (s *Server) fillUnreadCount(ctx context.Context, userID string) int {
-	count, err := s.store.UnreadCount(ctx, userID)
+	count, watermark, err := s.store.UnreadCount(ctx, userID)
 	if err != nil {
 		s.logger.Error("failed to get unread count", "error", err)
 		return -1
 	}
-	if _, err := s.cache.FillUnreadCount(ctx, userID, count, unreadCountTTL); err != nil {
+	if _, err := s.cache.FillUnreadCount(ctx, userID, count, watermark, unreadCountTTL); err != nil {
 		s.logger.Error("failed to cache unread count", "error", err)
 	}
 	return count
@@ -281,14 +284,14 @@ func (s *Server) refreshUnreadCount(ctx context.Context, userID string, cached i
 		return cached
 	}
 
-	count, err := s.store.UnreadCount(ctx, userID)
+	count, watermark, err := s.store.UnreadCount(ctx, userID)
 	if err != nil {
 		s.logger.Error("failed to refresh unread count", "error", err)
 		return cached
 	}
 	// Overwrite rather than SET NX: holding the lease makes this the authoritative recount, and
 	// it is newer than whatever increments landed while it ran.
-	if err := s.cache.SetUnreadCount(ctx, userID, count, unreadCountTTL); err != nil {
+	if err := s.cache.SetUnreadCount(ctx, userID, count, watermark, unreadCountTTL); err != nil {
 		s.logger.Error("failed to cache unread count", "error", err)
 	}
 	return count
@@ -297,7 +300,7 @@ func (s *Server) refreshUnreadCount(ctx context.Context, userID string, cached i
 // recountUnread reads the store without touching the cache. Used when there is no cache, or
 // when the cache is the thing that just failed.
 func (s *Server) recountUnread(ctx context.Context, userID string) int {
-	count, err := s.store.UnreadCount(ctx, userID)
+	count, _, err := s.store.UnreadCount(ctx, userID)
 	if err != nil {
 		s.logger.Error("failed to get unread count", "error", err)
 		return -1

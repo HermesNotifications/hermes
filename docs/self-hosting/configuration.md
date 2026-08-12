@@ -230,7 +230,7 @@ The host comes from `global.domain`. **`ingress.host` does not exist** — setti
 nothing, and the Ingress is still bound to `global.domain`.
 
 The chart renders two Ingress resources when enabled: the API routes and a `/realtime` route
-for Centrifugo WebSockets, which carries nginx long-timeout annotations. Both use the same
+for Centrifugo, which carries nginx long-timeout and no-buffering annotations. Both use the same
 `global.domain` and the same `ingress.tls`.
 
 | Path | Service |
@@ -249,6 +249,12 @@ same prefix is API-key-authenticated and served by admin. An ingress that sends 
 
 This list is checked against the Go handlers at build time by
 `scripts/check_helm_render.py`, so it cannot silently drift from what the services serve.
+
+The `/realtime` route is a prefix, not a single path, and it must stay one. It carries the
+WebSocket endpoint, the `http_stream` and `sse` fallback endpoints, and the `/emulation`
+endpoint that the two fallbacks use for their client→server half. Narrowing it to
+`/realtime/connection/websocket` would leave the fallbacks reachable but unable to send a
+subscribe command — so the connection would establish and then deliver nothing.
 
 With external Centrifugo, the realtime Ingress is only rendered if you set
 `externalCentrifugo.ingressServiceName` to a Service you have created yourself.

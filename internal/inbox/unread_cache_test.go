@@ -28,10 +28,16 @@ type fakeUnreadCache struct {
 	leaseWon bool
 	leaseErr error
 
-	getCalls   int
-	fillCalls  int
-	leaseCalls int
-	setCalls   int
+	getCalls    int
+	fillCalls   int
+	leaseCalls  int
+	setCalls    int
+	deleteCalls int
+
+	// Watermarks the fill and set were handed, so a test can assert they came from the store
+	// snapshot rather than being invented at the cache layer.
+	filledWatermark string
+	setWatermark    string
 }
 
 func (f *fakeUnreadCache) GetUnreadCountWithTTL(_ context.Context, _ string) (int, time.Duration, bool, error) {
@@ -42,15 +48,21 @@ func (f *fakeUnreadCache) GetUnreadCountWithTTL(_ context.Context, _ string) (in
 	return f.count, f.ttl, f.found, nil
 }
 
-func (f *fakeUnreadCache) SetUnreadCount(_ context.Context, _ string, count int, _ time.Duration) error {
+func (f *fakeUnreadCache) SetUnreadCount(_ context.Context, _ string, count int, watermark string, _ time.Duration) error {
 	f.setCalls++
-	f.count, f.found = count, true
+	f.count, f.found, f.setWatermark = count, true, watermark
 	return nil
 }
 
-func (f *fakeUnreadCache) FillUnreadCount(_ context.Context, _ string, count int, _ time.Duration) (bool, error) {
+func (f *fakeUnreadCache) DeleteUnreadCount(_ context.Context, _ string) error {
+	f.deleteCalls++
+	f.count, f.found = 0, false
+	return nil
+}
+
+func (f *fakeUnreadCache) FillUnreadCount(_ context.Context, _ string, count int, watermark string, _ time.Duration) (bool, error) {
 	f.fillCalls++
-	f.count, f.found = count, true
+	f.count, f.found, f.filledWatermark = count, true, watermark
 	return true, nil
 }
 

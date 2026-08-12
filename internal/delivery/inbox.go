@@ -75,7 +75,7 @@ func (p *InboxProvider) Send(ctx context.Context, req DeliveryRequest) (Delivery
 		if err != nil {
 			p.logger.Warn("unread count dedup check failed", "error", err, "notification_id", req.NotificationID)
 		} else if first {
-			if n, err := p.cache.IncrUnreadCount(ctx, req.UserID, models.UnreadCountCap); err != nil {
+			if n, err := p.cache.IncrUnreadCountForArrival(ctx, req.UserID, req.NotificationID, models.UnreadCountCap); err != nil {
 				p.logger.Warn("unread count increment failed", "error", err, "user_id", req.UserID)
 			} else if n >= 0 {
 				payload["unread_count"] = n

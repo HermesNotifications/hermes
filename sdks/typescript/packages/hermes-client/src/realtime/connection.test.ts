@@ -8,6 +8,7 @@ import {
   RealtimeConnection,
   type RealtimeSubscriptionLike,
   type RealtimeTransportLike,
+  type TransportEndpoint,
   type TransportFactory,
 } from "./connection.js";
 
@@ -70,9 +71,14 @@ class FakeTransport implements RealtimeTransportLike {
   private handlers = new Map<string, Array<(ctx: never) => void>>();
 
   constructor(
-    readonly endpoint: string,
+    readonly endpoints: TransportEndpoint[],
     readonly options: Record<string, unknown>
   ) {}
+
+  /** The endpoint for one rung, so a test can assert on it without indexing by position. */
+  endpointFor(transport: TransportEndpoint["transport"]): string | undefined {
+    return this.endpoints.find((e) => e.transport === transport)?.endpoint;
+  }
 
   on(event: string, handler: (ctx: never) => void): unknown {
     const list = this.handlers.get(event) ?? [];
@@ -115,8 +121,8 @@ class FakeTransport implements RealtimeTransportLike {
 /** A connection wired to a fake transport, plus the transports it built. */
 function connection(options?: { socketUrl?: string; token?: string }) {
   const transports: FakeTransport[] = [];
-  const factory: TransportFactory = (endpoint, opts) => {
-    const transport = new FakeTransport(endpoint, opts as Record<string, unknown>);
+  const factory: TransportFactory = (endpoints, opts) => {
+    const transport = new FakeTransport(endpoints, opts as Record<string, unknown>);
     transports.push(transport);
     return transport;
   };
@@ -155,7 +161,82 @@ describe("RealtimeConnection: endpoint construction", () => {
   ])("$name", async ({ socketUrl, want }) => {
     const { conn, transport } = connection({ socketUrl });
     await conn.connect("usr_1");
-    expect(transport().endpoint).toBe(want);
+    expect(transport().endpointFor("websocket")).toBe(want);
+  });
+});
+
+describe("RealtimeConnection: the transport ladder", () => {
+  it("offers websocket, then http_stream, then sse — in that order", async () => {
+    // Order is the whole contract: centrifuge tries these top-down and stops at the first
+    // that connects, so a healthy network must still land on websocket. Asserting the array
+    // rather than set membership is deliberate — a reordering is a behaviour change.
+    const { conn, transport } = connection({ socketUrl: "https://hermes.example.com/realtime" });
+    await conn.connect("usr_1");
+
+    expect(transport().endpoints).toEqual([
+      { transport: "websocket", endpoint: "wss://hermes.example.com/realtime/connection/websocket" },
+      {
+        transport: "http_stream",
+        endpoint: "https://hermes.example.com/realtime/connection/http_stream",
+      },
+      { transport: "sse", endpoint: "https://hermes.example.com/realtime/connection/sse" },
+    ]);
+  });
+
+  it("gives the fallback rungs an http scheme even when handed a ws url", async () => {
+    // The regression this guards is silent and total: `wss://…/connection/sse` is not a URL
+    // any browser will fetch, so both fallbacks would be dead on arrival and the failure
+    // would only show on the networks that need them — the ones we cannot reproduce locally.
+    const { conn, transport } = connection({
+      socketUrl: "wss://hermes.example.com/realtime/connection/websocket",
+    });
+    await conn.connect("usr_1");
+
+    expect(transport().endpointFor("http_stream")).toBe(
+      "https://hermes.example.com/realtime/connection/http_stream"
+    );
+    expect(transport().endpointFor("sse")).toBe(
+      "https://hermes.example.com/realtime/connection/sse"
+    );
+  });
+
+  it("keeps plaintext ws urls on plaintext http", async () => {
+    const { conn, transport } = connection({ socketUrl: "ws://localhost:8000" });
+    await conn.connect("usr_1");
+
+    expect(transport().endpointFor("http_stream")).toBe(
+      "http://localhost:8000/connection/http_stream"
+    );
+    expect(transport().endpointFor("sse")).toBe("http://localhost:8000/connection/sse");
+  });
+
+  it("points the emulation endpoint at Centrifugo, absolutely", async () => {
+    // Regression test for a bug the browser suite caught and every unit test missed.
+    //
+    // centrifuge-js defaults `emulationEndpoint` to the bare path `/emulation`, which the browser
+    // resolves against the *page's* origin. Hermes is cross-origin by construction, so the default
+    // sends every client->server command — including the subscribe — to the customer's own server,
+    // which 404s. The fallback transport then connects, receives nothing, and retries forever.
+    //
+    // Asserting the absolute URL rather than merely "it was set" is the point: a relative value
+    // would satisfy a truthiness check and still be broken in exactly the way that shipped.
+    const { conn, transport } = connection({ socketUrl: "https://hermes.example.com/realtime" });
+    await conn.connect("usr_1");
+
+    expect(transport().options.emulationEndpoint).toBe(
+      "https://hermes.example.com/realtime/emulation"
+    );
+  });
+
+  it("derives the emulation endpoint from a websocket url too", async () => {
+    const { conn, transport } = connection({
+      socketUrl: "wss://hermes.example.com/realtime/connection/websocket",
+    });
+    await conn.connect("usr_1");
+
+    expect(transport().options.emulationEndpoint).toBe(
+      "https://hermes.example.com/realtime/emulation"
+    );
   });
 });
 

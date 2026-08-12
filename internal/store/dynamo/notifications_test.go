@@ -430,7 +430,7 @@ func TestUnreadCount(t *testing.T) {
 		t.Fatalf("MarkRead: %v", err)
 	}
 
-	count, err := st.UnreadCount(ctx, userID)
+	count, _, err := st.UnreadCount(ctx, userID)
 	if err != nil {
 		t.Fatalf("UnreadCount: %v", err)
 	}
@@ -627,7 +627,7 @@ func TestMarkAllRead(t *testing.T) {
 	}
 
 	// Unread count should now be zero
-	count, _ := st.UnreadCount(ctx, userID)
+	count, _, _ := st.UnreadCount(ctx, userID)
 	if count != 0 {
 		t.Errorf("UnreadCount after MarkAllRead: want 0, got %d", count)
 	}
@@ -714,7 +714,7 @@ func TestMarkAllRead_LargeInbox(t *testing.T) {
 		t.Fatalf("MarkAllRead: %v", err)
 	}
 
-	count, err := st.UnreadCount(ctx, userID)
+	count, _, err := st.UnreadCount(ctx, userID)
 	if err != nil {
 		t.Fatalf("UnreadCount: %v", err)
 	}

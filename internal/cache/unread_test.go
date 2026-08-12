@@ -77,7 +77,7 @@ func TestIncrUnreadCount_DoesNotExtendTTL(t *testing.T) {
 	c, ctx := newCache(t), context.Background()
 	user := testUser(t)
 
-	if err := c.SetUnreadCount(ctx, user, 5, 30*time.Second); err != nil {
+	if err := c.SetUnreadCount(ctx, user, 5, "", 30*time.Second); err != nil {
 		t.Fatalf("SetUnreadCount: %v", err)
 	}
 	if _, err := c.IncrUnreadCount(ctx, user, testCap); err != nil {
@@ -103,7 +103,7 @@ func TestIncrUnreadCount_ClampsAtCap(t *testing.T) {
 	c, ctx := newCache(t), context.Background()
 	user := testUser(t)
 
-	if err := c.SetUnreadCount(ctx, user, testCap, time.Minute); err != nil {
+	if err := c.SetUnreadCount(ctx, user, testCap, "", time.Minute); err != nil {
 		t.Fatalf("SetUnreadCount: %v", err)
 	}
 	got, err := c.IncrUnreadCount(ctx, user, testCap)
@@ -149,7 +149,7 @@ func TestDecrUnreadCount_MissAndFloor(t *testing.T) {
 		t.Fatalf("decrementing an absent count = %d, want %d (miss)", got, cache.UnreadCountMiss)
 	}
 
-	if err := c.SetUnreadCount(ctx, user, 0, time.Minute); err != nil {
+	if err := c.SetUnreadCount(ctx, user, 0, "", time.Minute); err != nil {
 		t.Fatalf("SetUnreadCount: %v", err)
 	}
 	if got, err = c.DecrUnreadCount(ctx, user); err != nil {
@@ -188,7 +188,7 @@ func TestGetUnreadCountWithTTL(t *testing.T) {
 		t.Fatal("reported a hit for a key that was never written")
 	}
 
-	if err := c.SetUnreadCount(ctx, user, 42, time.Minute); err != nil {
+	if err := c.SetUnreadCount(ctx, user, 42, "", time.Minute); err != nil {
 		t.Fatalf("SetUnreadCount: %v", err)
 	}
 	count, ttl, found, err := c.GetUnreadCountWithTTL(ctx, user)
@@ -209,7 +209,9 @@ func TestGetUnreadCountWithTTL_TreatsImmortalKeyAsDue(t *testing.T) {
 	c, ctx := newCache(t), context.Background()
 	user := testUser(t)
 
-	if err := rawRedis(t).Set(ctx, "unread:"+user, 7, 0).Err(); err != nil {
+	// Seeded through the raw client so the key genuinely has no expiry, which the exported API
+	// will not produce. The key name and hash layout have to match internal/cache/redis.go.
+	if err := rawRedis(t).HSet(ctx, "unread:v2:"+user, "n", 7, "wm", "").Err(); err != nil {
 		t.Fatalf("seed key with no expiry: %v", err)
 	}
 
@@ -229,7 +231,7 @@ func TestFillUnreadCount_DoesNotClobber(t *testing.T) {
 	c, ctx := newCache(t), context.Background()
 	user := testUser(t)
 
-	won, err := c.FillUnreadCount(ctx, user, 3, time.Minute)
+	won, err := c.FillUnreadCount(ctx, user, 3, "", time.Minute)
 	if err != nil {
 		t.Fatalf("FillUnreadCount: %v", err)
 	}
@@ -238,7 +240,7 @@ func TestFillUnreadCount_DoesNotClobber(t *testing.T) {
 	}
 
 	// A second filler holding a staler answer must not replace the first.
-	won, err = c.FillUnreadCount(ctx, user, 99, time.Minute)
+	won, err = c.FillUnreadCount(ctx, user, 99, "", time.Minute)
 	if err != nil {
 		t.Fatalf("FillUnreadCount: %v", err)
 	}
@@ -296,5 +298,105 @@ func TestMarkUnreadCounted_IsIdempotent(t *testing.T) {
 	}
 	if first {
 		t.Fatal("a redelivery was treated as new; the user's count would be incremented twice")
+	}
+}
+
+// The overcount this watermark exists to prevent, reproduced as a unit rather than as a browser
+// test that only failed about half the time.
+//
+// The interleaving is the one that actually happened: dispatch persists the row, a cache miss
+// fills the count from the store -- a value that already includes it -- and only then does
+// delivery run. Before the watermark the increment counted the same notification a second time,
+// and the badge read one high until the entry refreshed.
+func TestIncrUnreadCountForArrival_DoesNotRecountWhatTheFillAlreadyCounted(t *testing.T) {
+	c, ctx := newCache(t), context.Background()
+	user := testUser(t)
+	const arrival = "0345d0V8zorZMYcA2R4l20"
+
+	// The store already held the notification, so the filled count includes it and the watermark
+	// says so.
+	if _, err := c.FillUnreadCount(ctx, user, 1, arrival, time.Minute); err != nil {
+		t.Fatalf("FillUnreadCount: %v", err)
+	}
+
+	got, err := c.IncrUnreadCountForArrival(ctx, user, arrival, testCap)
+	if err != nil {
+		t.Fatalf("IncrUnreadCountForArrival: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("count after a delivery the fill already counted = %d, want 1", got)
+	}
+}
+
+// The other side of the same guard: an arrival the fill could not have seen must still count.
+func TestIncrUnreadCountForArrival_CountsSomethingNewerThanTheFill(t *testing.T) {
+	c, ctx := newCache(t), context.Background()
+	user := testUser(t)
+
+	// Ids are time-sortable, so "newer" is a plain string comparison.
+	if _, err := c.FillUnreadCount(ctx, user, 1, "0345d0V8zorZMYcA2R4l20", time.Minute); err != nil {
+		t.Fatalf("FillUnreadCount: %v", err)
+	}
+
+	got, err := c.IncrUnreadCountForArrival(ctx, user, "0345d9zzzzzzzzzzzzzzzz", testCap)
+	if err != nil {
+		t.Fatalf("IncrUnreadCountForArrival: %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("count after a genuinely new arrival = %d, want 2", got)
+	}
+}
+
+// Out-of-order deliveries must all be counted. Nothing orders `delivery.inbox`, so a message for
+// an older notification can be processed after a newer one — and an earlier version of this script
+// advanced the watermark on every increment, which made exactly that case look already-counted and
+// dropped it. The count then sat one short indefinitely.
+func TestIncrUnreadCountForArrival_CountsOutOfOrderArrivals(t *testing.T) {
+	c, ctx := newCache(t), context.Background()
+	user := testUser(t)
+
+	if _, err := c.FillUnreadCount(ctx, user, 0, "", time.Minute); err != nil {
+		t.Fatalf("FillUnreadCount: %v", err)
+	}
+
+	// Newer first, then older: both are above the (empty) watermark, so both must count.
+	if _, err := c.IncrUnreadCountForArrival(ctx, user, "0345d9zzzzzzzzzzzzzzzz", testCap); err != nil {
+		t.Fatalf("IncrUnreadCountForArrival newer: %v", err)
+	}
+	got, err := c.IncrUnreadCountForArrival(ctx, user, "0345d0V8zorZMYcA2R4l20", testCap)
+	if err != nil {
+		t.Fatalf("IncrUnreadCountForArrival older: %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("count after two out-of-order arrivals = %d, want 2", got)
+	}
+}
+
+// Marking an existing notification unread is not an arrival: it flips a read flag on something the
+// count already knew about. It must raise the count even though its id sits far below the
+// watermark, and must leave the watermark where it is.
+func TestIncrUnreadCount_MarkUnreadIgnoresTheWatermark(t *testing.T) {
+	c, ctx := newCache(t), context.Background()
+	user := testUser(t)
+
+	if _, err := c.FillUnreadCount(ctx, user, 0, "0345d9zzzzzzzzzzzzzzzz", time.Minute); err != nil {
+		t.Fatalf("FillUnreadCount: %v", err)
+	}
+
+	got, err := c.IncrUnreadCount(ctx, user, testCap)
+	if err != nil {
+		t.Fatalf("IncrUnreadCount: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("count after marking an old notification unread = %d, want 1", got)
+	}
+
+	// The watermark is untouched, so a genuinely later arrival is still eligible.
+	after, err := c.IncrUnreadCountForArrival(ctx, user, "0345dzzzzzzzzzzzzzzzzz", testCap)
+	if err != nil {
+		t.Fatalf("IncrUnreadCountForArrival: %v", err)
+	}
+	if after != 2 {
+		t.Fatalf("count after a later arrival = %d, want 2", after)
 	}
 }

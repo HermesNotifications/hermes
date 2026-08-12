@@ -67,8 +67,21 @@ export function useHermesClient(config: HermesClientConfig): HermesClient {
 
   useEffect(() => {
     const { client } = current;
+    // `disconnect`, not `dispose` — and this is the fix for a bug that only a live browser found.
+    //
+    // StrictMode runs effect -> cleanup -> effect on this same memoized client, so this cleanup
+    // fires while the client is still very much in use. `dispose()` is terminal: it drops every
+    // handler any consumer registered. An embedded `<hermes-inbox client={...}>` registers its
+    // own during an async start(), so whichever won the race decided whether realtime worked —
+    // and when dispose won, the socket still connected and subscribed and delivered to nobody.
+    //
+    // A cleanup must be undoable by re-running the effect, and dropping third-party handlers
+    // never can be: the client cannot know who registered them. Closing the socket can be, so
+    // that is all this does. Anything still mounted reconnects (see InboxStore's self-heal);
+    // anything genuinely unmounting simply stays closed. Replacing the client on an
+    // apiUrl/socketUrl change is a deliberate act and still disposes, above.
     return () => {
-      client.dispose();
+      client.disconnect();
     };
   }, [current]);
 

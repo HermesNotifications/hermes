@@ -21,9 +21,12 @@ export {
 export { InboxStore, type InboxStoreOptions } from "./inbox/store.js";
 
 export {
+  emulationEndpoint,
   eventFromPublication,
+  transportEndpoints,
   type RealtimeStatus,
   type StatusHandler,
+  type TransportEndpoint,
   type TransportFactory,
   type RealtimeSubscriptionLike,
   type RealtimeTransportLike,

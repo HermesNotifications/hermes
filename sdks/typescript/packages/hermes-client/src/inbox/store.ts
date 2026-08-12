@@ -68,6 +68,9 @@ export class InboxStore {
    */
   private hasConnected = false;
 
+  /** Coalesces a burst of `disconnected` events into a single {@link heal}. */
+  private healScheduled = false;
+
   /**
    * Realtime actions seen while a mutation is in flight, one buffer per mutation.
    *
@@ -146,32 +149,7 @@ export class InboxStore {
     if (this.disposed || this.started) return;
     this.started = true;
 
-    this.cleanups.push(
-      this.client.on("notification", (event: NewNotificationEvent) => {
-        this.dispatchRealtime({ type: "realtime/notification", event });
-      })
-    );
-    this.cleanups.push(
-      this.client.on("update", (event: InboxUpdatedEvent) => {
-        this.dispatchRealtime({ type: "realtime/update", event, at: this.now() });
-      })
-    );
-    this.cleanups.push(
-      this.client.onStatusChange((status) => {
-        this.dispatch({ type: "realtime/status", status });
-        if (status !== "connected") return;
-
-        // The first connect needs no repair: start() has just loaded the first page, and the
-        // subscription was established before anything could be missed. Every *sub­sequent*
-        // connect follows a gap in which publications were lost for good, because the NATS
-        // broker keeps no history for Centrifugo to replay (issue #102).
-        if (!this.hasConnected) {
-          this.hasConnected = true;
-          return;
-        }
-        void this.reconcile();
-      })
-    );
+    this.wireRealtime();
 
     // Enter the loading state before the socket work below, not when refresh() finally runs.
     // Otherwise the store reports "not loading, no notifications" for as long as the connect
@@ -307,6 +285,99 @@ export class InboxStore {
     } finally {
       this.replayBuffers.delete(replay);
     }
+  }
+
+  /**
+   * Register this store's realtime handlers on the client, replacing any it already holds.
+   *
+   * Idempotent by construction: existing registrations are dropped first. That matters because
+   * {@link heal} calls this again on a live client, and a second registration would dispatch
+   * every arrival twice — double-counting the badge.
+   *
+   * Safe to call from inside a status callback. Both unsubscribe paths reassign their handler
+   * array rather than splicing it, so the iteration already in progress is unaffected.
+   */
+  private wireRealtime(): void {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups = [];
+
+    this.cleanups.push(
+      this.client.on("notification", (event: NewNotificationEvent) => {
+        this.dispatchRealtime({ type: "realtime/notification", event });
+      })
+    );
+    this.cleanups.push(
+      this.client.on("update", (event: InboxUpdatedEvent) => {
+        this.dispatchRealtime({ type: "realtime/update", event, at: this.now() });
+      })
+    );
+    this.cleanups.push(
+      this.client.onStatusChange((status) => {
+        this.dispatch({ type: "realtime/status", status });
+
+        // `disconnected` is only ever emitted by an explicit disconnect() or dispose() — a
+        // transport drop reports `connecting`, because the socket is coming back on its own.
+        // So reaching here means something outside this store closed a connection the store
+        // still wants, and nothing else will reopen it.
+        if (status === "disconnected") {
+          // Deferred, not inline. Healing re-registers, which mutates the very handler
+          // collections the client is part-way through iterating to deliver this callback, and
+          // whether that is safe depends on the emitter's internals: an array reassigned on
+          // unsubscribe is fine, a Set mutated in place hands the loop the freshly added
+          // handler and spins forever. A microtask makes the question moot rather than
+          // relying on an implementation detail two layers away.
+          if (this.healScheduled) return;
+          this.healScheduled = true;
+          queueMicrotask(() => {
+            this.healScheduled = false;
+            this.heal();
+          });
+          return;
+        }
+        if (status !== "connected") return;
+
+        // The first connect needs no repair: start() has just loaded the first page, and the
+        // subscription was established before anything could be missed. Every *sub­sequent*
+        // connect follows a gap in which publications were lost for good, because the NATS
+        // broker keeps no history for Centrifugo to replay (issue #102).
+        if (!this.hasConnected) {
+          this.hasConnected = true;
+          return;
+        }
+        void this.reconcile();
+      })
+    );
+  }
+
+  /**
+   * Recover from someone else tearing down a connection this store still depends on.
+   *
+   * The motivating case is `HermesClient.dispose()` on a *shared* client: it empties the
+   * consumer handler arrays and closes the socket, but leaves the client reusable. A store
+   * that had already registered is then silently deaf — the socket reopens, resubscribes and
+   * receives publications, and delivers them to nobody. React StrictMode makes this routine
+   * rather than exotic, because it runs effect → cleanup → effect, and `useHermesClient`
+   * disposes in that cleanup while the widget's own start() is still in flight.
+   *
+   * Re-registering is the load-bearing half. Reconnecting alone would not help: the status
+   * handlers survive dispose() (they live on the realtime connection, which only gets
+   * disconnected), but the notification handlers do not — which is exactly why the failure
+   * presents as a healthy, connected, silent widget.
+   *
+   * Deliberately scoped to a started, undisposed store. `stop()` clears `started` *before* it
+   * disconnects, so a deliberate teardown is never fought. An application that disconnects a
+   * shared client while a widget is mounted will be overridden, and that is the intended
+   * precedence: a mounted inbox asking for realtime is a live claim.
+   */
+  private heal(): void {
+    if (!this.started || this.disposed) return;
+
+    this.wireRealtime();
+
+    // Cannot loop: only an explicit disconnect emits `disconnected`, and connect() never does.
+    void this.client.connect(this.userId).catch((cause) => {
+      console.error("Hermes: could not restore the realtime connection:", cause);
+    });
   }
 
   /** Apply a realtime action, recording it for any mutation that may have to roll back. */

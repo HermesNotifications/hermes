@@ -115,22 +115,34 @@ func (s *Store) ListInbox(ctx context.Context, userID string, archived bool, cur
 // time a badge is drawn. LIMIT does have one: with idx_notifications_unread (migration 000018)
 // this is an index-only scan that stops at the cap, so the pathological user costs the same as
 // the ordinary one.
+// The watermark is deliberately the newest notification for this user in **any** state, not the
+// newest unread one. It answers "which arrivals does this count already account for", and a
+// notification that arrived and was read immediately still arrived. Taking the unread maximum
+// would leave a higher-id read notification outside the watermark, so a delivery still in flight
+// for it would be counted again — the exact double-count this exists to prevent.
+//
+// Both values come from one statement so they describe the same snapshot. Read separately they
+// could straddle an insert, and then either the count or the watermark is ahead of the other: one
+// way loses an arrival, the other counts it twice.
 const unreadCountSQL = `
-	SELECT count(*) FROM (
-		SELECT 1 FROM notifications
-		WHERE user_id = $1
-		  AND read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL
-		LIMIT $2
-	) capped`
+	SELECT
+		(SELECT count(*) FROM (
+			SELECT 1 FROM notifications
+			WHERE user_id = $1
+			  AND read_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL
+			LIMIT $2
+		) capped),
+		coalesce((SELECT max(id) FROM notifications WHERE user_id = $1), '')`
 
 // UnreadCount returns the number of unread, non-archived, non-deleted notifications for a user,
-// saturating at models.UnreadCountCap.
-func (s *Store) UnreadCount(ctx context.Context, userID string) (int, error) {
+// saturating at models.UnreadCountCap, together with the watermark described above.
+func (s *Store) UnreadCount(ctx context.Context, userID string) (int, string, error) {
 	var count int
-	if err := s.pool.QueryRow(ctx, unreadCountSQL, userID, models.UnreadCountCap).Scan(&count); err != nil {
-		return 0, fmt.Errorf("unread count: %w", err)
+	var watermark string
+	if err := s.pool.QueryRow(ctx, unreadCountSQL, userID, models.UnreadCountCap).Scan(&count, &watermark); err != nil {
+		return 0, "", fmt.Errorf("unread count: %w", err)
 	}
-	return count, nil
+	return count, watermark, nil
 }
 
 // MarkRead marks a notification as read and advances its status.

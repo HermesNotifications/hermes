@@ -815,6 +815,73 @@ describe("InboxStore: reconciling on reconnect", () => {
     expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["a"]);
   });
 
+  it("re-registers and reconnects when something else disconnects a shared client", async () => {
+    // The store may not be the only thing holding this client. `HermesClient.dispose()` empties
+    // the handler arrays without asking, and a React effect cleanup can fire it spuriously while
+    // the store is still very much started — which left the store deaf while its socket happily
+    // reconnected underneath it. Rather than trust every consumer to behave, a started store
+    // repairs its own wiring when it sees a disconnect it did not ask for.
+    const fake = new FakeHermesClient(fakePage({ data: [], unreadCount: 0 }));
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    fake.emitStatus("connected");
+
+    // Stand in for the dispose: handlers gone, connection down, store none the wiser.
+    fake.dropHandlers();
+    fake.emitStatus("disconnected");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fake.calls.filter((c) => c === "connect:usr_1"), "did not reconnect").toHaveLength(2);
+
+    fake.emit("notification", {
+      type: "notification.new",
+      id: "after-heal",
+      title: "Arrived",
+      body: "b",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(inbox.getSnapshot().notifications.map((n) => n.id)).toEqual(["after-heal"]);
+  });
+
+  it("does not fight a deliberate stop", async () => {
+    // stop() clears `started` before it disconnects, so the heal above must not undo it. Without
+    // that ordering an unmount would reopen the socket it had just closed, forever.
+    const fake = new FakeHermesClient(fakePage({ data: [], unreadCount: 0 }));
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    fake.emitStatus("connected");
+
+    inbox.stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fake.calls.filter((c) => c === "connect:usr_1")).toHaveLength(1);
+  });
+
+  it("registers each handler once when healing, so an arrival is not counted twice", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [], unreadCount: 0 }));
+    const inbox = store(fake, { userId: "usr_1" });
+    await inbox.start();
+    fake.emitStatus("connected");
+
+    // A burst of disconnects, as a flapping connection would produce.
+    fake.emitStatus("disconnected");
+    fake.emitStatus("connected");
+    fake.emitStatus("disconnected");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    fake.emit("notification", {
+      type: "notification.new",
+      id: "once",
+      title: "Arrived",
+      body: "b",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const after = inbox.getSnapshot();
+    expect(after.notifications.map((n) => n.id)).toEqual(["once"]);
+    expect(after.unreadCount, "the arrival was dispatched to a duplicate handler").toBe(1);
+  });
+
   it("treats a restart as a first connect, not a gap", async () => {
     // StrictMode's effect/cleanup/effect, or a genuine remount: start() loads the page again,
     // so the connect that follows is not a gap to repair.

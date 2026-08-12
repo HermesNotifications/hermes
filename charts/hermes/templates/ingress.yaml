@@ -106,6 +106,15 @@ metadata:
     # the chart did not. scripts/check_helm_render.py now refuses any rewrite-target containing
     # $ that is not paired with it.
     nginx.ingress.kubernetes.io/use-regex: "true"
+    # Load-bearing for the http_stream and sse fallback transports, and pinned rather than
+    # left to the default for the same reason use-regex is spelled out above: its absence is
+    # silent. Both rungs are a single response the server never finishes writing. With
+    # buffering on, nginx holds each publication waiting for a complete response that is not
+    # coming, so the connection establishes, the widget reports itself healthy, and
+    # notifications arrive late or not at all. ingress-nginx defaults this to "off", so it
+    # works today by luck — a cluster-wide ConfigMap enabling buffering would break realtime
+    # with nothing in any log to explain it. Websockets are unaffected either way.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
