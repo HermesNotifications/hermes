@@ -33,7 +33,17 @@ interface Harness {
   proxied: Request[];
 }
 
-function harness(options: { proxyStatus?: number } = {}): Harness {
+/**
+ * A rejection shaped like the server SDK's `HermesError`, which carries the upstream status.
+ *
+ * Constructed here rather than imported so this suite keeps depending only on `DemoDeps`. The
+ * handler duck-types on these two fields for the same reason.
+ */
+function hermesError(status: number, detail: string): Error & { status: number; detail: string } {
+  return Object.assign(new Error(`Hermes API error (${status}): ${detail}`), { status, detail });
+}
+
+function harness(options: { proxyStatus?: number; upstreamFailure?: unknown } = {}): Harness {
   const sends: unknown[] = [];
   const proxied: Request[] = [];
 
@@ -45,12 +55,16 @@ function harness(options: { proxyStatus?: number } = {}): Harness {
       port: 8899,
     },
     hermes: {
-      exchangeToken: async () => ({
-        token: tokenFor("usr_internal"),
-        expiresAt: "2026-07-29T14:00:00.000Z",
-      }),
+      exchangeToken: async () => {
+        if (options.upstreamFailure) throw options.upstreamFailure;
+        return {
+          token: tokenFor("usr_internal"),
+          expiresAt: "2026-07-29T14:00:00.000Z",
+        };
+      },
     },
     sendNotification: async (input) => {
+      if (options.upstreamFailure) throw options.upstreamFailure;
       sends.push(input);
       return { notificationId: "ntf_1" };
     },
@@ -194,6 +208,40 @@ describe("POST /api/session", () => {
     const body = (await (await handler(authed("/api/session"))).json()) as Record<string, unknown>;
     expect(body.expires_at).toBe("2026-07-29T14:00:00.000Z");
     expect(body.expiresAt).toBe("2026-07-29T14:00:00.000Z");
+  });
+
+  it("reports a rejected API key as a 401 that names the fix, not a bare 500", async () => {
+    // The failure this exists for: `make dev-up` recreates the database, `make seed` writes a new
+    // key, and a demo server started before that still holds the old one. It used to surface in
+    // the browser as "session request failed (500): internal error", which reads as Hermes being
+    // broken and sends you looking at pod logs. The status and the cause both have to survive.
+    const { handler } = harness({ upstreamFailure: hermesError(401, "invalid api key") });
+
+    const response = await handler(authed("/api/session", { method: "POST" }));
+
+    expect(response.status).toBe(401);
+    const { detail } = (await response.json()) as { detail: string };
+    expect(detail).toContain("invalid api key");
+    expect(detail).toContain("make seed");
+  });
+
+  it("passes a non-auth upstream status through as itself", async () => {
+    const { handler } = harness({ upstreamFailure: hermesError(503, "admin unavailable") });
+
+    const response = await handler(authed("/api/session", { method: "POST" }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ detail: "admin unavailable" });
+  });
+
+  it("lets a failure that is not an upstream error reach the catch-all", async () => {
+    // Anything without a numeric `status` is a bug in the demo, not a rejected call, and must not
+    // be dressed up as an HTTP status it never had.
+    const { handler } = harness({ upstreamFailure: new TypeError("fetch failed") });
+
+    await expect(handler(authed("/api/session", { method: "POST" }))).rejects.toThrow(
+      "fetch failed"
+    );
   });
 });
 
@@ -339,6 +387,21 @@ describe("POST /api/test-send", () => {
       authed("/api/test-send", { method: "POST", body: { body: "B" } })
     );
     expect(response.status).toBe(400);
+  });
+});
+
+describe("upstream failures on /api/test-send", () => {
+  it("surfaces the rejected key rather than an opaque 500", async () => {
+    const { handler } = harness({ upstreamFailure: hermesError(401, "invalid api key") });
+
+    const response = await handler(
+      authed("/api/test-send", { method: "POST", body: { title: "hi", body: "there" } })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      detail: expect.stringContaining("make seed") as unknown as string,
+    });
   });
 });
 
