@@ -93,7 +93,36 @@ admin:
     tag: ""                     # overrides global.image.tag for this service only
 ```
 
-Pull policy is `IfNotPresent` in the templates and is not configurable.
+Pull policy defaults to `IfNotPresent` and is settable globally or per service:
+
+```yaml
+global:
+  image:
+    pullPolicy: IfNotPresent   # or per service: admin.image.pullPolicy
+```
+
+`IfNotPresent` is right for the immutable semver tags the chart defaults to. Change it if you
+track a mutable tag, where the node otherwise keeps its first copy forever — the failure is a
+deploy that appears to succeed and changes nothing.
+
+### Private registries
+
+`global.imagePullSecrets` names secrets you have already created; the chart does not create
+registry credentials.
+
+```yaml
+global:
+  imagePullSecrets:
+    - my-registry-credentials
+  image:
+    pullSecretNames:            # the NATS sub-chart spells it differently
+      - my-registry-credentials
+```
+
+Both keys are needed if you run the bundled NATS: a parent chart cannot template a sub-chart's
+values, and the NATS chart reads `global.image.pullSecretNames` rather than
+`global.imagePullSecrets`. The first key covers everything else the chart owns, including the
+bundled Postgres and Redis and the `helm test` pods. Centrifugo reads it too.
 
 > The project used to carry three spellings of its own name. That is settled: the repository
 > is `github.com/HermesNotifications/hermes`, the module is
@@ -533,8 +562,8 @@ documented on this page at some point, and none of them ever did anything:
 | `replicaCount` | `replicas` |
 | `networkPolicies` | `networkPolicy` |
 | `ingress.host` | `global.domain` |
-| `image.registry` / `image.tag` / `image.pullPolicy` | `global.image.registry` / `global.image.tag`; pull policy is not configurable |
-| `imagePullSecrets` | *no equivalent* |
+| `image.registry` / `image.tag` / `image.pullPolicy` | `global.image.registry` / `global.image.tag` / `global.image.pullPolicy` |
+| top-level `imagePullSecrets` | `global.imagePullSecrets` (plus `global.image.pullSecretNames` for the NATS sub-chart) |
 | `hermes.logLevel` | *no equivalent — services do not read a log level* |
 | `hermes.email.smtp.from` | `hermes.email.from` |
 | `hermes.email.provider: webhook` + `hermes.email.webhook.*` | `provider: smtp` or `provider: ses` |

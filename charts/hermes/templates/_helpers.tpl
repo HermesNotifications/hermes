@@ -30,11 +30,20 @@ Create chart name and version as used by the chart label.
 
 {{/*
 Common labels shared across all resources.
+
+app.kubernetes.io/version belongs HERE and not in hermes.serviceSelectorLabels. A Deployment's
+`spec.selector` is immutable, so a version in the selector would make every upgrade fail with
+"field is immutable" and need the Deployment deleted by hand. It is here so that `kubectl get
+deploy -L app.kubernetes.io/version` answers "what is actually running?" -- which nothing on a
+live cluster could answer before, since the binaries do not report a version either.
 */}}
 {{- define "hermes.labels" -}}
 helm.sh/chart: {{ include "hermes.chart" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: hermes
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -67,6 +76,36 @@ Merges global registry/tag with per-service overrides.
 {{- else -}}
 {{- printf "%s:%s" $repository $tag -}}
 {{- end -}}
+{{- end }}
+
+{{/*
+Image pull policy. Call with (dict "root" . "service" .Values.admin) -- `service` may be a
+block with no `image` key, so this tolerates its absence.
+
+Was hardcoded IfNotPresent in twelve templates, which is right for the immutable semver tags
+this chart defaults to and wrong for anyone tracking a mutable tag or loading images into a
+kind/k3d node by hand: the node keeps the stale copy forever and the deploy silently does
+nothing.
+*/}}
+{{- define "hermes.imagePullPolicy" -}}
+{{- $service := .service | default dict -}}
+{{- $image := get $service "image" | default dict -}}
+{{- get $image "pullPolicy" | default .root.Values.global.image.pullPolicy -}}
+{{- end }}
+
+{{/*
+imagePullSecrets for a pod spec, rendered as a complete key (or nothing at all).
+
+Emits the key only when there is at least one secret, because `imagePullSecrets: []` and an
+absent key are not the same to some admission controllers. Call with the root context.
+*/}}
+{{- define "hermes.imagePullSecrets" -}}
+{{- with .Values.global.imagePullSecrets }}
+imagePullSecrets:
+{{- range . }}
+  - name: {{ . }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*

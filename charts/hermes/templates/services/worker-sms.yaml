@@ -28,10 +28,11 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
+      {{- include "hermes.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: worker-sms
           image: {{ include "hermes.image" (dict "root" . "service" .Values.workerSms) }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ include "hermes.imagePullPolicy" (dict "root" . "service" .Values.workerSms) }}
           ports:
             - name: http
               containerPort: {{ .Values.workerSms.port }}

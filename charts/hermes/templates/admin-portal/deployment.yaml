@@ -21,10 +21,11 @@ spec:
       labels:
         {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 8 }}
     spec:
+      {{- include "hermes.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: admin-portal
           image: {{ include "hermes.image" (dict "root" . "service" .Values.adminPortal) }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ include "hermes.imagePullPolicy" (dict "root" . "service" .Values.adminPortal) }}
           ports:
             - name: http
               containerPort: {{ .Values.adminPortal.port }}

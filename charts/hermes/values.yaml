@@ -5,6 +5,35 @@ global:
     registry: ghcr.io/hermesnotifications
     # -- Global image tag override (defaults to Chart appVersion)
     tag: ""
+    # -- Image pull policy for every Hermes image, overridable per service.
+    #
+    # IfNotPresent is right for the immutable semver tags this chart defaults to, and wrong
+    # in two cases that are easy to hit and hard to diagnose, because both fail by silently
+    # doing nothing: tracking a mutable tag (the node keeps its stale copy forever), and
+    # side-loading an image into a kind/k3d node, where Always would try the registry and
+    # fail. Set it deliberately for either.
+    pullPolicy: IfNotPresent
+  # -- Secrets used to pull every Hermes image, by name.
+  #
+  # Required for a private registry or an air-gapped mirror, which is most regulated
+  # environments -- and also for this project's own images before their GHCR packages are
+  # made public. Create the secret yourself (`kubectl create secret docker-registry`) and
+  # name it here; the chart does not manufacture registry credentials.
+  #
+  # Reaches every workload this chart owns, including the bundled Postgres and Redis (which
+  # pull from Docker Hub and so need it just as much) and the two `helm test` pods. The
+  # Centrifugo sub-chart reads this same key and picks it up too.
+  #
+  # The NATS sub-chart is the exception: it spells the same idea `global.image.pullSecretNames`,
+  # so set BOTH if you enable the bundled bus behind a private registry. A parent chart cannot
+  # template a sub-chart's values, so this cannot be wired up for you:
+  #
+  #   global:
+  #     imagePullSecrets: [my-registry-credentials]     # Hermes, Postgres, Redis, Centrifugo
+  #     image:
+  #       pullSecretNames: [my-registry-credentials]    # the NATS sub-chart
+  imagePullSecrets: []
+  #  - my-registry-credentials
   # -- Primary domain for ingress routing
   domain: ""
 
@@ -705,6 +734,20 @@ observability:
 networkPolicy:
   # -- Enable network policies to restrict inter-service traffic
   enabled: false
+
+# ---------------------------------------------------------------------------
+# helm test
+# ---------------------------------------------------------------------------
+
+# -- Configuration for the `helm test` hooks
+tests:
+  # -- Image used by the connectivity test pod, which curls every service's /healthz.
+  #
+  # Pinned rather than `:latest`, so `helm test` means the same thing next month as today,
+  # and settable so it can point at a mirror -- a hardcoded docker.io reference makes the
+  # test unrunnable on an air-gapped cluster, which is the same gap as global.imagePullSecrets
+  # and worth closing in the same place. It is the only third-party image `helm test` pulls.
+  image: curlimages/curl:8.21.0
 
 # ---------------------------------------------------------------------------
 # External services (when sub-charts are disabled)

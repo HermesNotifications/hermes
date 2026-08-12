@@ -10,9 +10,10 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   restartPolicy: Never
+  {{- include "hermes.imagePullSecrets" . | nindent 2 }}
   containers:
     - name: health-check
-      image: curlimages/curl:latest
+      image: {{ .Values.tests.image | quote }}
       command:
         - /bin/sh
         - -c

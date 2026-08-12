@@ -97,8 +97,18 @@
               "type": "string",
               "description": "Registry for Hermes' own images. Note that Helm merges `global` into every sub-chart and the NATS chart reads this same key, which is why values.yaml pins nats.*.image.registry explicitly."
             },
-            "tag": { "type": "string" }
+            "tag": { "type": "string" },
+            "pullPolicy": {
+              "enum": ["Always", "IfNotPresent", "Never"],
+              "description": "Pull policy for every Hermes image, overridable per service. The NATS sub-chart reads this same key, so setting it here also applies to the bundled bus — which is consistent rather than surprising.",
+              "default": "IfNotPresent"
+            }
           }
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Names of existing image pull secrets, applied to every Hermes pod. The chart does not create them."
         }
       }
     },
@@ -351,6 +361,18 @@
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" }
+      }
+    },
+
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Image for the `helm test` connectivity pod. Pinned, and settable so it can point at a mirror on an air-gapped cluster."
+        }
       }
     },
 
