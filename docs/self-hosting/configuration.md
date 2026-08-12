@@ -95,12 +95,13 @@ admin:
 
 Pull policy is `IfNotPresent` in the templates and is not configurable.
 
-> Three repository identities coexist in this project and only the source location is
-> settled — the repository is `github.com/darylrobbins/hermes`. The chart publishes to
-> `ghcr.io/hermesnotifications` while `go.mod` declares module
-> `github.com/hermes-notifications/hermes`. The registry above matches the chart, which is
-> what actually publishes. See finding 31.12 in
-> [the 2026-07-27 review](../reviews/2026-07-27-architecture-review.md).
+> The project used to carry three spellings of its own name. That is settled: the repository
+> is `github.com/HermesNotifications/hermes`, the module is
+> `github.com/hermesnotifications/hermes`, and images and charts publish under
+> `ghcr.io/hermesnotifications`. See [ADR 0020](../adr/0020-project-identity-and-registry.md),
+> which resolves finding 31.12 of
+> [the 2026-07-27 review](../reviews/2026-07-27-architecture-review.md). (The npm packages
+> keep the hyphenated `@hermes-notifications` scope; npm and Go namespaces are unrelated.)
 
 ## Email
 
