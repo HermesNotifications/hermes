@@ -843,6 +843,28 @@ centrifugo:
   config:
     engine:
       type: memory
+    # -- Fallback transports for the inbox widget's connection ladder
+    # (websocket -> http_stream -> sse). Leave both on.
+    #
+    # The widget tries websocket first and only steps down when it fails, so on a healthy
+    # network these cost nothing. They exist for the networks that break websockets:
+    # TLS-intercepting corporate proxies and middleboxes that strip `Upgrade`. Without
+    # them such a client loads its inbox once over REST and then never updates again,
+    # silently, for the whole session.
+    #
+    # Both are bidirectional via an `/emulation` endpoint that enabling either one also
+    # turns on, and which the chart's realtime Ingress already routes (`/realtime(/|$)(.*)`).
+    # Client->server commands are independent POSTs, so they can hit any replica and this
+    # needs no session affinity.
+    #
+    # Note the nesting, as with `allowed_origins` below: this sub-chart ships Centrifugo v6,
+    # where these are `sse.enabled`. The kustomize overlays in deploy/k8s run the v5 image,
+    # where they are flat booleans. An unrecognised key is ignored rather than rejected, so
+    # the wrong shape yields a server that starts healthy and 404s only the fallback rungs.
+    http_stream:
+      enabled: true
+    sse:
+      enabled: true
     client:
       # -- Origins permitted to open a realtime websocket, e.g.
       # `["https://app.example.com", "https://*.example.com"]`.

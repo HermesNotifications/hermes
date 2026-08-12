@@ -94,7 +94,7 @@ type inboxStoreWithDynamoInbox struct {
 func (s *inboxStoreWithDynamoInbox) ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error) {
 	return s.notifs.ListInbox(ctx, userID, archived, cursor, limit)
 }
-func (s *inboxStoreWithDynamoInbox) UnreadCount(ctx context.Context, userID string) (int, error) {
+func (s *inboxStoreWithDynamoInbox) UnreadCount(ctx context.Context, userID string) (int, string, error) {
 	return s.notifs.UnreadCount(ctx, userID)
 }
 func (s *inboxStoreWithDynamoInbox) MarkRead(ctx context.Context, userID, notificationID string) (bool, error) {

@@ -76,7 +76,7 @@ func TestInbox(t *testing.T) {
 			t.Fatal("expected non-empty cursor for page 1")
 		}
 
-		unreadCount, err := s.UnreadCount(ctx, user.ID)
+		unreadCount, _, err := s.UnreadCount(ctx, user.ID)
 		if err != nil {
 			t.Fatalf("UnreadCount: %v", err)
 		}
@@ -141,7 +141,7 @@ func TestInbox(t *testing.T) {
 			t.Fatal("expected read_at to be set")
 		}
 
-		unreadCount, err := s.UnreadCount(ctx, user.ID)
+		unreadCount, _, err := s.UnreadCount(ctx, user.ID)
 		if err != nil {
 			t.Fatalf("UnreadCount: %v", err)
 		}
@@ -165,7 +165,7 @@ func TestInbox(t *testing.T) {
 			t.Fatal("expected read_at to be nil")
 		}
 
-		unreadCount, err := s.UnreadCount(ctx, user.ID)
+		unreadCount, _, err := s.UnreadCount(ctx, user.ID)
 		if err != nil {
 			t.Fatalf("UnreadCount: %v", err)
 		}
@@ -239,7 +239,7 @@ func TestInbox(t *testing.T) {
 			t.Fatalf("MarkAllRead: %v", err)
 		}
 
-		unreadCount, err := s.UnreadCount(ctx, user.ID)
+		unreadCount, _, err := s.UnreadCount(ctx, user.ID)
 		if err != nil {
 			t.Fatalf("UnreadCount: %v", err)
 		}

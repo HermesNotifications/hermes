@@ -6,6 +6,8 @@
   "token_hmac_secret_key": "dev-jwt-secret",
   "api_key": "centrifugo-api-key",
   "admin": true,
+  "http_stream": true,
+  "sse": true,
   "presence": true,
   "history_size": 50,
   "history_ttl": "1h",

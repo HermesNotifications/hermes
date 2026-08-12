@@ -62,7 +62,7 @@ function client(config?: {
   fetch?: typeof fetch;
 }) {
   const transports: FakeTransport[] = [];
-  const transportFactory: TransportFactory = (_endpoint, options) => {
+  const transportFactory: TransportFactory = (_endpoints, options) => {
     const transport = new FakeTransport(options);
     transports.push(transport);
     return transport;
@@ -370,16 +370,38 @@ describe("HermesClient: teardown", () => {
     expect(hermes.handlerCount()).toBe(0);
   });
 
-  it("still delivers events after a dispose-then-reuse cycle", async () => {
-    // React's StrictMode runs an effect's cleanup and then the effect again on the same instance, so
-    // a client can be disposed and then used again. Before this, `dispose()` also tore down the
-    // client's own wiring into the realtime connection, and nothing re-established it — producing a
-    // client that connected, subscribed, received publications and delivered them to nobody. It took
-    // a live browser to find, because from the outside the socket looked perfectly healthy.
-    const { hermes, transports } = client();
+  it("refuses to reconnect after dispose, rather than reviving as a silent socket", async () => {
+    // This test replaces two that asserted the opposite — that a disposed client could be reused.
+    // That contract was the bug. `dispose()` drops every handler, so a client that reconnects
+    // afterwards is one that subscribes, receives publications and delivers them to nobody, while
+    // looking healthy from every angle. It shipped that way and took a live browser to find.
+    //
+    // Rejecting is what makes the mistake visible at the point it is made. The reuse-safe
+    // operation is disconnect(), exercised below.
+    const { hermes } = client();
     await hermes.connect();
 
     hermes.dispose();
+
+    await expect(hermes.connect()).rejects.toThrow(/disposed/i);
+  });
+
+  it("is idempotent, because a lifecycle teardown may legitimately run twice", async () => {
+    const { hermes } = client();
+    await hermes.connect();
+
+    hermes.dispose();
+    expect(() => hermes.dispose()).not.toThrow();
+  });
+
+  it("still delivers events after a disconnect-then-reconnect cycle", async () => {
+    // The half that must survive a spurious teardown. React's StrictMode runs every effect's
+    // cleanup and then the effect again on the same instance, so whatever a cleanup does has to be
+    // undoable — which is why the cleanup disconnects rather than disposes.
+    const { hermes, transports } = client();
+    await hermes.connect();
+
+    hermes.disconnect();
 
     const seen: unknown[] = [];
     hermes.on("update", (event) => seen.push(event));
@@ -395,10 +417,10 @@ describe("HermesClient: teardown", () => {
     expect(seen).toHaveLength(1);
   });
 
-  it("still reports the unread count after a dispose-then-reuse cycle", async () => {
+  it("still reports the unread count after a disconnect-then-reconnect cycle", async () => {
     const { hermes, transports } = client();
     await hermes.connect();
-    hermes.dispose();
+    hermes.disconnect();
 
     const counts: number[] = [];
     hermes.on("unreadCountChange", (count) => counts.push(count));
@@ -412,5 +434,24 @@ describe("HermesClient: teardown", () => {
     });
 
     expect(counts).toEqual([7]);
+  });
+
+  it("does not open a socket when dispose lands while the token is in flight", async () => {
+    // The race that produced the original zombie, pinned directly. dispose() is synchronous and
+    // connect() awaits a token, so dispose can land after a caller asked to connect but before the
+    // transport exists. Without the post-await check the socket then opens into a client whose
+    // handler lists dispose() has already emptied.
+    let releaseToken: (token: string) => void = () => {};
+    const tokenArrived = new Promise<string>((resolve) => {
+      releaseToken = resolve;
+    });
+    const { hermes, transports } = client({ getToken: () => tokenArrived });
+
+    const connecting = hermes.connect("usr_1");
+    hermes.dispose();
+    releaseToken("t");
+    await connecting.catch(() => undefined);
+
+    expect(transports, "a socket was opened for a client that had already been disposed").toHaveLength(0);
   });
 });

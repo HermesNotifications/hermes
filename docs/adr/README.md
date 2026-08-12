@@ -26,6 +26,8 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0014](0014-cache-first-unread-count.md) | Serve the unread count from cache, and keep it off the websocket's critical path | Accepted | 2026-08-10 |
 | [0015](0015-lifecycle-and-jetstream-durability.md) | Drain before shutdown, and replicate the streams the cluster can lose | Accepted | 2026-08-10 |
 | [0016](0016-distributed-rate-limiting-with-local-fallback.md) | Rate limit per credential in Redis, with the local bucket as the fallback | Accepted | 2026-08-11 |
+| [0017](0017-realtime-transport-ladder.md) | Fall back from WebSocket to HTTP-streaming then SSE, derived from one URL | Accepted | 2026-08-11 |
+| [0018](0018-client-lifecycle-dispose-is-terminal.md) | `dispose()` is terminal, `disconnect()` is the reusable one, and the store repairs its own wiring | Accepted | 2026-08-12 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

@@ -101,7 +101,10 @@ type EventRepository interface {
 type InboxRepository interface {
 	ListInbox(ctx context.Context, userID string, archived bool, cursor string, limit int) ([]models.Notification, string, error)
 	// UnreadCount saturates at models.UnreadCountCap: a returned cap means "at least that many".
-	UnreadCount(ctx context.Context, userID string) (int, error)
+	// UnreadCount returns the unread count and, from the same snapshot, the newest notification
+	// id it accounts for. The second value is the cache's watermark: it is what lets a delivery
+	// tell "already counted" from "not yet counted" and so count each arrival exactly once.
+	UnreadCount(ctx context.Context, userID string) (int, string, error)
 	MarkRead(ctx context.Context, userID, notificationID string) (bool, error)
 	MarkUnread(ctx context.Context, userID, notificationID string) (bool, error)
 	Archive(ctx context.Context, userID, notificationID string) (bool, error)

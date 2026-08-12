@@ -66,7 +66,7 @@ func TestUnreadCount_SaturatesAtCap(t *testing.T) {
 
 	userID := seedUnread(t, s, pool, models.UnreadCountCap+25)
 
-	got, err := s.UnreadCount(context.Background(), userID)
+	got, _, err := s.UnreadCount(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("UnreadCount: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestUnreadCount_ExactBelowCap(t *testing.T) {
 
 	userID := seedUnread(t, s, pool, 7)
 
-	got, err := s.UnreadCount(context.Background(), userID)
+	got, _, err := s.UnreadCount(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("UnreadCount: %v", err)
 	}

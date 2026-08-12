@@ -76,7 +76,7 @@ func TestInboxProvider_RedeliveryDoesNotDoubleCount(t *testing.T) {
 	notifID := "ntf_redeliver_" + uniqueSuffix()
 
 	// A live entry, as an authoritative read would have left behind.
-	if err := redis.SetUnreadCount(ctx, userID, 5, time.Minute); err != nil {
+	if err := redis.SetUnreadCount(ctx, userID, 5, "", time.Minute); err != nil {
 		t.Fatalf("seed count: %v", err)
 	}
 
@@ -113,7 +113,7 @@ func TestInboxProvider_AttachesUnreadCount(t *testing.T) {
 	ctx := context.Background()
 
 	userID := "usr_attach_" + uniqueSuffix()
-	if err := redis.SetUnreadCount(ctx, userID, 3, time.Minute); err != nil {
+	if err := redis.SetUnreadCount(ctx, userID, 3, "", time.Minute); err != nil {
 		t.Fatalf("seed count: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestInboxProvider_ClampsAtCap(t *testing.T) {
 	ctx := context.Background()
 
 	userID := "usr_cap_" + uniqueSuffix()
-	if err := redis.SetUnreadCount(ctx, userID, models.UnreadCountCap, time.Minute); err != nil {
+	if err := redis.SetUnreadCount(ctx, userID, models.UnreadCountCap, "", time.Minute); err != nil {
 		t.Fatalf("seed count: %v", err)
 	}
 

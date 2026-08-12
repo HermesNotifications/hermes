@@ -1,6 +1,6 @@
 # ADR 0014: Serve the unread count from cache, and keep it off the websocket's critical path
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-08-12)
 **Date:** 2026-08-10
 **Author:** Daryl Robbins
 
@@ -103,6 +103,45 @@ reads and mutations stay on HTTP. The websocket channel remains strictly server�
   is a single indexed count and the error is bounded by refresh-ahead. Closing it properly needs
   a separately-expiring delta key the filler reconciles against, which is a great deal of
   machinery for a badge.
+
+> **Amendment, 2026-08-12 — the same race in the other direction, and the watermark that closes
+> both.**
+>
+> The paragraph above reasons about a fill landing *after* an arrival, which loses an increment.
+> The mirror case was not considered and is worse, because it does not look like a loss: a fill
+> that lands *between* the row being persisted and its delivery seeds a count that already
+> includes that notification, and the delivery then counts it again. The badge reads high, and
+> unlike the undercount it is not obviously wrong to anyone looking at it.
+>
+> It shipped. It surfaced as a browser test failing about half the time — `GET /v1/inbox`
+> answering `unread_count=2` for a single row, with the notification list itself correct — and it
+> took a while to attribute, because the number is only wrong in the cache and every other layer
+> agrees.
+>
+> **The cached entry now carries a watermark** alongside the count: the newest notification id
+> that count includes. Ids are time-sortable, so an arrival at or below the watermark is already
+> in the count and its increment is skipped. `unread:<user>` therefore becomes a two-field hash,
+> under a versioned key name (`unread:v2:`) so v1's plain-integer values are ignored rather than
+> failing `WRONGTYPE` until they expire.
+>
+> Three things about it are load-bearing, each learned by getting them wrong first:
+>
+> - **Only a fill or a refresh may move the watermark, never an increment.** Advancing it per
+>   increment looks equivalent and is not: nothing orders `delivery.inbox`, so a message for an
+>   older notification can be handled after a newer one, and a watermark moved to the newer id
+>   makes the older arrival look already-counted and drops it for good. Observed as a count stuck
+>   at 24 of 25.
+> - **The count and the watermark must come from one store read.** Two reads straddle an insert,
+>   and then one of them is ahead: either an arrival is lost or it is counted twice. Postgres does
+>   both in a single statement. DynamoDB gets one descending pass over the by-user index — the
+>   watermark is simply the first item — because a GSI is eventually consistent and a second query
+>   can observe *less* than the first, which reintroduced the overcount about one run in eight.
+> - **Marking a notification unread is not an arrival** and keeps the unguarded increment. It
+>   flips a read flag on something the count already knows about, so the set of arrivals reflected
+>   in the count has not changed and the watermark must not move.
+>
+> Mark-all-read now invalidates the entry rather than writing a zero, because a zero needs a
+> watermark to go with it and that handler has no snapshot to take one from.
 - **A crash between claiming the dedup guard and incrementing loses an increment.** Deliberate:
   the alternative ordering repeats one, and an undercount heals at the next refresh while an
   overcount compounds with every retry.

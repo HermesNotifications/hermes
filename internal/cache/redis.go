@@ -185,12 +185,32 @@ func (c *Client) InvalidateJWTSigningKeys(ctx context.Context) error {
 // from the store rather than treat the absence as zero.
 const UnreadCountMiss = -1
 
-func unreadKey(userID string) string { return "unread:" + userID }
+// The cached count is a hash of two fields rather than a bare integer:
+//
+//	n   the unread count
+//	wm  the newest notification id already reflected in n
+//
+// `wm` is what stops an arrival being counted twice. A cache miss fills `n` from the store, and
+// that value already includes every notification the store had persisted — including one whose
+// delivery is still in flight. The delivery's increment then counted it a second time, and the
+// badge read one high until the entry refreshed. Comparing against the watermark makes the
+// increment idempotent per notification: ids are time-sortable (48-bit ms prefix, internal/id/v2),
+// so `id <= wm` means "already in n". See ADR 0014.
+//
+// The key is versioned because that change is not backward compatible: v1 held a plain string,
+// and reading it as a hash would fail WRONGTYPE on every request for that user until the old key
+// expired. A new name lets both live side by side, with the v1 keys ageing out on their own TTL.
+func unreadKey(userID string) string { return "unread:v2:" + userID }
+
+const (
+	unreadFieldCount     = "n"
+	unreadFieldWatermark = "wm"
+)
 
 // GetUnreadCount returns the cached unread count for a user.
 // Returns (count, true, nil) on hit, (0, false, nil) on miss.
 func (c *Client) GetUnreadCount(ctx context.Context, userID string) (int, bool, error) {
-	val, err := c.rdb.Get(ctx, unreadKey(userID)).Int()
+	val, err := c.rdb.HGet(ctx, unreadKey(userID), unreadFieldCount).Int()
 	if errors.Is(err, redis.Nil) {
 		return 0, false, nil
 	}
@@ -210,7 +230,7 @@ func (c *Client) GetUnreadCount(ctx context.Context, userID string) (int, bool, 
 func (c *Client) GetUnreadCountWithTTL(ctx context.Context, userID string) (int, time.Duration, bool, error) {
 	key := unreadKey(userID)
 	pipe := c.rdb.Pipeline()
-	get := pipe.Get(ctx, key)
+	get := pipe.HGet(ctx, key, unreadFieldCount)
 	pttl := pipe.PTTL(ctx, key)
 	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		return 0, 0, false, fmt.Errorf("get unread count with ttl: %w", err)
@@ -231,9 +251,21 @@ func (c *Client) GetUnreadCountWithTTL(ctx context.Context, userID string) (int,
 	return count, ttl, true, nil
 }
 
-// SetUnreadCount sets the cached unread count for a user, overwriting any existing value.
-func (c *Client) SetUnreadCount(ctx context.Context, userID string, count int, ttl time.Duration) error {
-	return c.rdb.Set(ctx, unreadKey(userID), count, ttl).Err()
+// setUnread writes both fields and re-arms the TTL in one round trip, so a reader can never
+// observe a count paired with a watermark from a different recount.
+var setUnread = redis.NewScript(`
+redis.call('HSET', KEYS[1], 'n', ARGV[1], 'wm', ARGV[2])
+redis.call('PEXPIRE', KEYS[1], ARGV[3])
+return 1
+`)
+
+// SetUnreadCount overwrites the cached count and its watermark for a user.
+//
+// `watermark` must be the newest notification id covered by `count`, taken from the same store
+// read — not a later one. A watermark ahead of the count silently drops the arrivals in between,
+// because their increments look already-counted.
+func (c *Client) SetUnreadCount(ctx context.Context, userID string, count int, watermark string, ttl time.Duration) error {
+	return setUnread.Run(ctx, c.rdb, []string{unreadKey(userID)}, count, watermark, ttl.Milliseconds()).Err()
 }
 
 // FillUnreadCount seeds the count only when no value is cached, reporting whether it won.
@@ -242,12 +274,22 @@ func (c *Client) SetUnreadCount(ctx context.Context, userID string, count int, t
 // ago, and in that window an increment or a fresher fill may have landed. The only writer it
 // could beat is another filler holding the same answer, so refusing to overwrite costs nothing
 // and removes the chance of replacing a newer value with an older one.
-func (c *Client) FillUnreadCount(ctx context.Context, userID string, count int, ttl time.Duration) (bool, error) {
-	ok, err := c.rdb.SetNX(ctx, unreadKey(userID), count, ttl).Result()
+// fillUnread is the hash equivalent of SET NX: it writes only when nothing is cached.
+var fillUnread = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 1 then
+	return 0
+end
+redis.call('HSET', KEYS[1], 'n', ARGV[1], 'wm', ARGV[2])
+redis.call('PEXPIRE', KEYS[1], ARGV[3])
+return 1
+`)
+
+func (c *Client) FillUnreadCount(ctx context.Context, userID string, count int, watermark string, ttl time.Duration) (bool, error) {
+	written, err := fillUnread.Run(ctx, c.rdb, []string{unreadKey(userID)}, count, watermark, ttl.Milliseconds()).Int64()
 	if err != nil {
 		return false, fmt.Errorf("fill unread count: %w", err)
 	}
-	return ok, nil
+	return written == 1, nil
 }
 
 // TryUnreadRefreshLease reports whether this caller should perform a refresh-ahead recount.
@@ -292,7 +334,7 @@ func (c *Client) MarkUnreadCounted(ctx context.Context, notificationID string, t
 // absent or holds a non-number (deleted on sight -- there is nothing to salvage, and leaving it
 // would make every future increment fail).
 var incrIfPresent = redis.NewScript(`
-local val = redis.call('GET', KEYS[1])
+local val = redis.call('HGET', KEYS[1], 'n')
 if val == false then
 	return -1
 end
@@ -304,15 +346,68 @@ end
 if val >= tonumber(ARGV[1]) then
 	return val
 end
-return redis.call('INCR', KEYS[1])
+return redis.call('HINCRBY', KEYS[1], 'n', 1)
 `)
 
 // IncrUnreadCount atomically increments a cached unread count, clamped at maxCount.
 // Returns the new value, or UnreadCountMiss if nothing was cached.
+//
+// Unguarded, and deliberately so: this is for marking an existing notification unread, which
+// changes a read flag rather than adding an arrival. It leaves the watermark alone, because the
+// set of arrivals reflected in the count has not changed. New arrivals must use
+// {@link IncrUnreadCountForArrival} instead.
 func (c *Client) IncrUnreadCount(ctx context.Context, userID string, maxCount int) (int64, error) {
 	result, err := incrIfPresent.Run(ctx, c.rdb, []string{unreadKey(userID)}, maxCount).Int64()
 	if err != nil {
 		return 0, fmt.Errorf("incr unread count: %w", err)
+	}
+	return result, nil
+}
+
+// incrArrival is incrIfPresent plus the watermark check that stops an arrival being counted twice.
+//
+// A cached count is filled from the store, and the store already holds every notification that has
+// been persisted — including one whose delivery has not run yet. Without the comparison below,
+// that delivery's increment counts the same notification a second time. Ids sort by time, so
+// `id <= wm` is precisely "persisted before the snapshot, therefore already in n".
+//
+// **The watermark is never advanced here**, and that is not an oversight. It describes one
+// authoritative snapshot — which notifications a store read counted — so only a fill or a refresh
+// may move it. Advancing it per increment looked equivalent and was not: deliveries are not
+// ordered, so a message for an older notification can be processed after a newer one, and moving
+// the watermark to the newer id makes the older arrival look already-counted and silently drops
+// it. That produced a count stuck one short, indefinitely, and is what the seeded-pagination test
+// caught at 24 of 25.
+//
+// Redelivery of the *same* notification is not this script's problem: worker-inbox claims each
+// notification id in Redis before incrementing (see MarkUnreadCounted), which is the layer that
+// makes delivery at-least-once safe.
+var incrArrival = redis.NewScript(`
+local val = redis.call('HGET', KEYS[1], 'n')
+if val == false then
+	return -1
+end
+val = tonumber(val)
+if val == nil then
+	redis.call('DEL', KEYS[1])
+	return -1
+end
+local wm = redis.call('HGET', KEYS[1], 'wm')
+if wm ~= false and wm ~= '' and ARGV[2] <= wm then
+	return val
+end
+if val >= tonumber(ARGV[1]) then
+	return val
+end
+return redis.call('HINCRBY', KEYS[1], 'n', 1)
+`)
+
+// IncrUnreadCountForArrival counts a newly delivered notification, once.
+// Returns the new value, or UnreadCountMiss if nothing was cached.
+func (c *Client) IncrUnreadCountForArrival(ctx context.Context, userID, notificationID string, maxCount int) (int64, error) {
+	result, err := incrArrival.Run(ctx, c.rdb, []string{unreadKey(userID)}, maxCount, notificationID).Int64()
+	if err != nil {
+		return 0, fmt.Errorf("incr unread count for arrival: %w", err)
 	}
 	return result, nil
 }
@@ -324,7 +419,7 @@ func (c *Client) IncrUnreadCount(ctx context.Context, userID string, maxCount in
 // that surfaces as an opaque script failure rather than a cache miss the caller can recover
 // from.
 var decrIfPositive = redis.NewScript(`
-local val = redis.call('GET', KEYS[1])
+local val = redis.call('HGET', KEYS[1], 'n')
 if val == false then
 	return -1
 end
@@ -334,7 +429,7 @@ if val == nil then
 	return -1
 end
 if val > 0 then
-	return redis.call('DECR', KEYS[1])
+	return redis.call('HINCRBY', KEYS[1], 'n', -1)
 end
 return 0
 `)

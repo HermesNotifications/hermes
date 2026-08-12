@@ -409,8 +409,23 @@ const maxUnreadCountQueries = 20
 
 // UnreadCount returns the number of unread, active, non-deleted notifications for a user,
 // saturating at models.UnreadCountCap.
-func (s *NotificationStore) UnreadCount(ctx context.Context, userID string) (int, error) {
+// UnreadCount returns the unread count and the watermark in a single descending pass over the
+// by-user index.
+//
+// One query, not two, and that is the whole point. The obvious implementation — a SelectCount for
+// the count, then a Limit(1) query for the newest id — reads the same GSI twice, and a GSI is
+// eventually consistent. The second read can therefore observe *less* than the first: the count
+// includes a just-arrived notification while the watermark does not, so its delivery increments a
+// value that already contains it. That is exactly the overcount the watermark exists to prevent,
+// reintroduced by the way it was fetched. It reproduced about one run in eight.
+//
+// Reading descending means the newest id is simply the first item, so the watermark costs nothing
+// beyond projecting one more attribute. Counting here rather than with a FilterExpression does not
+// change what is scanned — a filter is applied after the scan, and the note above already says the
+// scan is what gets billed.
+func (s *NotificationStore) UnreadCount(ctx context.Context, userID string) (int, string, error) {
 	var count int
+	watermark := ""
 	var lastKey map[string]types.AttributeValue
 
 	for page := 0; page < maxUnreadCountQueries; page++ {
@@ -418,30 +433,47 @@ func (s *NotificationStore) UnreadCount(ctx context.Context, userID string) (int
 			TableName:              aws.String(s.client.NotificationsTable),
 			IndexName:              aws.String(gsiByUser),
 			KeyConditionExpression: aws.String("user_id = :uid"),
-			FilterExpression:       aws.String("inbox_state = :active AND attribute_not_exists(read_at)"),
 			ExpressionAttributeValues: map[string]types.AttributeValue{
-				":uid":    strVal(userID),
-				":active": strVal(inboxStateActive),
+				":uid": strVal(userID),
 			},
-			Select: types.SelectCount,
+			// read_at is a reserved word, hence the alias.
+			ProjectionExpression:     aws.String("notif_id, inbox_state, #ra"),
+			ExpressionAttributeNames: map[string]string{"#ra": "read_at"},
+			ScanIndexForward:         aws.Bool(false), // newest first, so item 0 is the watermark
 		}
 		if lastKey != nil {
 			input.ExclusiveStartKey = lastKey
 		}
 		out, err := s.client.db.Query(ctx, input)
 		if err != nil {
-			return 0, fmt.Errorf("unread count: %w", err)
+			return 0, "", fmt.Errorf("unread count: %w", err)
 		}
-		count += int(out.Count)
-		if count >= models.UnreadCountCap {
-			return models.UnreadCountCap, nil
+
+		for i, item := range out.Items {
+			if page == 0 && i == 0 {
+				if id, ok := item["notif_id"].(*types.AttributeValueMemberS); ok {
+					watermark = id.Value
+				}
+			}
+			state, _ := item["inbox_state"].(*types.AttributeValueMemberS)
+			if state == nil || state.Value != inboxStateActive {
+				continue
+			}
+			if _, read := item["read_at"]; read {
+				continue
+			}
+			count++
+			if count >= models.UnreadCountCap {
+				return models.UnreadCountCap, watermark, nil
+			}
 		}
+
 		if out.LastEvaluatedKey == nil {
 			break
 		}
 		lastKey = out.LastEvaluatedKey
 	}
-	return count, nil
+	return count, watermark, nil
 }
 
 // MarkRead marks a notification as read and advances its status if below 'read'.

@@ -293,6 +293,14 @@ The inbox widget is embedded in **your** application, so the browser presents yo
 the socket lives on the Hermes domain. Every connection is cross-origin by construction, and
 Centrifugo answers `403` at the websocket handshake to any origin not listed.
 
+Since [ADR 0017](adr/0017-realtime-transport-ladder.md) this one setting covers two mechanisms.
+The WebSocket handshake is exempt from CORS and Centrifugo enforces the list as its own `Origin`
+check; the `http_stream` and `sse` fallbacks are ordinary CORS-governed requests whose preflights
+Centrifugo answers from the same list. A correct value therefore makes the entire ladder work
+cross-origin with no CORS middleware on any Hermes service — and a missing one now fails all three
+transports, presenting as a CORS error on the fallbacks and an opaque handshake failure on the
+websocket.
+
 What makes it expensive to diagnose is the asymmetry: Centrifugo **permits connections that
 carry no `Origin` header at all**, "as they typically originate from non-browser environments".
 So `/health` returns 200, `curl` connects, every server-side client connects, the pods are Ready

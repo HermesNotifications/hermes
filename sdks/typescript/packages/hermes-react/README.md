@@ -45,6 +45,22 @@ const inbox = useHermesInbox(useHermes(), { pageSize: 20 });
 `useUnreadCount(client)` gives just the count for a badge elsewhere in your layout. It is correct
 from first paint, not only after the user's first action.
 
+## Sharing a client, and retiring one
+
+`useHermesClient` owns the client for the lifetime of your component and needs nothing from you. If
+you manage one yourself, the distinction that matters is:
+
+| | Effect | Use it when |
+|---|---|---|
+| `client.disconnect()` | Closes the socket, **keeps every handler**. Reconnects on the next `connect()`. | Anywhere a lifecycle might run it spuriously — effect cleanups, unmount, going offline. |
+| `client.dispose()` | **Terminal.** Closes the socket, drops every handler, and refuses to reconnect. | Only when the client itself is finished, e.g. you are replacing it. |
+
+Reach for `disconnect()` by default. `dispose()` is deliberately unforgiving: a shared client may
+have handlers registered by an embedded `<hermes-inbox>` or another component, and disposing takes
+those with it — so a subsequent `connect()` rejects rather than handing you a socket that receives
+publications and delivers them to nobody. That failure used to be possible and silent; see
+[ADR 0018](../../../../docs/adr/0018-client-lifecycle-dispose-is-terminal.md).
+
 ## Server rendering
 
 Safe to import from a server component. It renders `<hermes-inbox></hermes-inbox>` with no children

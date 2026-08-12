@@ -193,8 +193,13 @@ func (s *Server) registerActionRoutes() {
 		}
 
 		if s.cache != nil {
-			if err := s.cache.SetUnreadCount(ctx, userID, 0, unreadCountTTL); err != nil {
-				s.logger.Error("failed to set unread count cache", "error", err)
+			// Invalidate rather than write a zero, because a zero needs a watermark to go with it
+			// and this handler has no snapshot to take one from. Writing the count without one
+			// would leave the entry claiming to account for no arrivals, so a delivery still in
+			// flight for a notification this call just marked read would increment it back to 1.
+			// Dropping the entry hands the next read a store snapshot where both agree.
+			if err := s.cache.DeleteUnreadCount(ctx, userID); err != nil {
+				s.logger.Error("failed to invalidate unread count cache", "error", err)
 			}
 		}
 		s.publishInboxEvent(ctx, userID, "", "read-all", 0)

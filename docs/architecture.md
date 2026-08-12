@@ -119,7 +119,7 @@ flowchart LR
 
     Browser -->|"GET /v1/inbox, actions (JWT)"| Inbox
     Browser -->|"profile & preferences (JWT)"| User
-    Browser <-->|"WebSocket: per-user channel"| Cent
+    Browser <-->|"WebSocket / HTTP-stream / SSE: per-user channel"| Cent
 
     WI -->|"publish"| Cent
     Inbox -->|"publish state changes"| Cent
@@ -133,9 +133,11 @@ flowchart LR
   cached in Redis. It holds **no NATS client** — it reads the store and pushes state changes
   straight to Centrifugo's HTTP API.
 - **User** serves the user's profile and per-subscription notification preferences.
-- **Centrifugo** pushes to the browser in real time over WebSockets on a per-user channel
+- **Centrifugo** pushes to the browser in real time on a per-user channel
   (`user#<internal-user-id>`). `worker-inbox` publishes new notifications; the Inbox service
-  publishes subsequent state changes.
+  publishes subsequent state changes. The client prefers WebSocket and steps down to
+  HTTP-streaming then SSE where a proxy blocks the upgrade — one ladder, one URL, identical
+  events on every rung. See [ADR 0017](adr/0017-realtime-transport-ladder.md).
 
 ## Services at a glance
 
@@ -532,7 +534,8 @@ superseded by `internal/id/v2`.)
   by setting `HERMES_DYNAMO_ENDPOINT`. See [the dual store](#the-dual-store) below.
 - **NATS JetStream** — the four streams above, declared by a `cmd/natsprovision` Job.
 - **Redis** — cache, idempotency dedup, and Centrifugo engine.
-- **Centrifugo** — real-time WebSocket push on user-scoped channels; NATS broker, Redis engine.
+- **Centrifugo** — real-time push on user-scoped channels over WebSocket, with HTTP-streaming
+  and SSE as fallbacks; NATS broker, Redis engine.
 
 Two Jobs therefore run ahead of the services — schema and streams — and both are idempotent
 and crash-loop to convergence. See [ADR 0006](adr/0006-migration-job-as-an-argocd-presync-hook.md)

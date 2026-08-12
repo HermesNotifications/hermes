@@ -16,7 +16,7 @@ target was always wrong.
 | `send_ack_latency` (churn) | p99 < 1000ms | churn | **Derived.** Allows for a pod being out and a retry landing elsewhere. |
 | `inbox_list_latency` | p95 < 150ms, p99 < 400ms | inbox-mixed | **Estimated.** One keyset-paginated query plus a cached count. Set after ADR 0011 removed the uncached `COUNT(*)` from the path; needs a baseline run to confirm. |
 | `inbox_list_latency` (churn) | p95 < 500ms, p99 < 2000ms | churn | **Derived** from the above, allowing for a drain in progress. |
-| `ws_connect_latency` | p95 < 500ms | inbox-mixed | **Estimated.** TLS handshake, JWT verification, subscribe round trip. |
+| `ws_connect_latency` | p95 < 500ms | inbox-mixed | **Estimated.** TLS handshake, JWT verification, subscribe round trip. Now covers a transport ladder ([ADR 0017](../adr/0017-realtime-transport-ladder.md)), so a p95 regression can mean *more clients falling through to a lower rung* rather than a slower system — split by Centrifugo's transport label before treating it as latency. |
 | `ws_push_e2e_latency` | p95 < 1s | inbox-mixed | **Measured**, but see the caveat below. |
 | `ws_push_e2e_latency` (churn) | p95 < 3s | churn | **Derived.** |
 | `ws_reconnect_duration` | p95 < 5s | churn | **Estimated** from centrifuge-js backoff (500ms min, 20s max, jittered). |

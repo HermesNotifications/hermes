@@ -124,11 +124,24 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Load-bearing for the http_stream and sse fallback transports, and pinned rather than
+    # left to the default for the same reason use-regex is spelled out above: its absence is
+    # silent. Both rungs are a single response the server never finishes writing. With
+    # buffering on, nginx holds each publication waiting for a complete response that is not
+    # coming, so the socket connects, the widget reports itself healthy, and notifications
+    # simply arrive late or not at all. ingress-nginx happens to default this to "off", so
+    # today it works by luck — a cluster-wide ConfigMap turning buffering on would break
+    # realtime with nothing in any log to say why.
+    #
+    # Websockets are unaffected either way: they are not a proxied HTTP response body.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
+          # Matches /realtime/connection/websocket, /connection/http_stream, /connection/sse
+          # and /emulation alike — the ladder needs no route of its own.
           - path: /realtime(/|$)(.*)
             pathType: ImplementationSpecific
             backend:

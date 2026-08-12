@@ -10,6 +10,8 @@
   "token_hmac_secret_key": "overridden-by-env",
   "api_key": "overridden-by-env",
   "admin": false,
+  "http_stream": true,
+  "sse": true,
   "presence": true,
   "history_size": 50,
   "history_ttl": "1h",

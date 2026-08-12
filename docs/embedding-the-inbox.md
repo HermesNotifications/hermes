@@ -17,7 +17,7 @@ that same element.
 |---|---|
 | An **API origin** | Where the inbox API is reachable *from the browser*. Usually your own origin — see [Origins and CORS](#origins-proxying-and-cors). |
 | A **user token** | A short-lived Hermes JWT, minted by your backend. |
-| A **socket URL** | Where Centrifugo is reachable, for live updates. |
+| A **socket URL** | Where the realtime service is reachable, for live updates. One URL — see [How live updates connect](#how-live-updates-connect). |
 
 There is no fourth thing. In particular there is **no user id to configure** — the element reads the
 internal Hermes user id from the token's `sub` claim.
@@ -27,6 +27,37 @@ internal Hermes user id from the token's `sub` claim.
 > fails in the most awkward way possible: REST keeps working, so the inbox loads and looks perfectly
 > healthy, while the subscription is rejected and no update ever arrives. Letting the SDK derive it
 > removes the entire class of error. You can still pass `user-id` explicitly if you need to.
+
+---
+
+## How live updates connect
+
+The widget tries three transports in order and keeps the first that connects:
+
+| | Transport | When it is used |
+|---|---|---|
+| 1 | WebSocket | Almost always. Nothing below this runs on a healthy network. |
+| 2 | HTTP-streaming | The `Upgrade` handshake was blocked or rewritten — typically a TLS-intercepting corporate proxy. |
+| 3 | SSE | HTTP-streaming was also blocked. |
+
+All three are derived from the single `socket-url`, so there is nothing extra to configure and no
+second URL to keep in sync. All three deliver identical events; nothing about the widget's behaviour
+or your integration changes with the rung it lands on.
+
+**Why this exists.** Before the ladder, a user behind a websocket-hostile proxy hit a failure that
+looked like success: the inbox loaded its first page over REST and then never changed again for the
+rest of the session. No error, no console warning, no reconnect — because a socket that never opens
+never reconnects, and nothing else triggers a refresh. The support report is "notifications are
+delayed", from one user on one network, and it reproduces nowhere else.
+
+**What it does not do.** There is no polling rung. If all three fail the widget is genuinely offline
+and says so via `hermes-status`; it does not fall back to a timer. There is no long-polling either —
+the transports above replace it, and they need no session affinity, so they work behind an ordinary
+round-robin load balancer.
+
+If you self-host, both fallbacks must be enabled server-side; see
+[Self-hosting → Configuration](self-hosting/configuration.md). The bundled chart and the kustomize
+overlays both enable them by default.
 
 ---
 
@@ -209,9 +240,17 @@ Two rules for the proxy. Both matter:
 A complete implementation is `examples/demo-server/src/proxy.ts`, in about sixty lines with no
 dependencies.
 
-**Websockets are exempt.** The WebSocket handshake is not subject to CORS, so `socket-url` points
-straight at Centrifugo, cross-origin, exactly as in production. If you self-host, note that
-Centrifugo performs its own `Origin` check via `allowed_origins`; set it for your app's origin.
+**The realtime connection does not go through the proxy.** `socket-url` points straight at
+Centrifugo, cross-origin, exactly as in production. If you self-host, set `allowed_origins` to your
+app's origin — without it every browser is refused while curl and health checks pass.
+
+That one setting now covers two distinct mechanisms, which is worth knowing when you debug it. The
+WebSocket handshake is not subject to CORS at all; Centrifugo enforces `allowed_origins` as its own
+`Origin` check. The `http_stream` and `sse` fallbacks *are* ordinary CORS-governed requests, and
+Centrifugo answers their preflights from the same list. So a correct `allowed_origins` makes the
+whole ladder work cross-origin and no Hermes service needs CORS middleware — but a *missing* one now
+fails on three transports rather than one, and the browser reports it as a CORS error on the
+fallbacks and an opaque handshake failure on the websocket.
 
 > Cross-origin support without a proxy is a genuine gap for an embeddable widget, and is tracked
 > separately — it changes the security surface of two public services and needs its own review. See
@@ -224,7 +263,7 @@ Centrifugo performs its own `Origin` check via `allowed_origins`; set it for you
 | Attribute | Default | Purpose |
 |---|---|---|
 | `api-url` | the page's origin | Where the inbox API is reachable from the browser |
-| `socket-url` | `api-url` | Base URL for the Centrifugo websocket |
+| `socket-url` | `api-url` | Base URL for the realtime connection. One URL: the widget derives its whole transport ladder from it |
 | `token` | — | A Hermes user JWT |
 | `token-url` | — | Endpoint returning `{ token, expires_at }`; enables auto-refresh |
 | `user-id` | the token's `sub` | Override the realtime channel's user |

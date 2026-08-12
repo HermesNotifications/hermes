@@ -38,6 +38,19 @@ data:
   # URL arrives as CENTRIFUGO_NATS_URL from a Secret (overlays/*/patches/centrifugo-env.yaml).
   # Leaving it out fails closed: a credential-less CONNECT to a server with accounts is
   # answered with an authorization violation and Centrifugo exits non-zero.
+  #
+  # http_stream and sse are the fallback rungs of the client's transport ladder
+  # (websocket -> http_stream -> sse). Both are bidirectional: the server->client half is
+  # the stream, and the client->server half is a POST to /emulation, which enabling either
+  # option also turns on. Because each command is an independent POST it can land on any
+  # replica, so this needs NO session affinity — the reason we use these rather than SockJS,
+  # whose long-polling did require it and which Centrifugo removed in v6 anyway.
+  #
+  # The key shape is version-specific and getting it wrong fails silently: v5 takes flat
+  # booleans (`--sse`), v6 takes `sse.enabled`. An unrecognised key is ignored, the server
+  # starts healthy, and only the fallback endpoints 404 — which nobody notices until a user
+  # on a websocket-hostile network gets a permanently stale inbox. This file is the v5 image
+  # (see the Deployment below); charts/hermes/values.yaml is v6 and nests them.
   config.json: |
     {
       "engine": "redis",
@@ -51,6 +64,8 @@ data:
       "token_hmac_secret_key": "",
       "api_key": "",
       "admin": false,
+      "http_stream": true,
+      "sse": true,
       "presence": true,
       "history_size": 50,
       "history_ttl": "1h",

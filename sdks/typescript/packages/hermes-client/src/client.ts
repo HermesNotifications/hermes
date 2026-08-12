@@ -160,23 +160,38 @@ export class HermesClient {
     return this.realtime.waitUntilConnected(timeoutMs);
   }
 
-  /** Close the socket, keeping handlers so a later connect() still delivers. */
+  /**
+   * Close the socket, keeping every handler so a later {@link connect} still delivers.
+   *
+   * This is the reuse-safe half of the pair, and the one a component lifecycle wants: it is
+   * survivable, so running it spuriously — as React StrictMode does to every effect cleanup —
+   * costs a reconnect rather than the client's usefulness. Reach for {@link dispose} only when
+   * the client is genuinely finished.
+   */
   disconnect(): void {
     this.realtime.disconnect();
   }
 
   /**
-   * Close the socket and drop the handlers consumers registered.
+   * Retire this client permanently: close the socket, drop every handler, refuse to reconnect.
    *
-   * Deliberately leaves this client's *own* wiring into the realtime connection intact, so the client
-   * still works if it is used again. That is not a hypothetical: React's StrictMode invokes an
-   * effect's cleanup and then the effect again on the same instance, so a `dispose()` that tore down
-   * the internal wiring left a client which connected, subscribed and received publications — and
-   * delivered them to nobody. Silent, and invisible to every unit test, because the socket looked
-   * healthy the whole time.
+   * **Terminal.** Call it only when the client itself is finished — being replaced because its
+   * `apiUrl`/`socketUrl` changed, or torn down by whoever built it. To close the socket while
+   * keeping the client usable, use {@link disconnect}.
+   *
+   * This used to be a middle thing: it dropped consumer handlers but deliberately preserved the
+   * internal wiring "so the client still works if it is used again". That combination has no
+   * coherent meaning. A reusable client with no handlers is one that reconnects, resubscribes,
+   * receives publications and delivers them to nobody — healthy from every angle and silent. It
+   * shipped exactly that way, because `useHermesClient` disposed a *shared* client from a React
+   * effect cleanup, which StrictMode runs spuriously, while an embedded widget was still
+   * registering on it. Whichever won the race decided whether realtime worked at all.
+   *
+   * So the contract is now one thing rather than two: after this, `connect()` rejects instead of
+   * producing that zombie. Idempotent, because a lifecycle teardown may legitimately run twice.
    */
   dispose(): void {
-    this.realtime.disconnect();
+    this.realtime.dispose();
     this.notificationHandlers = [];
     this.updateHandlers = [];
     this.unreadCountHandlers = [];

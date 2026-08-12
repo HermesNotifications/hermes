@@ -122,6 +122,21 @@ export class FakeHermesClient {
     this.emit("statusChange", status);
   }
 
+  /**
+   * Drop every `notification`/`update` handler, as the real `dispose()` does, while leaving the
+   * status handlers registered.
+   *
+   * That asymmetry is not an approximation — it is the real behaviour, and the reason the bug
+   * this stands in for was survivable at all. Status handlers live on the realtime connection,
+   * which `dispose()` only disconnects; the notification handlers live on the client, which it
+   * empties. So a disposed client still reports its status to a listening store, which is the
+   * one thread left to pull on.
+   */
+  dropHandlers(): void {
+    this.handlers.delete("notification");
+    this.handlers.delete("update");
+  }
+
   async connect(userId: string): Promise<void> {
     this.calls.push(`connect:${userId}`);
   }
