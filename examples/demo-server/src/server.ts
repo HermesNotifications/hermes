@@ -76,6 +76,35 @@ function problem(status: number, detail: string): Response {
   return json({ detail }, { status });
 }
 
+/**
+ * Re-report a failed upstream call as itself, rather than as a bare 500.
+ *
+ * Duck-typed on `status`/`detail` instead of importing the SDK's `HermesError`, so this module
+ * keeps depending only on the interfaces at the top of the file and stays testable without it.
+ *
+ * The case that motivated this: `make dev-up` recreates Postgres, `make seed` writes a fresh key
+ * into web/admin/.env.local, and a demo server started before that still holds the old one. Every
+ * call then 401s, the catch-all in main.ts turned that into `{"detail":"internal error"}`, and the
+ * browser showed "session request failed (500)" — which reads as Hermes being down. It is not; it
+ * is one stale environment variable, and a 401 that says so is the difference between a restart
+ * and an afternoon.
+ */
+function upstreamProblem(cause: unknown): Response {
+  const error = cause as { status?: unknown; detail?: unknown };
+  if (typeof error?.status !== "number") throw cause;
+
+  const detail = typeof error.detail === "string" ? error.detail : "upstream call failed";
+  if (error.status === 401 || error.status === 403) {
+    return problem(
+      error.status,
+      `Hermes rejected the demo's API key (${error.status}: ${detail}). ` +
+        "It is usually stale — `make seed` writes a new key whenever the database is recreated, " +
+        "and a demo server started beforehand still holds the old one. Restart it with `make dev-demo`."
+    );
+  }
+  return problem(error.status, detail);
+}
+
 async function readJson(request: Request): Promise<Record<string, unknown>> {
   try {
     const body = (await request.json()) as unknown;
@@ -133,7 +162,12 @@ export function createHandler(deps: DemoDeps): (request: Request) => Promise<Res
     const identity = identityOf(request);
     if (!identity) return problem(401, "no demo session; POST /api/demo/login first");
 
-    const session = await createSession(hermes, identity, { socketUrl: config.socketUrl });
+    let session;
+    try {
+      session = await createSession(hermes, identity, { socketUrl: config.socketUrl });
+    } catch (cause) {
+      return upstreamProblem(cause);
+    }
 
     // `expires_at` is duplicated in snake_case because that is what <hermes-inbox token-url>
     // reads, and this endpoint doubles as that url.
@@ -160,22 +194,26 @@ export function createHandler(deps: DemoDeps): (request: Request) => Promise<Res
     const channels = Array.isArray(body.channels) ? (body.channels as string[]) : ["inbox"];
 
     const sent: string[] = [];
-    for (let index = 0; index < count; index++) {
-      const { notificationId } = await sendNotification({
-        to: { organizationId: identity.organizationId, userId: identity.externalUserId },
-        content: {
-          title: count > 1 ? `${title} (${index + 1}/${count})` : title,
-          body: text,
-          ...(typeof body.actionUrl === "string" ? { actionUrl: body.actionUrl } : {}),
-          ...(typeof body.actionLabel === "string" ? { actionLabel: body.actionLabel } : {}),
-        },
-        ...(metadata ? { metadata } : {}),
-        channels,
-        // A repeated key inside the dedup window silently drops the send, which in a demo looks
-        // like the pipeline losing messages.
-        idempotencyKey: randomUUID(),
-      });
-      sent.push(notificationId);
+    try {
+      for (let index = 0; index < count; index++) {
+        const { notificationId } = await sendNotification({
+          to: { organizationId: identity.organizationId, userId: identity.externalUserId },
+          content: {
+            title: count > 1 ? `${title} (${index + 1}/${count})` : title,
+            body: text,
+            ...(typeof body.actionUrl === "string" ? { actionUrl: body.actionUrl } : {}),
+            ...(typeof body.actionLabel === "string" ? { actionLabel: body.actionLabel } : {}),
+          },
+          ...(metadata ? { metadata } : {}),
+          channels,
+          // A repeated key inside the dedup window silently drops the send, which in a demo looks
+          // like the pipeline losing messages.
+          idempotencyKey: randomUUID(),
+        });
+        sent.push(notificationId);
+      }
+    } catch (cause) {
+      return upstreamProblem(cause);
     }
 
     // 202, matching /v1/send: the notification row is created later by dispatch, so this is an

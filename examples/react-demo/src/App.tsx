@@ -146,43 +146,49 @@ export function App() {
   );
 
   const shell = (
-    <div className="shell">
-      {/* Inside the shell, so it sits under HermesProvider and useHermes() resolves. Before a
-          session exists the client is null and the hook is a no-op. */}
+    <>
+      {/* Under HermesProvider so useHermes() resolves, but a sibling of .shell rather than a
+          child of it. sonner's <Toaster> renders a real in-flow <section> — only the <ol> inside
+          it is fixed — so as a child it became .shell's first grid item, taking the 232px sidebar
+          column and pushing the sidebar and the whole app one cell along. Out here it is a
+          zero-height element on body. Before a session exists the client is null and the hook is
+          a no-op. */}
       <Toasts />
-      <Sidebar />
-      <div>
-        <Header
-          session={session}
-          theme={theme}
-          onThemeChange={setTheme}
-          onNotification={onNotification}
-          onUnreadCountChange={setUnreadCount}
-          onRealtimeChange={setRealtime}
-          onError={(message) => append(`widget: ${message}`)}
-        />
-        <main>
-          <Content unreadCount={unreadCount} />
-          <div className="side-column">
-            <SendPanel disabled={!session} onSent={(what) => append(`sent: ${what}`)} />
-            <SessionPanel
-              session={session}
-              realtime={realtime}
-              unreadCount={unreadCount}
-              log={log}
-              error={error}
-              onRefresh={() => void refreshSession()}
-              onBecomeUser={(externalUserId) =>
-                void refreshSession({
-                  organizationId: DEFAULT_ORGANIZATION,
-                  externalUserId,
-                })
-              }
-            />
-          </div>
-        </main>
+      <div className="shell">
+        <Sidebar />
+        <div>
+          <Header
+            session={session}
+            theme={theme}
+            onThemeChange={setTheme}
+            onNotification={onNotification}
+            onUnreadCountChange={setUnreadCount}
+            onRealtimeChange={setRealtime}
+            onError={(message) => append(`widget: ${message}`)}
+          />
+          <main>
+            <Content unreadCount={unreadCount} />
+            <div className="side-column">
+              <SendPanel disabled={!session} onSent={(what) => append(`sent: ${what}`)} />
+              <SessionPanel
+                session={session}
+                realtime={realtime}
+                unreadCount={unreadCount}
+                log={log}
+                error={error}
+                onRefresh={() => void refreshSession()}
+                onBecomeUser={(externalUserId) =>
+                  void refreshSession({
+                    organizationId: DEFAULT_ORGANIZATION,
+                    externalUserId,
+                  })
+                }
+              />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   );
 
   return config ? <HermesProvider config={config}>{shell}</HermesProvider> : shell;
