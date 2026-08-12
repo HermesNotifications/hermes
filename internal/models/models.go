@@ -23,6 +23,27 @@ type APIKey struct {
 	Name        string    `json:"name"`
 	Permissions []string  `json:"permissions"`
 	CreatedAt   time.Time `json:"created_at"`
+
+	// RateLimitPerSecond and RateLimitBurst override the service default for
+	// this credential. Nil means "use the default" — the column is nullable so
+	// that unset stays distinguishable from a deliberately chosen value.
+	RateLimitPerSecond *int `json:"rate_limit_per_second,omitempty"`
+	RateLimitBurst     *int `json:"rate_limit_burst,omitempty"`
+}
+
+// RateLimitOverride is a credential's own rate limit.
+//
+// Both fields are optional and independent: a key may raise its burst while keeping the
+// default sustained rate. A nil field means "use the service default", which is the same
+// sentinel middleware.ResolveLimit applies to a zero override, so an unset limit needs no
+// special case anywhere downstream.
+//
+// It exists as a struct rather than two more positional arguments because the credential
+// is where per-namespace and per-plan limits will attach when ADR 0012's namespace phase
+// lands; adding a field here will not break every call site again.
+type RateLimitOverride struct {
+	PerSecond *int
+	Burst     *int
 }
 
 type User struct {

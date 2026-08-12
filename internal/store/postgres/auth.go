@@ -14,11 +14,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error) {
-	k := &models.APIKey{ID: id, KeyHash: keyHash, Name: name, Permissions: permissions}
+func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string, limits models.RateLimitOverride) (*models.APIKey, error) {
+	k := &models.APIKey{
+		ID: id, KeyHash: keyHash, Name: name, Permissions: permissions,
+		RateLimitPerSecond: limits.PerSecond, RateLimitBurst: limits.Burst,
+	}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO api_keys (id, key_hash, name, permissions) VALUES ($1, $2, $3, $4) RETURNING created_at`,
-		k.ID, k.KeyHash, k.Name, k.Permissions,
+		`INSERT INTO api_keys (id, key_hash, name, permissions, rate_limit_per_second, rate_limit_burst)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING created_at`,
+		k.ID, k.KeyHash, k.Name, k.Permissions, k.RateLimitPerSecond, k.RateLimitBurst,
 	).Scan(&k.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create api key: %w", err)
@@ -26,8 +30,33 @@ func (s *Store) CreateAPIKey(ctx context.Context, id, keyHash, name string, perm
 	return k, nil
 }
 
+// UpdateAPIKeyRateLimits replaces a key's rate limit override wholesale.
+//
+// A nil field clears that limit back to the service default rather than leaving it
+// untouched — the endpoint above it is a PUT on the whole limit, so "absent" and "unset"
+// are deliberately the same thing. Returns (nil, nil) when no such key exists, matching
+// GetAPIKeyByID.
+func (s *Store) UpdateAPIKeyRateLimits(ctx context.Context, id string, limits models.RateLimitOverride) (*models.APIKey, error) {
+	var k models.APIKey
+	err := s.pool.QueryRow(ctx,
+		`UPDATE api_keys SET rate_limit_per_second = $2, rate_limit_burst = $3
+		 WHERE id = $1
+		 RETURNING id, key_hash, name, permissions, created_at, rate_limit_per_second, rate_limit_burst`,
+		id, limits.PerSecond, limits.Burst,
+	).Scan(&k.ID, &k.KeyHash, &k.Name, &k.Permissions, &k.CreatedAt,
+		&k.RateLimitPerSecond, &k.RateLimitBurst)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("update api key rate limits: %w", err)
+	}
+	return &k, nil
+}
+
 func (s *Store) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, key_hash, name, permissions, created_at FROM api_keys`)
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, key_hash, name, permissions, created_at, rate_limit_per_second, rate_limit_burst FROM api_keys`)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
@@ -36,7 +65,8 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 	var keys []models.APIKey
 	for rows.Next() {
 		var k models.APIKey
-		if err := rows.Scan(&k.ID, &k.KeyHash, &k.Name, &k.Permissions, &k.CreatedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.KeyHash, &k.Name, &k.Permissions, &k.CreatedAt,
+			&k.RateLimitPerSecond, &k.RateLimitBurst); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		keys = append(keys, k)
@@ -47,9 +77,11 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 func (s *Store) GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error) {
 	var k models.APIKey
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, key_hash, name, permissions, created_at FROM api_keys WHERE id = $1`,
+		`SELECT id, key_hash, name, permissions, created_at, rate_limit_per_second, rate_limit_burst
+		 FROM api_keys WHERE id = $1`,
 		id,
-	).Scan(&k.ID, &k.KeyHash, &k.Name, &k.Permissions, &k.CreatedAt)
+	).Scan(&k.ID, &k.KeyHash, &k.Name, &k.Permissions, &k.CreatedAt,
+		&k.RateLimitPerSecond, &k.RateLimitBurst)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

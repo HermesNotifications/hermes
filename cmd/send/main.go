@@ -44,7 +44,7 @@ func main() {
 	st := postgres.New(pool)
 
 	srv := send.NewServer(st, natsClient, redisClient, pool, cfg.APIKeyHMACSecret, logger)
-	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
+	bootstrap.SetupRateLimiting(srv, cfg, redisClient, logger)
 
 	// Publishing is this service's entire job, so an unusable bus makes it unready. Postgres
 	// too, for the API key lookup behind the cache.

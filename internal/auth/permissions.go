@@ -33,6 +33,13 @@ var DefaultPermissions = []string{
 type ValidatedKey struct {
 	ID          string
 	Permissions []string
+
+	// RateLimitPerSecond and RateLimitBurst carry this credential's own limits
+	// so the rate limiter, which runs immediately after authentication, can read
+	// them without a second lookup. Zero means "use the service default", which
+	// is the sentinel middleware.ResolveLimit already understands.
+	RateLimitPerSecond int
+	RateLimitBurst     int
 }
 
 const validatedKeyContextKey contextKey = "validatedKey"

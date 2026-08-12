@@ -324,16 +324,33 @@ func (m *mockStore) GetNotificationEvents(ctx context.Context, notificationID st
 
 // --- API Keys ---
 
-func (m *mockStore) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error) {
+func (m *mockStore) CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string, limits models.RateLimitOverride) (*models.APIKey, error) {
 	k := models.APIKey{
-		ID:          id,
-		KeyHash:     keyHash,
-		Name:        name,
-		Permissions: permissions,
-		CreatedAt:   time.Now(),
+		ID:                 id,
+		KeyHash:            keyHash,
+		Name:               name,
+		Permissions:        permissions,
+		CreatedAt:          time.Now(),
+		RateLimitPerSecond: limits.PerSecond,
+		RateLimitBurst:     limits.Burst,
 	}
 	m.apiKeys = append(m.apiKeys, k)
 	return &k, nil
+}
+
+// UpdateAPIKeyRateLimits replaces the override, matching the Postgres store: a nil field
+// clears rather than preserves, and an unknown key is (nil, nil) rather than an error.
+func (m *mockStore) UpdateAPIKeyRateLimits(ctx context.Context, id string, limits models.RateLimitOverride) (*models.APIKey, error) {
+	for i := range m.apiKeys {
+		if m.apiKeys[i].ID != id {
+			continue
+		}
+		m.apiKeys[i].RateLimitPerSecond = limits.PerSecond
+		m.apiKeys[i].RateLimitBurst = limits.Burst
+		k := m.apiKeys[i]
+		return &k, nil
+	}
+	return nil, nil
 }
 
 func (m *mockStore) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {

@@ -48,6 +48,36 @@ describe("HermesError.fromStatus", () => {
     expect(err.retryable).toBe(false);
   });
 
+  describe("Retry-After", () => {
+    it("surfaces the wait the server asked for", () => {
+      const headers = new Headers({ "Retry-After": "3" });
+      const err = HermesError.fromStatus("Inbox", 429, undefined, headers);
+      expect(err.kind).toBe("rate-limited");
+      expect(err.retryAfterSeconds).toBe(3);
+    });
+
+    it("is undefined when the header is absent", () => {
+      const err = HermesError.fromStatus("Inbox", 429, undefined, new Headers());
+      expect(err.retryAfterSeconds).toBeUndefined();
+    });
+
+    it("is undefined when no headers are supplied at all", () => {
+      expect(HermesError.fromStatus("Inbox", 429).retryAfterSeconds).toBeUndefined();
+    });
+
+    /**
+     * The header also permits an HTTP date. Returning NaN would be worse than
+     * returning nothing: `setTimeout(fn, NaN)` fires immediately, so a client
+     * honouring it would retry instantly — the opposite of the instruction.
+     */
+    it("ignores a non-numeric value rather than yielding NaN", () => {
+      const headers = new Headers({ "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" });
+      expect(
+        HermesError.fromStatus("Inbox", 429, undefined, headers).retryAfterSeconds
+      ).toBeUndefined();
+    });
+  });
+
   it("classifies a 400 whose body reports an invalid cursor", () => {
     // The store recovers from this by discarding the cursor and re-requesting page 1,
     // which it can only do if the kind is distinguishable from any other 400.

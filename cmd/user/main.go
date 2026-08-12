@@ -60,7 +60,7 @@ func main() {
 	}
 
 	srv := userservice.NewServer(userStore, keyProvider, logger)
-	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
+	bootstrap.SetupRateLimiting(srv, cfg, redisClient, logger)
 
 	readiness := bootstrap.NewReadiness(bootstrap.PostgresCheck(pool))
 	srv.SetReadiness(readiness)

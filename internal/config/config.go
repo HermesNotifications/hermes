@@ -131,12 +131,35 @@ type Config struct {
 	// Every HTTP service reads the same three variables, and because each runs as
 	// its own Deployment they are set per service rather than fleet-wide.
 	//
-	// Enforcement is PER REPLICA. The cluster-wide ceiling is these numbers times
-	// the replica count, which under an HPA moves with the autoscaler — so size
-	// them per pod, not per fleet. See docs/configuration.md.
+	// Without RateLimitDistributedEnabled these are enforced per replica, so the
+	// cluster-wide ceiling is the configured rate times the replica count. With
+	// it, the check runs in Redis and these become the cluster-wide numbers.
+	// See docs/configuration.md.
 	RateLimitEnabled   bool
 	RateLimitBurst     int
 	RateLimitPerSecond int
+
+	// RateLimitIP* bound requests per source address BEFORE authentication.
+	// The credential limiter cannot see an unauthenticated flood: such a request
+	// is rejected by the auth middleware, after an HMAC or a signature check, and
+	// never reaches a bucket. This is a flood bound, not a quota.
+	RateLimitIPEnabled   bool
+	RateLimitIPBurst     int
+	RateLimitIPPerSecond int
+
+	// TrustedProxyCIDRs lists the proxies whose X-Forwarded-For may be believed.
+	// Empty means trust none and always key on the peer address, which is the
+	// safe default: the header is caller-supplied, so honouring it from an
+	// untrusted peer lets anyone pick their own bucket.
+	TrustedProxyCIDRs []string
+
+	// RateLimitDistributedEnabled moves the per-credential admission check into
+	// Redis, making the limit cluster-wide rather than per replica. It adds one
+	// Redis round trip to each authenticated request — on the Send path, which
+	// already makes one or two. If Redis cannot answer, the request is decided
+	// from the local bucket instead, so an outage degrades to per-replica
+	// enforcement rather than failing requests or dropping the limit entirely.
+	RateLimitDistributedEnabled bool
 
 	// DynamoDB / ExtendDB — set DynamoEndpoint to an ExtendDB URL for local dev and
 	// multi-cloud environments; leave empty to use native DynamoDB on AWS.
@@ -193,9 +216,21 @@ func Load() Config {
 		RateLimitEnabled:    envBool("HERMES_RATELIMIT_ENABLED", true),
 		RateLimitBurst:      envInt("HERMES_RATELIMIT_BURST", 0),
 		RateLimitPerSecond:  envInt("HERMES_RATELIMIT_PER_SECOND", 0),
-		DynamoEndpoint:      envStr("HERMES_DYNAMO_ENDPOINT", ""),
-		DynamoRegion:        envStr("HERMES_DYNAMO_REGION", "us-east-1"),
-		Environment:         envStr("HERMES_ENV", EnvDevelopment),
+
+		RateLimitIPEnabled:   envBool("HERMES_RATELIMIT_IP_ENABLED", true),
+		RateLimitIPBurst:     envInt("HERMES_RATELIMIT_IP_BURST", 0),
+		RateLimitIPPerSecond: envInt("HERMES_RATELIMIT_IP_PER_SECOND", 0),
+		TrustedProxyCIDRs:    envStrSlice("HERMES_TRUSTED_PROXY_CIDRS", nil),
+
+		// Off by default. Turning it on is a behaviour change an operator should
+		// opt into: a caller's effective ceiling stops scaling with the replica
+		// count, which is the point but is also a reduction in the throughput a
+		// multi-replica deployment was getting.
+		RateLimitDistributedEnabled: envBool("HERMES_RATELIMIT_DISTRIBUTED_ENABLED", false),
+
+		DynamoEndpoint: envStr("HERMES_DYNAMO_ENDPOINT", ""),
+		DynamoRegion:   envStr("HERMES_DYNAMO_REGION", "us-east-1"),
+		Environment:    envStr("HERMES_ENV", EnvDevelopment),
 	}
 }
 
@@ -317,6 +352,23 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 		}
 	}
 	return fallback
+}
+
+// envStrSlice reads a comma-separated list. Blank entries are dropped, so a
+// trailing comma or a value indented across lines in a ConfigMap does not become
+// an empty element that a parser would then have to special-case.
+func envStrSlice(key string, fallback []string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if s := strings.TrimSpace(part); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func envInt64(key string, fallback int64) int64 {

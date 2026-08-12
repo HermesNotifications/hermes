@@ -69,7 +69,7 @@ func main() {
 	}
 
 	srv := inbox.NewServer(inboxStore, centrifugoClient, redisClient, keyProvider, logger)
-	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
+	bootstrap.SetupRateLimiting(srv, cfg, redisClient, logger)
 
 	// Postgres only. Redis is deliberately not a readiness dependency: every read it serves
 	// falls back to the database, so a Redis blip must not empty this service's endpoint list.

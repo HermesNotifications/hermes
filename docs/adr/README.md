@@ -25,6 +25,7 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0013](0013-embeddable-inbox-widget-contract.md) | Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React | Accepted | 2026-07-30 |
 | [0014](0014-cache-first-unread-count.md) | Serve the unread count from cache, and keep it off the websocket's critical path | Accepted | 2026-08-10 |
 | [0015](0015-lifecycle-and-jetstream-durability.md) | Drain before shutdown, and replicate the streams the cluster can lose | Accepted | 2026-08-10 |
+| [0016](0016-distributed-rate-limiting-with-local-fallback.md) | Rate limit per credential in Redis, with the local bucket as the fallback | Accepted | 2026-08-11 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

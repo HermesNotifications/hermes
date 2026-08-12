@@ -91,6 +91,7 @@ type Server struct {
 	skipAuth       bool
 	jwtKeyProvider auth.JWTKeyProvider
 	limiter        *middleware.RateLimiter
+	ipLimiter      *middleware.RateLimiter
 	readiness      *httputil.Readiness
 }
 
@@ -105,11 +106,20 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-// Default per-process rate limit. Overridable via HERMES_RATELIMIT_INBOX_*; see
-// SetRateLimit and docs/configuration.md.
+// Default per-process rate limit. Overridable via HERMES_RATELIMIT_*; see
+// ConfigureRateLimit and docs/configuration.md.
 const (
 	defaultRateLimitBurst     = 50
 	defaultRateLimitPerSecond = 20
+
+	// The per-IP bound cannot sit at the per-user ceiling the way the API
+	// services' does: many users legitimately share one egress IP — a corporate
+	// NAT, a mobile carrier — so a bound of 20/s would throttle a whole office
+	// as though it were one person. It is set well above the per-user rate and
+	// is only there to stop an unauthenticated flood from reaching JWT
+	// verification.
+	defaultIPRateLimitBurst     = 500
+	defaultIPRateLimitPerSecond = 200
 )
 
 // ConfigureRateLimit applies configured overrides on top of this service's
@@ -117,14 +127,18 @@ const (
 // false turns limiting off.
 func (s *Server) ConfigureRateLimit(enabled bool, burst, perSecond int) {
 	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultRateLimitBurst, defaultRateLimitPerSecond)
-	s.limiter = middleware.NewRateLimiter(userLimitKey, b, p)
+	s.limiter = middleware.NewRateLimiter(middleware.UserLimitKey, b, p).WithScope(middleware.ScopeCredential)
 }
 
-// userLimitKey buckets by the JWT-derived user ID, which is signature-derived
-// and so cannot be chosen by the caller.
-func userLimitKey(r *http.Request) string {
-	return auth.UserIDFromContext(r.Context())
+// ConfigureIPRateLimit installs the pre-auth per-IP bound, which runs before
+// JWT verification so an unauthenticated flood costs no signature checks.
+func (s *Server) ConfigureIPRateLimit(enabled bool, burst, perSecond int, proxies *middleware.TrustedProxies) {
+	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultIPRateLimitBurst, defaultIPRateLimitPerSecond)
+	s.ipLimiter = middleware.NewRateLimiter(proxies.ClientIP, b, p).WithScope(middleware.ScopeIP)
 }
+
+// CredentialLimiter exposes the per-user limiter for reconciliation.
+func (s *Server) CredentialLimiter() *middleware.RateLimiter { return s.limiter }
 
 // SetUnreadCache substitutes the unread-count cache. Intended for use in tests only; production
 // wiring goes through NewServer. Pass nil to run with no cache at all.
@@ -139,8 +153,9 @@ func NewServer(store InboxStore, cent *centrifugo.Client, cacheClient *cache.Cli
 		jwtKeyProvider: keyProvider,
 		logger:         logger,
 		router:         chi.NewRouter(),
-		limiter:        middleware.NewRateLimiter(userLimitKey, defaultRateLimitBurst, defaultRateLimitPerSecond),
 	}
+	s.ConfigureRateLimit(true, 0, 0)
+	s.ConfigureIPRateLimit(true, 0, 0, nil)
 	// Assigned only when non-nil. A nil *cache.Client stored in an interface field produces a
 	// non-nil interface holding a nil pointer, so `s.cache == nil` would be false and every
 	// cache call would panic on the callers that legitimately pass no cache.
@@ -190,6 +205,8 @@ func (s *Server) Handler() http.Handler {
 	if !s.skipAuth {
 		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}
+	// Outside auth, so an unauthenticated flood is shed before JWT verification.
+	h = s.ipLimiter.Middleware(h)
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)
 	return h

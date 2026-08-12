@@ -65,7 +65,85 @@ func main() {
 	}
 }
 
+// addRateLimitResponse documents 429 on every operation.
+//
+// It is applied here rather than on each huma.Register call because the limiter
+// is chi middleware wrapping the whole router (see each service's Handler): huma
+// never sees the request, so it cannot infer the response from a handler
+// signature. Without this the generated SDKs have no 429 shape at all, and a
+// client generated from the spec treats a rate-limited response as an unexpected
+// status.
+//
+// Note the body is the middleware envelope — {"error": "..."} from
+// httputil.ClientError — not huma's error shape, because the rejection happens
+// before huma is reached.
+func addRateLimitResponse(spec *huma.OpenAPI) {
+	if spec.Paths == nil {
+		return
+	}
+
+	body := &huma.Schema{
+		Type: "object",
+		Properties: map[string]*huma.Schema{
+			"error": {Type: "string", Description: "Human-readable reason."},
+		},
+	}
+
+	seconds := &huma.Schema{Type: "integer"}
+	newResponse := func() *huma.Response {
+		return &huma.Response{
+			Description: "Too Many Requests. The caller exceeded its rate limit. " +
+				"Honour Retry-After; retrying sooner does not shorten the wait. " +
+				"A 429 from the pre-authentication per-address bound carries only " +
+				"Retry-After, without the RateLimit-* headers.",
+			Headers: map[string]*huma.Param{
+				"Retry-After": {
+					Description: "Whole seconds to wait before retrying. Always at least 1.",
+					Schema:      seconds,
+				},
+				"RateLimit-Limit": {
+					Description: "Sustained requests per second allowed for this credential.",
+					Schema:      seconds,
+				},
+				"RateLimit-Remaining": {
+					Description: "Requests available right now.",
+					Schema:      seconds,
+				},
+				"RateLimit-Reset": {
+					Description: "Seconds until capacity is available.",
+					Schema:      seconds,
+				},
+			},
+			Content: map[string]*huma.MediaType{
+				"application/json": {Schema: body},
+			},
+		}
+	}
+
+	for _, item := range spec.Paths {
+		if item == nil {
+			continue
+		}
+		for _, op := range []*huma.Operation{
+			item.Get, item.Put, item.Post, item.Delete,
+			item.Options, item.Head, item.Patch, item.Trace,
+		} {
+			if op == nil {
+				continue
+			}
+			if op.Responses == nil {
+				op.Responses = map[string]*huma.Response{}
+			}
+			if _, exists := op.Responses["429"]; !exists {
+				op.Responses["429"] = newResponse()
+			}
+		}
+	}
+}
+
 func writeSpec(api huma.API, outPath, format string) {
+	addRateLimitResponse(api.OpenAPI())
+
 	var (
 		data []byte
 		err  error

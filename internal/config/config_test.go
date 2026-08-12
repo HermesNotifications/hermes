@@ -84,6 +84,62 @@ func TestLoad_OverrideFromEnv(t *testing.T) {
 	}
 }
 
+// ADR 0016. The rate limiting defaults are load-bearing: per-IP limiting on by
+// default is what makes the services self-sufficient without nginx, and
+// reconciliation off by default is what stops a chart upgrade from silently
+// lowering a multi-replica deployment's effective throughput.
+func TestLoad_RateLimitDefaults(t *testing.T) {
+	cfg := config.Load()
+
+	if !cfg.RateLimitEnabled {
+		t.Error("expected credential rate limiting to default on")
+	}
+	if !cfg.RateLimitIPEnabled {
+		t.Error("expected per-IP rate limiting to default on")
+	}
+	if cfg.RateLimitDistributedEnabled {
+		t.Error("expected distributed rate limiting to default off")
+	}
+	// Trusting nothing is the safe default: X-Forwarded-For is caller-supplied.
+	if len(cfg.TrustedProxyCIDRs) != 0 {
+		t.Errorf("expected no trusted proxies by default, got %v", cfg.TrustedProxyCIDRs)
+	}
+}
+
+func TestLoad_TrustedProxyCIDRs(t *testing.T) {
+	// Blank entries must be dropped, so a trailing comma or a value wrapped
+	// across lines in a ConfigMap does not become an empty element.
+	t.Setenv("HERMES_TRUSTED_PROXY_CIDRS", "10.42.0.0/16, 10.43.0.0/16 ,")
+
+	got := config.Load().TrustedProxyCIDRs
+	want := []string{"10.42.0.0/16", "10.43.0.0/16"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("entry %d: expected %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+func TestLoad_RateLimitOverridesFromEnv(t *testing.T) {
+	t.Setenv("HERMES_RATELIMIT_IP_ENABLED", "false")
+	t.Setenv("HERMES_RATELIMIT_IP_PER_SECOND", "50")
+	t.Setenv("HERMES_RATELIMIT_DISTRIBUTED_ENABLED", "true")
+
+	cfg := config.Load()
+	if cfg.RateLimitIPEnabled {
+		t.Error("expected per-IP limiting to be disabled")
+	}
+	if cfg.RateLimitIPPerSecond != 50 {
+		t.Errorf("expected 50/s, got %d", cfg.RateLimitIPPerSecond)
+	}
+	if !cfg.RateLimitDistributedEnabled {
+		t.Error("expected distributed rate limiting to be enabled")
+	}
+}
+
 // ADR 0005 phase 1. Validate is what makes transport security legible and enforceable
 // in code rather than a substring of a secret nobody can inspect. It deliberately checks
 // the connection strings themselves rather than parallel "tls enabled" settings, because

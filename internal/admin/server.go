@@ -6,11 +6,9 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -65,7 +63,8 @@ type AdminStore interface {
 	ListRecentNotifications(ctx context.Context, limit int) ([]models.Notification, error)
 
 	// API Keys
-	CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string) (*models.APIKey, error)
+	CreateAPIKey(ctx context.Context, id, keyHash, name string, permissions []string, limits models.RateLimitOverride) (*models.APIKey, error)
+	UpdateAPIKeyRateLimits(ctx context.Context, id string, limits models.RateLimitOverride) (*models.APIKey, error)
 	ListAPIKeys(ctx context.Context) ([]models.APIKey, error)
 	GetAPIKeyByID(ctx context.Context, id string) (*models.APIKey, error)
 	DeleteAPIKey(ctx context.Context, id string) error
@@ -86,6 +85,7 @@ type Server struct {
 	jwtSecret     []byte
 	hmacSecret    string
 	limiter       *middleware.RateLimiter
+	ipLimiter     *middleware.RateLimiter
 	readiness     *httputil.Readiness
 }
 
@@ -117,35 +117,40 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-// Default per-process rate limit. Overridable via HERMES_RATELIMIT_ADMIN_*; see
-// SetRateLimit and docs/configuration.md.
+// Default per-process rate limit. Overridable via HERMES_RATELIMIT_*; see
+// ConfigureRateLimit and docs/configuration.md.
 const (
 	defaultRateLimitBurst     = 1000
 	defaultRateLimitPerSecond = 500
+
+	// A flood bound rather than a quota, so it sits at the per-credential
+	// ceiling — see the equivalent note in internal/send/server.go.
+	defaultIPRateLimitBurst     = defaultRateLimitBurst
+	defaultIPRateLimitPerSecond = defaultRateLimitPerSecond
 )
 
 // ConfigureRateLimit applies configured overrides on top of this service's
 // defaults. Call before serving. A zero override keeps the default; enabled
 // false turns limiting off.
+//
+// The limit resolved here is the fallback. A key carrying its own
+// rate_limit_per_second/_burst overrides it for that credential alone.
 func (s *Server) ConfigureRateLimit(enabled bool, burst, perSecond int) {
 	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultRateLimitBurst, defaultRateLimitPerSecond)
-	s.limiter = middleware.NewRateLimiter(apiKeyLimitKey, b, p)
+	s.limiter = middleware.NewRateLimiter(middleware.APIKeyLimitKey, b, p).
+		WithScope(middleware.ScopeCredential).
+		WithLimitFunc(middleware.APIKeyLimits)
 }
 
-// apiKeyLimitKey buckets by validated key ID rather than by the raw
-// Authorization header.
-//
-// The header is the wrong key twice over. APIKeyMiddleware strips the "Bearer "
-// prefix before validating, so "hms_x" and "Bearer hms_x" are one credential but
-// were two buckets — a free doubling of anyone's limit. And the raw header is
-// the secret itself, so it had to be hashed before it could be retained. A key
-// ID is neither ambiguous nor sensitive.
-func apiKeyLimitKey(r *http.Request) string {
-	if k := auth.GetValidatedKey(r.Context()); k != nil {
-		return k.ID
-	}
-	return ""
+// ConfigureIPRateLimit installs the pre-auth per-IP bound. See the note on the
+// send service's equivalent for why this runs outside authentication.
+func (s *Server) ConfigureIPRateLimit(enabled bool, burst, perSecond int, proxies *middleware.TrustedProxies) {
+	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultIPRateLimitBurst, defaultIPRateLimitPerSecond)
+	s.ipLimiter = middleware.NewRateLimiter(proxies.ClientIP, b, p).WithScope(middleware.ScopeIP)
 }
+
+// CredentialLimiter exposes the per-credential limiter for reconciliation.
+func (s *Server) CredentialLimiter() *middleware.RateLimiter { return s.limiter }
 
 func NewServer(store AdminStore, organizations store.OrganizationRepository, cache *cache.Client, pool *pgxpool.Pool, jwtSecret []byte, hmacSecret string, logger *slog.Logger) *Server {
 	s := &Server{
@@ -157,8 +162,9 @@ func NewServer(store AdminStore, organizations store.OrganizationRepository, cac
 		hmacSecret:    hmacSecret,
 		logger:        logger,
 		router:        chi.NewRouter(),
-		limiter:       middleware.NewRateLimiter(apiKeyLimitKey, defaultRateLimitBurst, defaultRateLimitPerSecond),
 	}
+	s.ConfigureRateLimit(true, 0, 0)
+	s.ConfigureIPRateLimit(true, 0, 0, nil)
 
 	config := huma.DefaultConfig("Hermes Admin API", "1.0.0")
 	config.Info.Description = "Server-to-server API for managing subscription categories, templates, and notifications."
@@ -216,61 +222,20 @@ func (s *Server) Handler() http.Handler {
 		// that would be fail-open in production too. See finding 3.
 		h = auth.SkipAuthMiddleware()(h)
 	}
+	// Outside auth, so a flood with no valid credential is shed before it costs
+	// an HMAC and a Redis lookup.
+	h = s.ipLimiter.Middleware(h)
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)
 	return h
 }
 
 func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
-	keyID, secret, err := auth.ParseAPIKey(rawKey)
-	if err != nil {
-		return nil
-	}
-
-	var keyHash string
-	var permissions []string
-
-	// Try cache first
+	// See the note in internal/send/server.go: a typed nil in an interface is
+	// not nil, so the conversion has to be guarded.
+	var keyCache auth.APIKeyCache
 	if s.cache != nil {
-		cached, err := s.cache.GetAPIKey(context.Background(), keyID)
-		if err != nil {
-			s.logger.Error("cache get api key failed", "error", err)
-		} else if cached != nil {
-			var entry struct {
-				KeyHash     string   `json:"key_hash"`
-				Permissions []string `json:"permissions"`
-			}
-			if json.Unmarshal(cached, &entry) == nil {
-				keyHash = entry.KeyHash
-				permissions = entry.Permissions
-			}
-		}
+		keyCache = s.cache
 	}
-
-	// Cache miss — load from store
-	if keyHash == "" {
-		k, err := s.store.GetAPIKeyByID(context.Background(), keyID)
-		if err != nil || k == nil {
-			return nil
-		}
-		keyHash = k.KeyHash
-		permissions = k.Permissions
-
-		// Populate cache
-		if s.cache != nil {
-			entry, _ := json.Marshal(struct {
-				KeyHash     string   `json:"key_hash"`
-				Permissions []string `json:"permissions"`
-			}{keyHash, permissions})
-			if err := s.cache.SetAPIKey(context.Background(), keyID, entry, 5*time.Minute); err != nil {
-				s.logger.Error("cache set api key failed", "error", err)
-			}
-		}
-	}
-
-	if !auth.HMACVerifyAPIKey(secret, keyHash, s.hmacSecret) {
-		return nil
-	}
-
-	return &auth.ValidatedKey{ID: keyID, Permissions: permissions}
+	return auth.ResolveAPIKey(context.Background(), rawKey, s.store, keyCache, s.hmacSecret, s.logger)
 }

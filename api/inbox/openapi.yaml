@@ -227,6 +227,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ListInboxOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:
@@ -246,6 +273,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActionOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:
@@ -271,6 +325,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnreadCountOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:
@@ -298,6 +379,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActionOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:
@@ -325,6 +433,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActionOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:
@@ -351,6 +486,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActionOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:
@@ -378,6 +540,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActionOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:
@@ -404,6 +593,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActionOutputBody"
           description: OK
+        "429":
+          content:
+            application/json:
+              schema:
+                properties:
+                  error:
+                    description: Human-readable reason.
+                    type: string
+                type: object
+          description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
+          headers:
+            RateLimit-Limit:
+              description: Sustained requests per second allowed for this credential.
+              schema:
+                type: integer
+            RateLimit-Remaining:
+              description: Requests available right now.
+              schema:
+                type: integer
+            RateLimit-Reset:
+              description: Seconds until capacity is available.
+              schema:
+                type: integer
+            Retry-After:
+              description: Whole seconds to wait before retrying. Always at least 1.
+              schema:
+                type: integer
         default:
           content:
             application/problem+json:

@@ -601,6 +601,48 @@ natsProvision:
   resources: {}
 
 # ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+
+# -- Deployment-wide rate limiting. The per-credential rate lives on each
+# service's own `rateLimit` block, because each service is its own Deployment;
+# these settings describe the installation as a whole.
+rateLimit:
+  # -- Per-source-address bound applied BEFORE authentication, inside the Go
+  # services. Unlike the nginx ingress annotations below it works on every
+  # ingress controller, and on none at all — which matters because the
+  # in-process credential limiter runs *after* auth and so cannot see an
+  # unauthenticated flood at all. This is a flood bound, not a quota. Empty
+  # burst/perSecond keeps each service's compiled-in default (send and admin
+  # default to their per-credential ceiling; inbox and user default well above
+  # their per-user rate, because many users share one NAT).
+  perIP:
+    enabled: true
+    burst: ""
+    perSecond: ""
+  # -- Proxies whose `X-Forwarded-For` may be believed, as CIDRs or bare IPs.
+  # EMPTY MEANS TRUST NOTHING, and per-IP limiting then keys on the address of
+  # the immediate peer — which behind an ingress controller is the controller
+  # itself, collapsing every caller into one bucket. Set this to your ingress
+  # controller's pod CIDR to get real client addresses. Do not set it to
+  # 0.0.0.0/0: the header is caller-supplied, so trusting every peer lets anyone
+  # choose their own bucket and escape the limit entirely.
+  trustedProxyCIDRs: []
+  #  - 10.42.0.0/16
+  # -- Cluster-wide per-credential limiting. With this off, each replica enforces
+  # the configured rate independently and the cluster-wide ceiling is that rate
+  # times the replica count. With it on, the admission check runs in Redis
+  # (GCRA, one atomic Lua round trip) and the configured rate IS the cluster-wide
+  # ceiling. Costs one Redis round trip per authenticated request, on a path that
+  # already makes one or two. If Redis cannot answer within 100ms the request is
+  # decided from the replica's local bucket instead, so an outage degrades to the
+  # per-replica behaviour rather than failing requests or dropping the limit.
+  # Requires Redis. Off by default because it lowers the effective throughput a
+  # multi-replica deployment gets today, which should be an opt-in change.
+  distributed:
+    enabled: false
+
+# ---------------------------------------------------------------------------
 # Ingress
 # ---------------------------------------------------------------------------
 

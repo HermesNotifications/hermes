@@ -259,6 +259,37 @@
       }
     },
 
+    "rateLimit": {
+      "$comment": "Deployment-wide rate limiting. The per-credential rate is per service, under each service's own rateLimit block; these settings describe the installation.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "perIP": {
+          "$comment": "Applied inside the Go services before authentication, so it works with any ingress controller or none. burst/perSecond accept \"\" to mean 'keep the service default'.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "burst": { "type": ["integer", "string"], "minimum": 1 },
+            "perSecond": { "type": ["integer", "string"], "minimum": 1 }
+          }
+        },
+        "trustedProxyCIDRs": {
+          "$comment": "Empty means trust no forwarding headers at all. Never set this to 0.0.0.0/0: X-Forwarded-For is caller-supplied, so trusting every peer lets any caller pick its own bucket.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "distributed": {
+          "$comment": "Runs the per-credential admission check in Redis so the configured rate is the cluster-wide ceiling. Requires Redis; degrades to per-replica enforcement if it is unavailable.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
     "ingress": {
       "type": "object",
       "additionalProperties": false,

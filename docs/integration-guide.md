@@ -284,13 +284,20 @@ wastes your own quota. Back off, ideally with jitter so a fleet of your workers 
 synchronise.
 
 Defaults are 2000 req/s (5000 burst) for Send, 500/s (1000 burst) for Admin, and 20/s (50 burst)
-per user for Inbox and User. Operators can change these per deployment — see
-[configuration](configuration.md#http-rate-limiting) — so treat the values in `RateLimit-Limit`
-as authoritative over anything hardcoded in your client.
+per user for Inbox and User. Operators can change these per deployment, **and may set a
+different limit on an individual API key**, so two of your keys can legitimately have different
+ceilings. Treat `RateLimit-Limit` as authoritative over anything hardcoded in your client, and
+read it per key rather than assuming one value for your whole integration.
 
-If you are self-hosting or running against a multi-replica deployment, note that the limit is
-enforced per replica; the effective ceiling is higher than the per-replica figure and varies with
-autoscaling. Do not build a client that depends on hitting an exact threshold.
+**Do not build a client that depends on hitting an exact threshold.** How the advertised figure
+maps to the cluster depends on how the deployment is configured: operators may run the check in
+a shared store, making it the cluster-wide ceiling, or leave it per replica, in which case the
+effective ceiling is the advertised rate times the replica count and varies with autoscaling.
+Either way the number is a bound to back off from, not a quota to meter against.
+
+You may also see a 429 that carries **no** `RateLimit-*` headers. That is the per-address flood
+bound, which applies before authentication — it is usually a sign that many clients share your
+egress IP, or that something on your side is retrying hard. Back off the same way.
 
 `/healthz` and `/readyz` are never rate limited.
 

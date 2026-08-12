@@ -54,7 +54,7 @@ func main() {
 	}
 
 	srv := admin.NewServer(adminStore, organizations, redisClient, pool, []byte(cfg.JWTSecret), cfg.APIKeyHMACSecret, logger)
-	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
+	bootstrap.SetupRateLimiting(srv, cfg, redisClient, logger)
 
 	readiness := bootstrap.NewReadiness(bootstrap.PostgresCheck(pool))
 	srv.SetReadiness(readiness)

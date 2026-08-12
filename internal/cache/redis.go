@@ -10,12 +10,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-redis/redis_rate/v10"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
 type Client struct {
 	rdb *redis.Client
+	// limiter is stateless over rdb; it is held here so the GCRA Lua script is
+	// registered once rather than per call.
+	limiter *redis_rate.Limiter
 }
 
 // Options bound the Redis client. The zero value uses Defaults.
@@ -76,7 +80,7 @@ func ConnectWithOptions(redisURL string, o Options) (*Client, error) {
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		return nil, fmt.Errorf("redis ping: %w", err)
 	}
-	return &Client{rdb: rdb}, nil
+	return &Client{rdb: rdb, limiter: redis_rate.NewLimiter(rdb)}, nil
 }
 
 // SetIdempotencyKey attempts to set an idempotency key. Returns "" if the key was new,
