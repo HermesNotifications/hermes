@@ -132,6 +132,57 @@ hermes:
     # -- Cron schedule for cleanup job
     schedule: "0 3 * * *"
 
+  # -- First API key, created at install time.
+  #
+  # Creating an API key requires an API key -- POST /v1/apikeys demands apikeys:manage -- so
+  # without this a clean install produces a healthy cluster you cannot make a single
+  # authenticated call against. Turning it off leaves you no supported way to get a first
+  # credential short of writing an api_keys row by hand.
+  #
+  # Read it after installing:
+  #
+  #   kubectl -n <namespace> get secret <release>-hermes-bootstrap \
+  #     -o jsonpath='{.data.HERMES_API_KEY}' | base64 -d
+  #
+  # It carries every permission, including apikeys:manage -- it has to, or it could not mint
+  # the narrower key meant to replace it. Trade it for a scoped key and revoke it.
+  bootstrap:
+    # -- Create the first API key
+    enabled: true
+    # -- Name of the Secret to write. Defaults to <release>-hermes-bootstrap.
+    #
+    # The Secret is deliberately NOT tracked by Helm: `helm uninstall` leaves it, so a
+    # reinstall against a surviving database re-adopts the same key instead of issuing a new
+    # one and invalidating every place the old one was pasted.
+    secretName: ""
+    # -- Read the key from a Secret you manage instead of creating one.
+    #
+    # For clusters whose policy forbids workloads creating Secrets. Supply the key via ESO,
+    # Vault, SOPS or by hand; the Job then only ensures the database row, and the chart
+    # renders no ServiceAccount and no RBAC at all.
+    existingSecret: ""
+    # -- Key within existingSecret holding the raw API key
+    existingSecretKey: HERMES_API_KEY
+    # -- Label stored on the api_keys row
+    keyName: "Bootstrap"
+    # -- Port the Kubernetes API server listens on, for the networkPolicy egress rule.
+    #
+    # 443 on a managed control plane (EKS, GKE, AKS); 6443 on k3s, kind, k3d and RKE. Only
+    # matters when networkPolicy.enabled is true, and getting it wrong there costs a Job that
+    # hangs until its deadline rather than one that fails with something readable.
+    apiServerPort: 443
+    image:
+      # -- Bootstrap job image repository
+      repository: hermes-bootstrap
+      # -- Image tag override
+      tag: ""
+    # -- Retries before the Job is marked failed. 6 for the same reason migration uses 6:
+    # it is applied in the same pass as the database and the migration that creates
+    # api_keys, so on a first install it retries while both catch up.
+    backoffLimit: 6
+    # -- Resource requests and limits for the bootstrap job
+    resources: {}
+
 # ---------------------------------------------------------------------------
 # Per-service configuration
 # ---------------------------------------------------------------------------

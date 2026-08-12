@@ -50,6 +50,7 @@ jobs:
           # Caught by scripts/check_helm_render.py, which reads this list to decide whether an
           # image under the Hermes registry actually exists.
           - cleanup
+          - bootstrap
     env:
       # The exact commit CI validated. github.sha is the branch tip, which can race ahead of
       # the run that passed, so pin to the run's head_sha.

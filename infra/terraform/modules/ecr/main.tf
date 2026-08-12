@@ -23,6 +23,7 @@ locals {
     "migrate",
     "natsprovision",
     "cleanup",
+    "bootstrap",
   ])
 }
 

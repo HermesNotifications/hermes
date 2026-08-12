@@ -1,0 +1,88 @@
+{{- if .Values.hermes.bootstrap.enabled }}
+{{/*
+Creates the first API key and writes it to a Secret.
+
+Without this a clean install produces a healthy cluster nobody can authenticate against:
+POST /v1/apikeys requires apikeys:manage, so making the first key needs a key that already
+exists. The only previous escape was hand-computing an HMAC-SHA256 and writing a row with
+psql, which is not documented anywhere and should not have to be.
+
+Shaped exactly like migration-job.yaml, for the same reasons recorded in ADR 0008: a plain
+resource rather than a Helm hook, and a revision-scoped name because a Job's pod template is
+immutable and a stable name fails on the second install.
+
+It runs alongside the migration Job rather than after it, so on a first install it will fail
+and retry for as long as api_keys does not exist. That is the same convergence the services
+go through and is what backoffLimit is for.
+
+The Secret it creates is NOT tracked by Helm and has no ownerReference, deliberately:
+`helm uninstall` leaves it behind, so a reinstall against a surviving database re-adopts the
+key the operator already has rather than issuing a new one and silently invalidating every
+place the old one was pasted. An ownerReference would be garbage-collected on the next
+upgrade, which is the opposite of what is wanted.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "hermes.fullname" . }}-bootstrap-{{ .Release.Revision }}
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/name: hermes-bootstrap
+    app.kubernetes.io/component: bootstrap
+spec:
+  backoffLimit: {{ .Values.hermes.bootstrap.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "hermes.labels" . | nindent 8 }}
+        app.kubernetes.io/component: bootstrap
+    spec:
+      restartPolicy: Never
+      {{- if not .Values.hermes.bootstrap.existingSecret }}
+      serviceAccountName: {{ include "hermes.fullname" . }}-bootstrap
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      {{- include "hermes.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: bootstrap
+          image: {{ include "hermes.image" (dict "root" . "service" .Values.hermes.bootstrap) }}
+          imagePullPolicy: {{ include "hermes.imagePullPolicy" (dict "root" . "service" .Values.hermes.bootstrap) }}
+          args:
+            - "-secret-name"
+            - {{ include "hermes.bootstrapSecretName" . | quote }}
+            - "-key-name"
+            - {{ .Values.hermes.bootstrap.keyName | quote }}
+          env:
+            {{- if .Values.externalPostgresql.existingSecret }}
+            - name: HERMES_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgresql.existingSecret }}
+                  key: {{ .Values.externalPostgresql.existingSecretKey }}
+            {{- end }}
+            {{- if .Values.hermes.bootstrap.existingSecret }}
+            {{- /* The operator supplied the key themselves (ESO, Vault, SOPS). The Job then
+                   only ensures the database row, needs no ServiceAccount and no RBAC, and
+                   never touches a Secret. */}}
+            - name: HERMES_BOOTSTRAP_EXISTING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hermes.bootstrap.existingSecret }}
+                  key: {{ .Values.hermes.bootstrap.existingSecretKey }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "hermes.configMapName" . }}
+            - secretRef:
+                name: {{ include "hermes.secretName" . }}
+          resources:
+            {{- toYaml .Values.hermes.bootstrap.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+{{- end }}

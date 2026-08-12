@@ -109,6 +109,20 @@ imagePullSecrets:
 {{- end }}
 
 {{/*
+Name of the Secret holding the bootstrap API key.
+
+Referenced from three places that must agree or the RBAC silently does not cover the Secret
+the Job writes: the Job's argument, the Role's resourceNames, and NOTES.txt.
+*/}}
+{{- define "hermes.bootstrapSecretName" -}}
+{{- if .Values.hermes.bootstrap.secretName -}}
+{{- .Values.hermes.bootstrap.secretName -}}
+{{- else -}}
+{{- include "hermes.fullname" . }}-bootstrap
+{{- end -}}
+{{- end }}
+
+{{/*
 Return the secret name. Uses existingSecret if set, otherwise generates one.
 */}}
 {{- define "hermes.secretName" -}}

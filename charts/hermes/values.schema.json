@@ -215,6 +215,35 @@
             "enabled": { "type": "boolean" },
             "schedule": { "type": "string", "minLength": 1 }
           }
+        },
+        "bootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "First API key, created at install time. Without it a fresh install cannot be authenticated against at all.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" },
+            "existingSecret": { "type": "string" },
+            "existingSecretKey": { "type": "string", "minLength": 1 },
+            "keyName": { "type": "string", "minLength": 1 },
+            "apiServerPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "Kubernetes API server port for the networkPolicy egress rule. 443 on managed control planes, 6443 on k3s/kind/k3d/RKE."
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": { "type": "string", "minLength": 1 },
+                "tag": { "type": "string" },
+                "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "resources": { "type": "object" }
+          }
         }
       }
     },
