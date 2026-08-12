@@ -104,4 +104,3 @@ src/main/java/com/hermes/sdk/model/UpdateCategoryInputBody.java
 src/main/java/com/hermes/sdk/model/UpdateSubscriptionInputBody.java
 src/main/java/com/hermes/sdk/model/UpdateTemplateInputBody.java
 src/main/java/com/hermes/sdk/model/UserItem.java
-src/test/java/com/hermes/sdk/model/RateLimitErrorTest.java

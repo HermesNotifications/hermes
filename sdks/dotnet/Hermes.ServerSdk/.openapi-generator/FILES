@@ -43,7 +43,6 @@ docs/scripts/git_push.ps1
 docs/scripts/git_push.sh
 src/Hermes.ServerSdk.Test/Api/DependencyInjectionTests.cs
 src/Hermes.ServerSdk.Test/Hermes.ServerSdk.Test.csproj
-src/Hermes.ServerSdk.Test/Model/RateLimitErrorTests.cs
 src/Hermes.ServerSdk.Test/README.md
 src/Hermes.ServerSdk/Api/APIKeysApi.cs
 src/Hermes.ServerSdk/Api/AuthApi.cs
