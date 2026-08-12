@@ -13,6 +13,7 @@
   "history_ttl": "1h",
   "user_subscribe_to_personal": true,
   "allow_user_limited_channels": true,
-  "allowed_origins": ["http://localhost:5173"],
+  "_comment_allowed_origins": "Local dev only. The demo's port moves per worktree (see scripts/demo-env) and a per-worker sandbox is reached at <worker>.127.0.0.1.nip.io, so a fixed origin would have to be regenerated per sandbox. Staging and production patch this with their real origins and are not affected.",
+  "allowed_origins": ["http://localhost:*", "http://127.0.0.1:*", "http://*.127.0.0.1.nip.io:*"],
   "health": true
 }

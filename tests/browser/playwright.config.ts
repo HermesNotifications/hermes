@@ -5,6 +5,21 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
+ * Where the demo answers.
+ *
+ * Both are supplied by `scripts/demo-env`, which derives them from the worktree name so that two
+ * worktrees can run this suite at once — vite uses strictPort, so a fixed 5173 means the second
+ * run simply refuses to start. The defaults are the historical ports, so a plain
+ * `pnpm test` from the main checkout is unchanged.
+ *
+ * HERMES_DEMO_ORIGIN still wins if set: global-setup.ts reads the same variable, and Centrifugo
+ * validates websocket handshakes against this exact origin.
+ */
+const SERVER_PORT = process.env.DEMO_SERVER_PORT ?? "8899";
+const DEMO_ORIGIN =
+  process.env.HERMES_DEMO_ORIGIN ?? `http://localhost:${process.env.DEMO_WEB_PORT ?? "5173"}`;
+
+/**
  * Live end-to-end configuration.
  *
  * ## What this suite assumes, and what it owns
@@ -49,7 +64,7 @@ export default defineConfig({
   globalSetup: "./global-setup.ts",
 
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: DEMO_ORIGIN,
     // A trace of a notification arriving is the deliverable, not just a debugging aid.
     trace: "on-first-retry",
     video: "retain-on-failure",
@@ -64,7 +79,7 @@ export default defineConfig({
   webServer: [
     {
       command: "pnpm --filter @hermes/demo-server dev",
-      url: "http://localhost:8899/healthz",
+      url: `http://localhost:${SERVER_PORT}/healthz`,
       reuseExistingServer: !process.env.CI,
       timeout: 90_000,
       cwd: "../..",
@@ -73,7 +88,7 @@ export default defineConfig({
     },
     {
       command: "pnpm --filter @hermes/react-demo dev",
-      url: "http://localhost:5173",
+      url: DEMO_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 90_000,
       cwd: "../..",

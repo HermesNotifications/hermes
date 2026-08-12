@@ -8,12 +8,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Test Commands
 
+> **Working in a worktree, or alongside another agent?** Read
+> [docs/development.md](docs/development.md#running-several-agents-or-worktrees-at-once) first.
+> Everything below is already per-worktree — `WORKER`, the demo ports and the Docker Compose
+> host ports all derive from the worktree name — and every local-dev target is pinned to the
+> `k3d-hermes-dev` context rather than following `kubectl config current-context`. Do not
+> assume the ambient context is local; it is shared machine state and it changes.
+
 ```bash
-# Full local environment on k3d + Tilt (recommended): all services, infra, hot reload
+# Full local environment on k3d + Tilt (recommended): all services, infra, hot reload.
+# Singleton: Tilt port-forwards fixed host ports, so only one of these can run at a time.
 make dev-up
 
-# Lighter path used by the test suite: infra only, run binaries/tests against it
+# Lighter path used by the test suite: infra only, run binaries/tests against it.
+# Host ports are offset per worktree; `eval "$(scripts/compose-env)"` points tools at them.
 make infra-up   # Postgres, NATS with JetStream, Redis via docker compose
+
+# A whole stack of your own on the shared cluster, reachable at
+# http://<worktree>.127.0.0.1.nip.io:8888 — for the demo and the browser suite.
+make images-sandbox && make stack-up
 
 # Build all services (binaries output to bin/<service>/service)
 make build

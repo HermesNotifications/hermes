@@ -108,7 +108,14 @@ export async function loginAs(
   page: Page,
   identity: { organizationId: string; externalUserId: string }
 ): Promise<void> {
-  const response = await page.request.post("http://localhost:8899/api/demo/login", {
+  // Relative, so Playwright resolves it against `use.baseURL` and this helper needs to know
+  // nothing about ports. It used to name localhost:8899 outright, which broke the moment the
+  // demo server moved to a per-worktree port -- and broke as ECONNREFUSED inside a fixture, so
+  // every test in the suite failed at setup and none of them said why.
+  //
+  // It reaches the demo server through vite's /api proxy rather than directly, which is also
+  // what a browser does, and it shares the page's cookie jar either way.
+  const response = await page.request.post("/api/demo/login", {
     data: {
       organizationId: identity.organizationId,
       externalUserId: identity.externalUserId,

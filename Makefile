@@ -2,7 +2,18 @@
 # natsprovision is a Job like migrate, not a long-running service: ADR 0005 phase 4 made it
 # the only identity that may declare JetStream streams.
 SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate natsprovision seed cleanup
-DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
+
+# Where migrate/seed/cleanup point.
+#
+# HERMES_DATABASE_URL wins when it is set, which is what makes these targets follow a sandbox
+# (`eval "$(make devworker-env)"`) instead of the shared localhost:5432. Before this, DB_URL was
+# an unconditional `:=`, so `make migrate` silently ignored the sandbox you had just sourced and
+# migrated whatever Docker Compose stack happened to own 5432 -- another worktree's, if one was
+# up. That is not hypothetical: it is how migration 000020 first landed in the wrong database.
+#
+# Still overridable on the command line (`make migrate DB_URL=...`), because `?=` yields to an
+# explicit assignment.
+DB_URL  ?= $(if $(HERMES_DATABASE_URL),$(HERMES_DATABASE_URL),postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable)
 
 # The manifest gates in scripts/ parse rendered YAML, so every one of them needs PyYAML.
 # Nothing used to declare that. On a machine without it each gate printed SKIP and exited 0 --
@@ -13,6 +24,29 @@ DB_URL   := postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable
 # this venv is what stops that being a daily annoyance.
 VENV   := .venv
 PYTHON := $(VENV)/bin/python
+
+# --- Which cluster local-dev targets talk to ---
+#
+# Pinned, not inherited. Every kubectl invocation below used to follow whatever
+# `kubectl config current-context` happened to be, which is a footgun rather than a
+# convenience: the context is global machine state that any other terminal, any other
+# repository, or any other agent can change, and nothing in a `make devworker-up` prompt tells
+# you where it is about to deploy.
+#
+# The failure mode is not theoretical. A full local stack -- fourteen Deployments, a NATS
+# StatefulSet, two Ingresses -- was once applied to a shared remote cluster because the context
+# was left on it, and the migration and seed steps ran against that cluster's database. Nothing
+# in the output looked wrong, because nothing in the output mentioned a cluster at all.
+#
+# LOADTEST TARGETS ARE DELIBERATELY EXCLUDED. `make loadtest-*` is meant to run against a real
+# remote cluster, so it keeps using the ambient context on purpose.
+#
+# Override for a deliberate exception:  make stack-up KUBE_CONTEXT=kind-helix
+# Both are recursively expanded (`=`, not `:=`) because CLUSTER_NAME is defined further down, in
+# the k3d section. With `:=` this would freeze here as `kubectl --context k3d-` and every target
+# would fail with `context "k3d-" does not exist`.
+KUBE_CONTEXT ?= k3d-$(CLUSTER_NAME)
+KUBECTL       = kubectl --context $(KUBE_CONTEXT)
 
 # --- Build ---
 GO_BUILD := go run github.com/DataDog/orchestrion go build
@@ -318,47 +352,74 @@ sdk-dotnet:        ## Generate .NET server SDK
 		--global-property=skipFormModel=true
 sdk-generate: openapi sdk-ts-generate sdk-ts-build sdk-python sdk-java sdk-dotnet  ## Full pipeline: specs → types → build
 
+# Fail before touching anything if the pinned context is missing.
+#
+# Without this the first call reports `error: no context exists with the name "k3d-hermes-dev"`,
+# which is accurate but reads as a kubectl problem rather than "your local cluster is not
+# running". Say the actual next step instead.
+.PHONY: require-local-context
+require-local-context:
+	@kubectl config get-contexts -o name 2>/dev/null | grep -qx '$(KUBE_CONTEXT)' || { \
+		echo "No kubectl context named '$(KUBE_CONTEXT)'."; \
+		echo; \
+		echo "Local-dev targets are pinned to the k3d cluster and will not follow your current"; \
+		echo "context, so they cannot deploy to a remote cluster by accident."; \
+		echo; \
+		echo "  make dev-up                       create/start the local cluster"; \
+		echo "  make <target> KUBE_CONTEXT=name   aim somewhere else on purpose"; \
+		exit 1; \
+	}
+
 # --- Parallel development sandboxes (one namespace per worker) ---
 #
 # For running several agents or developers against one k3s cluster without them
 # colliding. Each worker gets its own namespace holding Postgres, Redis, NATS with
 # JetStream, and Mailpit. See docs/development.md.
 #
-# WORKER defaults to your username so `make devworker-up` is safe to type without
-# thinking; CI and agents should pass it explicitly.
-WORKER ?= $(USER)
+# WORKER defaults to the current directory's name, which in a git worktree is the worktree's
+# own name -- so every worktree gets its own sandbox with nothing to remember and no flag to
+# pass. That default is the point: a name you have to supply is a name an agent will forget,
+# and the failure mode of forgetting is silently sharing a database with someone else.
+#
+# In the main checkout this yields the repository directory name (`hermes`), which is a fine
+# stable sandbox for whoever is working there. Pass WORKER explicitly to override.
+#
+# Lowercased and cleaned because a namespace must be a DNS-1123 label: lowercase alphanumerics
+# and dashes only. Worktree names like `Inbox_Polish` would otherwise produce a namespace the
+# API server rejects, several steps later, with an error that does not mention the worktree.
+WORKER ?= $(shell basename "$(CURDIR)" | tr '[:upper:]_' '[:lower:]-' | tr -cd 'a-z0-9-' | cut -c1-40)
 DEVWORKER_NS := hermes-dev-$(WORKER)
 
 .PHONY: devworker-up devworker-down devworker-list devworker-env
-devworker-up:      ## Create an isolated dev sandbox namespace (WORKER=name)
-	@kubectl create namespace $(DEVWORKER_NS) --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+devworker-up: require-local-context      ## Create an isolated dev sandbox namespace (WORKER=name)
+	@$(KUBECTL) create namespace $(DEVWORKER_NS) --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	@# Labelled so devworker-list can find sandboxes without pattern-matching names, and
 	@# so a stray sandbox is identifiable as disposable rather than someone's real work.
-	@kubectl label namespace $(DEVWORKER_NS) hermes.io/devworker=true --overwrite >/dev/null
+	@$(KUBECTL) label namespace $(DEVWORKER_NS) hermes.io/devworker=true --overwrite >/dev/null
 	@# deploy/k8s/devworker deliberately sets no `namespace:` anywhere, so `-n` places
 	@# everything. That is what makes this parallel-safe: no shared file is edited, and
 	@# no throwaway overlay is needed (kustomize also rejects absolute `resources` paths).
 	kubectl kustomize deploy/k8s/devworker | kubectl apply -n $(DEVWORKER_NS) -f -
 	@echo "waiting for $(DEVWORKER_NS) to become ready..."
-	@kubectl -n $(DEVWORKER_NS) wait --for=condition=Ready pod --all --timeout=180s
+	@$(KUBECTL) -n $(DEVWORKER_NS) wait --for=condition=Ready pod --all --timeout=180s
 	@$(MAKE) --no-print-directory devworker-env WORKER=$(WORKER)
 
-devworker-down:    ## Delete a dev sandbox namespace and its volumes (WORKER=name)
-	kubectl delete namespace $(DEVWORKER_NS) --wait=false
+devworker-down: require-local-context    ## Delete a dev sandbox namespace and its volumes (WORKER=name)
+	$(KUBECTL) delete namespace $(DEVWORKER_NS) --wait=false
 
-devworker-list:    ## List all dev sandbox namespaces
-	@kubectl get ns -l hermes.io/devworker=true --no-headers 2>/dev/null || \
-		kubectl get ns --no-headers | grep '^hermes-dev-' || echo "no sandboxes"
+devworker-list: require-local-context    ## List all dev sandbox namespaces
+	@$(KUBECTL) get ns -l hermes.io/devworker=true --no-headers 2>/dev/null || \
+		$(KUBECTL) get ns --no-headers | grep '^hermes-dev-' || echo "no sandboxes"
 
-devworker-env:     ## Print eval-able env vars pointing at a sandbox (WORKER=name)
+devworker-env: require-local-context     ## Print eval-able env vars pointing at a sandbox (WORKER=name)
 	@# Emits ClusterIPs, not .svc DNS names. Cluster DNS does not resolve from the host,
 	@# but on a k3s node the host CAN route to both service and pod CIDRs — verified. So
 	@# these URLs work directly from a shell, with no port-forward.
 	@#
 	@# Node-local by nature: these addresses are only reachable from this machine.
 	@set -e; ns=$(DEVWORKER_NS); \
-	ip() { kubectl -n $$ns get svc $$1 -o jsonpath='{.spec.clusterIP}'; }; \
-	nats_ip() { kubectl -n $$ns get pod nats-0 -o jsonpath='{.status.podIP}'; }; \
+	ip() { $(KUBECTL) -n $$ns get svc $$1 -o jsonpath='{.spec.clusterIP}'; }; \
+	nats_ip() { $(KUBECTL) -n $$ns get pod nats-0 -o jsonpath='{.status.podIP}'; }; \
 	echo "# eval \"\$$(make devworker-env WORKER=$(WORKER))\""; \
 	echo "export HERMES_ENV=development"; \
 	echo "export HERMES_DATABASE_URL='postgres://hermes:hermes@$$(ip postgres):5432/hermes?sslmode=disable'"; \
@@ -373,10 +434,92 @@ devworker-env:     ## Print eval-able env vars pointing at a sandbox (WORKER=nam
 	echo "export HERMES_DYNAMO_REGION=us-east-1"; \
 	echo "export AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy"
 
+# --- Full-stack sandboxes (services as well as infrastructure) ---
+#
+# devworker-* above gives you infrastructure only -- enough for `go test -tags=integration`,
+# which is most work, and cheap. This gives you the whole thing: the nine services, Centrifugo
+# and an ingress, in your own namespace, so several agents can run the demo and the browser
+# suite at once.
+#
+# The two differ in cost, so they are separate targets rather than one with a flag. Do not run
+# both for the same WORKER: they place services of the same name in the same namespace.
+#
+# Deliberately NOT Tilt. `make dev-up` port-forwards 5432, 4222, 6379, 8000, 8025 and 8001 to
+# the host, so a second Tilt cannot start -- the port-forwards are themselves a contention
+# point. A sandbox publishes nothing to the host: HTTP arrives through the one shared ingress on
+# :8888, routed by hostname, and anything else is reached on a ClusterIP. The cost is no live
+# reload; re-run `make images-push stack-restart` after a code change.
+SANDBOX_HOST := $(WORKER).127.0.0.1.nip.io
+SANDBOX_URL  := http://$(SANDBOX_HOST):8888
+SANDBOX_DIR  := .hermes/sandbox/$(WORKER)
+
+.PHONY: stack-up stack-down stack-list stack-env stack-url stack-restart stack-render
+stack-up: require-local-context          ## Bring up a full per-worker stack (WORKER=name); run make images-push first
+	@command -v kubectl >/dev/null || { echo "kubectl not found"; exit 1; }
+	@$(KUBECTL) create namespace $(DEVWORKER_NS) --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
+	@$(KUBECTL) label namespace $(DEVWORKER_NS) hermes.io/devworker=true --overwrite >/dev/null
+	@# Regenerated every time, so a rename or a change to the local overlay cannot leave a
+	@# stale overlay behind quietly producing last week's topology.
+	@scripts/sandbox-overlay $(WORKER) $(DEVWORKER_NS) $(SANDBOX_HOST) $(SANDBOX_TAG) >/dev/null
+	$(KUBECTL) apply -k $(SANDBOX_DIR)
+	@echo "waiting for infrastructure..."
+	@$(KUBECTL) -n $(DEVWORKER_NS) rollout status deploy/postgres --timeout=180s
+	@$(KUBECTL) -n $(DEVWORKER_NS) rollout status deploy/redis --timeout=180s
+	@$(KUBECTL) -n $(DEVWORKER_NS) rollout status sts/nats --timeout=180s
+	@# migrate and natsprovision run from the host against ClusterIPs, because the local
+	@# overlay deletes their in-cluster Jobs -- Tilt runs them as local_resources and a sandbox
+	@# has to do the same job somewhere. Without natsprovision the streams do not exist and
+	@# every worker sits idle with no error worth reading.
+	@$(MAKE) --no-print-directory stack-bootstrap WORKER=$(WORKER)
+	@echo "waiting for services..."
+	@$(KUBECTL) -n $(DEVWORKER_NS) wait --for=condition=Available deploy --all --timeout=300s
+	@$(MAKE) --no-print-directory stack-url WORKER=$(WORKER)
+
+.PHONY: stack-bootstrap
+stack-bootstrap: require-local-context   ## Run migrations, NATS stream provisioning and the dev API key seed
+	@scripts/sandbox-bootstrap $(DEVWORKER_NS) $(KUBE_CONTEXT)
+
+stack-restart: require-local-context     ## Roll every service after pushing new images (WORKER=name)
+	$(KUBECTL) -n $(DEVWORKER_NS) rollout restart deploy -l app.kubernetes.io/part-of=hermes
+	@$(KUBECTL) -n $(DEVWORKER_NS) wait --for=condition=Available deploy --all --timeout=300s
+
+stack-down: require-local-context        ## Delete a full stack and its volumes (WORKER=name)
+	$(KUBECTL) delete namespace $(DEVWORKER_NS) --wait=false
+	@rm -rf $(SANDBOX_DIR)
+
+stack-list: require-local-context        ## List sandboxes and the URL each answers on
+	@$(KUBECTL) get ns -l hermes.io/devworker=true -o name 2>/dev/null | sed 's|namespace/hermes-dev-||' | \
+		while read -r w; do echo "$$w  ->  http://$$w.127.0.0.1.nip.io:8888"; done || echo "no sandboxes"
+
+stack-url:         ## Print the base URL for a sandbox (WORKER=name)
+	@echo "$(SANDBOX_URL)"
+	@echo "  api      $(SANDBOX_URL)/v1"
+	@echo "  realtime $(SANDBOX_URL)/realtime"
+	@echo
+	@# Not `make dev-demo WORKER=...`: scripts/demo-env does not read WORKER, and defaulting it
+	@# to a sandbox would be wrong for everyone pointing the demo at the shared stack. The eval
+	@# is what redirects it, and it is also what the browser suite needs.
+	@echo "  point the demo and the browser suite at it with:"
+	@echo '    eval "$$(make stack-env WORKER=$(WORKER))"'
+	@echo "    make dev-demo      # or: make demo-e2e"
+
+stack-render:      ## Render a sandbox's manifests without applying (WORKER=name)
+	@scripts/sandbox-overlay $(WORKER) $(DEVWORKER_NS) $(SANDBOX_HOST) $(SANDBOX_TAG) >/dev/null
+	@kubectl kustomize $(SANDBOX_DIR)
+
+stack-env: require-local-context         ## Print eval-able env vars for a full stack (WORKER=name)
+	@$(MAKE) --no-print-directory devworker-env WORKER=$(WORKER)
+	@echo "export HERMES_API_URL='$(SANDBOX_URL)'"
+	@echo "export HERMES_SOCKET_URL='$(SANDBOX_URL)/realtime'"
+
 # --- Infrastructure ---
 .PHONY: infra-up infra-down migrate seed
-infra-up:          ## Start local Postgres, NATS, Redis via Docker Compose
+infra-up:          ## Start local Postgres, NATS, Redis via Docker Compose (ports offset per worktree)
+	@scripts/compose-env >/dev/null
 	docker compose up -d
+	@echo
+	@echo "Host ports are offset for this worktree. Point your tools at them with:"
+	@echo '  eval "$$(scripts/compose-env)"'
 infra-down:        ## Stop local infrastructure
 	docker compose down
 migrate:           ## Run database migrations
@@ -425,6 +568,49 @@ demo-e2e-full:     ## Bring up the cluster, run the live E2E suite, tear it down
 .PHONY: docker-%
 docker-%:          ## Build Docker image for a service (e.g. make docker-admin)
 	docker build --build-arg SERVICE=$* -t hermes-$* -f deploy/docker/Dockerfile .
+
+# --- Sandbox images ---
+#
+# Services that get an image in a sandbox: the long-running ones plus cleanup, which the
+# overlay's CronJob references. migrate, natsprovision and seed are deliberately absent -- a
+# sandbox runs those from the host through an ephemeral port-forward, exactly as Tilt runs them
+# as local_resources, so there is no image to build and nothing to wait on in-cluster.
+IMAGE_SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user cleanup
+
+# `:sandbox` rather than `:latest`, and that is load-bearing rather than cosmetic. Nothing in
+# these manifests sets imagePullPolicy, so Kubernetes infers it from the tag: `latest` implies
+# Always, which would send the node to a registry for an image that only exists in its own
+# content store. Any other tag implies IfNotPresent, which is what makes an imported image work.
+SANDBOX_TAG := sandbox
+
+# The k3d node is Linux even though the host is not, so these binaries must be cross-compiled.
+# `make build-%` targets the host and its output would die in the container with "exec format
+# error" -- a failure that surfaces as CrashLoopBackOff with no useful log line. GOARCH follows
+# the host so an Apple Silicon machine does not run its whole stack under emulation.
+SANDBOX_GOARCH := $(if $(filter arm64,$(shell uname -m)),arm64,amd64)
+
+.PHONY: images-sandbox images-sandbox-%
+images-sandbox:    ## Build service images and import them into the k3d cluster
+	@$(MAKE) --no-print-directory $(addprefix images-sandbox-,$(IMAGE_SERVICES))
+	@# One import for all of them: k3d tars and loads into each node, and paying that startup
+	@# cost ten times is most of the wall clock.
+	@#
+	@# Imported rather than pushed to the k3d registry, because there is no name that works on
+	@# both sides here. The node's registries.yaml mirrors `k3d-hermes-registry:5111`, but from
+	@# the host that name resolves through the LAN's DNS search domain to an unrelated machine --
+	@# so a push would go somewhere else entirely and the pull would still fail. Tilt sidesteps
+	@# this by rewriting every image reference itself; without Tilt, importing is the honest way.
+	k3d image import $(addprefix hermes-,$(addsuffix :$(SANDBOX_TAG),$(IMAGE_SERVICES))) -c $(CLUSTER_NAME)
+
+images-sandbox-%:  ## Build one sandbox image (e.g. make images-sandbox-admin)
+	@# Dockerfile.dev, not Dockerfile: it copies a host-compiled binary instead of running a
+	@# full orchestrion build per service inside Docker. Ten of the latter is minutes; this is
+	@# seconds, and it reuses the Go build cache. Same trade Tilt makes.
+	@#
+	@# Plain `go build`, not orchestrion: a sandbox is for behaviour, and orchestrion roughly
+	@# doubles compile time to add Datadog instrumentation nothing here reads.
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(SANDBOX_GOARCH) go build -o bin/$*/service ./cmd/$*/
+	docker build -q --build-arg SERVICE=$* -t hermes-$*:$(SANDBOX_TAG) -f deploy/docker/Dockerfile.dev .
 
 # --- Helpers ---
 .PHONY: help
@@ -485,15 +671,15 @@ dev-status:
 	@k3d cluster list 2>/dev/null || echo "No clusters found"
 	@echo ""
 	@echo "=== Pods ==="
-	@kubectl get pods -n hermes -o wide 2>/dev/null || echo "No pods found"
+	@$(KUBECTL) get pods -n hermes -o wide 2>/dev/null || echo "No pods found"
 	@echo ""
 	@echo "=== Services ==="
-	@kubectl get svc -n hermes 2>/dev/null || echo "No services found"
+	@$(KUBECTL) get svc -n hermes 2>/dev/null || echo "No services found"
 
 ## Tail logs for a service (usage: make dev-logs SERVICE=admin)
 dev-logs:
 	@test -n "$(SERVICE)" || { echo "Usage: make dev-logs SERVICE=admin"; exit 1; }
-	kubectl logs -n hermes -l app=hermes-$(SERVICE) -f --tail=100
+	$(KUBECTL) logs -n hermes -l app=hermes-$(SERVICE) -f --tail=100
 
 ## Connect to the dev Postgres database
 dev-psql:

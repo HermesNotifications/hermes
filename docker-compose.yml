@@ -1,3 +1,16 @@
+# Host ports are offset per worktree so two checkouts can run `make infra-up` at once.
+#
+# Compose already namespaces containers, networks and volumes by project (the directory name),
+# so only the published ports collided -- and they collided silently in the worst way: the second
+# `docker compose up` fails on one service, leaves the rest running, and any tool defaulting to
+# localhost:5432 then talks to the *other* worktree's database without saying so.
+#
+# The offsets come from .env, written by `make infra-up` from the worktree name. Compose reads
+# .env automatically; the defaults below are the historical ports, so a checkout without one
+# behaves exactly as before.
+#
+# If you are running the k3d cluster, prefer `make devworker-up` over this file -- it needs no
+# host ports at all.
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,7 +19,7 @@ services:
       POSTGRES_PASSWORD: hermes
       POSTGRES_DB: hermes
     ports:
-      - "5432:5432"
+      - "${HERMES_PG_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -14,27 +27,27 @@ services:
     image: nats:2-alpine
     command: ["--jetstream", "--store_dir=/data"]
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "${HERMES_NATS_PORT:-4222}:4222"
+      - "${HERMES_NATS_MONITOR_PORT:-8222}:8222"
     volumes:
       - natsdata:/data
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${HERMES_REDIS_PORT:-6379}:6379"
 
   mailpit:
     image: axllent/mailpit:latest
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "${HERMES_SMTP_PORT:-1025}:1025"
+      - "${HERMES_MAILPIT_UI_PORT:-8025}:8025"
 
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
     ports:
-      - "8000:8000"
+      - "${HERMES_DYNAMO_PORT:-8000}:8000"
 
 volumes:
   pgdata:
