@@ -56,6 +56,9 @@ const (
 	sweepInterval = 5 * time.Minute
 	entryTTL      = 30 * time.Minute
 
+	// How often a full-map reclaim may run once the entry cap is reached.
+	forcedSweepInterval = time.Second
+
 	// DefaultMaxEntries bounds the entry map.
 	//
 	// It matters most for the pre-auth per-IP limiter, whose key space is chosen
@@ -124,6 +127,7 @@ type RateLimiter struct {
 	keyFunc   func(*http.Request) string
 	limitFunc LimitFunc
 	scope     string
+	service   string
 
 	shared SharedLimiter
 	logger *slog.Logger
@@ -131,15 +135,17 @@ type RateLimiter struct {
 	limit rate.Limit
 	burst int
 
-	entries    sync.Map // string -> *rateLimitEntry
-	entryCount atomic.Int64
-	maxEntries int
-	lastSweep  atomic.Int64
+	entries         sync.Map // string -> *rateLimitEntry
+	entryCount      atomic.Int64
+	maxEntries      int
+	lastSweep       atomic.Int64
+	lastForcedSweep atomic.Int64
 
 	// Precomputed so the hot path adds a counter without building an attribute
 	// set per request.
 	attrAllowed metric.MeasurementOption
 	attrLimited metric.MeasurementOption
+	attrScope   metric.MeasurementOption
 
 	// now is overridable so tests can advance time without sleeping.
 	now func() time.Time
@@ -179,12 +185,28 @@ func (rl *RateLimiter) WithShared(s SharedLimiter, logger *slog.Logger) *RateLim
 	return rl
 }
 
+// WithService namespaces this limiter's shared keys.
+//
+// Without it every service writes `rl:credential:<id>` into one Redis, so a single API key
+// calling both Send and Admin shares one bucket — and the two pass different rates for that
+// bucket, so a send burst pushes out the shared allowance and Admin returns 429s for
+// something the caller never did. Inbox and User collide the same way on the JWT user ID,
+// silently halving each user's documented per-service quota.
+//
+// It does not appear in the metric: which service reported comes from the OTel resource's
+// service.name, so a label would duplicate it.
+func (rl *RateLimiter) WithService(name string) *RateLimiter {
+	rl.service = name
+	return rl
+}
+
 // WithScope names what this limiter buckets by, for metrics and Redis keys.
 func (rl *RateLimiter) WithScope(scope string) *RateLimiter {
 	rl.scope = scope
 	scopeAttr := attribute.String("scope", scope)
 	rl.attrAllowed = metric.WithAttributes(decisionAllowed, scopeAttr)
 	rl.attrLimited = metric.WithAttributes(decisionLimited, scopeAttr)
+	rl.attrScope = metric.WithAttributes(scopeAttr)
 	return rl
 }
 
@@ -284,11 +306,15 @@ func (rl *RateLimiter) allowShared(
 	entry *rateLimitEntry,
 	next http.Handler,
 ) bool {
-	dec, err := rl.shared.AllowRequest(r.Context(), rl.scope+":"+key, entry.burst, int(entry.limit))
+	dec, err := rl.shared.AllowRequest(r.Context(), rl.sharedKey(key), entry.burst, int(entry.limit))
 	if err != nil {
 		// Fail over, loudly but not fatally. The caller still gets a decision;
 		// it is just made from this replica's own state.
-		sharedFailures.Add(r.Context(), 1, rl.attrLimited)
+		//
+		// Counted with the scope alone: a fallback is not a "limited" decision, and most
+		// of these requests are then admitted by the local bucket. Labelling them
+		// decision=limited made any dashboard splitting on it read the opposite.
+		sharedFailures.Add(r.Context(), 1, rl.attrScope)
 		if rl.logger != nil {
 			rl.logger.Warn("shared rate limiter unavailable; falling back to the local bucket",
 				"scope", rl.scope, "error", err)
@@ -306,6 +332,15 @@ func (rl *RateLimiter) allowShared(
 	rl.setLimitHeaders(w, entry, float64(dec.Remaining))
 	next.ServeHTTP(w, r)
 	return true
+}
+
+// sharedKey namespaces a caller's key by service and scope. See WithService.
+// cache.AllowRequest adds its own "rl:" prefix, so this does not.
+func (rl *RateLimiter) sharedKey(key string) string {
+	if rl.service == "" {
+		return rl.scope + ":" + key
+	}
+	return rl.service + ":" + rl.scope + ":" + key
 }
 
 // allowLocal decides the request against this process's own bucket.
@@ -344,15 +379,34 @@ func (rl *RateLimiter) entryFor(key string, r *http.Request) *rateLimitEntry {
 
 	// At the cap, try to reclaim before refusing. A sweep here is the difference
 	// between shedding genuinely idle buckets and punishing live callers.
+	//
+	// Rate-limited, because the sweep is a full scan of the map and the situation that
+	// triggers it is an address scan: without this, every request bearing an unseen key
+	// costs a 50,000-entry traversal, and concurrent requests each run their own. The
+	// mitigation for a cardinality attack would have been its best amplifier. Between
+	// sweeps we go straight to the shared overflow bucket, which is the intended
+	// behaviour under exactly this load.
 	if rl.entryCount.Load() >= int64(rl.maxEntries) {
-		rl.forceSweep(rl.now())
+		now := rl.now()
+		last := rl.lastForcedSweep.Load()
+		if now.UnixNano()-last < int64(forcedSweepInterval) ||
+			!rl.lastForcedSweep.CompareAndSwap(last, now.UnixNano()) {
+			return rl.overflowEntry()
+		}
+		rl.forceSweep(now)
 		if rl.entryCount.Load() >= int64(rl.maxEntries) {
 			return rl.overflowEntry()
 		}
 	}
 
 	limit, burst := rl.limit, rl.burst
-	if rl.limitFunc != nil && r != nil {
+
+	// A per-credential limit must not resurrect a limiter the operator turned off.
+	// HERMES_RATELIMIT_ENABLED=false resolves to (0, 0) — Inf rate, zero burst — and
+	// applying a key's own rate on top of that produced a finite rate with a burst of
+	// zero, which x/time/rate refuses every single request against. Disabling rate
+	// limiting entirely locked out exactly the keys that had a limit configured.
+	if rl.limitFunc != nil && r != nil && rl.limit != rate.Inf {
 		if b, ps := rl.limitFunc(r); ps > 0 || b > 0 {
 			if ps > 0 {
 				limit = rate.Limit(ps)
@@ -361,6 +415,12 @@ func (rl *RateLimiter) entryFor(key string, r *http.Request) *rateLimitEntry {
 				burst = b
 			}
 		}
+	}
+
+	// A finite rate with no burst admits nothing, so a key that sets only its sustained
+	// rate takes the rate as its burst rather than becoming unusable.
+	if limit != rate.Inf && burst < 1 {
+		burst = max(int(limit), 1)
 	}
 
 	fresh := &rateLimitEntry{

@@ -79,6 +79,16 @@ public class ApiKeyCreatedOutputBody {
   @javax.annotation.Nullable
   private List<String> permissions;
 
+  public static final String SERIALIZED_NAME_RATE_LIMIT_BURST = "rate_limit_burst";
+  @SerializedName(SERIALIZED_NAME_RATE_LIMIT_BURST)
+  @javax.annotation.Nullable
+  private Long rateLimitBurst;
+
+  public static final String SERIALIZED_NAME_RATE_LIMIT_PER_SECOND = "rate_limit_per_second";
+  @SerializedName(SERIALIZED_NAME_RATE_LIMIT_PER_SECOND)
+  @javax.annotation.Nullable
+  private Long rateLimitPerSecond;
+
   public static final String SERIALIZED_NAME_RAW_KEY = "raw_key";
   @SerializedName(SERIALIZED_NAME_RAW_KEY)
   @javax.annotation.Nonnull
@@ -189,6 +199,44 @@ public class ApiKeyCreatedOutputBody {
   }
 
 
+  public ApiKeyCreatedOutputBody rateLimitBurst(@javax.annotation.Nullable Long rateLimitBurst) {
+    this.rateLimitBurst = rateLimitBurst;
+    return this;
+  }
+
+  /**
+   * Get rateLimitBurst
+   * @return rateLimitBurst
+   */
+  @javax.annotation.Nullable
+  public Long getRateLimitBurst() {
+    return rateLimitBurst;
+  }
+
+  public void setRateLimitBurst(@javax.annotation.Nullable Long rateLimitBurst) {
+    this.rateLimitBurst = rateLimitBurst;
+  }
+
+
+  public ApiKeyCreatedOutputBody rateLimitPerSecond(@javax.annotation.Nullable Long rateLimitPerSecond) {
+    this.rateLimitPerSecond = rateLimitPerSecond;
+    return this;
+  }
+
+  /**
+   * Get rateLimitPerSecond
+   * @return rateLimitPerSecond
+   */
+  @javax.annotation.Nullable
+  public Long getRateLimitPerSecond() {
+    return rateLimitPerSecond;
+  }
+
+  public void setRateLimitPerSecond(@javax.annotation.Nullable Long rateLimitPerSecond) {
+    this.rateLimitPerSecond = rateLimitPerSecond;
+  }
+
+
   public ApiKeyCreatedOutputBody rawKey(@javax.annotation.Nonnull String rawKey) {
     this.rawKey = rawKey;
     return this;
@@ -223,12 +271,14 @@ public class ApiKeyCreatedOutputBody {
         Objects.equals(this.id, apiKeyCreatedOutputBody.id) &&
         Objects.equals(this.name, apiKeyCreatedOutputBody.name) &&
         Objects.equals(this.permissions, apiKeyCreatedOutputBody.permissions) &&
+        Objects.equals(this.rateLimitBurst, apiKeyCreatedOutputBody.rateLimitBurst) &&
+        Objects.equals(this.rateLimitPerSecond, apiKeyCreatedOutputBody.rateLimitPerSecond) &&
         Objects.equals(this.rawKey, apiKeyCreatedOutputBody.rawKey);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, createdAt, id, name, permissions, rawKey);
+    return Objects.hash($schema, createdAt, id, name, permissions, rateLimitBurst, rateLimitPerSecond, rawKey);
   }
 
   @Override
@@ -240,6 +290,8 @@ public class ApiKeyCreatedOutputBody {
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    permissions: ").append(toIndentedString(permissions)).append("\n");
+    sb.append("    rateLimitBurst: ").append(toIndentedString(rateLimitBurst)).append("\n");
+    sb.append("    rateLimitPerSecond: ").append(toIndentedString(rateLimitPerSecond)).append("\n");
     sb.append("    rawKey: ").append(toIndentedString(rawKey)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -262,7 +314,7 @@ public class ApiKeyCreatedOutputBody {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "created_at", "id", "name", "permissions", "raw_key"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "created_at", "id", "name", "permissions", "rate_limit_burst", "rate_limit_per_second", "raw_key"));
 
     // a set of required properties/fields (JSON key names)
     openapiRequiredFields = new HashSet<String>(Arrays.asList("created_at", "id", "name", "permissions", "raw_key"));

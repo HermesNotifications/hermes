@@ -48,6 +48,17 @@ func SetupRateLimiting(
 	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 	srv.ConfigureIPRateLimit(cfg.RateLimitIPEnabled, cfg.RateLimitIPBurst, cfg.RateLimitIPPerSecond, proxies)
 
+	// Enabled with nothing trusted is the one combination that silently misbehaves rather
+	// than failing: behind any proxy every request presents that proxy's address, so all
+	// callers share one bucket and the limit applies to the fleet instead of to each
+	// client. It cannot be detected from in here — one address may equally be one very
+	// busy caller — so it is warned about rather than refused.
+	if cfg.RateLimitIPEnabled && len(cfg.TrustedProxyCIDRs) == 0 {
+		logger.Warn("per-IP rate limiting is enabled with no trusted proxies; "+
+			"behind a proxy every caller will share one bucket",
+			"fix", "set HERMES_TRUSTED_PROXY_CIDRS to your ingress controller's pod CIDR")
+	}
+
 	if !cfg.RateLimitDistributedEnabled || !cfg.RateLimitEnabled || redisClient == nil {
 		return
 	}

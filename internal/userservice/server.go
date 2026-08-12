@@ -74,7 +74,9 @@ const (
 // false turns limiting off.
 func (s *Server) ConfigureRateLimit(enabled bool, burst, perSecond int) {
 	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultRateLimitBurst, defaultRateLimitPerSecond)
-	s.limiter = middleware.NewRateLimiter(middleware.UserLimitKey, b, p).WithScope(middleware.ScopeCredential)
+	s.limiter = middleware.NewRateLimiter(middleware.UserLimitKey, b, p).
+		WithService("user").
+		WithScope(middleware.ScopeCredential)
 }
 
 // ConfigureIPRateLimit installs the pre-auth per-IP bound, which runs before

@@ -5,6 +5,7 @@
 README.md
 docs/APIKeysApi.md
 docs/ApiKeyCreatedOutputBody.md
+docs/ApiKeyView.md
 docs/AuthApi.md
 docs/CreateAPIKeyInputBody.md
 docs/CreateCategoryInputBody.md
@@ -13,7 +14,6 @@ docs/CreateSubscriptionInputBody.md
 docs/CreateTemplateInputBody.md
 docs/ErrorDetail.md
 docs/ErrorModel.md
-docs/Item.md
 docs/Notification.md
 docs/NotificationEvent.md
 docs/NotificationItem.md
@@ -22,10 +22,12 @@ docs/NotificationTemplate.md
 docs/NotificationsApi.md
 docs/OrganizationItem.md
 docs/OrganizationsApi.md
+docs/RateLimitError.md
 docs/SendContent.md
 docs/SendInputBody.md
 docs/SendOutputBody.md
 docs/SendRecipient.md
+docs/SetAPIKeyRateLimitInputBody.md
 docs/Subscription.md
 docs/SubscriptionCategory.md
 docs/SubscriptionsApi.md
@@ -53,6 +55,7 @@ hermes_server_sdk/configuration.py
 hermes_server_sdk/exceptions.py
 hermes_server_sdk/models/__init__.py
 hermes_server_sdk/models/api_key_created_output_body.py
+hermes_server_sdk/models/api_key_view.py
 hermes_server_sdk/models/create_api_key_input_body.py
 hermes_server_sdk/models/create_category_input_body.py
 hermes_server_sdk/models/create_organization_input_body.py
@@ -60,17 +63,18 @@ hermes_server_sdk/models/create_subscription_input_body.py
 hermes_server_sdk/models/create_template_input_body.py
 hermes_server_sdk/models/error_detail.py
 hermes_server_sdk/models/error_model.py
-hermes_server_sdk/models/item.py
 hermes_server_sdk/models/notification.py
 hermes_server_sdk/models/notification_event.py
 hermes_server_sdk/models/notification_item.py
 hermes_server_sdk/models/notification_status_output_body.py
 hermes_server_sdk/models/notification_template.py
 hermes_server_sdk/models/organization_item.py
+hermes_server_sdk/models/rate_limit_error.py
 hermes_server_sdk/models/send_content.py
 hermes_server_sdk/models/send_input_body.py
 hermes_server_sdk/models/send_output_body.py
 hermes_server_sdk/models/send_recipient.py
+hermes_server_sdk/models/set_api_key_rate_limit_input_body.py
 hermes_server_sdk/models/subscription.py
 hermes_server_sdk/models/subscription_category.py
 hermes_server_sdk/models/token_input_body.py

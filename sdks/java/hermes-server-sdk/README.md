@@ -117,6 +117,7 @@ Class | Method | HTTP request | Description
 *ApiKeysApi* | [**createApiKey**](docs/ApiKeysApi.md#createApiKey) | **POST** /v1/apikeys | Create a new API key
 *ApiKeysApi* | [**deleteApiKey**](docs/ApiKeysApi.md#deleteApiKey) | **DELETE** /v1/apikeys/{id} | Revoke an API key
 *ApiKeysApi* | [**listApiKeys**](docs/ApiKeysApi.md#listApiKeys) | **GET** /v1/apikeys | List all API keys
+*ApiKeysApi* | [**setApiKeyRateLimit**](docs/ApiKeysApi.md#setApiKeyRateLimit) | **PUT** /v1/apikeys/{id}/rate-limit | Set or clear a key&#39;s rate limit
 *AuthApi* | [**exchangeToken**](docs/AuthApi.md#exchangeToken) | **POST** /v1/auth/token | Exchange credentials for a user JWT token
 *NotificationsApi* | [**getNotification**](docs/NotificationsApi.md#getNotification) | **GET** /v1/notifications/{id} | Get notification status and events
 *NotificationsApi* | [**listNotifications**](docs/NotificationsApi.md#listNotifications) | **GET** /v1/notifications | List recent notifications
@@ -141,6 +142,7 @@ Class | Method | HTTP request | Description
 ## Documentation for Models
 
  - [ApiKeyCreatedOutputBody](docs/ApiKeyCreatedOutputBody.md)
+ - [ApiKeyView](docs/ApiKeyView.md)
  - [CreateAPIKeyInputBody](docs/CreateAPIKeyInputBody.md)
  - [CreateCategoryInputBody](docs/CreateCategoryInputBody.md)
  - [CreateOrganizationInputBody](docs/CreateOrganizationInputBody.md)
@@ -148,17 +150,18 @@ Class | Method | HTTP request | Description
  - [CreateTemplateInputBody](docs/CreateTemplateInputBody.md)
  - [ErrorDetail](docs/ErrorDetail.md)
  - [ErrorModel](docs/ErrorModel.md)
- - [Item](docs/Item.md)
  - [Notification](docs/Notification.md)
  - [NotificationEvent](docs/NotificationEvent.md)
  - [NotificationItem](docs/NotificationItem.md)
  - [NotificationStatusOutputBody](docs/NotificationStatusOutputBody.md)
  - [NotificationTemplate](docs/NotificationTemplate.md)
  - [OrganizationItem](docs/OrganizationItem.md)
+ - [RateLimitError](docs/RateLimitError.md)
  - [SendContent](docs/SendContent.md)
  - [SendInputBody](docs/SendInputBody.md)
  - [SendOutputBody](docs/SendOutputBody.md)
  - [SendRecipient](docs/SendRecipient.md)
+ - [SetAPIKeyRateLimitInputBody](docs/SetAPIKeyRateLimitInputBody.md)
  - [Subscription](docs/Subscription.md)
  - [SubscriptionCategory](docs/SubscriptionCategory.md)
  - [TokenInputBody](docs/TokenInputBody.md)

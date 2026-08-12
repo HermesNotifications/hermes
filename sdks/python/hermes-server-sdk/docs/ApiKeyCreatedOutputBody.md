@@ -10,6 +10,8 @@ Name | Type | Description | Notes
 **id** | **str** |  | 
 **name** | **str** |  | 
 **permissions** | **List[str]** |  | 
+**rate_limit_burst** | **int** |  | [optional] 
+**rate_limit_per_second** | **int** |  | [optional] 
 **raw_key** | **str** |  | 
 
 ## Example

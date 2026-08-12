@@ -95,6 +95,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "NotificationStatusOutputBody",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -161,6 +162,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "NotificationStatusOutputBody",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -227,6 +229,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "NotificationStatusOutputBody",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -353,6 +356,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[NotificationItem]",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -419,6 +423,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[NotificationItem]",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -485,6 +490,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[NotificationItem]",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -617,6 +623,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '202': "SendOutputBody",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -687,6 +694,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '202': "SendOutputBody",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -757,6 +765,7 @@ class NotificationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '202': "SendOutputBody",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,

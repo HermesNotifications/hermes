@@ -35,6 +35,7 @@ __all__ = [
     "ApiAttributeError",
     "ApiException",
     "ApiKeyCreatedOutputBody",
+    "ApiKeyView",
     "CreateAPIKeyInputBody",
     "CreateCategoryInputBody",
     "CreateOrganizationInputBody",
@@ -42,17 +43,18 @@ __all__ = [
     "CreateTemplateInputBody",
     "ErrorDetail",
     "ErrorModel",
-    "Item",
     "Notification",
     "NotificationEvent",
     "NotificationItem",
     "NotificationStatusOutputBody",
     "NotificationTemplate",
     "OrganizationItem",
+    "RateLimitError",
     "SendContent",
     "SendInputBody",
     "SendOutputBody",
     "SendRecipient",
+    "SetAPIKeyRateLimitInputBody",
     "Subscription",
     "SubscriptionCategory",
     "TokenInputBody",
@@ -85,6 +87,7 @@ from hermes_server_sdk.exceptions import ApiException as ApiException
 
 # import models into sdk package
 from hermes_server_sdk.models.api_key_created_output_body import ApiKeyCreatedOutputBody as ApiKeyCreatedOutputBody
+from hermes_server_sdk.models.api_key_view import ApiKeyView as ApiKeyView
 from hermes_server_sdk.models.create_api_key_input_body import CreateAPIKeyInputBody as CreateAPIKeyInputBody
 from hermes_server_sdk.models.create_category_input_body import CreateCategoryInputBody as CreateCategoryInputBody
 from hermes_server_sdk.models.create_organization_input_body import CreateOrganizationInputBody as CreateOrganizationInputBody
@@ -92,17 +95,18 @@ from hermes_server_sdk.models.create_subscription_input_body import CreateSubscr
 from hermes_server_sdk.models.create_template_input_body import CreateTemplateInputBody as CreateTemplateInputBody
 from hermes_server_sdk.models.error_detail import ErrorDetail as ErrorDetail
 from hermes_server_sdk.models.error_model import ErrorModel as ErrorModel
-from hermes_server_sdk.models.item import Item as Item
 from hermes_server_sdk.models.notification import Notification as Notification
 from hermes_server_sdk.models.notification_event import NotificationEvent as NotificationEvent
 from hermes_server_sdk.models.notification_item import NotificationItem as NotificationItem
 from hermes_server_sdk.models.notification_status_output_body import NotificationStatusOutputBody as NotificationStatusOutputBody
 from hermes_server_sdk.models.notification_template import NotificationTemplate as NotificationTemplate
 from hermes_server_sdk.models.organization_item import OrganizationItem as OrganizationItem
+from hermes_server_sdk.models.rate_limit_error import RateLimitError as RateLimitError
 from hermes_server_sdk.models.send_content import SendContent as SendContent
 from hermes_server_sdk.models.send_input_body import SendInputBody as SendInputBody
 from hermes_server_sdk.models.send_output_body import SendOutputBody as SendOutputBody
 from hermes_server_sdk.models.send_recipient import SendRecipient as SendRecipient
+from hermes_server_sdk.models.set_api_key_rate_limit_input_body import SetAPIKeyRateLimitInputBody as SetAPIKeyRateLimitInputBody
 from hermes_server_sdk.models.subscription import Subscription as Subscription
 from hermes_server_sdk.models.subscription_category import SubscriptionCategory as SubscriptionCategory
 from hermes_server_sdk.models.token_input_body import TokenInputBody as TokenInputBody

@@ -64,13 +64,19 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IListUsersApiResponse"/>
     /// </summary>
-    public interface IListUsersApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<UserItem>?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IListUsersApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<UserItem>?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
         /// </summary>
         /// <returns></returns>
         bool IsOk { get; }
+
+        /// <summary>
+        /// Returns true if the response is 429 TooManyRequests
+        /// </summary>
+        /// <returns></returns>
+        bool IsTooManyRequests { get; }
 
         /// <summary>
         /// Returns true if the response is the default response type
@@ -384,10 +390,48 @@ namespace Hermes.ServerSdk.Api
             }
 
             /// <summary>
+            /// Returns true if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public bool IsTooManyRequests => 429 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsTooManyRequests
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = TooManyRequests();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)429);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
             /// Returns true if the response is the default response type
             /// </summary>
             /// <returns></returns>
-            public bool IsDefault => !IsOk;
+            public bool IsDefault => !IsOk && !IsTooManyRequests;
 
             /// <summary>
             /// Deserializes the response if the response is 0 Default

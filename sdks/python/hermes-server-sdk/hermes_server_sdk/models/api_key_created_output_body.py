@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -32,8 +32,10 @@ class ApiKeyCreatedOutputBody(BaseModel):
     id: StrictStr
     name: StrictStr
     permissions: Optional[List[StrictStr]]
+    rate_limit_burst: Optional[StrictInt] = None
+    rate_limit_per_second: Optional[StrictInt] = None
     raw_key: StrictStr
-    __properties: ClassVar[List[str]] = ["$schema", "created_at", "id", "name", "permissions", "raw_key"]
+    __properties: ClassVar[List[str]] = ["$schema", "created_at", "id", "name", "permissions", "rate_limit_burst", "rate_limit_per_second", "raw_key"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -98,6 +100,8 @@ class ApiKeyCreatedOutputBody(BaseModel):
             "id": obj.get("id"),
             "name": obj.get("name"),
             "permissions": obj.get("permissions"),
+            "rate_limit_burst": obj.get("rate_limit_burst"),
+            "rate_limit_per_second": obj.get("rate_limit_per_second"),
             "raw_key": obj.get("raw_key")
         })
         return _obj

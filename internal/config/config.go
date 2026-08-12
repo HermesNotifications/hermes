@@ -217,7 +217,13 @@ func Load() Config {
 		RateLimitBurst:      envInt("HERMES_RATELIMIT_BURST", 0),
 		RateLimitPerSecond:  envInt("HERMES_RATELIMIT_PER_SECOND", 0),
 
-		RateLimitIPEnabled:   envBool("HERMES_RATELIMIT_IP_ENABLED", true),
+		// Off by default, and this is the safe direction rather than the timid one.
+		// Behind an ingress controller every request carries the controller's pod IP
+		// unless HERMES_TRUSTED_PROXY_CIDRS is set, so enabling it without that config
+		// collapses the entire fleet into one bucket — 200 rps for all inbox traffic
+		// combined. That is an outage, delivered by the feature meant to prevent one.
+		// Enable it together with the trusted proxy list; bootstrap warns if you do not.
+		RateLimitIPEnabled:   envBool("HERMES_RATELIMIT_IP_ENABLED", false),
 		RateLimitIPBurst:     envInt("HERMES_RATELIMIT_IP_BURST", 0),
 		RateLimitIPPerSecond: envInt("HERMES_RATELIMIT_IP_PER_SECOND", 0),
 		TrustedProxyCIDRs:    envStrSlice("HERMES_TRUSTED_PROXY_CIDRS", nil),

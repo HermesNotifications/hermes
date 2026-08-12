@@ -94,6 +94,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "NotificationTemplate",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -160,6 +161,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "NotificationTemplate",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -226,6 +228,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "NotificationTemplate",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -365,6 +368,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -431,6 +435,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -497,6 +502,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -541,6 +547,7 @@ class TemplatesApi:
         if 'Accept' not in _header_params:
             _header_params['Accept'] = self.api_client.select_header_accept(
                 [
+                    'application/json', 
                     'application/problem+json'
                 ]
             )
@@ -618,6 +625,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[NotificationTemplate]",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -680,6 +688,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[NotificationTemplate]",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -742,6 +751,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[NotificationTemplate]",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -869,6 +879,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "NotificationTemplate",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -939,6 +950,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "NotificationTemplate",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1009,6 +1021,7 @@ class TemplatesApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "NotificationTemplate",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,

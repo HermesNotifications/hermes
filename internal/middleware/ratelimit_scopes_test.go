@@ -220,6 +220,56 @@ func TestRateLimit_HealthEndpointsSkipTheBackend(t *testing.T) {
 	}
 }
 
+// Disabling rate limiting must disable it for EVERY key, including the ones carrying their
+// own limit. ResolveLimit(false, …) yields (0, 0) — Inf rate, zero burst — and applying a
+// key's rate on top produced a finite rate with a burst of zero, which x/time/rate refuses
+// every request against. Turning the feature off locked out exactly the configured keys.
+func TestRateLimit_DisabledIgnoresPerCallerLimits(t *testing.T) {
+	b, p := ResolveLimit(false, 0, 0, 5000, 2000)
+	rl := NewRateLimiter(headerKey, b, p).WithLimitFunc(func(*http.Request) (int, int) {
+		return 0, 500 // only the sustained rate is set on the key
+	})
+	h := rl.Middleware(okHandler())
+
+	for i := range 5 {
+		if code := doAs(h, "premium").Code; code != http.StatusOK {
+			t.Fatalf("request %d returned %d while rate limiting is disabled", i+1, code)
+		}
+	}
+}
+
+// A key that sets only its sustained rate must still be usable: a finite rate with a zero
+// burst admits nothing at all.
+func TestRateLimit_PerCallerRateWithoutBurstIsUsable(t *testing.T) {
+	rl := NewRateLimiter(headerKey, 10, 10).WithLimitFunc(func(*http.Request) (int, int) {
+		return 0, 50
+	})
+	h := rl.Middleware(okHandler())
+
+	if code := doAs(h, "rate-only").Code; code != http.StatusOK {
+		t.Fatalf("expected the request to be admitted, got %d", code)
+	}
+	e := rl.entryFor("rate-only", nil)
+	if e.burst < 1 {
+		t.Errorf("expected a usable burst, got %d", e.burst)
+	}
+}
+
+// Two services against one Redis must not share a caller's bucket. Send and Admin both key
+// on the API key ID and pass different rates for it; without the service in the key, a send
+// burst spent Admin's allowance and Admin returned 429s for something the caller never did.
+func TestRateLimit_SharedKeyIsNamespacedByService(t *testing.T) {
+	send := NewRateLimiter(fixedKey, 5000, 2000).WithService("send").WithScope(ScopeCredential)
+	admin := NewRateLimiter(fixedKey, 1000, 500).WithService("admin").WithScope(ScopeCredential)
+
+	if send.sharedKey("key_abc") == admin.sharedKey("key_abc") {
+		t.Errorf("send and admin share the key %q", send.sharedKey("key_abc"))
+	}
+	if want := "send:credential:key_abc"; send.sharedKey("key_abc") != want {
+		t.Errorf("expected %q, got %q", want, send.sharedKey("key_abc"))
+	}
+}
+
 // Per-IP keying is unbounded by an attacker's choice, so the map needs a cap.
 func TestRateLimit_EntryCapDivertsToASharedBucket(t *testing.T) {
 	c := &clock{t: time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)}

@@ -65,9 +65,13 @@ which points at the rate limiter's own path rather than at Redis generally.
 - **Timeouts under load:** scale Redis, or split the Centrifugo engine onto its own instance.
 - **Pool exhaustion:** raise `HERMES_REDIS_POOL_SIZE`.
 - **If the widened ceiling is itself the problem** — an abusive caller is exploiting the outage —
-  lower `HERMES_RATELIMIT_PER_SECOND` on the affected service, remembering it is now per replica,
-  or set that caller's `rate_limit_per_second` in `api_keys`. Note the per-key value is read
-  through the API key cache, so a change takes up to 5 minutes unless the key is invalidated.
+  lower `HERMES_RATELIMIT_PER_SECOND` on the affected service and restart it, remembering the
+  limit is now per replica.
+
+  > **`PUT /v1/apikeys/{id}/rate-limit` will not help you here.** A caller's limit is pinned when
+  > its bucket is created, and a continuously active caller never lets that bucket go idle — so
+  > the new limit applies only after it stops, which is not the situation you are in. To stop an
+  > abusive key now, revoke it (`DELETE /v1/apikeys/{id}`) or block it at the ingress.
 
 Do **not** "fix" this by making the limiter fail closed when Redis is unreachable. That converts
 a dependency blip into a total API outage, which is the trade [ADR 0016](../../adr/0016-distributed-rate-limiting-with-local-fallback.md)
