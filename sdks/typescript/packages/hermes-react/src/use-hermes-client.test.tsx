@@ -124,6 +124,35 @@ describe("useHermesClient under StrictMode", () => {
     expect(arrivals.map((a) => a.id)).toEqual(["n1"]);
   });
 
+  it("keeps a handler registered out of band, after the mount cycle has finished", async () => {
+    // The ordering that actually decided the bug, and the one the test above does not reach.
+    //
+    // `Consumer` registers from a React effect, so it is inside React's ordering and the cleanup
+    // cannot land between its registration and the publication. `<hermes-inbox>` is not: its
+    // controller starts the store from an async `rebuild()`, so it registers whenever that
+    // promise settles — roughly 4ms later, outside React entirely.
+    //
+    // Which side of the StrictMode cleanup that landed on decided whether realtime worked for the
+    // whole session. Instrumenting the two orderings correlated 10 out of 10 with pass/fail; see
+    // docs/reviews/2026-08-12-silent-realtime-fault-investigation.md. This pins the losing one:
+    // register *after* the cycle is over, exactly as the widget does, and it must still deliver.
+    const { client, transports } = mount();
+
+    const arrivals: NewNotificationEvent[] = [];
+    client().on("notification", (event) => arrivals.push(event));
+
+    await client().connect("usr_1");
+    await waitFor(() => expect(transports).toHaveLength(1));
+    transports[0].latest.publish({
+      type: "notification.new",
+      id: "n2",
+      title: "Late registration",
+      body: "b",
+    });
+
+    expect(arrivals.map((a) => a.id)).toEqual(["n2"]);
+  });
+
   it("closes the socket on cleanup, so a spurious teardown costs a reconnect and nothing more", async () => {
     // The cleanup still has to do something — an unmount must not leave a socket open. Asserting
     // it disconnects pins the reason `disconnect()` was the right verb: survivable, therefore
