@@ -103,18 +103,49 @@ namespace Hermes.ServerSdk.Api
         /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
         /// <returns><see cref="Task"/>&lt;<see cref="IListApiKeysApiResponse"/>?&gt;</returns>
         Task<IListApiKeysApiResponse?> ListApiKeysOrDefaultAsync(System.Threading.CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Set or clear a key&#39;s rate limit
+        /// </summary>
+        /// <remarks>
+        /// Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
+        /// </remarks>
+        /// <exception cref="ApiException">Thrown when fails to make API call</exception>
+        /// <param name="id">API key ID</param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
+        /// <returns><see cref="Task"/>&lt;<see cref="ISetApiKeyRateLimitApiResponse"/>&gt;</returns>
+        Task<ISetApiKeyRateLimitApiResponse> SetApiKeyRateLimitAsync(string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody, System.Threading.CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Set or clear a key&#39;s rate limit
+        /// </summary>
+        /// <remarks>
+        /// Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
+        /// </remarks>
+        /// <param name="id">API key ID</param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
+        /// <returns><see cref="Task"/>&lt;<see cref="ISetApiKeyRateLimitApiResponse"/>?&gt;</returns>
+        Task<ISetApiKeyRateLimitApiResponse?> SetApiKeyRateLimitOrDefaultAsync(string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody, System.Threading.CancellationToken cancellationToken = default);
     }
 
     /// <summary>
     /// The <see cref="ICreateApiKeyApiResponse"/>
     /// </summary>
-    public interface ICreateApiKeyApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.ApiKeyCreatedOutputBody?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface ICreateApiKeyApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.ApiKeyCreatedOutputBody?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 201 Created
         /// </summary>
         /// <returns></returns>
         bool IsCreated { get; }
+
+        /// <summary>
+        /// Returns true if the response is 429 TooManyRequests
+        /// </summary>
+        /// <returns></returns>
+        bool IsTooManyRequests { get; }
 
         /// <summary>
         /// Returns true if the response is the default response type
@@ -126,13 +157,19 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IDeleteApiKeyApiResponse"/>
     /// </summary>
-    public interface IDeleteApiKeyApiResponse : Hermes.ServerSdk.Client.IApiResponse, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IDeleteApiKeyApiResponse : Hermes.ServerSdk.Client.IApiResponse, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 204 NoContent
         /// </summary>
         /// <returns></returns>
         bool IsNoContent { get; }
+
+        /// <summary>
+        /// Returns true if the response is 429 TooManyRequests
+        /// </summary>
+        /// <returns></returns>
+        bool IsTooManyRequests { get; }
 
         /// <summary>
         /// Returns true if the response is the default response type
@@ -144,13 +181,43 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IListApiKeysApiResponse"/>
     /// </summary>
-    public interface IListApiKeysApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<Item>?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IListApiKeysApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<ApiKeyView>?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
         /// </summary>
         /// <returns></returns>
         bool IsOk { get; }
+
+        /// <summary>
+        /// Returns true if the response is 429 TooManyRequests
+        /// </summary>
+        /// <returns></returns>
+        bool IsTooManyRequests { get; }
+
+        /// <summary>
+        /// Returns true if the response is the default response type
+        /// </summary>
+        /// <returns></returns>
+        bool IsDefault { get; }
+    }
+
+    /// <summary>
+    /// The <see cref="ISetApiKeyRateLimitApiResponse"/>
+    /// </summary>
+    public interface ISetApiKeyRateLimitApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<Hermes.ServerSdk.Model.ApiKeyView?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    {
+        /// <summary>
+        /// Returns true if the response is 200 Ok
+        /// </summary>
+        /// <returns></returns>
+        bool IsOk { get; }
+
+        /// <summary>
+        /// Returns true if the response is 429 TooManyRequests
+        /// </summary>
+        /// <returns></returns>
+        bool IsTooManyRequests { get; }
 
         /// <summary>
         /// Returns true if the response is the default response type
@@ -222,6 +289,26 @@ namespace Hermes.ServerSdk.Api
         internal void ExecuteOnErrorListApiKeys(Exception exception)
         {
             OnErrorListApiKeys?.Invoke(this, new ExceptionEventArgs(exception));
+        }
+
+        /// <summary>
+        /// The event raised after the server response
+        /// </summary>
+        public event EventHandler<ApiResponseEventArgs>? OnSetApiKeyRateLimit;
+
+        /// <summary>
+        /// The event raised after an error querying the server
+        /// </summary>
+        public event EventHandler<ExceptionEventArgs>? OnErrorSetApiKeyRateLimit;
+
+        internal void ExecuteOnSetApiKeyRateLimit(APIKeysApi.SetApiKeyRateLimitApiResponse apiResponse)
+        {
+            OnSetApiKeyRateLimit?.Invoke(this, new ApiResponseEventArgs(apiResponse));
+        }
+
+        internal void ExecuteOnErrorSetApiKeyRateLimit(Exception exception)
+        {
+            OnErrorSetApiKeyRateLimit?.Invoke(this, new ExceptionEventArgs(exception));
         }
     }
 
@@ -510,10 +597,48 @@ namespace Hermes.ServerSdk.Api
             }
 
             /// <summary>
+            /// Returns true if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public bool IsTooManyRequests => 429 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsTooManyRequests
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = TooManyRequests();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)429);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
             /// Returns true if the response is the default response type
             /// </summary>
             /// <returns></returns>
-            public bool IsDefault => !IsCreated;
+            public bool IsDefault => !IsCreated && !IsTooManyRequests;
 
             /// <summary>
             /// Deserializes the response if the response is 0 Default
@@ -665,6 +790,7 @@ namespace Hermes.ServerSdk.Api
                     httpRequestMessageLocalVar.RequestUri = uriBuilderLocalVar.Uri;
 
                     string[] acceptLocalVars = new string[] {
+                        "application/json",
                         "application/problem+json"
                     };
 
@@ -758,10 +884,48 @@ namespace Hermes.ServerSdk.Api
             public bool IsNoContent => 204 == (int)StatusCode;
 
             /// <summary>
+            /// Returns true if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public bool IsTooManyRequests => 429 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsTooManyRequests
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = TooManyRequests();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)429);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
             /// Returns true if the response is the default response type
             /// </summary>
             /// <returns></returns>
-            public bool IsDefault => !IsNoContent;
+            public bool IsDefault => !IsNoContent && !IsTooManyRequests;
 
             /// <summary>
             /// Deserializes the response if the response is 0 Default
@@ -986,11 +1150,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 200 Ok
             /// </summary>
             /// <returns></returns>
-            public List<Item>? Ok()
+            public List<ApiKeyView>? Ok()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsOk
-                    ? System.Text.Json.JsonSerializer.Deserialize<List<Item>>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<ApiKeyView>>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -999,7 +1163,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryOk([NotNullWhen(true)]out List<Item>? result)
+            public bool TryOk([NotNullWhen(true)]out List<ApiKeyView>? result)
             {
                 result = null;
 
@@ -1015,10 +1179,390 @@ namespace Hermes.ServerSdk.Api
             }
 
             /// <summary>
+            /// Returns true if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public bool IsTooManyRequests => 429 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsTooManyRequests
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = TooManyRequests();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)429);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
             /// Returns true if the response is the default response type
             /// </summary>
             /// <returns></returns>
-            public bool IsDefault => !IsOk;
+            public bool IsDefault => !IsOk && !IsTooManyRequests;
+
+            /// <summary>
+            /// Deserializes the response if the response is 0 Default
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.ErrorModel? Default()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsDefault
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ErrorModel>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 0 Default and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryDefault([NotNullWhen(true)]out Hermes.ServerSdk.Model.ErrorModel? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = Default();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)0);
+                }
+
+                return result != null;
+            }
+
+            private void OnDeserializationErrorDefaultImplementation(Exception exception, HttpStatusCode httpStatusCode)
+            {
+                bool suppressDefaultLog = false;
+                OnDeserializationError(ref suppressDefaultLog, exception, httpStatusCode);
+                if (!suppressDefaultLog)
+                    Logger.LogError(exception, "An error occurred while deserializing the {code} response.", httpStatusCode);
+            }
+
+            partial void OnDeserializationError(ref bool suppressDefaultLog, Exception exception, HttpStatusCode httpStatusCode);
+        }
+
+        partial void FormatSetApiKeyRateLimit(ref string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody);
+
+        /// <summary>
+        /// Validates the request parameters
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        /// <returns></returns>
+        private void ValidateSetApiKeyRateLimit(string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody)
+        {
+            if (id == null)
+                throw new ArgumentNullException(nameof(id));
+
+            if (setAPIKeyRateLimitInputBody == null)
+                throw new ArgumentNullException(nameof(setAPIKeyRateLimitInputBody));
+        }
+
+        /// <summary>
+        /// Processes the server response
+        /// </summary>
+        /// <param name="apiResponseLocalVar"></param>
+        /// <param name="id"></param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        private void AfterSetApiKeyRateLimitDefaultImplementation(ISetApiKeyRateLimitApiResponse apiResponseLocalVar, string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody)
+        {
+            bool suppressDefaultLog = false;
+            AfterSetApiKeyRateLimit(ref suppressDefaultLog, apiResponseLocalVar, id, setAPIKeyRateLimitInputBody);
+            if (!suppressDefaultLog)
+                Logger.LogInformation("{0,-9} | {1} | {2}", (apiResponseLocalVar.DownloadedAt - apiResponseLocalVar.RequestedAt).TotalSeconds, apiResponseLocalVar.StatusCode, apiResponseLocalVar.Path);
+        }
+
+        /// <summary>
+        /// Processes the server response
+        /// </summary>
+        /// <param name="suppressDefaultLog"></param>
+        /// <param name="apiResponseLocalVar"></param>
+        /// <param name="id"></param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        partial void AfterSetApiKeyRateLimit(ref bool suppressDefaultLog, ISetApiKeyRateLimitApiResponse apiResponseLocalVar, string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody);
+
+        /// <summary>
+        /// Logs exceptions that occur while retrieving the server response
+        /// </summary>
+        /// <param name="exceptionLocalVar"></param>
+        /// <param name="pathFormatLocalVar"></param>
+        /// <param name="pathLocalVar"></param>
+        /// <param name="id"></param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        private void OnErrorSetApiKeyRateLimitDefaultImplementation(Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody)
+        {
+            bool suppressDefaultLogLocalVar = false;
+            OnErrorSetApiKeyRateLimit(ref suppressDefaultLogLocalVar, exceptionLocalVar, pathFormatLocalVar, pathLocalVar, id, setAPIKeyRateLimitInputBody);
+            if (!suppressDefaultLogLocalVar)
+                Logger.LogError(exceptionLocalVar, "An error occurred while sending the request to the server.");
+        }
+
+        /// <summary>
+        /// A partial method that gives developers a way to provide customized exception handling
+        /// </summary>
+        /// <param name="suppressDefaultLogLocalVar"></param>
+        /// <param name="exceptionLocalVar"></param>
+        /// <param name="pathFormatLocalVar"></param>
+        /// <param name="pathLocalVar"></param>
+        /// <param name="id"></param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        partial void OnErrorSetApiKeyRateLimit(ref bool suppressDefaultLogLocalVar, Exception exceptionLocalVar, string pathFormatLocalVar, string pathLocalVar, string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody);
+
+        /// <summary>
+        /// Set or clear a key&#39;s rate limit Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
+        /// </summary>
+        /// <param name="id">API key ID</param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
+        /// <returns><see cref="Task"/>&lt;<see cref="ISetApiKeyRateLimitApiResponse"/>&gt;</returns>
+        public async Task<ISetApiKeyRateLimitApiResponse?> SetApiKeyRateLimitOrDefaultAsync(string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody, System.Threading.CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return await SetApiKeyRateLimitAsync(id, setAPIKeyRateLimitInputBody, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Set or clear a key&#39;s rate limit Replaces this key&#39;s rate limit. Omitted fields reset to the service default, so an empty body clears the override entirely. This endpoint invalidates the key&#39;s cache entry, so the new limit applies to the next bucket created for it — but a caller that is continuously active keeps its current bucket, and therefore its old limit, until it goes idle. Do not rely on this to throttle a caller mid-flood.
+        /// </summary>
+        /// <exception cref="ApiException">Thrown when fails to make API call</exception>
+        /// <param name="id">API key ID</param>
+        /// <param name="setAPIKeyRateLimitInputBody"></param>
+        /// <param name="cancellationToken">Cancellation Token to cancel the request.</param>
+        /// <returns><see cref="Task"/>&lt;<see cref="ISetApiKeyRateLimitApiResponse"/>&gt;</returns>
+        public async Task<ISetApiKeyRateLimitApiResponse> SetApiKeyRateLimitAsync(string id, SetAPIKeyRateLimitInputBody setAPIKeyRateLimitInputBody, System.Threading.CancellationToken cancellationToken = default)
+        {
+            UriBuilder uriBuilderLocalVar = new UriBuilder();
+
+            try
+            {
+                ValidateSetApiKeyRateLimit(id, setAPIKeyRateLimitInputBody);
+
+                FormatSetApiKeyRateLimit(ref id, setAPIKeyRateLimitInputBody);
+
+                using (HttpRequestMessage httpRequestMessageLocalVar = new HttpRequestMessage())
+                {
+                    uriBuilderLocalVar.Host = HttpClient.BaseAddress!.Host;
+                    uriBuilderLocalVar.Port = HttpClient.BaseAddress.Port;
+                    uriBuilderLocalVar.Scheme = HttpClient.BaseAddress.Scheme;
+                    uriBuilderLocalVar.Path = HttpClient.BaseAddress.AbsolutePath == "/"
+                        ? "/v1/apikeys/{id}/rate-limit"
+                        : string.Concat(HttpClient.BaseAddress.AbsolutePath, "/v1/apikeys/{id}/rate-limit");
+                    uriBuilderLocalVar.Path = uriBuilderLocalVar.Path.Replace("%7Bid%7D", Uri.EscapeDataString(id.ToString()));
+
+                    httpRequestMessageLocalVar.Content = (setAPIKeyRateLimitInputBody as object) is System.IO.Stream stream
+                        ? httpRequestMessageLocalVar.Content = new StreamContent(stream)
+                        : httpRequestMessageLocalVar.Content = new StringContent(JsonSerializer.Serialize(setAPIKeyRateLimitInputBody, _jsonSerializerOptions));
+
+                    httpRequestMessageLocalVar.RequestUri = uriBuilderLocalVar.Uri;
+
+                    string[] contentTypes = new string[] {
+                        "application/json"
+                    };
+
+                    string? contentTypeLocalVar = ClientUtils.SelectHeaderContentType(contentTypes);
+
+                    if (contentTypeLocalVar != null && httpRequestMessageLocalVar.Content != null)
+                        httpRequestMessageLocalVar.Content.Headers.ContentType = new MediaTypeHeaderValue(contentTypeLocalVar);
+
+                    string[] acceptLocalVars = new string[] {
+                        "application/json",
+                        "application/problem+json"
+                    };
+
+                    IEnumerable<MediaTypeWithQualityHeaderValue> acceptHeaderValuesLocalVar = ClientUtils.SelectHeaderAcceptArray(acceptLocalVars);
+
+                    foreach (var acceptLocalVar in acceptHeaderValuesLocalVar)
+                        httpRequestMessageLocalVar.Headers.Accept.Add(acceptLocalVar);
+
+                    httpRequestMessageLocalVar.Method = HttpMethod.Put;
+
+                    DateTime requestedAtLocalVar = DateTime.UtcNow;
+
+                    using (HttpResponseMessage httpResponseMessageLocalVar = await HttpClient.SendAsync(httpRequestMessageLocalVar, cancellationToken).ConfigureAwait(false))
+                    {
+                        ILogger<SetApiKeyRateLimitApiResponse> apiResponseLoggerLocalVar = LoggerFactory.CreateLogger<SetApiKeyRateLimitApiResponse>();
+                        SetApiKeyRateLimitApiResponse apiResponseLocalVar;
+
+                        switch ((int)httpResponseMessageLocalVar.StatusCode) {
+                            default: {
+                                string responseContentLocalVar = await httpResponseMessageLocalVar.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                                apiResponseLocalVar = new(apiResponseLoggerLocalVar, httpRequestMessageLocalVar, httpResponseMessageLocalVar, responseContentLocalVar, "/v1/apikeys/{id}/rate-limit", requestedAtLocalVar, _jsonSerializerOptions);
+
+                                break;
+                            }
+                        }
+
+                        AfterSetApiKeyRateLimitDefaultImplementation(apiResponseLocalVar, id, setAPIKeyRateLimitInputBody);
+
+                        Events.ExecuteOnSetApiKeyRateLimit(apiResponseLocalVar);
+
+                        return apiResponseLocalVar;
+                    }
+                }
+            }
+            catch(Exception e)
+            {
+                OnErrorSetApiKeyRateLimitDefaultImplementation(e, "/v1/apikeys/{id}/rate-limit", uriBuilderLocalVar.Path, id, setAPIKeyRateLimitInputBody);
+                Events.ExecuteOnErrorSetApiKeyRateLimit(e);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// The <see cref="SetApiKeyRateLimitApiResponse"/>
+        /// </summary>
+        public partial class SetApiKeyRateLimitApiResponse : Hermes.ServerSdk.Client.ApiResponse, ISetApiKeyRateLimitApiResponse
+        {
+            /// <summary>
+            /// The logger
+            /// </summary>
+            public ILogger<SetApiKeyRateLimitApiResponse> Logger { get; }
+
+            /// <summary>
+            /// The <see cref="SetApiKeyRateLimitApiResponse"/>
+            /// </summary>
+            /// <param name="logger"></param>
+            /// <param name="httpRequestMessage"></param>
+            /// <param name="httpResponseMessage"></param>
+            /// <param name="rawContent"></param>
+            /// <param name="path"></param>
+            /// <param name="requestedAt"></param>
+            /// <param name="jsonSerializerOptions"></param>
+            public SetApiKeyRateLimitApiResponse(ILogger<SetApiKeyRateLimitApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, string rawContent, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, rawContent, path, requestedAt, jsonSerializerOptions)
+            {
+                Logger = logger;
+                OnCreated(httpRequestMessage, httpResponseMessage);
+            }
+
+            /// <summary>
+            /// The <see cref="SetApiKeyRateLimitApiResponse"/>
+            /// </summary>
+            /// <param name="logger"></param>
+            /// <param name="httpRequestMessage"></param>
+            /// <param name="httpResponseMessage"></param>
+            /// <param name="contentStream"></param>
+            /// <param name="path"></param>
+            /// <param name="requestedAt"></param>
+            /// <param name="jsonSerializerOptions"></param>
+            public SetApiKeyRateLimitApiResponse(ILogger<SetApiKeyRateLimitApiResponse> logger, System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage, System.IO.Stream contentStream, string path, DateTime requestedAt, System.Text.Json.JsonSerializerOptions jsonSerializerOptions) : base(httpRequestMessage, httpResponseMessage, contentStream, path, requestedAt, jsonSerializerOptions)
+            {
+                Logger = logger;
+                OnCreated(httpRequestMessage, httpResponseMessage);
+            }
+
+            partial void OnCreated(global::System.Net.Http.HttpRequestMessage httpRequestMessage, System.Net.Http.HttpResponseMessage httpResponseMessage);
+
+            /// <summary>
+            /// Returns true if the response is 200 Ok
+            /// </summary>
+            /// <returns></returns>
+            public bool IsOk => 200 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 200 Ok
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.ApiKeyView? Ok()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsOk
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ApiKeyView>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 200 Ok and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryOk([NotNullWhen(true)]out Hermes.ServerSdk.Model.ApiKeyView? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = Ok();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)200);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public bool IsTooManyRequests => 429 == (int)StatusCode;
+
+            /// <summary>
+            /// Deserializes the response if the response is 429 TooManyRequests
+            /// </summary>
+            /// <returns></returns>
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
+            {
+                // This logic may be modified with the AsModel.mustache template
+                return IsTooManyRequests
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
+                    : null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is 429 TooManyRequests and the deserialized response is not null
+            /// </summary>
+            /// <param name="result"></param>
+            /// <returns></returns>
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
+            {
+                result = null;
+
+                try
+                {
+                    result = TooManyRequests();
+                } catch (Exception e)
+                {
+                    OnDeserializationErrorDefaultImplementation(e, (HttpStatusCode)429);
+                }
+
+                return result != null;
+            }
+
+            /// <summary>
+            /// Returns true if the response is the default response type
+            /// </summary>
+            /// <returns></returns>
+            public bool IsDefault => !IsOk && !IsTooManyRequests;
 
             /// <summary>
             /// Deserializes the response if the response is 0 Default

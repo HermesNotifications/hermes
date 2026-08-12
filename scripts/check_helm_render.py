@@ -264,13 +264,20 @@ def service_backends(docs):
     `<chart name>-<service>` — the same string messaging.StreamsForService keys on and the
     same string SERVICE_SOURCE_DIRS maps to. Deriving it this way rather than by string
     surgery on the release name is what keeps the ingress check honest under a rename.
+
+    The kustomize overlays label Services with `part-of` only, and there the Service is
+    already *named* for its identity (`hermes-admin`), so its own name is the answer. The
+    fallback is deliberately only reached when the label is absent: under the chart the
+    Service name carries a release prefix and would be the wrong string, so preferring the
+    label keeps that case honest.
     """
     out = {}
     for doc in docs:
         if doc.get("kind") != "Service":
             continue
         meta = doc.get("metadata") or {}
-        out[meta.get("name")] = _app_name(meta.get("labels") or {})
+        name = meta.get("name")
+        out[name] = _app_name(meta.get("labels") or {}) or name
     return out
 
 
@@ -604,15 +611,28 @@ def check_rewrite_targets(docs):
     return failures
 
 
-def evaluate(docs, source):
-    """Run every check. Returns (failures, stats)."""
+# CHECKS maps a --only name to the check it selects. The names are part of the CLI, so
+# renaming one is a breaking change to whatever invokes this.
+CHECK_NAMES = ("routes", "rewrites", "provisioner", "images", "config", "hook-refs")
+
+
+def evaluate(docs, source, only=None):
+    """Run the selected checks — every one by default. Returns (failures, stats)."""
+    enabled = set(only) if only else set(CHECK_NAMES)
+
     failures = []
-    failures += check_ingress_routes(docs, source.routes)
-    failures += check_rewrite_targets(docs)
-    failures += check_provisioner(docs, source.stream_services, source.provisioner)
-    failures += check_images(docs, source.published_images, source.registry)
-    failures += check_config(docs, source.email_providers)
-    failures += check_hook_config_refs(docs)
+    if "routes" in enabled:
+        failures += check_ingress_routes(docs, source.routes)
+    if "rewrites" in enabled:
+        failures += check_rewrite_targets(docs)
+    if "provisioner" in enabled:
+        failures += check_provisioner(docs, source.stream_services, source.provisioner)
+    if "images" in enabled:
+        failures += check_images(docs, source.published_images, source.registry)
+    if "config" in enabled:
+        failures += check_config(docs, source.email_providers)
+    if "hook-refs" in enabled:
+        failures += check_hook_config_refs(docs)
 
     templates = pod_templates(docs)
     stats = {
@@ -627,11 +647,22 @@ def main(argv):
     paths = [a for a in argv if not a.startswith("--")]
     root = "."
     registry = DEFAULT_REGISTRY
+    only = None
     for arg in argv:
         if arg.startswith("--source-root="):
             root = arg.split("=", 1)[1]
         elif arg.startswith("--registry="):
             registry = arg.split("=", 1)[1]
+        elif arg.startswith("--only="):
+            only = [c.strip() for c in arg.split("=", 1)[1].split(",") if c.strip()]
+            unknown = [c for c in only if c not in CHECK_NAMES]
+            if unknown:
+                print(
+                    f"ERROR: unknown --only check(s): {', '.join(unknown)}\n"
+                    f"  known checks: {', '.join(CHECK_NAMES)}",
+                    file=sys.stderr,
+                )
+                return 2
 
     try:
         import yaml
@@ -657,7 +688,7 @@ def main(argv):
         print(f"\n(--source-root={root!r}; pass the repository root)", file=sys.stderr)
         return 1
 
-    failures, stats = evaluate(docs, source)
+    failures, stats = evaluate(docs, source, only)
 
     if stats["workloads"] == 0:
         print("ERROR: no pod-producing workloads found; is this a rendered chart?", file=sys.stderr)

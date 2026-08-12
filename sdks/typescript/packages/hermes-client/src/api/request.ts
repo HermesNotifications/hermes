@@ -31,7 +31,9 @@ export interface ApiOptions {
  *   error; retrying until it works would hang the caller forever.
  * - **Only a 401 is retried.** A 500 might succeed on a second attempt, but retrying it
  *   here would hide server trouble behind doubled latency, and the caller can see
- *   `retryable` on the error and decide for itself.
+ *   `retryable` on the error and decide for itself. The same applies to a 429: the
+ *   server has already said how long to wait, and that arrives on the error as
+ *   `retryAfterSeconds` rather than being slept through inside the client.
  */
 export function createSender(surface: string, onUnauthorized?: () => Promise<void>) {
   async function attempt<T extends ApiResult>(request: () => Promise<T>): Promise<T> {
@@ -50,9 +52,19 @@ export function createSender(surface: string, onUnauthorized?: () => Promise<voi
       await onUnauthorized();
       const retried = await attempt(request);
       if (!retried.error) return retried;
-      throw HermesError.fromStatus(surface, retried.response.status, retried.error);
+      throw HermesError.fromStatus(
+        surface,
+        retried.response.status,
+        retried.error,
+        retried.response.headers
+      );
     }
 
-    throw HermesError.fromStatus(surface, result.response.status, result.error);
+    throw HermesError.fromStatus(
+      surface,
+      result.response.status,
+      result.error,
+      result.response.headers
+    );
   };
 }

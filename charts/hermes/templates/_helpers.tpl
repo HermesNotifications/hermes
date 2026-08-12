@@ -162,16 +162,22 @@ Render per-service OpenTelemetry service identity. Call with
 {{- end }}
 
 {{/*
-Render the HTTP rate-limit env for one service. Call with the service's own
-values block, e.g. (include "hermes.rateLimitEnv" .Values.send).
+Render the HTTP rate-limit env for one service. Call with a dict carrying the
+root context and the service's own values block, e.g.
+  (include "hermes.rateLimitEnv" (dict "root" . "svc" .Values.send))
 
-The knobs are per service because each service is its own Deployment. Note that
-enforcement is PER REPLICA: the cluster-wide ceiling is the configured rate times
-the replica count, so size these per pod, not per fleet. An empty burst or
-perSecond keeps the service's compiled-in default.
+The per-credential knobs are per service because each service is its own
+Deployment. The per-IP and reconciliation knobs are global, under
+.Values.rateLimit, because they describe the deployment rather than one service.
+
+By default enforcement is PER REPLICA: the cluster-wide ceiling is the configured
+rate times the replica count, so size these per pod. With
+.Values.rateLimit.distributed.enabled the check runs in Redis and the configured
+rate becomes the cluster-wide ceiling instead. An empty burst or perSecond keeps
+the service's compiled-in default.
 */}}
 {{- define "hermes.rateLimitEnv" -}}
-{{- with .rateLimit }}
+{{- with .svc.rateLimit }}
 {{- if hasKey . "enabled" }}
 - name: HERMES_RATELIMIT_ENABLED
   value: {{ .enabled | quote }}
@@ -183,6 +189,32 @@ perSecond keeps the service's compiled-in default.
 {{- if .perSecond }}
 - name: HERMES_RATELIMIT_PER_SECOND
   value: {{ .perSecond | quote }}
+{{- end }}
+{{- end }}
+{{- with .root.Values.rateLimit }}
+{{- with .perIP }}
+{{- if hasKey . "enabled" }}
+- name: HERMES_RATELIMIT_IP_ENABLED
+  value: {{ .enabled | quote }}
+{{- end }}
+{{- if .burst }}
+- name: HERMES_RATELIMIT_IP_BURST
+  value: {{ .burst | quote }}
+{{- end }}
+{{- if .perSecond }}
+- name: HERMES_RATELIMIT_IP_PER_SECOND
+  value: {{ .perSecond | quote }}
+{{- end }}
+{{- end }}
+{{- if .trustedProxyCIDRs }}
+- name: HERMES_TRUSTED_PROXY_CIDRS
+  value: {{ join "," .trustedProxyCIDRs | quote }}
+{{- end }}
+{{- with .distributed }}
+{{- if hasKey . "enabled" }}
+- name: HERMES_RATELIMIT_DISTRIBUTED_ENABLED
+  value: {{ .enabled | quote }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

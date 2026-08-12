@@ -46,7 +46,7 @@ spec:
             - name: HERMES_NATS_DRAIN_TIMEOUT
               value: "0s"
             {{- include "hermes.otelServiceEnv" $svcCtx | nindent 12 }}
-            {{- include "hermes.rateLimitEnv" .Values.user | nindent 12 }}
+            {{- include "hermes.rateLimitEnv" (dict "root" $ "svc" .Values.user) | nindent 12 }}
             {{- if .Values.hermes.jwt.existingSecret }}
             - name: HERMES_JWT_SECRET
               valueFrom:

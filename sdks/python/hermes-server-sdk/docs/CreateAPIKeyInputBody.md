@@ -8,6 +8,8 @@ Name | Type | Description | Notes
 **var_schema** | **str** | A URL to the JSON Schema for this object. | [optional] [readonly] 
 **name** | **str** | Human-readable key name | 
 **permissions** | **List[str]** | Permission set (defaults to all except apikeys:manage) | [optional] 
+**rate_limit_burst** | **int** | Requests admitted instantaneously for this key. Omit to use the service default. | [optional] 
+**rate_limit_per_second** | **int** | Sustained requests per second for this key. Omit to use the service default. | [optional] 
 
 ## Example
 

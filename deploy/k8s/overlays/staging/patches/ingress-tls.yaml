@@ -1,0 +1,28 @@
+# JSON6902, not a strategic merge, and that is the whole point.
+#
+# `spec.rules` is an atomic list in the Ingress schema, so a strategic-merge patch that
+# wants to add a `host` has to restate every path to keep them. The previous version of
+# this file did exactly that, and drifted: staging and production served 7 of the base's
+# 12 routes, and sent /v1/users to the user service instead of admin. Four admin endpoints
+# were unreachable in both environments and nothing failed — the manifests rendered
+# perfectly. scripts/check_helm_render.py --only=routes now runs over these overlays
+# (see the Makefile), which is what catches it if it happens again.
+#
+# These ops add only what the overlay actually owns. The route list lives in ../../base
+# and has exactly one copy.
+#
+# DOMAIN_PLACEHOLDER is overwritten by the `replacements` block in kustomization.yaml,
+# which sources the real domain from the hermes-domain ConfigMap. The literal has to be
+# here anyway: a replacement can only rewrite a field that already exists.
+- op: add
+  path: /metadata/annotations/cert-manager.io~1cluster-issuer
+  value: letsencrypt-prod
+- op: add
+  path: /spec/rules/0/host
+  value: DOMAIN_PLACEHOLDER
+- op: add
+  path: /spec/tls
+  value:
+    - hosts:
+        - DOMAIN_PLACEHOLDER
+      secretName: hermes-tls

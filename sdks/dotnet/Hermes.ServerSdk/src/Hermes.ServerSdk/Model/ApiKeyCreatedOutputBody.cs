@@ -39,8 +39,10 @@ namespace Hermes.ServerSdk.Model
         /// <param name="rawKey">rawKey</param>
         /// <param name="schema">A URL to the JSON Schema for this object.</param>
         /// <param name="permissions">permissions</param>
+        /// <param name="rateLimitBurst">rateLimitBurst</param>
+        /// <param name="rateLimitPerSecond">rateLimitPerSecond</param>
         [JsonConstructor]
-        public ApiKeyCreatedOutputBody(DateTime createdAt, string id, string name, string rawKey, Option<string?> schema = default, List<string>? permissions = default)
+        public ApiKeyCreatedOutputBody(DateTime createdAt, string id, string name, string rawKey, Option<string?> schema = default, List<string>? permissions = default, Option<long?> rateLimitBurst = default, Option<long?> rateLimitPerSecond = default)
         {
             CreatedAt = createdAt;
             Id = id;
@@ -48,6 +50,8 @@ namespace Hermes.ServerSdk.Model
             RawKey = rawKey;
             SchemaOption = schema;
             Permissions = permissions;
+            RateLimitBurstOption = rateLimitBurst;
+            RateLimitPerSecondOption = rateLimitPerSecond;
             OnCreated();
         }
 
@@ -98,6 +102,32 @@ namespace Hermes.ServerSdk.Model
         public List<string>? Permissions { get; set; }
 
         /// <summary>
+        /// Used to track the state of RateLimitBurst
+        /// </summary>
+        [JsonIgnore]
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public Option<long?> RateLimitBurstOption { get; private set; }
+
+        /// <summary>
+        /// Gets or Sets RateLimitBurst
+        /// </summary>
+        [JsonPropertyName("rate_limit_burst")]
+        public long? RateLimitBurst { get { return this.RateLimitBurstOption; } set { this.RateLimitBurstOption = new(value); } }
+
+        /// <summary>
+        /// Used to track the state of RateLimitPerSecond
+        /// </summary>
+        [JsonIgnore]
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public Option<long?> RateLimitPerSecondOption { get; private set; }
+
+        /// <summary>
+        /// Gets or Sets RateLimitPerSecond
+        /// </summary>
+        [JsonPropertyName("rate_limit_per_second")]
+        public long? RateLimitPerSecond { get { return this.RateLimitPerSecondOption; } set { this.RateLimitPerSecondOption = new(value); } }
+
+        /// <summary>
         /// Returns the string presentation of the object
         /// </summary>
         /// <returns>String presentation of the object</returns>
@@ -111,6 +141,8 @@ namespace Hermes.ServerSdk.Model
             sb.Append("  RawKey: ").Append(RawKey).Append("\n");
             sb.Append("  Schema: ").Append(Schema).Append("\n");
             sb.Append("  Permissions: ").Append(Permissions).Append("\n");
+            sb.Append("  RateLimitBurst: ").Append(RateLimitBurst).Append("\n");
+            sb.Append("  RateLimitPerSecond: ").Append(RateLimitPerSecond).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }
@@ -159,6 +191,8 @@ namespace Hermes.ServerSdk.Model
             Option<string?> rawKey = default;
             Option<string?> schema = default;
             Option<List<string>?> permissions = default;
+            Option<long?> rateLimitBurst = default;
+            Option<long?> rateLimitPerSecond = default;
 
             while (utf8JsonReader.Read())
             {
@@ -192,6 +226,12 @@ namespace Hermes.ServerSdk.Model
                             break;
                         case "permissions":
                             permissions = new Option<List<string>?>(JsonSerializer.Deserialize<List<string>>(ref utf8JsonReader, jsonSerializerOptions));
+                            break;
+                        case "rate_limit_burst":
+                            rateLimitBurst = new Option<long?>(utf8JsonReader.TokenType == JsonTokenType.Null ? (long?)null : utf8JsonReader.GetInt64());
+                            break;
+                        case "rate_limit_per_second":
+                            rateLimitPerSecond = new Option<long?>(utf8JsonReader.TokenType == JsonTokenType.Null ? (long?)null : utf8JsonReader.GetInt64());
                             break;
                         default:
                             break;
@@ -229,7 +269,13 @@ namespace Hermes.ServerSdk.Model
             if (schema.IsSet && schema.Value == null)
                 throw new ArgumentNullException(nameof(schema), "Property is not nullable for class ApiKeyCreatedOutputBody.");
 
-            return new ApiKeyCreatedOutputBody(createdAt.Value!.Value!, id.Value!, name.Value!, rawKey.Value!, schema, permissions.Value!);
+            if (rateLimitBurst.IsSet && rateLimitBurst.Value == null)
+                throw new ArgumentNullException(nameof(rateLimitBurst), "Property is not nullable for class ApiKeyCreatedOutputBody.");
+
+            if (rateLimitPerSecond.IsSet && rateLimitPerSecond.Value == null)
+                throw new ArgumentNullException(nameof(rateLimitPerSecond), "Property is not nullable for class ApiKeyCreatedOutputBody.");
+
+            return new ApiKeyCreatedOutputBody(createdAt.Value!.Value!, id.Value!, name.Value!, rawKey.Value!, schema, permissions.Value!, rateLimitBurst, rateLimitPerSecond);
         }
 
         /// <summary>
@@ -286,6 +332,11 @@ namespace Hermes.ServerSdk.Model
             }
             else
                 writer.WriteNull("permissions");
+            if (apiKeyCreatedOutputBody.RateLimitBurstOption.IsSet)
+                writer.WriteNumber("rate_limit_burst", apiKeyCreatedOutputBody.RateLimitBurstOption.Value!.Value);
+
+            if (apiKeyCreatedOutputBody.RateLimitPerSecondOption.IsSet)
+                writer.WriteNumber("rate_limit_per_second", apiKeyCreatedOutputBody.RateLimitPerSecondOption.Value!.Value);
         }
     }
 }

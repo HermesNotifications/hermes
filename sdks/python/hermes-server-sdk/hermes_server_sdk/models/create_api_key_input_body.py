@@ -30,7 +30,9 @@ class CreateAPIKeyInputBody(BaseModel):
     var_schema: Optional[StrictStr] = Field(default=None, description="A URL to the JSON Schema for this object.", alias="$schema")
     name: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Human-readable key name")
     permissions: Optional[List[StrictStr]] = Field(default=None, description="Permission set (defaults to all except apikeys:manage)")
-    __properties: ClassVar[List[str]] = ["$schema", "name", "permissions"]
+    rate_limit_burst: Optional[Annotated[int, Field(strict=True, ge=1)]] = Field(default=None, description="Requests admitted instantaneously for this key. Omit to use the service default.")
+    rate_limit_per_second: Optional[Annotated[int, Field(strict=True, ge=1)]] = Field(default=None, description="Sustained requests per second for this key. Omit to use the service default.")
+    __properties: ClassVar[List[str]] = ["$schema", "name", "permissions", "rate_limit_burst", "rate_limit_per_second"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,7 +94,9 @@ class CreateAPIKeyInputBody(BaseModel):
         _obj = cls.model_validate({
             "$schema": obj.get("$schema"),
             "name": obj.get("name"),
-            "permissions": obj.get("permissions")
+            "permissions": obj.get("permissions"),
+            "rate_limit_burst": obj.get("rate_limit_burst"),
+            "rate_limit_per_second": obj.get("rate_limit_per_second")
         })
         return _obj
 

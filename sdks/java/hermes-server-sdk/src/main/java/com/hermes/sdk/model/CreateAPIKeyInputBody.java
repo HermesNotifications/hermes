@@ -69,6 +69,16 @@ public class CreateAPIKeyInputBody {
   @javax.annotation.Nullable
   private List<String> permissions;
 
+  public static final String SERIALIZED_NAME_RATE_LIMIT_BURST = "rate_limit_burst";
+  @SerializedName(SERIALIZED_NAME_RATE_LIMIT_BURST)
+  @javax.annotation.Nullable
+  private Long rateLimitBurst;
+
+  public static final String SERIALIZED_NAME_RATE_LIMIT_PER_SECOND = "rate_limit_per_second";
+  @SerializedName(SERIALIZED_NAME_RATE_LIMIT_PER_SECOND)
+  @javax.annotation.Nullable
+  private Long rateLimitPerSecond;
+
   public CreateAPIKeyInputBody() {
   }
 
@@ -136,6 +146,46 @@ public class CreateAPIKeyInputBody {
   }
 
 
+  public CreateAPIKeyInputBody rateLimitBurst(@javax.annotation.Nullable Long rateLimitBurst) {
+    this.rateLimitBurst = rateLimitBurst;
+    return this;
+  }
+
+  /**
+   * Requests admitted instantaneously for this key. Omit to use the service default.
+   * minimum: 1
+   * @return rateLimitBurst
+   */
+  @javax.annotation.Nullable
+  public Long getRateLimitBurst() {
+    return rateLimitBurst;
+  }
+
+  public void setRateLimitBurst(@javax.annotation.Nullable Long rateLimitBurst) {
+    this.rateLimitBurst = rateLimitBurst;
+  }
+
+
+  public CreateAPIKeyInputBody rateLimitPerSecond(@javax.annotation.Nullable Long rateLimitPerSecond) {
+    this.rateLimitPerSecond = rateLimitPerSecond;
+    return this;
+  }
+
+  /**
+   * Sustained requests per second for this key. Omit to use the service default.
+   * minimum: 1
+   * @return rateLimitPerSecond
+   */
+  @javax.annotation.Nullable
+  public Long getRateLimitPerSecond() {
+    return rateLimitPerSecond;
+  }
+
+  public void setRateLimitPerSecond(@javax.annotation.Nullable Long rateLimitPerSecond) {
+    this.rateLimitPerSecond = rateLimitPerSecond;
+  }
+
+
 
   @Override
   public boolean equals(Object o) {
@@ -148,7 +198,9 @@ public class CreateAPIKeyInputBody {
     CreateAPIKeyInputBody createAPIKeyInputBody = (CreateAPIKeyInputBody) o;
     return Objects.equals(this.$schema, createAPIKeyInputBody.$schema) &&
         Objects.equals(this.name, createAPIKeyInputBody.name) &&
-        Objects.equals(this.permissions, createAPIKeyInputBody.permissions);
+        Objects.equals(this.permissions, createAPIKeyInputBody.permissions) &&
+        Objects.equals(this.rateLimitBurst, createAPIKeyInputBody.rateLimitBurst) &&
+        Objects.equals(this.rateLimitPerSecond, createAPIKeyInputBody.rateLimitPerSecond);
   }
 
   private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
@@ -157,7 +209,7 @@ public class CreateAPIKeyInputBody {
 
   @Override
   public int hashCode() {
-    return Objects.hash($schema, name, permissions);
+    return Objects.hash($schema, name, permissions, rateLimitBurst, rateLimitPerSecond);
   }
 
   private static <T> int hashCodeNullable(JsonNullable<T> a) {
@@ -174,6 +226,8 @@ public class CreateAPIKeyInputBody {
     sb.append("    $schema: ").append(toIndentedString($schema)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    permissions: ").append(toIndentedString(permissions)).append("\n");
+    sb.append("    rateLimitBurst: ").append(toIndentedString(rateLimitBurst)).append("\n");
+    sb.append("    rateLimitPerSecond: ").append(toIndentedString(rateLimitPerSecond)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -195,7 +249,7 @@ public class CreateAPIKeyInputBody {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("$schema", "name", "permissions"));
+    openapiFields = new HashSet<String>(Arrays.asList("$schema", "name", "permissions", "rate_limit_burst", "rate_limit_per_second"));
 
     // a set of required properties/fields (JSON key names)
     openapiRequiredFields = new HashSet<String>(Arrays.asList("name"));

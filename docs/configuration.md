@@ -49,53 +49,115 @@ Per-service defaults, and what the limit is keyed on:
 | Inbox | 50 | 20 | JWT `user_id` |
 | User | 50 | 20 | JWT `user_id` |
 
-> **The limit is enforced per replica, not per cluster.** Each pod holds its own in-memory
-> buckets, so the cluster-wide ceiling is the configured rate **times the replica count** — and
-> under an [HPA](deployment-guide.md#autoscaling) that ceiling moves with the autoscaler. At the
-> production defaults, send's 2000/s is 6,000/s across 3 replicas and 40,000/s if it scales to 20.
-> Size these numbers per pod, and treat the cluster figure as a range rather than a guarantee.
-> Making the limit cluster-exact requires shared state and is tracked as future work.
+A key may also carry **its own** limit, which overrides the service default for that credential
+alone — see [per-credential limits](#per-credential-limits) below.
+
+> **By default the limit is enforced per replica, not per cluster.** Each pod holds its own
+> in-memory buckets, so the cluster-wide ceiling is the configured rate **times the replica
+> count** — and under an [HPA](deployment-guide.md#autoscaling) that ceiling moves with the
+> autoscaler. At the production defaults, send's 2000/s is 6,000/s across 3 replicas and
+> 40,000/s if it scales to 20. Turn on [distributed limiting](#distributed-rate-limiting) to
+> make the configured rate the actual cluster-wide ceiling.
 
 Rate limiting runs **after** authentication, so an unauthenticated flood is rejected with 401
-before it reaches the limiter and never allocates a bucket. That also means the limiter is not a
-defence against unauthenticated abuse — put per-IP limits on your ingress controller for that.
+before it reaches the credential limiter and never allocates a bucket. The
+[per-IP limiter](#pre-authentication-per-ip-limiting) exists to bound that work.
 `/healthz` and `/readyz` are never limited.
 
-See [the integration guide](integration-guide.md#rate-limits) for the client-facing contract.
+See [the integration guide](integration-guide.md#rate-limits) for the client-facing contract,
+and [ADR 0016](adr/0016-distributed-rate-limiting-with-local-fallback.md) for why the design is
+shaped this way.
 
-### HTTP rate limiting
+### Pre-authentication per-IP limiting
 
-Every HTTP service reads the same three variables. Because each service runs as its own
-Deployment, they are set **per service**, not fleet-wide.
+A second limiter runs **before** authentication, keyed by source address. It is a flood bound,
+not a quota: it exists so an invalid-credential flood is shed before it costs an HMAC and a
+Redis lookup per request. It runs inside the Go services, so unlike the nginx ingress
+annotations it works on any ingress controller, and on none.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HERMES_RATELIMIT_ENABLED` | `true` | Set `false` to disable rate limiting for that service entirely. |
-| `HERMES_RATELIMIT_BURST` | _(service default)_ | Requests admitted instantaneously per caller. Unset or `0` keeps the service default. |
-| `HERMES_RATELIMIT_PER_SECOND` | _(service default)_ | Sustained requests per second per caller. Unset or `0` keeps the service default. |
+| `HERMES_RATELIMIT_IP_ENABLED` | `true` | Set `false` to disable per-IP limiting. |
+| `HERMES_RATELIMIT_IP_BURST` | _(service default)_ | Requests admitted instantaneously per address. |
+| `HERMES_RATELIMIT_IP_PER_SECOND` | _(service default)_ | Sustained requests per second per address. |
+| `HERMES_TRUSTED_PROXY_CIDRS` | _(empty)_ | Comma-separated CIDRs or IPs whose `X-Forwarded-For` may be believed. |
 
-Per-service defaults, and what the limit is keyed on:
+Per-service defaults: Send 5000/2000 and Admin 1000/500, matching their per-credential ceilings
+so a legitimate caller behind one egress IP can still reach its documented limit. Inbox and User
+default to 500/200 — far above their 20/s per-user rate, because many users share one address
+behind a corporate NAT or a mobile carrier and a bound at the per-user rate would throttle a
+whole office as one person.
 
-| Service | Burst | Per second | Keyed on |
-|---|---|---|---|
-| Send | 5000 | 2000 | API key ID |
-| Admin | 1000 | 500 | API key ID |
-| Inbox | 50 | 20 | JWT `user_id` |
-| User | 50 | 20 | JWT `user_id` |
+> **`HERMES_TRUSTED_PROXY_CIDRS` needs setting behind a proxy, and must never be `0.0.0.0/0`.**
+> Empty means trust no forwarding headers, so every request is attributed to the address of the
+> immediate peer — behind an ingress controller that is the controller itself, and all callers
+> collapse into a single bucket. Set it to your ingress controller's pod CIDR to get real client
+> addresses. Trusting *every* peer is worse than not limiting at all: `X-Forwarded-For` is
+> caller-supplied, so anyone could then pick their own bucket on every request.
 
-> **The limit is enforced per replica, not per cluster.** Each pod holds its own in-memory
-> buckets, so the cluster-wide ceiling is the configured rate **times the replica count** — and
-> under an [HPA](deployment-guide.md#autoscaling) that ceiling moves with the autoscaler. At the
-> production defaults, send's 2000/s is 6,000/s across 3 replicas and 40,000/s if it scales to 20.
-> Size these numbers per pod, and treat the cluster figure as a range rather than a guarantee.
-> Making the limit cluster-exact requires shared state and is tracked as future work.
+The forwarded chain is walked from the **right**, taking the first address that is not itself a
+trusted proxy — the leftmost entry is whatever the client chose to send.
 
-Rate limiting runs **after** authentication, so an unauthenticated flood is rejected with 401
-before it reaches the limiter and never allocates a bucket. That also means the limiter is not a
-defence against unauthenticated abuse — put per-IP limits on your ingress controller for that.
-`/healthz` and `/readyz` are never limited.
+### Distributed rate limiting
 
-See [the integration guide](integration-guide.md#rate-limits) for the client-facing contract.
+With this enabled the per-credential admission check runs **in Redis**, so the configured rate is
+the cluster-wide ceiling rather than a per-pod one.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_RATELIMIT_DISTRIBUTED_ENABLED` | `false` | Run the per-credential check in Redis. Requires Redis. |
+
+The algorithm is GCRA, evaluated inside a single Lua script, so the whole check is one round trip
+and is atomic across replicas — there is no window in which two pods both believe they hold the
+last token. The limit is exact; there is no approximation to size around.
+
+Three properties worth knowing:
+
+- **It costs one Redis round trip per authenticated request.** On the Send path that is roughly a
+  50% increase in Redis operations, since authentication and idempotency already make one or two.
+- **A Redis outage degrades, it does not reject.** The call is bounded at 100ms. On timeout or
+  error the request is decided by the replica's **local bucket** instead, so behaviour falls back
+  to per-replica enforcement — what you get with this setting off — rather than failing requests
+  or removing the limit. Each fallback increments `hermes.http.rate_limit_backend_failures`.
+- **That counter is worth alerting on.** While it is non-zero the advertised limit is no longer
+  cluster-wide, and nothing else surfaces that: requests are still being served normally.
+
+The [per-IP limiter](#pre-authentication-per-ip-limiting) is **never** sent to Redis, whatever
+this is set to. It is a flood bound whose key space an attacker chooses, and forwarding it would
+turn an address scan into Redis load.
+
+### Per-credential limits
+
+An API key may carry its own limit, overriding the service default for that credential alone.
+Set it at creation, or afterwards through the Admin API:
+
+```http
+POST /v1/apikeys
+{"name": "Acme", "rate_limit_per_second": 500, "rate_limit_burst": 1000}
+
+PUT /v1/apikeys/{id}/rate-limit
+{"per_second": 50, "burst": 100}
+```
+
+`PUT .../rate-limit` **replaces** the whole limit rather than patching it: omitted fields reset
+to the service default, so `{}` clears the override entirely. That is deliberate — once
+unmarshalled, JSON cannot distinguish an absent field from an explicit null, so a PATCH could
+never tell "leave this alone" from "clear this".
+
+Both values must be at least 1 if present. There is no "zero means unlimited" — omit the field
+instead. The current values appear on `GET /v1/apikeys`.
+
+Underneath, these are nullable `rate_limit_per_second` and `rate_limit_burst` columns on
+`api_keys`. Unset for every existing key, so behaviour is unchanged until you set one.
+
+Two timing properties worth knowing:
+
+- **The limit rides the API key cache**, so it costs no extra lookup on the request path. The
+  `PUT` endpoint invalidates that entry, so a change is visible immediately; a change made with
+  direct SQL is not, and waits out the 5-minute TTL.
+- **A caller's limit is pinned when their bucket is created** and held for that bucket's
+  lifetime (30 minutes idle). A change therefore applies to the next new bucket rather than
+  retuning one in use — it does not discard tokens a caller has already accrued.
 
 ### Store backend
 

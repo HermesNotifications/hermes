@@ -40,6 +40,7 @@ type Server struct {
 	skipAuth       bool
 	jwtKeyProvider auth.JWTKeyProvider
 	limiter        *middleware.RateLimiter
+	ipLimiter      *middleware.RateLimiter
 	readiness      *httputil.Readiness
 }
 
@@ -54,11 +55,18 @@ func (s *Server) SetSkipAuth(skip bool) {
 	s.skipAuth = skip
 }
 
-// Default per-process rate limit. Overridable via HERMES_RATELIMIT_USER_*; see
-// SetRateLimit and docs/configuration.md.
+// Default per-process rate limit. Overridable via HERMES_RATELIMIT_*; see
+// ConfigureRateLimit and docs/configuration.md.
 const (
 	defaultRateLimitBurst     = 50
 	defaultRateLimitPerSecond = 20
+
+	// Set well above the per-user rate: many users share one egress IP behind a
+	// corporate NAT or a mobile carrier, so a bound at the per-user ceiling
+	// would throttle a whole office as though it were one person. See the
+	// equivalent note in internal/inbox/server.go.
+	defaultIPRateLimitBurst     = 500
+	defaultIPRateLimitPerSecond = 200
 )
 
 // ConfigureRateLimit applies configured overrides on top of this service's
@@ -66,14 +74,20 @@ const (
 // false turns limiting off.
 func (s *Server) ConfigureRateLimit(enabled bool, burst, perSecond int) {
 	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultRateLimitBurst, defaultRateLimitPerSecond)
-	s.limiter = middleware.NewRateLimiter(userLimitKey, b, p)
+	s.limiter = middleware.NewRateLimiter(middleware.UserLimitKey, b, p).
+		WithService("user").
+		WithScope(middleware.ScopeCredential)
 }
 
-// userLimitKey buckets by the JWT-derived user ID, which is signature-derived
-// and so cannot be chosen by the caller.
-func userLimitKey(r *http.Request) string {
-	return auth.UserIDFromContext(r.Context())
+// ConfigureIPRateLimit installs the pre-auth per-IP bound, which runs before
+// JWT verification so an unauthenticated flood costs no signature checks.
+func (s *Server) ConfigureIPRateLimit(enabled bool, burst, perSecond int, proxies *middleware.TrustedProxies) {
+	b, p := middleware.ResolveLimit(enabled, burst, perSecond, defaultIPRateLimitBurst, defaultIPRateLimitPerSecond)
+	s.ipLimiter = middleware.NewRateLimiter(proxies.ClientIP, b, p).WithScope(middleware.ScopeIP)
 }
+
+// CredentialLimiter exposes the per-user limiter for reconciliation.
+func (s *Server) CredentialLimiter() *middleware.RateLimiter { return s.limiter }
 
 func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
 	s := &Server{
@@ -81,8 +95,9 @@ func NewServer(store UserStore, keyProvider auth.JWTKeyProvider, logger *slog.Lo
 		jwtKeyProvider: keyProvider,
 		logger:         logger,
 		router:         chi.NewRouter(),
-		limiter:        middleware.NewRateLimiter(userLimitKey, defaultRateLimitBurst, defaultRateLimitPerSecond),
 	}
+	s.ConfigureRateLimit(true, 0, 0)
+	s.ConfigureIPRateLimit(true, 0, 0, nil)
 
 	config := huma.DefaultConfig("Hermes User API", "1.0.0")
 	config.Info.Description = "User-facing API for profile management and notification preferences."
@@ -124,6 +139,8 @@ func (s *Server) Handler() http.Handler {
 	if !s.skipAuth {
 		h = auth.JWTMiddleware(s.jwtKeyProvider)(h)
 	}
+	// Outside auth, so an unauthenticated flood is shed before JWT verification.
+	h = s.ipLimiter.Middleware(h)
 	h = middleware.Logging(s.logger)(h)
 	h = middleware.Recovery(s.logger)(h)
 	return h

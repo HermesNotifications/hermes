@@ -14,7 +14,14 @@ resources:
 patches:
 - path: patches/replicas.yaml
 - path: patches/centrifugo-env.yaml
-- path: patches/ingress.yaml
+- path: patches/ingress-tls.yaml
+  target:
+    kind: Ingress
+    name: hermes-ingress
+- path: patches/ingress-realtime-tls.yaml
+  target:
+    kind: Ingress
+    name: hermes-realtime-ingress
 - path: patches/nats.yaml
 # DATABASE_URL and REDIS_URL are provided by ExternalSecret (hermes-secrets)
 # No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL

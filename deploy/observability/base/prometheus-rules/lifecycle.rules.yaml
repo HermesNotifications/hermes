@@ -65,6 +65,22 @@ spec:
             description: "{{ $labels.job }} has been failing to read the cache for 10 minutes and is falling back to the database. Correct, but slower and more load than intended — and invisible in readiness by design."
             runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/cache-degraded.md"
 
+        # ADR 0016. With distributed rate limiting on, this is the only thing that says the
+        # advertised limit has stopped being cluster-wide. The fallback to each replica's
+        # local bucket is deliberate and keeps requests flowing, so there is no error rate,
+        # no latency spike and no failing probe to notice — the limit has simply widened to
+        # the per-replica behaviour, silently, for as long as Redis is unreachable.
+        - alert: RateLimitBackendDegraded
+          expr: rate(hermes_http_rate_limit_backend_failures_total[5m]) > 0
+          for: 5m
+          labels:
+            severity: warn
+            component: ratelimit
+          annotations:
+            summary: "Rate limiting fell back to per-replica buckets on {{ $labels.job }}"
+            description: "{{ $labels.job }} has been unable to reach the shared rate limiter for 5 minutes and is deciding requests from its local bucket. Requests still flow; the effective ceiling is now the configured rate times the replica count."
+            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/rate-limit-backend-degraded.md"
+
         # The metric that says whether AckWait is right. Once p99 handler duration approaches
         # the configured AckWait, JetStream begins redelivering messages whose handlers are
         # still running, and every side effect happens twice.

@@ -6,6 +6,7 @@ api/openapi.yaml
 build.gradle
 build.sbt
 docs/ApiKeyCreatedOutputBody.md
+docs/ApiKeyView.md
 docs/ApiKeysApi.md
 docs/AuthApi.md
 docs/CreateAPIKeyInputBody.md
@@ -15,7 +16,6 @@ docs/CreateSubscriptionInputBody.md
 docs/CreateTemplateInputBody.md
 docs/ErrorDetail.md
 docs/ErrorModel.md
-docs/Item.md
 docs/Notification.md
 docs/NotificationEvent.md
 docs/NotificationItem.md
@@ -24,10 +24,12 @@ docs/NotificationTemplate.md
 docs/NotificationsApi.md
 docs/OrganizationItem.md
 docs/OrganizationsApi.md
+docs/RateLimitError.md
 docs/SendContent.md
 docs/SendInputBody.md
 docs/SendOutputBody.md
 docs/SendRecipient.md
+docs/SetAPIKeyRateLimitInputBody.md
 docs/Subscription.md
 docs/SubscriptionCategory.md
 docs/SubscriptionsApi.md
@@ -74,6 +76,7 @@ src/main/java/com/hermes/sdk/auth/HttpBasicAuth.java
 src/main/java/com/hermes/sdk/auth/HttpBearerAuth.java
 src/main/java/com/hermes/sdk/model/AbstractOpenApiSchema.java
 src/main/java/com/hermes/sdk/model/ApiKeyCreatedOutputBody.java
+src/main/java/com/hermes/sdk/model/ApiKeyView.java
 src/main/java/com/hermes/sdk/model/CreateAPIKeyInputBody.java
 src/main/java/com/hermes/sdk/model/CreateCategoryInputBody.java
 src/main/java/com/hermes/sdk/model/CreateOrganizationInputBody.java
@@ -81,17 +84,18 @@ src/main/java/com/hermes/sdk/model/CreateSubscriptionInputBody.java
 src/main/java/com/hermes/sdk/model/CreateTemplateInputBody.java
 src/main/java/com/hermes/sdk/model/ErrorDetail.java
 src/main/java/com/hermes/sdk/model/ErrorModel.java
-src/main/java/com/hermes/sdk/model/Item.java
 src/main/java/com/hermes/sdk/model/Notification.java
 src/main/java/com/hermes/sdk/model/NotificationEvent.java
 src/main/java/com/hermes/sdk/model/NotificationItem.java
 src/main/java/com/hermes/sdk/model/NotificationStatusOutputBody.java
 src/main/java/com/hermes/sdk/model/NotificationTemplate.java
 src/main/java/com/hermes/sdk/model/OrganizationItem.java
+src/main/java/com/hermes/sdk/model/RateLimitError.java
 src/main/java/com/hermes/sdk/model/SendContent.java
 src/main/java/com/hermes/sdk/model/SendInputBody.java
 src/main/java/com/hermes/sdk/model/SendOutputBody.java
 src/main/java/com/hermes/sdk/model/SendRecipient.java
+src/main/java/com/hermes/sdk/model/SetAPIKeyRateLimitInputBody.java
 src/main/java/com/hermes/sdk/model/Subscription.java
 src/main/java/com/hermes/sdk/model/SubscriptionCategory.java
 src/main/java/com/hermes/sdk/model/TokenInputBody.java

@@ -67,6 +67,12 @@ spec:
               - image: hermes-natsprovision
                 newName: ${{ vars.registry }}/hermes-natsprovision
                 tag: ${{ imageFrom(vars.registry + "/hermes-natsprovision").Tag }}
+              # The retention CronJob. cd.yml builds it and base deploys it, but nothing
+              # promoted it, so the overlay kept the bare name `hermes-cleanup` — which
+              # resolves to docker.io/library/hermes-cleanup:latest and cannot pull.
+              - image: hermes-cleanup
+                newName: ${{ vars.registry }}/hermes-cleanup
+                tag: ${{ imageFrom(vars.registry + "/hermes-cleanup").Tag }}
         - uses: git-commit
           config:
             path: ./src
