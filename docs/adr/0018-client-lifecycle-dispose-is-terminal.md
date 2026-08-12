@@ -1,6 +1,7 @@
 # ADR 0018: `dispose()` is terminal, `disconnect()` is the reusable one, and the store repairs its own wiring
 
-**Status:** Accepted (2026-08-12)  
+**Status:** Accepted (amended 2026-08-12: independently reproduced from the opposite direction; see
+the update at the end of Consequences)  
 **Date:** 2026-08-12  
 **Author:** Daryl Robbins
 
@@ -89,6 +90,19 @@ never fought.
 **Defence in depth, not one fix.** The store repair and the hook change each fix the observed bug
 alone. Keeping both is deliberate: the hook fix addresses this caller, the repair addresses the
 next one.
+
+> **Update 2026-08-12: independently reproduced, from the opposite direction.**
+>
+> While this ADR was being written, a separate investigation chased the same symptom from a flaky
+> browser suite rather than from a reading of the lifecycle contract, without knowledge of this
+> work, and reached the same cause. It also measured a sixth alternative not listed below —
+> *rebuild the client React-side after disposing it*, the intuitive fix — and found it markedly
+> worse: 14 of 16 runs failed, against 4–6 of 16 before.
+>
+> The decision is unchanged. The narrative, the frame captures and the ruled-out hypotheses live in
+> [the investigation write-up](../reviews/2026-08-12-silent-realtime-fault-investigation.md), which
+> also names one limit this fix does not close: the browser suite's realtime gate proves the socket
+> is *connected*, which is exactly what read true while the client was deaf.
 
 ## Alternatives considered
 
