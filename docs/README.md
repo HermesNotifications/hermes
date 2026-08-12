@@ -73,7 +73,9 @@ flowchart LR
 - **[Architecture Decision Records](adr/README.md)** — the significant architectural decisions and
   their rationale, plus when and how to write a new one.
 - **[Reviews](reviews/2026-07-27-architecture-review.md)** — findings from periodic architecture
-  and security reviews, kept as a remediation backlog.
+  and security reviews, kept as a remediation backlog. Alongside them,
+  [investigation write-ups](reviews/2026-08-12-silent-realtime-fault-investigation.md) for faults
+  worth being able to recognise a second time.
 - **[Development](development.md)** — local dev with Tilt + k3d (and the lighter Docker Compose
   path for tests), project layout, and live reload.
 - **[Testing](testing.md)** — the unit / integration / e2e split and the mock-store pattern.
