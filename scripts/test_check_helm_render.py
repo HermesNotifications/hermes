@@ -126,6 +126,7 @@ func other() {
 
 
 class TestParsePublishedImages(unittest.TestCase):
+    # cd.yml: the matrix block is terminated by a job-level `env:`.
     CD = '''
     strategy:
       matrix:
@@ -138,9 +139,31 @@ class TestParsePublishedImages(unittest.TestCase):
       IMAGE_TAG: something
 '''
 
+    # release.yml: no job-level `env:`, so the block runs to `steps:` instead. Parsing this
+    # one by looking only for `env:` swallowed the whole file and read the step names as
+    # services.
+    RELEASE = '''
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - admin
+          - dispatch
+          - natsprovision
+    steps:
+      - uses: actions/checkout@abc
+      - name: Build and push
+'''
+
     def test_reads_the_publish_matrix(self):
         self.assertEqual(
             check.parse_published_images(self.CD),
+            {"hermes-admin", "hermes-dispatch", "hermes-natsprovision"},
+        )
+
+    def test_reads_a_matrix_terminated_by_steps(self):
+        self.assertEqual(
+            check.parse_published_images(self.RELEASE),
             {"hermes-admin", "hermes-dispatch", "hermes-natsprovision"},
         )
 
@@ -638,6 +661,7 @@ class TestEvaluate(unittest.TestCase):
         provisioner="hermes-natsprovision",
         email_providers={"smtp"},
         published_images={"hermes-admin", "hermes-send", "hermes-natsprovision"},
+        internal_images={"hermes-admin", "hermes-send", "hermes-natsprovision"},
         registry="ghcr.io/hermesnotifications",
     )
 
@@ -660,9 +684,9 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertEqual(stats["workloads"], 3)
 
-    def test_an_image_the_cd_matrix_does_not_build_is_flagged(self):
-        # `hermes-cleanup` is exactly this case in the real repo: charts reference it,
-        # cd.yml does not build it.
+    def test_an_image_the_release_matrix_does_not_build_is_flagged(self):
+        # `hermes-cleanup` was exactly this case in the real repo: charts reference it,
+        # the build matrix did not build it.
         source = check.Source(**{**self.SOURCE._asdict(),
                                  "published_images": {"hermes-admin", "hermes-natsprovision"}})
         failures, _ = check.evaluate(self._good_docs(), source)
@@ -757,36 +781,50 @@ class TestEvaluateOnly(unittest.TestCase):
 class TestMainGuards(unittest.TestCase):
     """The gate must not report success when it read nothing."""
 
+    @staticmethod
+    def _source(**overrides):
+        base = dict(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
+                    email_providers={"smtp"}, published_images={"x"}, internal_images={"x"},
+                    registry="r")
+        return check.Source(**{**base, **overrides})
+
     def test_source_with_no_routes_is_rejected(self):
-        empty = check.Source(routes={}, stream_services={"hermes-send"}, provisioner="p",
-                             email_providers={"smtp"}, published_images={"x"}, registry="r")
-        problems = check.source_problems(empty)
+        problems = check.source_problems(self._source(routes={}))
         self.assertTrue(any("route" in p for p in problems), problems)
 
     def test_source_with_no_stream_services_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services=set(), provisioner="p",
-                             email_providers={"smtp"}, published_images={"x"}, registry="r")
-        self.assertTrue(check.source_problems(empty))
+        self.assertTrue(check.source_problems(self._source(stream_services=set())))
 
     def test_source_with_no_provisioner_identity_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner=None,
-                             email_providers={"smtp"}, published_images={"x"}, registry="r")
-        self.assertTrue(check.source_problems(empty))
+        self.assertTrue(check.source_problems(self._source(provisioner=None)))
 
     def test_source_with_no_email_providers_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
-                             email_providers=set(), published_images={"x"}, registry="r")
-        self.assertTrue(check.source_problems(empty))
+        self.assertTrue(check.source_problems(self._source(email_providers=set())))
 
     def test_source_with_no_published_images_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
-                             email_providers={"smtp"}, published_images=set(), registry="r")
-        self.assertTrue(check.source_problems(empty))
+        problems = check.source_problems(self._source(published_images=set()))
+        self.assertTrue(any("release.yml" in p for p in problems), problems)
+
+    def test_source_with_no_internal_images_is_rejected(self):
+        problems = check.source_problems(self._source(internal_images=set()))
+        self.assertTrue(any("cd.yml" in p for p in problems), problems)
+
+    def test_a_service_published_but_never_delivered_is_flagged(self):
+        # In release.yml, absent from cd.yml: Kargo has nothing to promote.
+        problems = check.source_problems(
+            self._source(published_images={"x", "hermes-new"}, internal_images={"x"}))
+        self.assertTrue(any("hermes-new" in p and "Kargo" in p for p in problems), problems)
+
+    def test_a_service_delivered_but_never_published_is_flagged(self):
+        # In cd.yml, absent from release.yml: no self-hoster can pull it. This is the
+        # direction that hurts strangers rather than the maintainer, so it must not be
+        # silent.
+        problems = check.source_problems(
+            self._source(published_images={"x"}, internal_images={"x", "hermes-new"}))
+        self.assertTrue(any("hermes-new" in p and "self-hoster" in p for p in problems), problems)
 
     def test_a_complete_source_has_no_problems(self):
-        ok = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
-                          email_providers={"smtp"}, published_images={"x"}, registry="r")
-        self.assertEqual(check.source_problems(ok), [])
+        self.assertEqual(check.source_problems(self._source()), [])
 
 
 if __name__ == "__main__":

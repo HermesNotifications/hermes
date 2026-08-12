@@ -5,6 +5,10 @@
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+# Must match the build matrix in .github/workflows/cd.yml. ECR does not create a repository
+# on push, so a service in the matrix and not here fails the whole matrix leg -- which is
+# what `natsprovision` and `cleanup` were doing on every commit to main, silently, because a
+# red leg in a 12-way matrix reads as "CD is flaky" rather than "CD is broken".
 locals {
   services = toset([
     "admin",
@@ -17,6 +21,8 @@ locals {
     "worker-sms",
     "worker-inbox",
     "migrate",
+    "natsprovision",
+    "cleanup",
   ])
 }
 

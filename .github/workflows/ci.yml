@@ -266,6 +266,26 @@ jobs:
             echo "::error::adminPortal.enabled=true rendered against hermes-admin-portal, which nothing in this repository builds"
             exit 1
           fi
+      # release.yml asserts the same thing against the tag, but only once a tag exists — by
+      # which point the fix is a new tag rather than a commit. Catch it on the PR instead.
+      # The chart's appVersion is what _helpers.tpl defaults every image tag to, so a chart
+      # claiming 0.1.0 while version says 0.2.0 renders images that were never published.
+      - name: Chart version and appVersion must agree, and be in the changelog
+        run: |
+          set -euo pipefail
+          version=$(grep '^version:' charts/hermes/Chart.yaml | awk '{print $2}')
+          app_version=$(grep '^appVersion:' charts/hermes/Chart.yaml | awk '{print $2}' | tr -d '"')
+
+          if [ "$version" != "$app_version" ]; then
+            echo "::error::charts/hermes/Chart.yaml version ($version) != appVersion ($app_version)."
+            echo "They are one number: appVersion is the default tag for every Hermes image."
+            exit 1
+          fi
+          if ! grep -q "^## ${version}\$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## ${version}' section."
+            echo "release.yml builds the GitHub Release notes from it and fails without one."
+            exit 1
+          fi
 
   kustomize-validate:
     name: Validate Kustomize Overlays

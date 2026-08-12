@@ -21,7 +21,11 @@ it reads the answer out of the Go source at check time:
     messaging.StreamsForService, and the provisioner's identity from
     messaging.ProvisionerService;
   * the accepted email providers come from the switch in email.NewProvider;
-  * the set of images Hermes actually publishes comes from the cd.yml build matrix.
+  * the set of images Hermes actually publishes comes from the release.yml build matrix --
+    the *public* one, because ghcr.io is where the chart's default registry points and so
+    the only registry a self-hoster can pull from. cd.yml's matrix feeds a private ECR; the
+    two are asserted to agree, since a service in one and not the other is a defect either
+    way round.
 
 What remains hardcoded is the map from a Go package directory to the service identity it
 runs as (SERVICE_SOURCE_DIRS below) and the registry prefix. Both are named in comments
@@ -68,7 +72,18 @@ ENV_DEVELOPMENT = "development"
 
 Source = namedtuple(
     "Source",
-    ["routes", "stream_services", "provisioner", "email_providers", "published_images", "registry"],
+    [
+        "routes",
+        "stream_services",
+        "provisioner",
+        "email_providers",
+        # release.yml -- the public GHCR matrix, which is what the chart's default registry
+        # resolves against and therefore the only one a self-hoster can pull from.
+        "published_images",
+        # cd.yml -- the private ECR matrix. Checked only for agreement with the above.
+        "internal_images",
+        "registry",
+    ],
 )
 
 
@@ -115,7 +130,7 @@ def parse_email_providers(text):
 
 
 def parse_published_images(text):
-    """Image names cd.yml actually builds and pushes, as `hermes-<service>`.
+    """Image names a workflow's build matrix actually builds and pushes, as `hermes-<service>`.
 
     An image reference under the Hermes registry that is not in this set cannot be pulled,
     however well-formed it looks. That is not a hypothetical: the NATS sub-chart reads the
@@ -125,8 +140,11 @@ def parse_published_images(text):
     start = text.find("      matrix:")
     if start < 0:
         return set()
-    end = text.find("\n    env:", start)
-    body = text[start:end if end > 0 else len(text)]
+    # The matrix block ends at the next key at `    ` depth -- `env:` in cd.yml, `steps:` in
+    # release.yml. Take whichever comes first rather than naming one of them.
+    ends = [text.find(f"\n    {key}:", start) for key in ("env", "steps")]
+    ends = [e for e in ends if e > 0]
+    body = text[start:min(ends) if ends else len(text)]
     return {"hermes-" + s for s in re.findall(r"^\s*-\s+([a-z0-9][a-z0-9-]*)\s*$", body, re.MULTILINE)}
 
 
@@ -158,7 +176,8 @@ def load_source(root):
         stream_services=parse_stream_services(provision),
         provisioner=parse_provisioner_identity(provision),
         email_providers=parse_email_providers(_read(root, "internal/email/email.go")),
-        published_images=parse_published_images(_read(root, ".github/workflows/cd.yml")),
+        published_images=parse_published_images(_read(root, ".github/workflows/release.yml")),
+        internal_images=parse_published_images(_read(root, ".github/workflows/cd.yml")),
         registry=DEFAULT_REGISTRY,
     )
 
@@ -182,7 +201,29 @@ def source_problems(source):
     if not source.email_providers:
         problems.append("email.NewProvider switch not found in internal/email/email.go")
     if not source.published_images:
+        problems.append("build matrix not found in .github/workflows/release.yml")
+    if not source.internal_images:
         problems.append("build matrix not found in .github/workflows/cd.yml")
+
+    # The two pipelines build the same Dockerfile from the same source and differ only in where
+    # they push. A service in one and not the other is a defect either way round: missing from
+    # release.yml it is unpullable by every self-hoster, and missing from cd.yml it breaks
+    # Kargo's promotion. Neither shows up until someone deploys.
+    if source.published_images and source.internal_images:
+        public_only = source.published_images - source.internal_images
+        internal_only = source.internal_images - source.published_images
+        if public_only:
+            problems.append(
+                "in release.yml's matrix but not cd.yml's: "
+                + ", ".join(sorted(public_only))
+                + " (published to GHCR but never delivered to ECR, so Kargo cannot promote it)"
+            )
+        if internal_only:
+            problems.append(
+                "in cd.yml's matrix but not release.yml's: "
+                + ", ".join(sorted(internal_only))
+                + " (delivered to ECR but never published, so no self-hoster can pull it)"
+            )
     return problems
 
 

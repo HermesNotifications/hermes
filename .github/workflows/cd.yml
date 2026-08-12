@@ -1,5 +1,10 @@
 name: CD
 
+# Internal delivery only: SHA-tagged images to this project's private ECR, feeding Kargo and
+# ArgoCD. The *public* release -- GHCR images and the Helm chart -- is release.yml, which is
+# deliberately independent of AWS so that cutting a release needs no cloud account. See the
+# header comment there.
+
 on:
   # Build & push only after CI succeeds on main, so we never publish images for a
   # commit that failed CI. Kargo's automated image-tag commits don't trigger CI
@@ -8,14 +13,10 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # Version tags are cut from already-merged, CI-passed commits.
-  push:
-    tags: ["v*"]
 
 permissions:
   id-token: write    # OIDC for AWS
   contents: read
-  packages: write    # Push to GHCR on version tags
 
 env:
   AWS_REGION: us-east-1
@@ -23,11 +24,13 @@ env:
 jobs:
   build-and-push:
     name: Build & Push ${{ matrix.service }}
-    # Tag pushes always proceed; CI-completion runs only proceed on success.
-    if: ${{ github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # KEEP IN SYNC with release.yml's matrix. scripts/check_helm_render.py asserts the two
+        # agree: a service published to ECR but not to GHCR would be invisible to every
+        # self-hoster, and one published to GHCR but not ECR would break Kargo.
         service:
           - admin
           - dispatch
@@ -48,14 +51,13 @@ jobs:
           # image under the Hermes registry actually exists.
           - cleanup
     env:
-      # The exact commit CI validated. For workflow_run, github.sha is the branch
-      # tip (which can race ahead), so we pin to the run's head_sha; for tag
-      # pushes there's no workflow_run, so fall back to github.sha.
-      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      # The exact commit CI validated. github.sha is the branch tip, which can race ahead of
+      # the run that passed, so pin to the run's head_sha.
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -83,30 +85,3 @@ jobs:
             --cache-to "type=gha,mode=max,scope=cd-${SERVICE}" \
             --push \
             -f deploy/docker/Dockerfile .
-
-      - name: Tag with semver version
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          SERVICE: ${{ matrix.service }}
-          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          docker buildx imagetools create \
-            "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
-            --tag "${ECR_REGISTRY}/hermes-${SERVICE}:${VERSION}"
-
-      - name: Login to GHCR
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Push to GHCR
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          SERVICE: ${{ matrix.service }}
-          IMAGE_TAG: ${{ github.sha }}
-          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          docker buildx imagetools create \
-            "${ECR_REGISTRY}/hermes-${SERVICE}:${IMAGE_TAG}" \
-            --tag "ghcr.io/hermesnotifications/hermes-${SERVICE}:${VERSION}"
