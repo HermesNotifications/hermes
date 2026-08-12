@@ -11,6 +11,7 @@
 |**channels** | **List&lt;String&gt;** | Explicit delivery channels |  [optional] |
 |**content** | [**SendContent**](SendContent.md) | Direct content (mutually exclusive with template) |  [optional] |
 |**data** | **Map&lt;String, Object&gt;** | Template data for rendering |  [optional] |
+|**metadata** | **SendInputBodyMetadata** |  |  [optional] |
 |**template** | **String** | Notification template slug (mutually exclusive with content) |  [optional] |
 |**to** | [**SendRecipient**](SendRecipient.md) | Notification recipient |  |
 

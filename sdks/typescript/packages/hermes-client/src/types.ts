@@ -34,6 +34,14 @@ export interface NewNotificationEvent {
   actionUrl?: string;
   actionLabel?: string;
   /**
+   * The sender's opaque metadata, echoed back verbatim.
+   *
+   * Typed as the REST schema's `metadata` so a row synthesized from a live arrival is the same
+   * shape as the same row after a reload. Hermes reads `level` and `toast` from it; see
+   * `notificationLevel` and `toastRequested`.
+   */
+  metadata?: Notification["metadata"];
+  /**
    * Unread count after this arrival, when the server knows it.
    *
    * Absent is normal, not exceptional: the inbox worker that publishes this event has no

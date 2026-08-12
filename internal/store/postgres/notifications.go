@@ -18,12 +18,12 @@ func (s *Store) CreateNotification(ctx context.Context, n *models.Notification) 
 	}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO notifications
-			(id, organization_id, user_id, template_id, category_id, title, body, action_url, action_label, idempotency_key, channels, status)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			(id, organization_id, user_id, template_id, category_id, title, body, action_url, action_label, idempotency_key, channels, status, metadata)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 RETURNING created_at`,
 		n.ID, n.OrganizationID, n.UserID, n.TemplateID, categoryID,
 		n.Title, n.Body, n.ActionURL, n.ActionLabel,
-		n.IdempotencyKey, n.Channels, n.Status,
+		n.IdempotencyKey, n.Channels, n.Status, n.Metadata,
 	).Scan(&n.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create notification: %w", err)
@@ -31,12 +31,16 @@ func (s *Store) CreateNotification(ctx context.Context, n *models.Notification) 
 	return n, nil
 }
 
+// scanNotification reads a row in the column order every SELECT in this package uses.
+//
+// The column lists and this function are one unit: there are four SELECTs here and a fifth in
+// inbox.go, and adding a column to some of them silently shifts every destination after it.
 func scanNotification(scan func(dest ...any) error, n *models.Notification) error {
 	var categoryID *string
 	err := scan(
 		&n.ID, &n.OrganizationID, &n.UserID, &n.TemplateID, &categoryID,
 		&n.Title, &n.Body, &n.ActionURL, &n.ActionLabel,
-		&n.IdempotencyKey, &n.Channels, &n.Status,
+		&n.IdempotencyKey, &n.Channels, &n.Status, &n.Metadata,
 		&n.CreatedAt, &n.SentAt, &n.DeliveredAt, &n.ReadAt, &n.ArchivedAt, &n.DeletedAt,
 	)
 	if categoryID != nil {
@@ -49,7 +53,7 @@ func (s *Store) GetNotificationByID(ctx context.Context, notifID string) (*model
 	n := &models.Notification{}
 	row := s.pool.QueryRow(ctx,
 		`SELECT id, organization_id, user_id, template_id, category_id, title, body,
-		        action_url, action_label, idempotency_key, channels, status,
+		        action_url, action_label, idempotency_key, channels, status, metadata,
 		        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 		 FROM notifications WHERE id = $1`, notifID,
 	)
@@ -63,7 +67,7 @@ func (s *Store) GetNotificationByIdempotencyKey(ctx context.Context, organizatio
 	n := &models.Notification{}
 	row := s.pool.QueryRow(ctx,
 		`SELECT id, organization_id, user_id, template_id, category_id, title, body,
-		        action_url, action_label, idempotency_key, channels, status,
+		        action_url, action_label, idempotency_key, channels, status, metadata,
 		        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 		 FROM notifications
 		 WHERE organization_id = $1 AND idempotency_key = $2
@@ -82,7 +86,7 @@ func (s *Store) ListRecentNotifications(ctx context.Context, limit int) ([]model
 	}
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, organization_id, user_id, template_id, category_id, title, body,
-		        action_url, action_label, idempotency_key, channels, status,
+		        action_url, action_label, idempotency_key, channels, status, metadata,
 		        created_at, sent_at, delivered_at, read_at, archived_at, deleted_at
 		 FROM notifications ORDER BY created_at DESC LIMIT $1`, limit,
 	)

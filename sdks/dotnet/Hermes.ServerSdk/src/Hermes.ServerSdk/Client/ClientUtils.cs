@@ -114,6 +114,10 @@ namespace Hermes.ServerSdk.Client
                     : "false";
             if (obj is CreateCategoryInputBody.DefaultStateEnum createCategoryInputBodyDefaultStateEnum)
                 return CreateCategoryInputBody.DefaultStateEnumToJsonValue(createCategoryInputBodyDefaultStateEnum);
+            if (obj is NotificationMetadata.LevelEnum notificationMetadataLevelEnum)
+                return NotificationMetadata.LevelEnumToJsonValue(notificationMetadataLevelEnum);
+            if (obj is SendInputBodyMetadata.LevelEnum sendInputBodyMetadataLevelEnum)
+                return SendInputBodyMetadata.LevelEnumToJsonValue(sendInputBodyMetadataLevelEnum);
             if (obj is UpdateCategoryInputBody.DefaultStateEnum updateCategoryInputBodyDefaultStateEnum)
                 return UpdateCategoryInputBody.DefaultStateEnumToJsonValue(updateCategoryInputBodyDefaultStateEnum);
             if (obj is ICollection collection)

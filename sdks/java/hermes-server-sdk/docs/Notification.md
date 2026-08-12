@@ -18,6 +18,7 @@
 |**deliveredAt** | **OffsetDateTime** |  |  [optional] |
 |**id** | **String** |  |  |
 |**idempotencyKey** | **String** |  |  [optional] |
+|**metadata** | **NotificationMetadata** |  |  [optional] |
 |**organizationId** | **String** |  |  |
 |**readAt** | **OffsetDateTime** |  |  [optional] |
 |**sentAt** | **OffsetDateTime** |  |  [optional] |

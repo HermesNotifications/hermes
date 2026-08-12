@@ -92,6 +92,9 @@ export function notificationFromEvent(event: NewNotificationEvent): Notification
     created_at: event.createdAt,
     ...(event.actionUrl !== undefined ? { action_url: event.actionUrl } : {}),
     ...(event.actionLabel !== undefined ? { action_label: event.actionLabel } : {}),
+    // Carried through, or a row that arrived live would render without its level while the
+    // same row after a reload had one -- the same class of gap as the action url above.
+    ...(event.metadata !== undefined ? { metadata: event.metadata } : {}),
   };
 }
 

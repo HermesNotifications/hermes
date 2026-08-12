@@ -272,6 +272,8 @@ fallbacks and an opaque handshake failure on the websocket.
 | `open` | `false` | Reflected; whether the panel is open |
 | `heading` | `Notifications` | Panel heading |
 | `empty-text` | `No notifications` | Shown when there is nothing to list |
+| `expand-text` | `Show more` | Label on the control that lifts a clipped row |
+| `collapse-text` | `Show less` | Label once that row is expanded |
 
 Properties without an attribute equivalent, since a function cannot be expressed in HTML:
 `getToken`, `client`, `clientFactory`, and read-only `state`.
@@ -287,6 +289,7 @@ All bubble and are composed, so you can listen on any ancestor or on `document`.
 | `hermes-unread-count-change` | the new count, as a number |
 | `hermes-open-change` | `{ open }` |
 | `hermes-connected` | `{ status }` — realtime is live and will deliver |
+| `hermes-realtime-change` | `{ status }` — **every** transition, for an honest connection indicator |
 | `hermes-error` | a `HermesError` |
 | `hermes-action` | `{ notification }` — **cancellable**; `preventDefault()` to route yourself |
 | `hermes-notification-click` | `{ notification }` |
@@ -314,6 +317,11 @@ hermes-inbox {
   --hermes-border-color: #e3e6ec;
   --hermes-popover-z-index: 50;   /* raise above your own sticky header */
   --hermes-focus-ring: 2px solid #4f46e5;
+
+  --hermes-trigger-border: 1px solid #e3e6ec;  /* the bell ships borderless; this puts a box back */
+  --hermes-body-line-clamp: 3;                 /* lines of body text before clipping (default 2) */
+  --hermes-expand-color: #4f46e5;              /* the "Show more" control */
+  --hermes-level-error-color: #dc2626;         /* and -info-, -success-, -warning- */
 }
 ```
 
@@ -325,14 +333,155 @@ default of 1000, the panel is clipped, and this is the lever.
 ```css
 hermes-inbox::part(trigger) { border-radius: 10px; }
 hermes-inbox::part(notification unread) { border-left: 2px solid #4f46e5; }
+hermes-inbox::part(notification error) { background: #fef2f2; }
 ```
 
 Exposed parts: `trigger`, `badge`, `status`, `popover`, `header`, `mark-all-read`, `list`,
-`notification` (plus an `unread` or `read` token), `unread-dot`, `read-dot`, `notification-content`,
-`title`, `body`, `time`, `action-link`, `actions`, `action-btn`, `footer`, `load-more`, `loading`,
-`empty`, `error`.
+`notification` (plus a `read`/`unread` token, an `expanded` token, and a `level-*` token when the
+notification declares one), `unread-dot`, `read-dot`, `row-target`, `notification-content`,
+`title`, `body`, `time`, `action-label`, `action-link`, `expand-toggle`, `actions`, `action-btn`,
+`footer`, `load-more`, `loading`, `empty`, `error`.
+
+> **One `::part()` limitation, so you don't spend an afternoon on it.** `::part()` may appear only
+> once, at the end of a compound selector, and nothing may descend past it.
+> `hermes-inbox::part(notification):hover` is fine, but there is no way to express "reveal
+> `::part(action-btn)` when `::part(notification)` is hovered" — the popular reveal-on-row-hover
+> pattern is not available to a consumer, and would have to become the element's own behaviour.
+
+A worked example that goes well beyond a border radius — a circular tinted bell, a gradient panel
+header, an accent rail in place of the unread dot — is the `brand` theme in
+[`examples/react-demo/src/styles.css`](../examples/react-demo/src/styles.css). Switch the demo's
+Theme select to "Brand" to see it.
+
+### Long notifications
+
+A body is clipped to `--hermes-body-line-clamp` lines (2 by default) and the title to one. When a
+row is actually clipped — measured, not guessed — a **Show more** control appears beneath it and
+lifts both. Rows that fit get no control, so short notifications add no extra tab stop.
+
+Expanding never marks the notification read and never follows its action. That is structural
+rather than defensive: the control is a sibling of the row's link/button, not a child of it.
 
 ---
+
+## Metadata: levels and toasts
+
+A send may attach an arbitrary `metadata` object. Hermes stores it, echoes it back on the inbox row
+and on the realtime event, and reads exactly two keys from it:
+
+```jsonc
+POST /v1/send
+{
+  "to": { "organization_id": "…", "user_id": "…" },
+  "content": { "title": "Payment failed", "body": "Your card was declined." },
+  "channels": ["inbox"],
+  "metadata": {
+    "level": "error",     // info | success | warning | error — how it should look
+    "toast": true,        // whether it should interrupt rather than wait to be opened
+    "invoiceId": "1041",  // yours. Round-trips untouched.
+    "tab": "billing"      // also yours.
+  }
+}
+```
+
+**Hermes will never interpret a third key.** That is a commitment, not an implementation detail:
+reserving another bare top-level name later would break anyone already using it for their own data.
+
+`level` and `toast` are independent, deliberately. An `error` with no `toast` is styled as an error
+in the list without interrupting anyone; an `info` with `toast: true` is a passing confirmation.
+
+A few properties worth knowing:
+
+- **`level` is validated at the send edge.** An unrecognised value is a `422`, naming the allowed
+  set — it is not coerced to `info` and not silently dropped, because `level` is optional and so
+  only a caller who typed something wrong is affected.
+- **Clients treat an unknown `level` as no level.** Levels may be added; a client that predates one
+  must stay renderable rather than throw.
+- **`toast` is a hint, not a channel.** It does not affect routing, and a client with no transient
+  surface may ignore it.
+- **The object is capped at 4 KiB** serialized.
+- **"Verbatim" means a semantic round trip, not byte-for-byte.** It is stored as `jsonb`, which does
+  not preserve key order and collapses duplicate keys; numbers come back as JSON numbers.
+
+The widget renders `level` as a coloured rail on the row, so a severity is still visible when the
+user opens the panel later — not only for the few seconds a toast is on screen.
+
+## Toasts
+
+Hermes renders no toast UI and depends on no toast library. React gets a hook plus a small adapter
+interface, so you keep whichever toast component you already use.
+
+```bash
+pnpm add sonner   # or bring your own
+```
+
+```tsx
+import { useHermes, useHermesToasts } from "@hermes-notifications/react";
+import { sonnerAdapter } from "@hermes-notifications/react/sonner";
+import { Toaster } from "sonner";
+
+function Toasts() {
+  useHermesToasts(useHermes(), { toast: sonnerAdapter });
+  return <Toaster position="top-right" />;
+}
+```
+
+`sonner` is an **optional peer dependency**, and the adapter lives on its own subpath — importing
+`@hermes-notifications/react` never pulls it in, so a host that renders its own toasts pays nothing
+and a server component still imports cleanly.
+
+**To swap it**, pass a different object. That is the whole integration:
+
+```ts
+const myToaster: HermesToastAdapter = {
+  info:    (t) => mySnackbar.show(t.title, { kind: "info" }),
+  success: (t) => mySnackbar.show(t.title, { kind: "ok" }),
+  warning: (t) => mySnackbar.show(t.title, { kind: "warn" }),
+  error:   (t) => mySnackbar.show(t.title, { kind: "error" }),
+  show:    (t) => mySnackbar.show(t.title),          // no level, or one we don't know
+  dismiss: (handle) => mySnackbar.close(handle),     // optional
+};
+```
+
+Each method receives the whole payload — `{ id, title, body, level, toastRequested, notification,
+event }` — so an adapter that wants to render the action link or the timestamp can.
+
+### Two behaviours people assume are bugs
+
+**Only live arrivals toast.** The hook listens to websocket publications, not to the initial list and
+not to the REST repair that runs after a reconnect. Loading a page with forty unread notifications
+produces no toasts, and neither does a laptop waking up after an hour.
+
+**Toasts fire whether or not the panel is open.** The SDK cannot know whether it is — a headless host
+has no panel. To suppress them while the user is already reading their inbox, track `onOpenChange`
+on `<HermesInbox>` and consult it from `shouldToast`:
+
+```tsx
+useHermesToasts(client, {
+  toast: sonnerAdapter,
+  shouldToast: (payload) => payload.toastRequested && !panelOpen,
+});
+```
+
+Options: `enabled`, `shouldToast`, `dismissOnRead` (retract when read elsewhere — needs `dismiss`),
+`dedupeScope`, `dedupeSize`. Duplicate arrivals are suppressed by notification id, shared across
+every hook instance driving the same client, so two mounted consumers toast once between them.
+
+### Without React
+
+The custom element emits everything needed; there is no toast machinery to miss:
+
+```js
+document.querySelector("hermes-inbox").addEventListener("hermes-notification", (event) => {
+  const { title, body, metadata } = event.detail;
+  if (metadata?.toast) myToast(metadata.level ?? "info", title, body);
+});
+```
+
+That is deliberate rather than an omission. A toast is a page-level surface — fixed position,
+stacked, above your modals, in your design language — and the element is an inline-block bell
+anchored inside your header. Rendering toasts from inside its shadow root would either trap them in
+your header's stacking context or portal them somewhere you cannot style.
 
 ## Run the demo
 

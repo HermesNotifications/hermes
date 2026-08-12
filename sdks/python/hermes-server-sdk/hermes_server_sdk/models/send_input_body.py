@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from hermes_server_sdk.models.send_content import SendContent
+from hermes_server_sdk.models.send_input_body_metadata import SendInputBodyMetadata
 from hermes_server_sdk.models.send_recipient import SendRecipient
 from typing import Optional, Set
 from typing_extensions import Self
@@ -32,9 +33,11 @@ class SendInputBody(BaseModel):
     channels: Optional[List[StrictStr]] = Field(default=None, description="Explicit delivery channels")
     content: Optional[SendContent] = Field(default=None, description="Direct content (mutually exclusive with template)")
     data: Optional[Dict[str, Any]] = Field(default=None, description="Template data for rendering")
+    metadata: Optional[SendInputBodyMetadata] = None
     template: Optional[StrictStr] = Field(default=None, description="Notification template slug (mutually exclusive with content)")
     to: SendRecipient = Field(description="Notification recipient")
-    __properties: ClassVar[List[str]] = ["$schema", "channels", "content", "data", "template", "to"]
+    additional_properties: Dict[str, Any] = {}
+    __properties: ClassVar[List[str]] = ["$schema", "channels", "content", "data", "metadata", "template", "to"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -67,9 +70,11 @@ class SendInputBody(BaseModel):
           were set at model initialization. Other fields with value `None`
           are ignored.
         * OpenAPI `readOnly` fields are excluded.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
             "var_schema",
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -80,9 +85,17 @@ class SendInputBody(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of content
         if self.content:
             _dict['content'] = self.content.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of metadata
+        if self.metadata:
+            _dict['metadata'] = self.metadata.to_dict()
         # override the default output from pydantic by calling `to_dict()` of to
         if self.to:
             _dict['to'] = self.to.to_dict()
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+
         # set to None if channels (nullable) is None
         # and model_fields_set contains the field
         if self.channels is None and "channels" in self.model_fields_set:
@@ -104,9 +117,15 @@ class SendInputBody(BaseModel):
             "channels": obj.get("channels"),
             "content": SendContent.from_dict(obj["content"]) if obj.get("content") is not None else None,
             "data": obj.get("data"),
+            "metadata": SendInputBodyMetadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None,
             "template": obj.get("template"),
             "to": SendRecipient.from_dict(obj["to"]) if obj.get("to") is not None else None
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 

@@ -55,12 +55,14 @@ namespace Hermes.ServerSdk.Client
             _jsonOptions.Converters.Add(new NotificationJsonConverter());
             _jsonOptions.Converters.Add(new NotificationEventJsonConverter());
             _jsonOptions.Converters.Add(new NotificationItemJsonConverter());
+            _jsonOptions.Converters.Add(new NotificationMetadataJsonConverter());
             _jsonOptions.Converters.Add(new NotificationStatusOutputBodyJsonConverter());
             _jsonOptions.Converters.Add(new NotificationTemplateJsonConverter());
             _jsonOptions.Converters.Add(new OrganizationItemJsonConverter());
             _jsonOptions.Converters.Add(new RateLimitErrorJsonConverter());
             _jsonOptions.Converters.Add(new SendContentJsonConverter());
             _jsonOptions.Converters.Add(new SendInputBodyJsonConverter());
+            _jsonOptions.Converters.Add(new SendInputBodyMetadataJsonConverter());
             _jsonOptions.Converters.Add(new SendOutputBodyJsonConverter());
             _jsonOptions.Converters.Add(new SendRecipientJsonConverter());
             _jsonOptions.Converters.Add(new SetAPIKeyRateLimitInputBodyJsonConverter());

@@ -111,6 +111,8 @@ export async function sendNotification(input: {
   body: string;
   actionUrl?: string;
   actionLabel?: string;
+  /** Opaque metadata. Hermes reads `level` and `toast`; anything else round-trips. */
+  metadata?: Record<string, unknown>;
 }): Promise<{ notificationId: string }> {
   const body = (await expectOk(
     await fetch(`${SEND_URL}/v1/send`, {
@@ -124,6 +126,7 @@ export async function sendNotification(input: {
           ...(input.actionUrl ? { action_url: input.actionUrl } : {}),
           ...(input.actionLabel ? { action_label: input.actionLabel } : {}),
         },
+        ...(input.metadata ? { metadata: input.metadata } : {}),
         channels: ["inbox"],
       }),
     }),

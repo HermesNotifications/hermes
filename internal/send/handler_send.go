@@ -6,12 +6,15 @@ package send
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/hermes-notifications/hermes/internal/auth"
 	id "github.com/hermes-notifications/hermes/internal/id/v2"
+	"github.com/hermes-notifications/hermes/internal/models"
 	hermenats "github.com/hermes-notifications/hermes/internal/nats"
 	"github.com/hermes-notifications/hermes/internal/observability"
 	"go.opentelemetry.io/otel/metric"
@@ -49,7 +52,10 @@ type sendInput struct {
 		Template string         `json:"template,omitempty" doc:"Notification template slug (mutually exclusive with content)"`
 		Content  *sendContent   `json:"content,omitempty" doc:"Direct content (mutually exclusive with template)"`
 		Data     map[string]any `json:"data,omitempty" doc:"Template data for rendering"`
-		Channels []string       `json:"channels,omitempty" doc:"Explicit delivery channels"`
+		// Metadata is stored with the notification and echoed back to the recipient's client.
+		// Distinct from Data above, which is template render input and is never persisted.
+		Metadata models.NotificationMetadata `json:"metadata,omitempty" doc:"Opaque metadata echoed back on the notification. Hermes reads only 'level' and 'toast'."`
+		Channels []string                    `json:"channels,omitempty" doc:"Explicit delivery channels"`
 	}
 }
 
@@ -92,6 +98,27 @@ func (s *Server) registerSendRoutes() {
 			return nil, huma.Error400BadRequest("channels required for direct content sends")
 		}
 
+		// Bound the opaque blob here, at the only point in the pipeline with a synchronous
+		// channel back to the caller. Everything past notification.send is asynchronous, so a
+		// value rejected later could only be logged. It is also the point *before* the value is
+		// amplified into a row, one DeliveryMessage per channel, and a websocket frame per
+		// connected client.
+		//
+		// `level` needs no check here: models.NotificationMetadata.Schema declares the enum, so
+		// huma has already rejected an unrecognised value with a 422 naming the allowed set.
+		if len(req.Metadata) > 0 {
+			encoded, err := json.Marshal(req.Metadata)
+			if err != nil {
+				return nil, huma.Error400BadRequest("metadata must be JSON-serializable")
+			}
+			if len(encoded) > models.MaxMetadataBytes {
+				return nil, huma.Error400BadRequest(fmt.Sprintf(
+					"metadata is %d bytes, over the %d byte limit",
+					len(encoded), models.MaxMetadataBytes,
+				))
+			}
+		}
+
 		// Generate notification ID
 		notifID := id.Notification.New()
 
@@ -115,6 +142,7 @@ func (s *Server) registerSendRoutes() {
 			Metadata: hermenats.MessageMetadata{
 				Template: req.Template,
 			},
+			ClientMetadata: req.Metadata,
 			Data:           req.Data,
 			Channels:       req.Channels,
 			IdempotencyKey: idemKey,

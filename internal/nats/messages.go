@@ -7,6 +7,8 @@ package hermenats
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
 // SendMessage is published to notification.send by the Send service.
@@ -17,10 +19,17 @@ type SendMessage struct {
 	Contacts       map[string]string `json:"contacts,omitempty"` // per-send address overrides: address key -> address
 	Content        *MessageContent   `json:"content,omitempty"`
 	Metadata       MessageMetadata   `json:"metadata"`
-	Data           map[string]any    `json:"data,omitempty"`
-	Channels       []string          `json:"channels,omitempty"`
-	IdempotencyKey string            `json:"idempotency_key,omitempty"`
-	Attempt        int               `json:"attempt"`
+	// ClientMetadata is the sender's opaque object, bound for the recipient's client. A
+	// separate field from Metadata above, which is Hermes's own routing information about the
+	// template -- the two are unrelated despite the shared word, and folding this into it
+	// would not be wire-safe: during a rolling deploy an old Send publishes
+	// {"metadata":{"template":"welcome"}}, which a new Dispatch would decode as user metadata,
+	// find no template, and silently degrade a template send into an empty direct-content one.
+	ClientMetadata models.NotificationMetadata `json:"client_metadata,omitempty"`
+	Data           map[string]any              `json:"data,omitempty"`
+	Channels       []string                    `json:"channels,omitempty"`
+	IdempotencyKey string                      `json:"idempotency_key,omitempty"`
+	Attempt        int                         `json:"attempt"`
 }
 
 type MessageContent struct {
@@ -47,8 +56,12 @@ type DeliveryMessage struct {
 	Channel        string          `json:"channel"`
 	Content        MessageContent  `json:"content"`
 	Metadata       MessageMetadata `json:"metadata"`
-	Recipient      Recipient       `json:"recipient"`
-	Attempt        int             `json:"attempt"`
+	// ClientMetadata must travel on the message rather than being looked up: cmd/worker-inbox
+	// wires NATS, Redis and Centrifugo and no database, so the process that publishes the
+	// realtime event has no way to read it back.
+	ClientMetadata models.NotificationMetadata `json:"client_metadata,omitempty"`
+	Recipient      Recipient                   `json:"recipient"`
+	Attempt        int                         `json:"attempt"`
 }
 
 // EventMessage is published to notification.events by Dispatch and Workers.

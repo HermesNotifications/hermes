@@ -94,13 +94,20 @@ A user's opt-in/out for a subscription. Composite PK `(user_id, subscription_id)
 One notification to one user. `id` (base62, time-sortable), `organization_id` → `organizations`,
 `user_id` → `users`, `template_id` → `notification_templates` (nullable, for direct-content
 sends), `category_id` → `subscription_categories` (nullable), `title`, `body`, `action_url`,
-`action_label`, `idempotency_key`, `channels` (text[]), `status` (default `pending`), and the
-lifecycle timestamps `created_at`, `sent_at`, `delivered_at`, `read_at`, `archived_at`,
-`deleted_at`.
+`action_label`, `idempotency_key`, `channels` (text[]), `status` (default `pending`),
+`metadata` (JSONB, nullable), and the lifecycle timestamps `created_at`, `sent_at`,
+`delivered_at`, `read_at`, `archived_at`, `deleted_at`.
+- **`metadata`** is sender-supplied and opaque, echoed back on the inbox row and on the
+  `notification.new` event. Hermes reads exactly two keys from it — `level`
+  (`info`/`success`/`warning`/`error`) and `toast` (bool) — and never interprets any other.
+  Capped at 4 KiB at the send edge. NULL means none was supplied. See
+  [ADR 0019](adr/0019-notification-metadata-passthrough.md).
 - **Inbox index:** `(user_id, created_at DESC)` partial, `WHERE archived_at IS NULL AND
   deleted_at IS NULL` — backs the cursor-paginated inbox.
 - **Idempotency index:** unique `(organization_id, idempotency_key)` partial,
   `WHERE idempotency_key IS NOT NULL` — enforces dedup at the database.
+- **Unread index:** `(user_id)` partial, `WHERE read_at IS NULL AND archived_at IS NULL AND
+  deleted_at IS NULL` — backs the unread count, and shrinks as users read.
 
 ### `notification_events`
 Append-only delivery log. `id`, `notification_id`, `channel`, `event` (e.g. `email.sent`,

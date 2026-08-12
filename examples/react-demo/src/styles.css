@@ -120,18 +120,46 @@ body {
   padding: 12px 24px;
   background: var(--panel-bg);
   border-bottom: 1px solid var(--line);
+  /* Every child below declares its own flex behaviour. Without that, the search input's
+     intrinsic width becomes its flex basis, the row overflows, and the browser takes the
+     difference out of whatever is left — which is how the theme select lost half its label
+     and the avatar became an ellipse. */
+  flex-wrap: nowrap;
 }
 
 .header-title {
   font-weight: 600;
   margin: 0;
   font-size: 16px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .header-search {
+  /* Shrink-to-fit rather than a hard floor: `min-width: 220px` cannot be honoured on a narrow
+     viewport, so it forced an overflow instead of yielding. This yields. */
+  flex: 0 1 260px;
+  min-width: 160px;
   margin-left: auto;
-  min-width: 220px;
   padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--page-bg);
+  color: inherit;
+  font: inherit;
+}
+
+/*
+ * The theme switcher.
+ *
+ * It needs its own rule because the panel form styling below is deliberately scoped to `.field`
+ * now — a bare `select { width: 100% }` in a shared stylesheet is a global, and this control is
+ * the proof: it was being stretched to the full header width and then squeezed back to a stub.
+ */
+.header-select {
+  flex: 0 0 auto;
+  /* Room for the native disclosure arrow, which otherwise sits on top of "Default". */
+  padding: 7px 28px 7px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--page-bg);
@@ -143,11 +171,15 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 0 0 auto;
 }
 
 .avatar {
   width: 32px;
   height: 32px;
+  /* A fixed width is not enough in a flex row: the initial `flex-shrink: 1` still compresses it,
+     which is what turned a 32px circle into an ellipse. */
+  flex: 0 0 auto;
   border-radius: 50%;
   background: var(--brand);
   color: #fff;
@@ -225,7 +257,20 @@ main {
 
 /* --- forms --- */
 
-label {
+/*
+ * Panel form controls, opted into by class rather than matched by element type.
+ *
+ * These were bare type selectors (`input[type="text"], select { width: 100% }`), which is a
+ * global in a shared stylesheet: they were written for the side panels but also matched the
+ * header's search box and theme switcher, stretching both to the full header width and
+ * overflowing the flex row. Everything to the right — the select's own label, then the avatar —
+ * got squeezed to absorb it.
+ *
+ * Scoping by ancestor (`.card input[type="text"]`) would fix today's symptom in one line, but it
+ * relocates the fragility rather than removing it: the next card placed in a header, or a modal,
+ * reintroduces exactly this bug. An explicit class cannot leak.
+ */
+.field-label {
   display: block;
   font-size: 12px;
   font-weight: 600;
@@ -233,9 +278,7 @@ label {
   margin-bottom: 4px;
 }
 
-input[type="text"],
-input[type="url"],
-select {
+.field {
   width: 100%;
   padding: 7px 10px;
   border: 1px solid var(--line);
@@ -244,6 +287,18 @@ select {
   color: inherit;
   font: inherit;
   margin-bottom: 10px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.checkbox-field input {
+  margin: 0;
 }
 
 button {
@@ -353,12 +408,18 @@ dl.session dd {
  * ------------------------------------------------------------------------ */
 
 hermes-inbox {
+  /* The widget is a flex item of .header-actions; without this it is shrinkable like anything
+     else, and a narrow viewport would clip the bell rather than the search box. */
+  flex: 0 0 auto;
+
   --hermes-font-family: inherit;
   --hermes-text-color: var(--ink);
   --hermes-muted-color: var(--ink-muted);
   --hermes-border-color: var(--line);
   --hermes-popover-bg: var(--panel-bg);
-  --hermes-trigger-border: 1px solid var(--line);
+  /* No --hermes-trigger-border here: the widget now ships borderless, and a bell in a box reads
+     as a form control rather than an icon button. `--hermes-trigger-border` is still the lever
+     for anyone who wants the box back. */
   --hermes-trigger-hover-bg: var(--page-bg);
   --hermes-accent-color: var(--brand);
   --hermes-badge-bg: #ef4444;
@@ -379,3 +440,102 @@ hermes-inbox::part(trigger) {
 hermes-inbox::part(badge) {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------------
+ * A worked restyling, scoped to the "brand" theme.
+ *
+ * The default and dark themes above show the *minimal* integration: set a dozen custom
+ * properties and the widget looks at home. This block is the other end — what it takes to make
+ * the widget look like it was built for one specific design system, without forking it.
+ *
+ * Switch the Theme select to "Brand" to see it. Everything below uses parts and properties that
+ * ship with the element; nothing here required a change to the widget.
+ * ------------------------------------------------------------------------ */
+
+:root[data-theme="brand"] hermes-inbox {
+  --hermes-popover-width: 420px;
+  --hermes-popover-radius: 18px;
+  --hermes-popover-shadow: 0 20px 48px rgba(42, 26, 16, 0.18);
+  --hermes-badge-bg: var(--brand);
+  --hermes-badge-size: 20px;
+  --hermes-focus-ring: 2px solid var(--brand);
+  /* Three lines of body text rather than two, because this panel is wider. */
+  --hermes-body-line-clamp: 3;
+}
+
+/* A circular, tinted icon button. The bell itself is drawn with currentColor, so setting
+   `color` recolours the glyph — no icon slot needed. */
+:root[data-theme="brand"] hermes-inbox::part(trigger) {
+  border-radius: 999px;
+  padding: 10px;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+:root[data-theme="brand"] hermes-inbox::part(trigger):hover {
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
+}
+
+/* Punch the badge out of the bell with a ring in the header's own colour. */
+:root[data-theme="brand"] hermes-inbox::part(badge) {
+  box-shadow: 0 0 0 2px var(--panel-bg);
+}
+
+:root[data-theme="brand"] hermes-inbox::part(header) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand) 12%, transparent),
+    transparent
+  );
+  padding: 18px 18px 14px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+/* Rows: no dividers, and an accent rail instead of the unread dot. */
+:root[data-theme="brand"] hermes-inbox::part(notification) {
+  border-bottom: none;
+  padding: 14px 18px;
+}
+:root[data-theme="brand"] hermes-inbox::part(notification unread) {
+  background: transparent;
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+:root[data-theme="brand"] hermes-inbox::part(unread-dot),
+:root[data-theme="brand"] hermes-inbox::part(read-dot) {
+  display: none;
+}
+
+:root[data-theme="brand"] hermes-inbox::part(title) {
+  font-weight: 650;
+}
+
+/* The action label as a pill, and the row controls to match. */
+:root[data-theme="brand"] hermes-inbox::part(action-label) {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-top: 8px;
+}
+:root[data-theme="brand"] hermes-inbox::part(action-btn) {
+  border-radius: 999px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+:root[data-theme="brand"] hermes-inbox::part(load-more) {
+  border-radius: 999px;
+}
+:root[data-theme="brand"] hermes-inbox::part(expand-toggle) {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+
+/*
+ * One limitation worth knowing before you spend an afternoon on it: `::part()` may appear only
+ * once, at the end of a compound selector, and nothing may descend past it. So
+ * `hermes-inbox::part(notification):hover` is legal, but there is no way to express "reveal
+ * ::part(action-btn) when ::part(notification) is hovered" — the popular reveal-on-row-hover
+ * pattern is simply not available to a consumer. It would have to be the element's own
+ * behaviour, behind a custom property.
+ */

@@ -231,6 +231,16 @@ export interface SendOptions {
     actionLabel?: string;
   };
   data?: Record<string, unknown>;
+  /**
+   * Opaque metadata stored with the notification and echoed back to the recipient's client.
+   *
+   * Hermes reads `level` and `toast`; every other key round-trips untouched. Unlike `data`,
+   * which is template render input and never leaves the server.
+   */
+  metadata?: {
+    level?: "info" | "success" | "warning" | "error";
+    toast?: boolean;
+  } & Record<string, unknown>;
   channels?: string[];
   idempotencyKey?: string;
 }
@@ -261,6 +271,7 @@ export class NotificationsService {
             }
           : undefined,
         data: options.data,
+        metadata: options.metadata,
         channels: options.channels,
       },
     });

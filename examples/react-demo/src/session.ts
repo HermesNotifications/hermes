@@ -79,15 +79,34 @@ export interface TestSendInput {
   actionUrl?: string;
   actionLabel?: string;
   count?: number;
+  /** Becomes `metadata.level` — how the widget and the toast present it. */
+  level?: "info" | "success" | "warning" | "error";
+  /** Becomes `metadata.toast` — whether it interrupts rather than waiting to be opened. */
+  toast?: boolean;
+}
+
+/**
+ * Compose the two reserved keys into a metadata object, or nothing at all.
+ *
+ * Absent rather than `{}` when neither is set, so a plain send produces exactly the request an
+ * integration that has never heard of metadata would produce.
+ */
+function metadataFor(input: TestSendInput): Record<string, unknown> | undefined {
+  const metadata: Record<string, unknown> = {};
+  if (input.level) metadata.level = input.level;
+  if (input.toast) metadata.toast = true;
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 /** Ask the demo backend to send a notification to the current user. */
 export async function testSend(input: TestSendInput): Promise<{ notificationIds: string[] }> {
+  const { level, toast, ...rest } = input;
+  const metadata = metadataFor(input);
   const response = await fetch("/api/test-send", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...rest, ...(metadata ? { metadata } : {}) }),
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");

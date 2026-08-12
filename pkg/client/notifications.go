@@ -28,6 +28,10 @@ type SendRequest struct {
 	Template string         `json:"template,omitempty"`
 	Content  *Content       `json:"content,omitempty"`
 	Data     map[string]any `json:"data,omitempty"`
+	// Metadata is stored with the notification and echoed back to the recipient's client.
+	// Hermes reads "level" ("info"/"success"/"warning"/"error") and "toast" (bool); every
+	// other key round-trips untouched. Unlike Data, which is only template render input.
+	Metadata map[string]any `json:"metadata,omitempty"`
 	Channels []string       `json:"channels,omitempty"`
 }
 

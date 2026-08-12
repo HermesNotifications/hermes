@@ -75,10 +75,13 @@ export function SessionPanel({
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <label htmlFor="become-user">Act as another user</label>
+        <label className="field-label" htmlFor="become-user">
+          Act as another user
+        </label>
         <div className="field-row">
           <input
             id="become-user"
+            className="field"
             type="text"
             value={userId}
             onChange={(event) => setUserId(event.target.value)}

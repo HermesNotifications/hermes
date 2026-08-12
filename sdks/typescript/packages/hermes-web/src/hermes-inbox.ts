@@ -3,8 +3,9 @@
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 import { LitElement, html, css, nothing, type TemplateResult } from "lit";
-import { property } from "lit/decorators.js";
+import { property, state } from "lit/decorators.js";
 import {
+  notificationLevel,
   relativeTime,
   type HermesClient,
   type HermesError,
@@ -47,6 +48,30 @@ export function safeActionUrl(raw: string | undefined): string | undefined {
     return undefined;
   }
   return SAFE_ACTION_PROTOCOLS.has(parsed.protocol) ? trimmed : undefined;
+}
+
+/** The subset of an element's box metrics that decides whether its text is clipped. */
+export interface TruncationBox {
+  scrollHeight: number;
+  clientHeight: number;
+  scrollWidth: number;
+  clientWidth: number;
+}
+
+/**
+ * Whether either dimension of a box is clipping its content.
+ *
+ * Extracted and exported because it is the one part of the overflow probe that can be tested
+ * without a layout engine: jsdom reports every one of these as 0, so a test there can only
+ * assert the arithmetic, never the measurement.
+ *
+ * The one-pixel tolerance is not defensive padding. Line boxes land on fractional pixels at
+ * non-integer zoom and with some fonts, so `scrollHeight` exceeds `clientHeight` by a fraction
+ * on rows that are visually not clipped at all — and a toggle that appears and disappears as
+ * the user zooms is worse than no toggle.
+ */
+export function isTruncated(box: TruncationBox): boolean {
+  return box.scrollHeight > box.clientHeight + 1 || box.scrollWidth > box.clientWidth + 1;
 }
 
 /**
@@ -94,6 +119,8 @@ export class HermesInbox extends LitElement {
   @property({ type: Boolean, reflect: true }) open = false;
   @property() heading = "Notifications";
   @property({ attribute: "empty-text" }) emptyText = "No notifications";
+  @property({ attribute: "expand-text" }) expandText = "Show more";
+  @property({ attribute: "collapse-text" }) collapseText = "Show less";
 
   /**
    * Supplies a fresh token on demand. A property rather than an attribute because a
@@ -106,6 +133,34 @@ export class HermesInbox extends LitElement {
 
   /** Overrides how the client is constructed. Escape hatch for tests and wrappers. */
   @property({ attribute: false }) clientFactory?: ClientFactory;
+
+  /**
+   * Overrides how a row is judged to be clipped. Escape hatch for tests, mirroring
+   * `clientFactory`.
+   *
+   * The real probe reads layout, and jsdom has none — every box there measures zero, so the
+   * toggle would never render and the whole behaviour would be assertable only in a browser.
+   * Injecting the predicate lets the unit suite cover the markup, the ARIA wiring and the
+   * click semantics, and leaves Playwright to assert the one thing that genuinely needs a
+   * layout engine: that the clamp lifts.
+   */
+  @property({ attribute: false }) overflowProbe?: (row: {
+    id: string;
+    title: HTMLElement;
+    body: HTMLElement;
+  }) => boolean;
+
+  /** Rows the user has expanded, by notification id. */
+  @state() private expanded = new Set<string>();
+
+  /** Rows whose text is clipped and therefore need a toggle, by notification id. */
+  @state() private overflowing = new Set<string>();
+
+  /** Watches row bodies for reflow. Absent in jsdom, and lazily created for that reason. */
+  private resizeObserver?: ResizeObserver;
+
+  /** Coalesces observer callbacks into one re-measure per frame. */
+  private remeasureHandle?: number;
 
   private controller = new InboxController(this, {
     onNotification: (event: NewNotificationEvent) => this.emit("hermes-notification", event),
@@ -174,13 +229,25 @@ export class HermesInbox extends LitElement {
       border: 0;
     }
 
+    /*
+     * Borderless by default: a bell in a box reads as a form control sitting in someone's
+     * header, not as an icon button.
+     *
+     * The default is a *transparent* border rather than \`none\` on purpose. It keeps the box
+     * metrics identical, so a host that sets --hermes-trigger-border to put the box back gets
+     * exactly the old geometry, and nobody gets a 2px reflow in either direction. With the
+     * border invisible, --hermes-trigger-hover-bg below is the only hover affordance, and the
+     * :focus-visible outline above is the only focus one -- both must stay.
+     */
     .trigger {
       position: relative;
       cursor: pointer;
       background: var(--hermes-trigger-bg, transparent);
-      border: var(--hermes-trigger-border, 1px solid #e0e0e0);
+      border: var(--hermes-trigger-border, 1px solid transparent);
       border-radius: var(--hermes-trigger-radius, 8px);
-      padding: 8px;
+      /* 20px icon + 8px padding either side = a 36px target, clearing the 24x24 minimum in
+         WCAG 2.2 SC 2.5.8. Do not tighten this now that the border is gone. */
+      padding: var(--hermes-trigger-padding, 8px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -278,6 +345,33 @@ export class HermesInbox extends LitElement {
       background: var(--hermes-unread-hover-bg, #e5f0ff);
     }
 
+    /*
+     * A restrained default for a declared level: an inset rail rather than an icon.
+     *
+     * An icon would need a size, a colour, an accessible name and a glyph per level -- four
+     * design-system decisions this element has no business making for its host. A rail makes
+     * the level visible, adds nothing to the accessibility tree (the level is decoration; the
+     * text carries the meaning), and a host wanting icons can add one on
+     * ::part(notification level-error)::before.
+     *
+     * Rows with no level are untouched, so nothing changes for existing embeds.
+     */
+    .notification[data-level] {
+      box-shadow: inset 3px 0 0 var(--hermes-level-color, transparent);
+    }
+    .notification[data-level="info"] {
+      --hermes-level-color: var(--hermes-level-info-color, #3b82f6);
+    }
+    .notification[data-level="success"] {
+      --hermes-level-color: var(--hermes-level-success-color, #16a34a);
+    }
+    .notification[data-level="warning"] {
+      --hermes-level-color: var(--hermes-level-warning-color, #d97706);
+    }
+    .notification[data-level="error"] {
+      --hermes-level-color: var(--hermes-level-error-color, #dc2626);
+    }
+
     .unread-dot {
       flex-shrink: 0;
       width: 8px;
@@ -293,8 +387,15 @@ export class HermesInbox extends LitElement {
       margin-top: 6px;
     }
 
-    .notification-content {
+    /* Owns the column that the row target and the expand toggle share. The toggle is a
+       sibling of the target rather than a child, because the target is an <a> or a <button>
+       and nesting a control inside either is invalid and unreachable by keyboard. */
+    .notification-main {
       flex: 1;
+      min-width: 0;
+    }
+
+    .notification-content {
       min-width: 0;
       text-align: left;
     }
@@ -321,13 +422,43 @@ export class HermesInbox extends LitElement {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    /* An ellipsised title above a fully expanded body reads as a bug, so the toggle lifts
+       both. One control, one concept. */
+    .notification-title[data-expanded] {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+    }
     .notification-body {
       color: var(--hermes-muted-color, #666);
       font-size: 13px;
       display: -webkit-box;
-      -webkit-line-clamp: 2;
+      -webkit-line-clamp: var(--hermes-body-line-clamp, 2);
+      line-clamp: var(--hermes-body-line-clamp, 2);
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+    /* Leaving -webkit-box is what actually lifts the clamp; unsetting the line count alone
+       does not, in either engine. */
+    .notification-body[data-expanded] {
+      display: block;
+      -webkit-line-clamp: none;
+      line-clamp: none;
+      overflow: visible;
+    }
+
+    .expand-toggle {
+      background: none;
+      border: none;
+      padding: 2px 0;
+      margin-top: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--hermes-expand-color, var(--hermes-accent-color, #3b82f6));
+    }
+    .expand-toggle:hover {
+      text-decoration: underline;
     }
     .notification-time {
       color: var(--hermes-muted-color, #666);
@@ -416,6 +547,7 @@ export class HermesInbox extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.stopDismissListeners();
+    this.stopObservingRows();
   }
 
   updated(): void {
@@ -424,6 +556,100 @@ export class HermesInbox extends LitElement {
     // is what previously let `user-id` changes go unnoticed while double-applying the two
     // fields that *were* watched.
     this.applyConfig();
+    this.measureRows();
+  }
+
+  /**
+   * Work out which rows are clipped, and keep the observer pointed at the current ones.
+   *
+   * Runs after every render. It re-renders at most once more, because the toggle it may add
+   * sits *below* the body and so cannot change the body's own box — the second pass measures
+   * identically and changes nothing.
+   */
+  private measureRows(): void {
+    if (!this.open) {
+      this.stopObservingRows();
+      return;
+    }
+
+    const rows = this.renderRoot.querySelectorAll<HTMLElement>(".notification[data-id]");
+    const next = new Set<string>();
+    const live = new Set<string>();
+
+    for (const row of rows) {
+      const id = row.dataset.id;
+      if (id === undefined) continue;
+      live.add(id);
+
+      const title = row.querySelector<HTMLElement>(".notification-title");
+      const body = row.querySelector<HTMLElement>(".notification-body");
+      if (!title || !body) continue;
+
+      this.observeRow(body);
+
+      // An expanded row has its clamp lifted, so it measures as fitting. Re-measuring it would
+      // drop it from the set, remove the button the user just pressed, and take the focus with
+      // it — so its membership is carried over untouched instead.
+      if (this.expanded.has(id)) {
+        next.add(id);
+        continue;
+      }
+
+      const truncated = this.overflowProbe
+        ? this.overflowProbe({ id, title, body })
+        : isTruncated(body) || isTruncated(title);
+      if (truncated) next.add(id);
+    }
+
+    // Drop ids for rows that have left the list, so archiving or refreshing does not leak
+    // state for the lifetime of the session.
+    const expanded = intersect(this.expanded, live);
+    if (expanded.size !== this.expanded.size) this.expanded = expanded;
+
+    if (!sameMembers(next, this.overflowing)) this.overflowing = next;
+  }
+
+  private observeRow(body: HTMLElement): void {
+    // jsdom has no ResizeObserver, and an unguarded constructor would throw on import of
+    // every test in this package rather than in one obvious place.
+    if (typeof ResizeObserver === "undefined") return;
+    this.resizeObserver ??= new ResizeObserver(() => this.scheduleRemeasure());
+    // observe() on an already-observed target is a no-op, so this needs no bookkeeping.
+    this.resizeObserver.observe(body);
+  }
+
+  /**
+   * Re-measure once on the next frame.
+   *
+   * Coalesced because a viewport resize fires the observer once per row, and because writing
+   * to reactive state from inside a ResizeObserver callback synchronously is what produces
+   * "ResizeObserver loop completed with undelivered notifications" in the console.
+   */
+  private scheduleRemeasure(): void {
+    if (this.remeasureHandle !== undefined) return;
+    this.remeasureHandle = requestAnimationFrame(() => {
+      this.remeasureHandle = undefined;
+      // Clearing the non-expanded entries forces the next pass to measure them afresh; without
+      // it a row that stopped being clipped would keep its toggle.
+      this.overflowing = intersect(this.overflowing, this.expanded);
+      this.requestUpdate();
+    });
+  }
+
+  private stopObservingRows(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
+    if (this.remeasureHandle !== undefined) {
+      cancelAnimationFrame(this.remeasureHandle);
+      this.remeasureHandle = undefined;
+    }
+  }
+
+  /** Expand or collapse one row. Deliberately does not mark it read or follow its action. */
+  private toggleExpanded(id: string): void {
+    const next = new Set(this.expanded);
+    if (!next.delete(id)) next.add(id);
+    this.expanded = next;
   }
 
   private applyConfig(): void {
@@ -589,9 +815,23 @@ export class HermesInbox extends LitElement {
     const actionUrl = safeActionUrl(notification.action_url);
     const hasAction = actionUrl !== undefined;
 
+    // A level that only ever appeared in a toast, for four seconds, would be half a feature:
+    // reopening the panel should still show which rows were errors. The token goes on the same
+    // multi-token `part` the read/unread state already uses, so a host can select on it.
+    const level = notificationLevel(notification);
+    const isExpanded = this.expanded.has(notification.id);
+    const canExpand = this.overflowing.has(notification.id);
+    // Notification ids are Base62 (`internal/id/v2`), so they are safe in an id attribute and
+    // in a selector with no escaping. Anything else here would need CSS.escape.
+    const bodyId = `hermes-body-${notification.id}`;
+
     const body = html`
-      <div class="notification-title" part="title">${notification.title}</div>
-      <div class="notification-body" part="body">${notification.body}</div>
+      <div class="notification-title" part="title" ?data-expanded=${isExpanded}>
+        ${notification.title}
+      </div>
+      <div class="notification-body" part="body" id=${bodyId} ?data-expanded=${isExpanded}>
+        ${notification.body}
+      </div>
       <div class="notification-time" part="time">
         ${relativeTime(notification.created_at)}
       </div>
@@ -605,32 +845,64 @@ export class HermesInbox extends LitElement {
     // An <a> when there is somewhere to go, a <button> otherwise — either way a real
     // interactive element, so the row is reachable by keyboard without any roving-tabindex
     // machinery. Previously rows were plain divs and entirely unreachable.
+    //
+    // Both carry part="row-target" so a host can reach the row itself; previously only the
+    // <a> was addressable, and the plain <button> row could not be styled from outside at all.
     const target = hasAction
       ? html`<a
           class="row-target"
-          part="action-link"
+          part="row-target action-link"
           href=${actionUrl ?? "#"}
           @click=${(event: Event) => this.onActionActivate(event, notification)}
         >
-          <div class="notification-content">${body}</div>
+          <div class="notification-content" part="notification-content">${body}</div>
         </a>`
       : html`<button
           class="row-target"
+          part="row-target"
           type="button"
           @click=${() => this.onRowActivate(notification)}
         >
-          <div class="notification-content">${body}</div>
+          <div class="notification-content" part="notification-content">${body}</div>
         </button>`;
 
     return html`
       <div
         class="notification ${isUnread ? "unread" : ""}"
-        part="notification ${isUnread ? "unread" : "read"}"
+        part="notification ${isUnread ? "unread" : "read"}${isExpanded ? " expanded" : ""}${
+          level ? ` level-${level}` : ""
+        }"
+        data-id=${notification.id}
+        data-level=${level ?? nothing}
       >
         ${isUnread
           ? html`<div class="unread-dot" part="unread-dot"></div>`
           : html`<div class="read-dot" part="read-dot"></div>`}
-        ${target}
+        <div class="notification-main">
+          ${target}
+          <!--
+            A sibling of the row target, never a child: the target is an <a> or a <button>, and
+            a control nested inside either is invalid and unreachable by keyboard.
+
+            Because it sits outside the target and the row itself carries no click handler,
+            expanding provably cannot mark the row read or follow its action. There is
+            deliberately no stopPropagation() here — there is nothing to stop, and adding it
+            would hide a regression if that ever stopped being true.
+          -->
+          ${canExpand
+            ? html`<button
+                class="expand-toggle"
+                part="expand-toggle"
+                type="button"
+                aria-expanded=${isExpanded ? "true" : "false"}
+                aria-controls=${bodyId}
+                aria-label="${isExpanded ? this.collapseText : this.expandText} of ${notification.title}"
+                @click=${() => this.toggleExpanded(notification.id)}
+              >
+                ${isExpanded ? this.collapseText : this.expandText}
+              </button>`
+            : nothing}
+        </div>
         <div class="actions" part="actions">
           ${isUnread
             ? html`<button
@@ -678,6 +950,20 @@ function renderBellIcon(): TemplateResult {
 /** The page's own origin, or empty string where there is no document. */
 function defaultOrigin(): string {
   return typeof location === "undefined" ? "" : location.origin;
+}
+
+/** The members of `set` that are also in `keep`. */
+function intersect(set: ReadonlySet<string>, keep: ReadonlySet<string>): Set<string> {
+  const out = new Set<string>();
+  for (const value of set) if (keep.has(value)) out.add(value);
+  return out;
+}
+
+/** Whether two sets hold the same members. Guards the re-render, so measuring cannot loop. */
+function sameMembers(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) if (!b.has(value)) return false;
+  return true;
 }
 
 declare global {

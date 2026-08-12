@@ -14,7 +14,8 @@ source: docs/reviews/2026-07-27-architecture-review.md — finding 46; web inbox
 
 # ADR 0013: The embeddable inbox contract
 
-**Status:** Accepted (2026-07-30)  
+**Status:** Accepted (amended 2026-08-11: additive contract growth for row expansion, notification
+levels and a React toast hook; see the update note in Consequences)  
 **Date:** 2026-07-30  
 **Author:** Daryl Robbins
 
@@ -102,6 +103,36 @@ tracked separately. Aliasing the element under a second tag name registers a sub
 > diverged between the two implementations this ADR consolidated. It is optional because the
 > publishing worker has no database and cannot know the number when its cache has expired. The
 > identity fields (`category_id`, `organization_id`, `user_id`) are still absent.
+
+> **Update 2026-08-12 ([ADR 0019](0019-notification-metadata-passthrough.md)).** The contract
+> gains, all additively — a minor release, nothing removed or renamed:
+>
+> - **Parts:** `expand-toggle`, `row-target` (on *both* row branches; previously the plain
+>   `<button>` row carried no part at all and could not be reached from outside), and
+>   `notification-content`, which this document had listed for some time without the element ever
+>   emitting it. New tokens on `part="notification …"`: `expanded`, and `level-*` when the
+>   notification declares one.
+> - **Custom properties:** `--hermes-body-line-clamp`, `--hermes-expand-color`,
+>   `--hermes-trigger-padding`, and `--hermes-level-{info,success,warning,error}-color`.
+> - **Attributes:** `expand-text` and `collapse-text`, following `heading`/`empty-text` in keeping
+>   user-visible strings overridable rather than hardcoded English.
+> - **One changed default:** the bell's border is now `1px solid transparent` rather than
+>   `1px solid #e0e0e0`. A visual default change, not a contract break —
+>   `--hermes-trigger-border` remains the lever, and keeping a transparent border rather than
+>   `none` preserves the box metrics exactly, so restoring it cannot reflow anything.
+> - **Long rows expand.** The control is a *sibling* of the row's `<a>`/`<button>`, never a child,
+>   because a control nested inside either is invalid and unreachable by keyboard. It follows that
+>   expanding structurally cannot mark a row read or follow its action.
+>
+> **Toasts are explicitly not this element's job**, and that non-goal is the part most worth
+> recording here: it will be re-proposed. See ADR 0019's alternatives for the reasoning. React gets
+> a headless hook and an adapter interface instead; the framework-agnostic path is the existing
+> `hermes-notification` event, which now carries `metadata`. The two reserved keys are read in
+> `@hermes-notifications/client` (`inbox/metadata.ts`), consistent with this ADR's principle that
+> shared meaning lives in one place rather than once per consumer.
+>
+> The second subpath export (`@hermes-notifications/react/sonner`) needed no build change —
+> `tsc` already emits every file in `src/` — so the zero-bundler-except-`hermes-web` rule stands.
 
 ## Alternatives considered
 

@@ -80,6 +80,63 @@ func TestCreateAndGetNotification(t *testing.T) {
 	}
 }
 
+// DynamoDB is an equal store, not an afterthought, so metadata must round-trip identically to
+// the Postgres path. It is stored as a JSON string rather than a native M attribute precisely so
+// that both go through one encoding/json path: a native map would bring numbers back through
+// DynamoDB's N type, which carries them as decimal strings, and the two stores would disagree
+// about the Go type of the same value.
+func TestCreateNotification_MetadataRoundTrip(t *testing.T) {
+	st := testNotifStore(t)
+	ctx := context.Background()
+
+	n := newNotif(uuid.New().String(), uuid.New().String())
+	n.Metadata = models.NotificationMetadata{
+		"level":     "warning",
+		"toast":     true,
+		"invoiceId": "1041",
+		"nested":    map[string]any{"tab": "billing"},
+	}
+	if _, err := st.CreateNotification(ctx, n); err != nil {
+		t.Fatalf("CreateNotification: %v", err)
+	}
+
+	got, err := st.GetNotificationByID(ctx, n.ID)
+	if err != nil {
+		t.Fatalf("GetNotificationByID: %v", err)
+	}
+	if level, ok := got.Metadata.Level(); !ok || level != "warning" {
+		t.Errorf("level = (%q, %v), want (\"warning\", true)", level, ok)
+	}
+	if !got.Metadata.Toast() {
+		t.Error("toast did not survive the round trip")
+	}
+	if got.Metadata["invoiceId"] != "1041" {
+		t.Errorf("opaque key = %#v", got.Metadata["invoiceId"])
+	}
+	nested, ok := got.Metadata["nested"].(map[string]any)
+	if !ok || nested["tab"] != "billing" {
+		t.Errorf("nested object = %#v", got.Metadata["nested"])
+	}
+}
+
+func TestCreateNotification_NoMetadataStaysAbsent(t *testing.T) {
+	st := testNotifStore(t)
+	ctx := context.Background()
+
+	n := newNotif(uuid.New().String(), uuid.New().String())
+	if _, err := st.CreateNotification(ctx, n); err != nil {
+		t.Fatalf("CreateNotification: %v", err)
+	}
+
+	got, err := st.GetNotificationByID(ctx, n.ID)
+	if err != nil {
+		t.Fatalf("GetNotificationByID: %v", err)
+	}
+	if got.Metadata != nil {
+		t.Errorf("metadata = %#v, want nil", got.Metadata)
+	}
+}
+
 func TestGetNotificationByID_Miss(t *testing.T) {
 	st := testNotifStore(t)
 	_, err := st.GetNotificationByID(context.Background(), uuid.New().String())

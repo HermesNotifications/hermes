@@ -22,12 +22,13 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0010](0010-bounded-work-streams-reject-rather-than-drop.md) | Bound the JetStream work streams and reject new work when they fill | Accepted | 2026-08-10 |
 | [0011](0011-api-keys-are-scoped-to-an-organization.md) | Scope API keys to an organization, and derive the organization from the key | Superseded by [0012](0012-api-keys-are-not-scoped-to-organizations.md) | 2026-08-10 |
 | [0012](0012-api-keys-are-not-scoped-to-organizations.md) | API keys are not scoped to organizations; the organization is a per-request parameter | Accepted | 2026-08-11 |
-| [0013](0013-embeddable-inbox-widget-contract.md) | Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React | Accepted | 2026-07-30 |
+| [0013](0013-embeddable-inbox-widget-contract.md) | Ship one inbox implementation as a custom element with a versioned public contract, wrapped rather than reimplemented for React | Accepted (amended 2026-08-11) | 2026-07-30 |
 | [0014](0014-cache-first-unread-count.md) | Serve the unread count from cache, and keep it off the websocket's critical path | Accepted | 2026-08-10 |
 | [0015](0015-lifecycle-and-jetstream-durability.md) | Drain before shutdown, and replicate the streams the cluster can lose | Accepted | 2026-08-10 |
 | [0016](0016-distributed-rate-limiting-with-local-fallback.md) | Rate limit per credential in Redis, with the local bucket as the fallback | Accepted | 2026-08-11 |
 | [0017](0017-realtime-transport-ladder.md) | Fall back from WebSocket to HTTP-streaming then SSE, derived from one URL | Accepted | 2026-08-11 |
 | [0018](0018-client-lifecycle-dispose-is-terminal.md) | `dispose()` is terminal, `disconnect()` is the reusable one, and the store repairs its own wiring | Accepted | 2026-08-12 |
+| [0019](0019-notification-metadata-passthrough.md) | Carry an opaque metadata object end to end, and reserve exactly two keys in it | Accepted | 2026-08-12 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

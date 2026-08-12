@@ -473,6 +473,18 @@ export interface components {
             delivered_at?: string;
             id: string;
             idempotency_key?: string;
+            /** @description Opaque metadata stored with the notification and echoed back. Hermes reads only 'level' and 'toast'; every other key round-trips untouched. */
+            metadata?: {
+                /**
+                 * @description How a client should present this notification.
+                 * @enum {string}
+                 */
+                level?: "info" | "success" | "warning" | "error";
+                /** @description Whether a client should surface this transiently rather than waiting for the user to open their inbox. */
+                toast?: boolean;
+            } & {
+                [key: string]: unknown;
+            };
             organization_id: string;
             /** Format: date-time */
             read_at?: string;
@@ -582,6 +594,18 @@ export interface components {
             content?: components["schemas"]["SendContent"];
             /** @description Template data for rendering */
             data?: {
+                [key: string]: unknown;
+            };
+            /** @description Opaque metadata echoed back on the notification. Hermes reads only 'level' and 'toast'. */
+            metadata?: {
+                /**
+                 * @description How a client should present this notification.
+                 * @enum {string}
+                 */
+                level?: "info" | "success" | "warning" | "error";
+                /** @description Whether a client should surface this transiently rather than waiting for the user to open their inbox. */
+                toast?: boolean;
+            } & {
                 [key: string]: unknown;
             };
             /** @description Notification template slug (mutually exclusive with content) */

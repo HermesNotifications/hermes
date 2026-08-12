@@ -5,7 +5,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Notification } from "@hermes-notifications/client";
 import { FakeHermesClient, fakeNotification, fakePage } from "@hermes-notifications/client/testing";
-import { HermesInbox } from "./hermes-inbox.js";
+import { HermesInbox, isTruncated } from "./hermes-inbox.js";
 import { registerHermesInbox } from "./register.js";
 
 /**
@@ -629,6 +629,8 @@ describe("<hermes-inbox>: theming surface", () => {
       "actions",
       "action-btn",
       "action-link",
+      "row-target",
+      "notification-content",
       "footer",
       "load-more",
     ]) {
@@ -674,8 +676,188 @@ describe("<hermes-inbox>: theming surface", () => {
       "--hermes-text-color",
       "--hermes-border-color",
       "--hermes-focus-ring",
+      "--hermes-trigger-border",
+      "--hermes-body-line-clamp",
+      "--hermes-expand-color",
     ]) {
       expect(css).toContain(`var(${property},`);
     }
+  });
+
+  it("ships a borderless trigger, with the custom property still the lever", () => {
+    // A bell in a box reads as a form control. The default is `transparent` rather than
+    // `none` so that a host putting the box back gets identical geometry.
+    const css = HermesInbox.styles.toString();
+
+    expect(css).toContain("var(--hermes-trigger-border, 1px solid transparent)");
+    expect(css).not.toContain("1px solid #e0e0e0");
+  });
+});
+
+describe("isTruncated", () => {
+  const fits = { scrollHeight: 40, clientHeight: 40, scrollWidth: 200, clientWidth: 200 };
+
+  it("is false for a box whose content fits", () => {
+    expect(isTruncated(fits)).toBe(false);
+  });
+
+  it("is true when the content is taller than the box (a clamped body)", () => {
+    expect(isTruncated({ ...fits, scrollHeight: 80 })).toBe(true);
+  });
+
+  it("is true when the content is wider than the box (an ellipsised title)", () => {
+    expect(isTruncated({ ...fits, scrollWidth: 320 })).toBe(true);
+  });
+
+  it("tolerates a single pixel of sub-pixel rounding in both axes", () => {
+    // Fractional line boxes at non-integer zoom overshoot by less than a pixel on rows that
+    // are visually not clipped. Without the tolerance the toggle flickers as the user zooms.
+    expect(isTruncated({ ...fits, scrollHeight: 40.5 })).toBe(false);
+    expect(isTruncated({ ...fits, scrollWidth: 200.5 })).toBe(false);
+    // Exactly one pixel over is still within tolerance; the comparison is strict.
+    expect(isTruncated({ ...fits, scrollHeight: 41 })).toBe(false);
+    expect(isTruncated({ ...fits, scrollWidth: 201 })).toBe(false);
+    // ...but anything beyond a pixel is a real clip.
+    expect(isTruncated({ ...fits, scrollHeight: 41.5 })).toBe(true);
+    expect(isTruncated({ ...fits, scrollHeight: 42 })).toBe(true);
+  });
+});
+
+describe("<hermes-inbox>: expanding a long notification", () => {
+  /** Mount with the overflow probe forced, since jsdom measures every box as zero. */
+  async function mountWithOverflow(
+    fake: FakeHermesClient,
+    overflowing: (id: string) => boolean = () => true
+  ): Promise<HermesInbox> {
+    const el = document.createElement("hermes-inbox") as HermesInbox;
+    el.client = fake.asClient();
+    el.overflowProbe = ({ id }) => overflowing(id);
+    document.body.append(el);
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    await clickTrigger(el);
+    // One more settle: the toggle appears on the pass after the first measurement.
+    await el.updateComplete;
+    return el;
+  }
+
+  function toggle(el: HermesInbox): HTMLButtonElement | null {
+    return shadow(el).querySelector<HTMLButtonElement>("button.expand-toggle");
+  }
+
+  it("shows no toggle when the row is not clipped", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [unread("n1")], unreadCount: 1 }));
+    const el = await mountWithOverflow(fake, () => false);
+
+    expect(toggle(el)).toBeNull();
+  });
+
+  it("shows a toggle wired to the body when the row is clipped", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [unread("n1")], unreadCount: 1 }));
+    const el = await mountWithOverflow(fake);
+
+    const button = toggle(el);
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute("aria-expanded")).toBe("false");
+    // aria-controls must name the body element, or the relationship is decorative.
+    const bodyId = button?.getAttribute("aria-controls");
+    expect(bodyId).toBe("hermes-body-n1");
+    expect(shadow(el).querySelector(`#${bodyId}`)?.classList.contains("notification-body")).toBe(
+      true
+    );
+  });
+
+  it("expands the body and the title together, and flips the part token", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [unread("n1")], unreadCount: 1 }));
+    const el = await mountWithOverflow(fake);
+
+    await click(el, "button.expand-toggle");
+
+    expect(toggle(el)?.getAttribute("aria-expanded")).toBe("true");
+    expect(shadow(el).querySelector(".notification-body")?.hasAttribute("data-expanded")).toBe(true);
+    // The title lifts with the body: an ellipsised title over an expanded body reads as a bug.
+    expect(shadow(el).querySelector(".notification-title")?.hasAttribute("data-expanded")).toBe(
+      true
+    );
+    expect(shadow(el).querySelector(".notification")?.getAttribute("part")).toContain("expanded");
+  });
+
+  it("collapses again on a second press", async () => {
+    const fake = new FakeHermesClient(fakePage({ data: [unread("n1")], unreadCount: 1 }));
+    const el = await mountWithOverflow(fake);
+
+    await click(el, "button.expand-toggle");
+    await click(el, "button.expand-toggle");
+
+    expect(toggle(el)?.getAttribute("aria-expanded")).toBe("false");
+    expect(shadow(el).querySelector(".notification-body")?.hasAttribute("data-expanded")).toBe(
+      false
+    );
+  });
+
+  it("keeps the toggle present once expanded, even though the row now measures as fitting", async () => {
+    // The guarantee that keeps focus alive: an expanded body has no clamp, so a naive
+    // re-measure would drop it from the overflowing set and delete the button the user is
+    // standing on. Probe reports "fits" for everything after the first expansion.
+    const fake = new FakeHermesClient(fakePage({ data: [unread("n1")], unreadCount: 1 }));
+    let clipped = true;
+    const el = await mountWithOverflow(fake, () => clipped);
+
+    await click(el, "button.expand-toggle");
+    clipped = false;
+    el.requestUpdate();
+    await el.updateComplete;
+
+    expect(toggle(el)).not.toBeNull();
+    expect(toggle(el)?.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("does not mark the row read or emit a click when the toggle is pressed", async () => {
+    // The whole reason the toggle is a sibling of the row target rather than inside it.
+    const fake = new FakeHermesClient(fakePage({ data: [unread("n1")], unreadCount: 1 }));
+    const el = await mountWithOverflow(fake);
+
+    const clicks: unknown[] = [];
+    el.addEventListener("hermes-notification-click", (event) => clicks.push(event));
+
+    await click(el, "button.expand-toggle");
+
+    expect(clicks).toHaveLength(0);
+    expect(fake.calls.filter((call) => call.startsWith("markRead"))).toHaveLength(0);
+  });
+
+  it("keys expanded state by id, so pagination cannot smear it across rows", async () => {
+    const fake = new FakeHermesClient(
+      fakePage({ data: [unread("n1"), unread("n2")], unreadCount: 2, cursor: "c1" })
+    );
+    const el = await mountWithOverflow(fake);
+
+    // Expand the second row, then load a page on top.
+    const buttons = shadow(el).querySelectorAll<HTMLButtonElement>("button.expand-toggle");
+    buttons[1]?.click();
+    await el.updateComplete;
+
+    fake.page = fakePage({ data: [unread("n3")], unreadCount: 2 });
+    await click(el, "button.load-more");
+    await el.updateComplete;
+
+    const rows = shadow(el).querySelectorAll(".notification");
+    expect(rows).toHaveLength(3);
+    const expandedIds = [...rows]
+      .filter((row) => (row.getAttribute("part") ?? "").includes("expanded"))
+      .map((row) => row.getAttribute("data-id"));
+    expect(expandedIds).toEqual(["n2"]);
+  });
+
+  it("constructs where ResizeObserver does not exist", async () => {
+    // jsdom has none. Without the guard in observeRow this throws, and it would surface as
+    // every test in this file failing rather than as one obvious signal.
+    expect(globalThis.ResizeObserver).toBeUndefined();
+
+    const fake = new FakeHermesClient(fakePage({ data: [unread("n1")], unreadCount: 1 }));
+    const el = await mountWithOverflow(fake);
+
+    expect(shadow(el).querySelector(".notification")).not.toBeNull();
   });
 });

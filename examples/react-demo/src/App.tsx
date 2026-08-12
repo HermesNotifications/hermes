@@ -8,6 +8,7 @@ import type { NewNotificationEvent, RealtimeStatus } from "@hermes-notifications
 import { Header } from "./host/Header.js";
 import { Sidebar } from "./host/Sidebar.js";
 import { Content } from "./host/Content.js";
+import { Toasts } from "./host/Toasts.js";
 import { SendPanel } from "./panels/SendPanel.js";
 import { SessionPanel } from "./panels/SessionPanel.js";
 import { fetchSession, login, refreshDelayMs, type DemoSession } from "./session.js";
@@ -146,6 +147,9 @@ export function App() {
 
   const shell = (
     <div className="shell">
+      {/* Inside the shell, so it sits under HermesProvider and useHermes() resolves. Before a
+          session exists the client is null and the hook is a no-op. */}
+      <Toasts />
       <Sidebar />
       <div>
         <Header

@@ -18,7 +18,24 @@ export {
   type UseHermesInboxResult,
 } from "./hooks.js";
 
-export { HermesError, initialInboxState } from "@hermes-notifications/client";
+// Toasts, provider-agnostic. The Sonner adapter lives at "@hermes-notifications/react/sonner"
+// and is deliberately NOT re-exported here: a hard `import "sonner"` in the package root would
+// turn an optional peer dependency into a mandatory one for every consumer.
+export {
+  useHermesToasts,
+  type HermesToastAdapter,
+  type HermesToastHandle,
+  type HermesToastPayload,
+  type UseHermesToastsOptions,
+} from "./toasts.js";
+
+export {
+  HermesError,
+  initialInboxState,
+  NOTIFICATION_LEVELS,
+  notificationLevel,
+  toastRequested,
+} from "@hermes-notifications/client";
 export type {
   HermesClient,
   HermesClientConfig,
@@ -28,5 +45,6 @@ export type {
   InboxUpdatedEvent,
   NewNotificationEvent,
   Notification,
+  NotificationLevel,
   RealtimeStatus,
 } from "@hermes-notifications/client";

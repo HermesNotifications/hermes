@@ -1854,7 +1854,7 @@ components:
           format: uri
           type: string
     Notification:
-      additionalProperties: false
+      additionalProperties: {}
       properties:
         action_label:
           type: string
@@ -1885,6 +1885,8 @@ components:
           type: string
         idempotency_key:
           type: string
+        metadata:
+          $ref: "#/components/schemas/Notification_metadata"
         organization_id:
           type: string
         read_at:
@@ -2142,9 +2144,12 @@ components:
       - body
       - title
     SendInputBody:
-      additionalProperties: false
+      additionalProperties: {}
       example:
         template: template
+        metadata:
+          toast: true
+          level: info
         $schema: https://openapi-generator.tech
         channels:
         - channels
@@ -2172,6 +2177,8 @@ components:
         data:
           additionalProperties: {}
           description: Template data for rendering
+        metadata:
+          $ref: "#/components/schemas/SendInputBody_metadata"
         template:
           description: Notification template slug (mutually exclusive with content)
           type: string
@@ -2513,4 +2520,41 @@ components:
       - locale
       - organization_id
       - organization_name
+    Notification_metadata:
+      additionalProperties: true
+      description: Opaque metadata stored with the notification and echoed back. Hermes
+        reads only 'level' and 'toast'; every other key round-trips untouched.
+      properties:
+        level:
+          description: How a client should present this notification.
+          enum:
+          - info
+          - success
+          - warning
+          - error
+          type: string
+        toast:
+          description: Whether a client should surface this transiently rather than
+            waiting for the user to open their inbox.
+          type: boolean
+    SendInputBody_metadata:
+      additionalProperties: true
+      description: Opaque metadata echoed back on the notification. Hermes reads only
+        'level' and 'toast'.
+      example:
+        toast: true
+        level: info
+      properties:
+        level:
+          description: How a client should present this notification.
+          enum:
+          - info
+          - success
+          - warning
+          - error
+          type: string
+        toast:
+          description: Whether a client should surface this transiently rather than
+            waiting for the user to open their inbox.
+          type: boolean
 

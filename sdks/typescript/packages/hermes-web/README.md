@@ -51,6 +51,26 @@ See [docs/embedding-the-inbox.md](../../../../docs/embedding-the-inbox.md). In b
 There is no user id to configure — the element reads the internal Hermes id from the token's `sub`
 claim, which is what the Centrifugo channel is named after.
 
+## Toasts are not this element's job
+
+Deliberately, and it is worth saying out loud so it is not mistaken for an omission. A toast is a
+page-level surface — fixed position, stacked, above your modals, in your design language — while
+this element is an inline-block bell anchored inside your header. Toasts rendered from inside its
+shadow root would be trapped in your header's stacking context, or portalled somewhere `::part()`
+cannot reach. It would also roughly double the element's public contract to reimplement what every
+design system already ships.
+
+Everything needed is already emitted:
+
+```js
+document.querySelector("hermes-inbox").addEventListener("hermes-notification", (event) => {
+  const { title, body, metadata } = event.detail;
+  if (metadata?.toast) myToast(metadata.level ?? "info", title, body);
+});
+```
+
+React users get a hook and an adapter interface — see [`@hermes-notifications/react`](../hermes-react).
+
 ## React
 
 Use [`@hermes-notifications/react`](../hermes-react), which wraps this element so props arrive as

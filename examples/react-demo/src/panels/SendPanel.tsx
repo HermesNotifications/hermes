@@ -28,7 +28,44 @@ const PRESETS: Array<{ label: string; input: TestSendInput }> = [
       title: "Data export finished",
       body:
         "Your export of 1.2M rows completed successfully and will be retained for thirty days. " +
-        "This body is deliberately long so the two-line clamp in the widget is visible.",
+        "This body is deliberately long so the two-line clamp, and the Show more control that " +
+        "lifts it, are both visible in the panel.",
+    },
+  },
+  {
+    // Both the title's single-line ellipsis and the body's clamp, lifted by one control.
+    label: "Long title and body",
+    input: {
+      title:
+        "Your scheduled export of the full analytics warehouse has finished processing and is ready",
+      body:
+        "All 1.2M rows were exported without errors. The archive is available for thirty days, " +
+        "after which it is deleted automatically and would need to be regenerated from scratch.",
+    },
+  },
+  {
+    label: "Error + toast",
+    input: {
+      title: "Payment failed",
+      body: "Your card was declined. Update your billing details to avoid interruption.",
+      level: "error",
+      toast: true,
+      actionUrl: "/billing",
+      actionLabel: "Update billing",
+    },
+  },
+  {
+    label: "Success + toast",
+    input: { title: "Export complete", body: "1.2M rows are ready to download.", level: "success", toast: true },
+  },
+  {
+    label: "Warning, no toast",
+    input: {
+      // The two flags are independent: this one is styled as a warning in the list but is not
+      // important enough to interrupt whatever the user is doing.
+      title: "Approaching your plan limit",
+      body: "You have used 92% of this month's events.",
+      level: "warning",
     },
   },
   { label: "Burst of 5", input: { title: "Threshold crossed", body: "Sessions exceeded target.", count: 5 } },
@@ -49,6 +86,8 @@ const PRESETS: Array<{ label: string; input: TestSendInput }> = [
 export function SendPanel({ disabled, onSent }: SendPanelProps) {
   const [title, setTitle] = useState("Weekly report is ready");
   const [body, setBody] = useState("Your Acme Analytics summary for this week.");
+  const [level, setLevel] = useState<"" | "info" | "success" | "warning" | "error">("");
+  const [toast, setToast] = useState(false);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -75,21 +114,58 @@ export function SendPanel({ disabled, onSent }: SendPanelProps) {
         moment before it arrives.
       </p>
 
-      <label htmlFor="send-title">Title</label>
+      <label className="field-label" htmlFor="send-title">
+        Title
+      </label>
       <input
         id="send-title"
+        className="field"
         type="text"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
       />
 
-      <label htmlFor="send-body">Body</label>
+      <label className="field-label" htmlFor="send-body">
+        Body
+      </label>
       <input
         id="send-body"
+        className="field"
         type="text"
         value={body}
         onChange={(event) => setBody(event.target.value)}
       />
+
+      {/*
+        The two reserved metadata keys, as separate controls because they are separate
+        decisions: `level` is how it looks, `toast` is whether it interrupts. An error you do
+        not want to interrupt someone with is a real combination, and so is an info toast.
+      */}
+      <label className="field-label" htmlFor="send-level">
+        Level
+      </label>
+      <select
+        id="send-level"
+        className="field"
+        value={level}
+        onChange={(event) => setLevel(event.target.value as typeof level)}
+      >
+        <option value="">(none)</option>
+        <option value="info">Info</option>
+        <option value="success">Success</option>
+        <option value="warning">Warning</option>
+        <option value="error">Error</option>
+      </select>
+
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={toast}
+          data-testid="send-toast"
+          onChange={(event) => setToast(event.target.checked)}
+        />
+        Toast it (metadata.toast)
+      </label>
 
       <div className="button-row">
         <button
@@ -97,7 +173,9 @@ export function SendPanel({ disabled, onSent }: SendPanelProps) {
           type="button"
           disabled={disabled || pending || title === ""}
           data-testid="send-transactional"
-          onClick={() => void send({ title, body }, title)}
+          onClick={() =>
+            void send({ title, body, ...(level ? { level } : {}), ...(toast ? { toast } : {}) }, title)
+          }
         >
           {pending ? "Sending…" : "Send transactional"}
         </button>

@@ -48,11 +48,12 @@ namespace Hermes.ServerSdk.Model
         /// <param name="deletedAt">deletedAt</param>
         /// <param name="deliveredAt">deliveredAt</param>
         /// <param name="idempotencyKey">idempotencyKey</param>
+        /// <param name="metadata">metadata</param>
         /// <param name="readAt">readAt</param>
         /// <param name="sentAt">sentAt</param>
         /// <param name="templateId">templateId</param>
         [JsonConstructor]
-        public Notification(string body, string categoryId, DateTime createdAt, string id, string organizationId, string status, string title, string userId, Option<string?> actionLabel = default, Option<string?> actionUrl = default, Option<DateTime?> archivedAt = default, List<string>? channels = default, Option<DateTime?> deletedAt = default, Option<DateTime?> deliveredAt = default, Option<string?> idempotencyKey = default, Option<DateTime?> readAt = default, Option<DateTime?> sentAt = default, Option<string?> templateId = default)
+        public Notification(string body, string categoryId, DateTime createdAt, string id, string organizationId, string status, string title, string userId, Option<string?> actionLabel = default, Option<string?> actionUrl = default, Option<DateTime?> archivedAt = default, List<string>? channels = default, Option<DateTime?> deletedAt = default, Option<DateTime?> deliveredAt = default, Option<string?> idempotencyKey = default, Option<NotificationMetadata?> metadata = default, Option<DateTime?> readAt = default, Option<DateTime?> sentAt = default, Option<string?> templateId = default)
         {
             Body = body;
             CategoryId = categoryId;
@@ -69,6 +70,7 @@ namespace Hermes.ServerSdk.Model
             DeletedAtOption = deletedAt;
             DeliveredAtOption = deliveredAt;
             IdempotencyKeyOption = idempotencyKey;
+            MetadataOption = metadata;
             ReadAtOption = readAt;
             SentAtOption = sentAt;
             TemplateIdOption = templateId;
@@ -210,6 +212,19 @@ namespace Hermes.ServerSdk.Model
         public string? IdempotencyKey { get { return this.IdempotencyKeyOption; } set { this.IdempotencyKeyOption = new(value); } }
 
         /// <summary>
+        /// Used to track the state of Metadata
+        /// </summary>
+        [JsonIgnore]
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public Option<NotificationMetadata?> MetadataOption { get; private set; }
+
+        /// <summary>
+        /// Gets or Sets Metadata
+        /// </summary>
+        [JsonPropertyName("metadata")]
+        public NotificationMetadata? Metadata { get { return this.MetadataOption; } set { this.MetadataOption = new(value); } }
+
+        /// <summary>
         /// Used to track the state of ReadAt
         /// </summary>
         [JsonIgnore]
@@ -249,6 +264,12 @@ namespace Hermes.ServerSdk.Model
         public string? TemplateId { get { return this.TemplateIdOption; } set { this.TemplateIdOption = new(value); } }
 
         /// <summary>
+        /// Gets or Sets additional properties
+        /// </summary>
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement> AdditionalProperties { get; } = new Dictionary<string, JsonElement>();
+
+        /// <summary>
         /// Returns the string presentation of the object
         /// </summary>
         /// <returns>String presentation of the object</returns>
@@ -271,9 +292,11 @@ namespace Hermes.ServerSdk.Model
             sb.Append("  DeletedAt: ").Append(DeletedAt).Append("\n");
             sb.Append("  DeliveredAt: ").Append(DeliveredAt).Append("\n");
             sb.Append("  IdempotencyKey: ").Append(IdempotencyKey).Append("\n");
+            sb.Append("  Metadata: ").Append(Metadata).Append("\n");
             sb.Append("  ReadAt: ").Append(ReadAt).Append("\n");
             sb.Append("  SentAt: ").Append(SentAt).Append("\n");
             sb.Append("  TemplateId: ").Append(TemplateId).Append("\n");
+            sb.Append("  AdditionalProperties: ").Append(AdditionalProperties).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }
@@ -356,6 +379,7 @@ namespace Hermes.ServerSdk.Model
             Option<DateTime?> deletedAt = default;
             Option<DateTime?> deliveredAt = default;
             Option<string?> idempotencyKey = default;
+            Option<NotificationMetadata?> metadata = default;
             Option<DateTime?> readAt = default;
             Option<DateTime?> sentAt = default;
             Option<string?> templateId = default;
@@ -419,6 +443,9 @@ namespace Hermes.ServerSdk.Model
                             break;
                         case "idempotency_key":
                             idempotencyKey = new Option<string?>(utf8JsonReader.GetString()!);
+                            break;
+                        case "metadata":
+                            metadata = new Option<NotificationMetadata?>(JsonSerializer.Deserialize<NotificationMetadata>(ref utf8JsonReader, jsonSerializerOptions)!);
                             break;
                         case "read_at":
                             readAt = new Option<DateTime?>(JsonSerializer.Deserialize<DateTime>(ref utf8JsonReader, jsonSerializerOptions));
@@ -504,6 +531,9 @@ namespace Hermes.ServerSdk.Model
             if (idempotencyKey.IsSet && idempotencyKey.Value == null)
                 throw new ArgumentNullException(nameof(idempotencyKey), "Property is not nullable for class Notification.");
 
+            if (metadata.IsSet && metadata.Value == null)
+                throw new ArgumentNullException(nameof(metadata), "Property is not nullable for class Notification.");
+
             if (readAt.IsSet && readAt.Value == null)
                 throw new ArgumentNullException(nameof(readAt), "Property is not nullable for class Notification.");
 
@@ -513,7 +543,7 @@ namespace Hermes.ServerSdk.Model
             if (templateId.IsSet && templateId.Value == null)
                 throw new ArgumentNullException(nameof(templateId), "Property is not nullable for class Notification.");
 
-            return new Notification(body.Value!, categoryId.Value!, createdAt.Value!.Value!, id.Value!, organizationId.Value!, status.Value!, title.Value!, userId.Value!, actionLabel, actionUrl, archivedAt, channels.Value!, deletedAt, deliveredAt, idempotencyKey, readAt, sentAt, templateId);
+            return new Notification(body.Value!, categoryId.Value!, createdAt.Value!.Value!, id.Value!, organizationId.Value!, status.Value!, title.Value!, userId.Value!, actionLabel, actionUrl, archivedAt, channels.Value!, deletedAt, deliveredAt, idempotencyKey, metadata, readAt, sentAt, templateId);
         }
 
         /// <summary>
@@ -570,6 +600,9 @@ namespace Hermes.ServerSdk.Model
             if (notification.IdempotencyKeyOption.IsSet && notification.IdempotencyKey == null)
                 throw new ArgumentNullException(nameof(notification.IdempotencyKey), "Property is required for class Notification.");
 
+            if (notification.MetadataOption.IsSet && notification.Metadata == null)
+                throw new ArgumentNullException(nameof(notification.Metadata), "Property is required for class Notification.");
+
             if (notification.TemplateIdOption.IsSet && notification.TemplateId == null)
                 throw new ArgumentNullException(nameof(notification.TemplateId), "Property is required for class Notification.");
 
@@ -614,6 +647,11 @@ namespace Hermes.ServerSdk.Model
             if (notification.IdempotencyKeyOption.IsSet)
                 writer.WriteString("idempotency_key", notification.IdempotencyKey);
 
+            if (notification.MetadataOption.IsSet)
+            {
+                writer.WritePropertyName("metadata");
+                JsonSerializer.Serialize(writer, notification.Metadata, jsonSerializerOptions);
+            }
             if (notification.ReadAtOption.IsSet)
                 writer.WriteString("read_at", notification.ReadAtOption.Value!.Value.ToString(ReadAtFormat));
 
