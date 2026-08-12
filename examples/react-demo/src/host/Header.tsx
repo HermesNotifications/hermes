@@ -48,6 +48,7 @@ export function Header({
 
       <div className="header-actions">
         <select
+          className="header-select"
           aria-label="Theme"
           value={theme}
           onChange={(event) => onThemeChange(event.target.value as Theme)}

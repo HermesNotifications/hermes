@@ -55,6 +55,12 @@ func (p *InboxProvider) Send(ctx context.Context, req DeliveryRequest) (Delivery
 		payload["action"] = action
 	}
 
+	// Omitted when empty, like `action` and `unread_count` below, so a send that carries no
+	// metadata produces a byte-identical frame to the one clients see today.
+	if len(req.Metadata) > 0 {
+		payload["metadata"] = req.Metadata
+	}
+
 	// Attach the user's unread count to the arrival, so the client does not have to guess it.
 	//
 	// The increment is guarded on the notification ID because delivery is at-least-once: if the

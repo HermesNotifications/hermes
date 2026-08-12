@@ -97,6 +97,68 @@ test.describe("theming", () => {
     await expect(popover).toBeInViewport();
   });
 
+  test("the bell ships borderless, and the custom property still puts a box back", async ({
+    demoPage,
+  }) => {
+    // Both halves matter: the first is the change, the second is the promise that a host who
+    // wanted the old look has a lever. The default is `transparent` rather than `none` so the
+    // box metrics are identical either way and restoring it cannot reflow the header.
+    const trigger = demoPage.locator("hermes-inbox").locator("css=button.trigger");
+
+    const before = await trigger.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { color: style.borderTopColor, width: style.borderTopWidth };
+    });
+    expect(before.color).toBe("rgba(0, 0, 0, 0)");
+    expect(before.width).toBe("1px");
+
+    await demoPage.evaluate(() => {
+      document
+        .querySelector("hermes-inbox")
+        ?.setAttribute("style", "--hermes-trigger-border: 1px solid rgb(7, 8, 9)");
+    });
+
+    expect(await trigger.evaluate((node) => getComputedStyle(node).borderTopColor)).toBe(
+      "rgb(7, 8, 9)"
+    );
+  });
+
+  test("the bell is a large enough target once the border is invisible", async ({ demoPage }) => {
+    // WCAG 2.2 SC 2.5.8 wants 24x24 minimum. Worth pinning, because "tighten the padding now
+    // that the box is gone" is the tempting follow-on edit.
+    const box = await demoPage
+      .locator("hermes-inbox")
+      .locator("css=button.trigger")
+      .boundingBox();
+
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(24);
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(24);
+  });
+
+  test("the brand theme restyles the widget well beyond a border radius", async ({ demoPage }) => {
+    // The demo's worked example, asserted so it cannot rot. It reaches internals no custom
+    // property exposes, which is the whole argument for ::part existing.
+    await demoPage.getByLabel("Theme").selectOption("brand");
+
+    const trigger = demoPage.locator("hermes-inbox").locator("css=button.trigger");
+    expect(await trigger.evaluate((node) => getComputedStyle(node).borderRadius)).toBe("999px");
+
+    await openPanel(demoPage);
+
+    // Asserted on the panel chrome rather than on a row, for the reason given at the top of
+    // this file: a fresh user's inbox is empty, so anything selecting `.notification` or its
+    // unread dot waits for an element that will never exist and fails as a 90s timeout rather
+    // than as a styling error. The row-level parts of the brand theme are covered where a
+    // notification already has to exist, in toasts.spec.
+    const popover = demoPage.getByRole("dialog");
+    // --hermes-popover-width, a custom property the brand theme widens to 420px.
+    expect(await popover.evaluate((node) => getComputedStyle(node).width)).toBe("420px");
+
+    // And a ::part rule reaching an internal element no custom property exposes.
+    const header = demoPage.locator("hermes-inbox").locator("css=.header");
+    expect(await header.evaluate((node) => getComputedStyle(node).paddingTop)).toBe("18px");
+  });
+
   test("switching the host theme restyles the widget with it", async ({ demoPage }) => {
     await openPanel(demoPage);
     const popover = demoPage.getByRole("dialog");

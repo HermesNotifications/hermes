@@ -24,6 +24,7 @@ export interface DemoConfig {
 export interface SendInput {
   to: { organizationId: string; userId: string };
   content: { title: string; body: string; actionUrl?: string; actionLabel?: string };
+  metadata?: Record<string, unknown>;
   channels: string[];
   idempotencyKey: string;
 }
@@ -40,6 +41,29 @@ const UUID_PATTERN =
 
 /** A stray count must not turn a demo click into a flood through the real pipeline. */
 const MAX_SEND_COUNT = 50;
+
+/**
+ * Mirrors the send API's own cap (models.MaxMetadataBytes). Checked here as well so the demo
+ * fails the same way a real integration would, rather than surfacing a Hermes 400 as an opaque
+ * proxy error.
+ */
+const MAX_METADATA_BYTES = 4096;
+
+/**
+ * Narrow a request's `metadata` to a plain JSON object.
+ *
+ * Arrays are rejected explicitly: `typeof [] === "object"`, so without the check an array would
+ * be forwarded as if it were an object and Hermes would reject it further down the pipeline,
+ * asynchronously, where the caller can no longer be told.
+ */
+function readMetadata(value: unknown): Record<string, unknown> | undefined | "invalid" {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) return "invalid";
+  const metadata = value as Record<string, unknown>;
+  if (Object.keys(metadata).length === 0) return undefined;
+  if (JSON.stringify(metadata).length > MAX_METADATA_BYTES) return "invalid";
+  return metadata;
+}
 
 function json(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -126,6 +150,11 @@ export function createHandler(deps: DemoDeps): (request: Request) => Promise<Res
     if (typeof title !== "string" || title === "") return problem(400, "title is required");
     if (typeof text !== "string") return problem(400, "body must be a string");
 
+    const metadata = readMetadata(body.metadata);
+    if (metadata === "invalid") {
+      return problem(400, `metadata must be a JSON object of at most ${MAX_METADATA_BYTES} bytes`);
+    }
+
     const requested = typeof body.count === "number" ? Math.floor(body.count) : 1;
     const count = Math.max(1, Math.min(requested, MAX_SEND_COUNT));
     const channels = Array.isArray(body.channels) ? (body.channels as string[]) : ["inbox"];
@@ -140,6 +169,7 @@ export function createHandler(deps: DemoDeps): (request: Request) => Promise<Res
           ...(typeof body.actionUrl === "string" ? { actionUrl: body.actionUrl } : {}),
           ...(typeof body.actionLabel === "string" ? { actionLabel: body.actionLabel } : {}),
         },
+        ...(metadata ? { metadata } : {}),
         channels,
         // A repeated key inside the dedup window silently drops the send, which in a demo looks
         // like the pipeline losing messages.

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/hermes-notifications/hermes/internal/centrifugo"
+	"github.com/hermes-notifications/hermes/internal/models"
 )
 
 func TestInboxProvider_Send_Success(t *testing.T) {
@@ -67,6 +68,80 @@ func TestInboxProvider_Send_Success(t *testing.T) {
 	}
 	if capturedData["id"] != "notif-1" {
 		t.Errorf("expected id 'notif-1', got %v", capturedData["id"])
+	}
+}
+
+// capturePublish stands up a Centrifugo double and returns the data payload it received.
+func capturePublish(t *testing.T, req DeliveryRequest) map[string]any {
+	t.Helper()
+	var captured map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		captured, _ = payload["data"].(map[string]any)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"result":{}}`))
+	}))
+	defer server.Close()
+
+	provider := NewInboxProvider(centrifugo.NewClient(server.URL, "test-key"), nil, nil)
+	if _, err := provider.Send(context.Background(), req); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	return captured
+}
+
+// The inbox worker has no database (cmd/worker-inbox wires NATS, Redis and Centrifugo and
+// nothing else), so whatever a client is to receive has to arrive on the DeliveryRequest. This
+// is the test that holds that path open.
+func TestInboxProvider_Send_CarriesMetadataVerbatim(t *testing.T) {
+	data := capturePublish(t, DeliveryRequest{
+		NotificationID: "notif-1",
+		UserID:         "user-42",
+		Title:          "Hello",
+		Body:           "World",
+		Metadata: models.NotificationMetadata{
+			"level":     "warning",
+			"toast":     true,
+			"invoiceId": "1041",
+			"nested":    map[string]any{"a": float64(1)},
+		},
+	})
+
+	metadata, ok := data["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected metadata on the published frame, got %#v", data["metadata"])
+	}
+	if metadata["level"] != "warning" {
+		t.Errorf("level: got %#v", metadata["level"])
+	}
+	if metadata["toast"] != true {
+		t.Errorf("toast: got %#v", metadata["toast"])
+	}
+	// The keys Hermes does not read must survive too, or "passthrough" is not true.
+	if metadata["invoiceId"] != "1041" {
+		t.Errorf("opaque key: got %#v", metadata["invoiceId"])
+	}
+	if _, ok := metadata["nested"].(map[string]any); !ok {
+		t.Errorf("nested object: got %#v", metadata["nested"])
+	}
+}
+
+func TestInboxProvider_Send_OmitsMetadataWhenThereIsNone(t *testing.T) {
+	// Absent rather than null, so a send carrying no metadata produces the frame existing
+	// clients already handle.
+	data := capturePublish(t, DeliveryRequest{
+		NotificationID: "notif-1",
+		UserID:         "user-42",
+		Title:          "Hello",
+		Body:           "World",
+	})
+
+	if _, present := data["metadata"]; present {
+		t.Errorf("metadata key present on a notification that had none: %#v", data["metadata"])
 	}
 }
 

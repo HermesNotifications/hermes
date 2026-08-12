@@ -1,0 +1,30 @@
+-- Sender-supplied metadata, stored with the notification and echoed back to clients.
+--
+-- Hermes reads exactly two keys from this object -- "level" and "toast" -- and treats everything
+-- else as opaque. There was previously nowhere at all to put either: the send API's `data` is
+-- template render input that is never persisted and never reaches a client, and the notifications
+-- table had no free-form column.
+--
+-- Nullable with no default, deliberately. tenants.settings (000001) is NOT NULL DEFAULT '{}', but
+-- it got that at table-creation time where it is free; here NULL is the honest "no metadata"
+-- sentinel, it matches notification_events.metadata (000007), and it costs zero bytes on every
+-- historical row. Backfilling '{}' across the largest table in the system would rewrite it for no
+-- semantic gain.
+--
+-- Adding a nullable column with no default is a catalog-only change in Postgres: it takes an
+-- ACCESS EXCLUSIVE lock only for the duration of the catalog update, not for a table rewrite, so
+-- it is O(1) regardless of table size. That is why this needs none of the CONCURRENTLY machinery
+-- 000018 required -- there, the lock was held for the whole index *build*.
+--
+-- No index. Nothing queries into this column; the reserved keys are read by clients, not by SQL.
+-- Add a GIN index when a query exists, in its own migration, and read the note at the top of
+-- 000018 first about why such a file may contain exactly one statement.
+--
+-- Sizing note: the send API caps the serialized object at 4 KiB (models.MaxMetadataBytes). A row
+-- near that cap may be pushed out of line into TOAST storage, which is a property of the row
+-- rather than of this column, and an accepted cost.
+--
+-- Numbered 000020 rather than 000019: 000019 is claimed by in-flight API-key rate-limit work on
+-- another branch. golang-migrate tracks an ascending version number and tolerates gaps, so
+-- skipping one is free; colliding is not, and nothing in CI would catch it.
+ALTER TABLE notifications ADD COLUMN metadata JSONB;

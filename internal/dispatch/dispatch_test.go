@@ -87,6 +87,23 @@ func (f *fakeBus) deliverySubjects() []string {
 	return out
 }
 
+// deliveries returns every DeliveryMessage fanned out, in order.
+func (f *fakeBus) deliveries(t *testing.T) []hermenats.DeliveryMessage {
+	t.Helper()
+	var out []hermenats.DeliveryMessage
+	for _, m := range f.published {
+		if m.Subject == "notification.events" {
+			continue
+		}
+		var dm hermenats.DeliveryMessage
+		if err := json.Unmarshal(m.Data, &dm); err != nil {
+			t.Fatalf("unmarshal delivery message: %v", err)
+		}
+		out = append(out, dm)
+	}
+	return out
+}
+
 type fakeNotifStore struct {
 	created  *models.Notification
 	channels []string
@@ -182,6 +199,21 @@ func directSend(channels ...string) []byte {
 	return data
 }
 
+// directSendWithMetadata is directSend plus a client metadata object.
+func directSendWithMetadata(metadata models.NotificationMetadata, channels ...string) []byte {
+	msg := &hermenats.SendMessage{
+		NotificationID: "ntf_test",
+		OrganizationID: "org_test",
+		ExternalUserID: "ext_1",
+		Content:        &hermenats.MessageContent{Title: "hi", Body: "there"},
+		ClientMetadata: metadata,
+		Channels:       channels,
+		Attempt:        1,
+	}
+	data, _ := msg.Marshal()
+	return data
+}
+
 func firstAttempt() messaging.DeliveryInfo {
 	return messaging.DeliveryInfo{Attempt: 1, LastAttempt: false}
 }
@@ -197,6 +229,71 @@ func countEvent(names []string, want string) int {
 }
 
 // --- tests -------------------------------------------------------------------------------
+
+// Metadata has to land in two places from one message: on the row that dispatch persists
+// before any routing runs, and on every delivery message it fans out. Only the second reaches
+// the inbox worker, which has no database and so cannot recover it any other way.
+func TestHandleSend_MetadataIsPersistedAndFannedOut(t *testing.T) {
+	bus := &fakeBus{}
+	notifs := &fakeNotifStore{}
+	user := &models.User{ID: "usr_1", Contacts: map[string]string{"email": "a@example.com"}}
+	d := newTestDispatch(bus, notifs, user)
+
+	metadata := models.NotificationMetadata{"level": "error", "toast": true, "ref": "abc"}
+	send := directSendWithMetadata(metadata, "email", "inbox")
+	if err := d.handleSend(context.Background(), send, firstAttempt()); err != nil {
+		t.Fatalf("handleSend: %v", err)
+	}
+
+	if notifs.created == nil {
+		t.Fatal("no notification was created")
+	}
+	if level, ok := notifs.created.Metadata.Level(); !ok || level != "error" {
+		t.Errorf("persisted level = (%q, %v), want (\"error\", true)", level, ok)
+	}
+	if !notifs.created.Metadata.Toast() {
+		t.Error("persisted metadata lost the toast flag")
+	}
+	if notifs.created.Metadata["ref"] != "abc" {
+		t.Errorf("persisted metadata lost the opaque key: %#v", notifs.created.Metadata["ref"])
+	}
+
+	deliveries := bus.deliveries(t)
+	if len(deliveries) != 2 {
+		t.Fatalf("expected 2 delivery messages, got %d", len(deliveries))
+	}
+	for _, dm := range deliveries {
+		if level, ok := dm.ClientMetadata.Level(); !ok || level != "error" {
+			t.Errorf("%s delivery lost the level: %#v", dm.Channel, dm.ClientMetadata)
+		}
+		if dm.ClientMetadata["ref"] != "abc" {
+			t.Errorf("%s delivery lost the opaque key: %#v", dm.Channel, dm.ClientMetadata)
+		}
+	}
+}
+
+func TestHandleSend_NoMetadataStaysNil(t *testing.T) {
+	bus := &fakeBus{}
+	notifs := &fakeNotifStore{}
+	user := &models.User{ID: "usr_1", Contacts: map[string]string{"email": "a@example.com"}}
+	d := newTestDispatch(bus, notifs, user)
+
+	if err := d.handleSend(context.Background(), directSend("inbox"), firstAttempt()); err != nil {
+		t.Fatalf("handleSend: %v", err)
+	}
+
+	if notifs.created == nil {
+		t.Fatal("no notification was created")
+	}
+	if notifs.created.Metadata != nil {
+		t.Errorf("metadata invented for a send that carried none: %#v", notifs.created.Metadata)
+	}
+	for _, dm := range bus.deliveries(t) {
+		if dm.ClientMetadata != nil {
+			t.Errorf("%s delivery invented metadata: %#v", dm.Channel, dm.ClientMetadata)
+		}
+	}
+}
 
 // A successful fan-out must publish exactly one notification.sent, which is what advances the
 // notification to the "sent" status. Without it the status ladder skips rank 1 entirely.

@@ -212,6 +212,18 @@ export interface components {
             delivered_at?: string;
             id: string;
             idempotency_key?: string;
+            /** @description Opaque metadata stored with the notification and echoed back. Hermes reads only 'level' and 'toast'; every other key round-trips untouched. */
+            metadata?: {
+                /**
+                 * @description How a client should present this notification.
+                 * @enum {string}
+                 */
+                level?: "info" | "success" | "warning" | "error";
+                /** @description Whether a client should surface this transiently rather than waiting for the user to open their inbox. */
+                toast?: boolean;
+            } & {
+                [key: string]: unknown;
+            };
             organization_id: string;
             /** Format: date-time */
             read_at?: string;

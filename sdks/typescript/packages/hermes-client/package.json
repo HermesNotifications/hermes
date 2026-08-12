@@ -22,7 +22,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && cp -r src/generated dist/generated",
+    "build": "tsc -p tsconfig.build.json && rm -rf dist/generated && cp -r src/generated dist/generated",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

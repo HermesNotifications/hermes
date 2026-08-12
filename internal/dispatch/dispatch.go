@@ -127,6 +127,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 		UserID:         user.ID,
 		Channels:       channels,
 		Status:         models.StatusPending,
+		Metadata:       msg.ClientMetadata,
 	}
 	if msg.Content != nil {
 		n.Title = msg.Content.Title
@@ -337,6 +338,7 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 			Channel:        ch,
 			Content:        deliveryContent,
 			Metadata:       msg.Metadata,
+			ClientMetadata: msg.ClientMetadata,
 			Recipient:      recipient,
 			Attempt:        msg.Attempt,
 		}

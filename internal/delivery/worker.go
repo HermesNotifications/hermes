@@ -84,6 +84,7 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte, info messaging.
 		Body:           msg.Content.Body,
 		EmailTo:        msg.Recipient["email"],
 		PhoneTo:        msg.Recipient["phone"],
+		Metadata:       msg.ClientMetadata,
 	}
 	if msg.Content.ActionURL != nil {
 		req.ActionURL = *msg.Content.ActionURL

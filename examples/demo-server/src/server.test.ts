@@ -237,6 +237,61 @@ describe("POST /api/test-send", () => {
     });
   });
 
+  it("passes metadata through to the send API", async () => {
+    const { handler, sends } = harness();
+
+    await handler(
+      authed("/api/test-send", {
+        method: "POST",
+        body: {
+          title: "T",
+          body: "B",
+          metadata: { level: "error", toast: true, invoiceId: "1041" },
+        },
+      })
+    );
+
+    expect(sends[0]).toMatchObject({
+      metadata: { level: "error", toast: true, invoiceId: "1041" },
+    });
+  });
+
+  it("omits metadata entirely when none was supplied", async () => {
+    const { handler, sends } = harness();
+
+    await handler(authed("/api/test-send", { method: "POST", body: { title: "T", body: "B" } }));
+
+    expect(Object.keys(sends[0] as Record<string, unknown>)).not.toContain("metadata");
+  });
+
+  it("rejects metadata that is not a plain object", async () => {
+    // An array is `typeof "object"`, so without an explicit check it would be forwarded and
+    // rejected asynchronously inside Hermes, where the caller can no longer be told.
+    const { handler, sends } = harness();
+
+    for (const metadata of [["level"], "error", 42]) {
+      const response = await handler(
+        authed("/api/test-send", { method: "POST", body: { title: "T", body: "B", metadata } })
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(sends).toHaveLength(0);
+  });
+
+  it("rejects metadata over the size cap", async () => {
+    const { handler, sends } = harness();
+
+    const response = await handler(
+      authed("/api/test-send", {
+        method: "POST",
+        body: { title: "T", body: "B", metadata: { blob: "x".repeat(5000) } },
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(sends).toHaveLength(0);
+  });
+
   it("generates a distinct idempotency key per send", async () => {
     // Repeating a key inside the dedup window silently drops the second notification, which in
     // a demo looks like the pipeline losing messages.

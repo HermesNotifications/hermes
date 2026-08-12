@@ -55,6 +55,20 @@ already framework-agnostic and needs no changes.
 - **`POST /api/demo/login`** sets a signed cookie. This is demo scaffolding standing in for whatever
   session your app already has; replace it entirely.
 
+## What to look at once it is running
+
+- **The send panel** drives `metadata.level` and `metadata.toast` — the two keys Hermes reads.
+  The presets cover each level, a long body and a long title (to exercise the **Show more**
+  control), and a warning that is deliberately *not* toasted, because presentation and
+  interruption are separate decisions.
+- **The Theme select** switches between three host themes. `Brand` is the worked restyling
+  example: a circular tinted bell, a gradient panel header, and an accent rail instead of the
+  unread dot — all from the host's stylesheet, none of it a fork of the widget. The CSS is
+  commented in [`react-demo/src/styles.css`](react-demo/src/styles.css).
+- **[`react-demo/src/host/Toasts.tsx`](react-demo/src/host/Toasts.tsx)** is the whole toast
+  integration: a hook, an adapter, and sonner's `<Toaster/>`. Swapping toast libraries means
+  passing a different adapter object.
+
 ## Two honest caveats
 
 **The send button is labelled "transactional" for a reason.** It supplies content directly rather than

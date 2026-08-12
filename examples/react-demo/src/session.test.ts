@@ -3,7 +3,7 @@
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 import { describe, expect, it } from "vitest";
-import { refreshDelayMs, REFRESH_MARGIN_MS } from "./session.js";
+import { refreshDelayMs, testSend, REFRESH_MARGIN_MS } from "./session.js";
 
 /**
  * Token refresh scheduling, extracted from the component so it can be asserted directly.
@@ -58,5 +58,53 @@ describe("refreshDelayMs", () => {
     // setTimeout treats anything *above* 2^31-1 as zero and fires immediately, which would spin.
     // 2^31-1 itself is the largest valid delay, so the bound is inclusive.
     expect(refreshDelayMs(at(400 * 24 * HOUR), NOW)).toBeLessThanOrEqual(2 ** 31 - 1);
+  });
+});
+
+describe("testSend: composing metadata", () => {
+  /** Capture the body `testSend` posts, without a network. */
+  async function bodyOf(input: Parameters<typeof testSend>[0]): Promise<Record<string, unknown>> {
+    let captured = "";
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      captured = String(init.body);
+      return new Response(JSON.stringify({ notificationIds: ["n1"] }), { status: 202 });
+    }) as typeof fetch;
+    try {
+      await testSend(input);
+    } finally {
+      globalThis.fetch = original;
+    }
+    return JSON.parse(captured) as Record<string, unknown>;
+  }
+
+  it("folds level and toast into a metadata object", () => {
+    return bodyOf({ title: "t", body: "b", level: "error", toast: true }).then((body) => {
+      expect(body.metadata).toEqual({ level: "error", toast: true });
+      // The flat fields must not also be sent: `level` is not a send-API field.
+      expect(body.level).toBeUndefined();
+      expect(body.toast).toBeUndefined();
+    });
+  });
+
+  it("sends either key on its own", async () => {
+    expect((await bodyOf({ title: "t", body: "b", level: "warning" })).metadata).toEqual({
+      level: "warning",
+    });
+    expect((await bodyOf({ title: "t", body: "b", toast: true })).metadata).toEqual({
+      toast: true,
+    });
+  });
+
+  it("omits metadata entirely when neither is set", async () => {
+    // Not `{}`: a plain send should produce exactly the request an integration that has never
+    // heard of metadata would produce.
+    const body = await bodyOf({ title: "t", body: "b" });
+    expect("metadata" in body).toBe(false);
+  });
+
+  it("treats toast: false as not asking for a toast", async () => {
+    const body = await bodyOf({ title: "t", body: "b", toast: false });
+    expect("metadata" in body).toBe(false);
   });
 });

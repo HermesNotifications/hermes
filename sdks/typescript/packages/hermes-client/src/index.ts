@@ -19,6 +19,12 @@ export {
   type InboxState,
 } from "./inbox/state.js";
 export { InboxStore, type InboxStoreOptions } from "./inbox/store.js";
+export {
+  NOTIFICATION_LEVELS,
+  notificationLevel,
+  toastRequested,
+  type NotificationLevel,
+} from "./inbox/metadata.js";
 
 export {
   emulationEndpoint,

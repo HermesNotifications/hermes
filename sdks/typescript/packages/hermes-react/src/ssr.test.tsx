@@ -56,6 +56,24 @@ describe("server rendering", () => {
     expect(globalThis.customElements).toBeUndefined();
   });
 
+  it("exports the toast hook, which is server-safe", async () => {
+    // toasts.ts imports only react and types, so it must not compromise the guarantee above.
+    const { useHermesToasts } = await import("./index.js");
+    expect(typeof useHermesToasts).toBe("function");
+  });
+
+  it("does not pull sonner in through the package root", async () => {
+    // The Sonner adapter is reachable only at "@hermes-notifications/react/sonner", and sonner
+    // is an OPTIONAL peer dependency. A re-export from the root would turn it into a mandatory
+    // one: every consumer would have to install sonner for `import "@hermes-notifications/react"`
+    // to resolve at all, whether or not they render toasts. That failure would look exactly like
+    // the crash this file was written to prevent, so it is guarded in the same place.
+    const root = await import("./index.js");
+
+    expect("sonnerAdapter" in root).toBe(false);
+    expect("createSonnerAdapter" in root).toBe(false);
+  });
+
   it("serves the initial inbox state as the server snapshot", async () => {
     // useSyncExternalStore requires a server snapshot, and requires it to be stable between
     // calls. Returning a fresh object would throw "The result of getServerSnapshot should be

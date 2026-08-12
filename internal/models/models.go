@@ -97,12 +97,15 @@ type Notification struct {
 	IdempotencyKey *string            `json:"idempotency_key,omitempty"`
 	Channels       []string           `json:"channels"`
 	Status         NotificationStatus `json:"status"`
-	CreatedAt      time.Time          `json:"created_at"`
-	SentAt         *time.Time         `json:"sent_at,omitempty"`
-	DeliveredAt    *time.Time         `json:"delivered_at,omitempty"`
-	ReadAt         *time.Time         `json:"read_at,omitempty"`
-	ArchivedAt     *time.Time         `json:"archived_at,omitempty"`
-	DeletedAt      *time.Time         `json:"deleted_at,omitempty"`
+	// Metadata is sender-supplied and opaque; see NotificationMetadata for the two keys
+	// Hermes reads.
+	Metadata    NotificationMetadata `json:"metadata,omitempty"`
+	CreatedAt   time.Time            `json:"created_at"`
+	SentAt      *time.Time           `json:"sent_at,omitempty"`
+	DeliveredAt *time.Time           `json:"delivered_at,omitempty"`
+	ReadAt      *time.Time           `json:"read_at,omitempty"`
+	ArchivedAt  *time.Time           `json:"archived_at,omitempty"`
+	DeletedAt   *time.Time           `json:"deleted_at,omitempty"`
 }
 
 type NotificationEvent struct {

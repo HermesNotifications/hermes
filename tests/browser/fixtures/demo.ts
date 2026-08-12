@@ -35,6 +35,7 @@ export interface HermesUser {
     body: string;
     actionUrl?: string;
     actionLabel?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<{ notificationId: string }>;
   inbox(options?: { archived?: boolean; limit?: number; cursor?: string }): Promise<InboxPage>;
   waitFor(
@@ -140,6 +141,22 @@ export function panel(page: Page): Locator {
 
 export function rows(page: Page): Locator {
   return page.locator("hermes-inbox").locator("css=.notification");
+}
+
+/** The "Show more"/"Show less" control on a clipped row. Absent when the row fits. */
+export function expandToggle(page: Page): Locator {
+  return page.locator("hermes-inbox").locator("css=button.expand-toggle");
+}
+
+/**
+ * Toasts, scoped to sonner's region.
+ *
+ * Scoped by the container's aria-label rather than a class, because sonner's class names are
+ * internal. The demo sets containerAriaLabel="Toasts" precisely so this is addressable and does
+ * not collide with the bell, whose accessible name is also "Notifications".
+ */
+export function toasts(page: Page): Locator {
+  return page.getByLabel("Toasts").locator("[data-sonner-toast]");
 }
 
 /**

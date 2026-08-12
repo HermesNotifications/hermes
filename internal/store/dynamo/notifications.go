@@ -7,6 +7,7 @@ package dynamo
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -107,6 +108,14 @@ func (s *NotificationStore) CreateNotification(ctx context.Context, n *models.No
 	if n.IdempotencyKey != nil && *n.IdempotencyKey != "" {
 		item["idempotency_key"] = strVal(*n.IdempotencyKey)
 		item["idem_pk"] = strVal("ORG#" + n.OrganizationID + "#IDEM#" + *n.IdempotencyKey)
+	}
+	if len(n.Metadata) > 0 {
+		// A JSON string, matching unmarshalNotif -- see the note there on why not a native M.
+		encoded, err := json.Marshal(n.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("create notification: marshal metadata: %w", err)
+		}
+		item["metadata"] = strVal(string(encoded))
 	}
 
 	_, err := s.client.db.PutItem(ctx, &dynamodb.PutItemInput{
@@ -787,6 +796,21 @@ func unmarshalNotif(item map[string]types.AttributeValue) (*models.Notification,
 
 	if ss, ok := item["channels"].(*types.AttributeValueMemberSS); ok {
 		n.Channels = ss.Value
+	}
+
+	// Stored as a JSON string rather than a native M, so both stores round-trip metadata
+	// through one encoding/json path and cannot disagree about numbers -- DynamoDB's N carries
+	// numbers as decimal strings, so a native map would come back with a different Go type than
+	// the Postgres path yields.
+	//
+	// A parse failure degrades to no metadata rather than failing the read: this column is
+	// decoration, and refusing to return a notification because one opaque blob is malformed
+	// would take the whole inbox down with it.
+	if s, ok := strAttr(item, "metadata"); ok && s != "" {
+		var metadata models.NotificationMetadata
+		if err := json.Unmarshal([]byte(s), &metadata); err == nil {
+			n.Metadata = metadata
+		}
 	}
 
 	n.SentAt = optTime(item, "sent_at")

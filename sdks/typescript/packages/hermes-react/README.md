@@ -32,6 +32,33 @@ This wraps the `<hermes-inbox>` custom element rather than reimplementing it —
 the inbox UI, not two. The wrapper is what makes it usable from React at all: React 18 stringifies
 every prop, and even React 19 does not wire `on*` props to CustomEvents.
 
+## Toasts
+
+Provider-agnostic: this package renders no toast UI and depends on no toast library.
+
+```tsx
+import { useHermes, useHermesToasts } from "@hermes-notifications/react";
+import { sonnerAdapter } from "@hermes-notifications/react/sonner";
+import { Toaster } from "sonner";
+
+function Toasts() {
+  useHermesToasts(useHermes(), { toast: sonnerAdapter });
+  return <Toaster position="top-right" />;
+}
+```
+
+`sonner` is an **optional peer dependency** and the adapter is a separate subpath, so importing
+`@hermes-notifications/react` never pulls it in. To use something else, pass an object with
+`info`/`success`/`warning`/`error`/`show` (and optionally `dismiss`) — that is the entire contract.
+
+A notification toasts when it carries `metadata.toast === true`; `metadata.level` picks the method.
+Two behaviours worth knowing before you file a bug: **only live websocket arrivals toast** (not the
+initial list, and not the REST repair after a reconnect), and **toasts fire whether or not the panel
+is open** — use `shouldToast` with `onOpenChange` if you want otherwise. Duplicates are suppressed
+by notification id, shared across every hook instance on the same client.
+
+See [Embedding the Inbox](../../../../docs/embedding-the-inbox.md#toasts) for the full contract.
+
 ## Headless
 
 For your own markup, with the same state implementation:

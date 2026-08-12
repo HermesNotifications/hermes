@@ -120,8 +120,15 @@ function httpBase(socketUrl: string): string {
     .replace(/^wss:/, "https:");
 }
 
+/**
+ * Narrow a value to a plain JSON object.
+ *
+ * The array check is load-bearing, not defensive: `typeof [] === "object"` and an array is not
+ * null, so without it a JSON array would be handed back as a "record" and every property read
+ * on it would silently yield undefined.
+ */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null
+  return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 }
@@ -152,6 +159,7 @@ export function eventFromPublication(data: unknown): HermesEvent | undefined {
     }
     case "notification.new": {
       const action = asRecord(payload.action);
+      const metadata = asRecord(payload.metadata);
       const event: NewNotificationEvent = {
         type: "notification.new",
         id: payload.id as string,
@@ -164,6 +172,9 @@ export function eventFromPublication(data: unknown): HermesEvent | undefined {
         // be worse than having no count at all: the reducer trusts a present count absolutely,
         // so a fabricated zero would blank the badge on every arrival.
         ...(typeof payload.unread_count === "number" ? { unreadCount: payload.unread_count } : {}),
+        // Absent stays absent, like every field above. A `metadata: {}` invented here would be
+        // indistinguishable to a consumer from a sender who supplied an empty object.
+        ...(metadata ? { metadata: metadata as NewNotificationEvent["metadata"] } : {}),
       };
       return event;
     }

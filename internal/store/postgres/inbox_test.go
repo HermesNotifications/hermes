@@ -53,6 +53,7 @@ func TestInbox(t *testing.T) {
 			Body:           fmt.Sprintf("Body %d", i+1),
 			Channels:       []string{"inbox"},
 			Status:         models.StatusDelivered,
+			Metadata:       models.NotificationMetadata{"level": "info", "seq": float64(i)},
 		}
 		_, err := s.CreateNotification(ctx, n)
 		if err != nil {
@@ -74,6 +75,14 @@ func TestInbox(t *testing.T) {
 		}
 		if cursor == "" {
 			t.Fatal("expected non-empty cursor for page 1")
+		}
+
+		// ListInbox keeps its own SELECT column list, separate from the three in
+		// notifications.go, and it must stay in lockstep with scanNotification. Adding a
+		// column to one and not the other shifts every destination after it, which shows up
+		// as data appearing in the wrong field rather than as an error.
+		if level, ok := notifs[0].Metadata.Level(); !ok || level != "info" {
+			t.Errorf("ListInbox dropped metadata: got %#v", notifs[0].Metadata)
 		}
 
 		unreadCount, _, err := s.UnreadCount(ctx, user.ID)

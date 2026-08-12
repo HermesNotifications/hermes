@@ -4,7 +4,11 @@
 
 package delivery
 
-import "context"
+import (
+	"context"
+
+	"github.com/hermes-notifications/hermes/internal/models"
+)
 
 type DeliveryRequest struct {
 	NotificationID string
@@ -17,6 +21,9 @@ type DeliveryRequest struct {
 	ActionLabel    string
 	EmailTo        string
 	PhoneTo        string
+	// Metadata is the sender's opaque object. Only the inbox provider does anything with it
+	// today: email and SMS have nowhere to put a "toast" hint.
+	Metadata models.NotificationMetadata
 }
 
 type DeliveryResult struct {

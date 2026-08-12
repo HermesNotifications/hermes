@@ -292,41 +292,50 @@ components:
       required:
         - notification_id
         - organization_id
-        - user_id
-        - group_id
-        - content
+        - external_user_id
         - metadata
         - attempt
       properties:
         notification_id:
           type: string
-          description: Crockford Base32 time-sortable ID
+          description: Base62 time-sortable ID (internal/id/v2)
         organization_id:
           type: string
           format: uuid
-        user_id:
+        external_user_id:
           type: string
-        group_id:
-          type: string
+          description: The caller's own identifier for the user, not the internal Hermes id.
         content:
           $ref: '#/components/schemas/MessageContent'
+          description: Direct content. Absent when the send names a template instead.
         metadata:
           $ref: '#/components/schemas/MessageMetadata'
+        client_metadata:
+          $ref: '#/components/schemas/NotificationMetadata'
+          description: >-
+            The sender's opaque object, bound for the recipient's client.
+
+            Deliberately a separate field from `metadata` above, which is Hermes's own routing
+            information about the template. The two are unrelated despite the shared word, and
+            merging them would not be wire-safe across a rolling deploy.
         data:
           type: object
           additionalProperties: true
-          description: Template variables for rendering notification content
+          description: Template variables for rendering notification content. Never persisted, and never sent to a client.
         channels:
           type: array
           items:
             type: string
             enum: [email, sms, inbox]
-          description: Explicit channel override. If omitted, resolved from user preferences or group defaults.
+          description: Explicit channel override. If omitted, resolved from user preferences or category defaults.
         contacts:
           type: object
           additionalProperties:
             type: string
           description: Per-send recipient address overrides, keyed by address key (e.g. email, phone).
+        idempotency_key:
+          type: string
+          description: Caller-supplied deduplication key, scoped to the organization.
         attempt:
           type: integer
           minimum: 1
@@ -356,6 +365,12 @@ components:
           $ref: '#/components/schemas/MessageContent'
         metadata:
           $ref: '#/components/schemas/MessageMetadata'
+        client_metadata:
+          $ref: '#/components/schemas/NotificationMetadata'
+          description: >-
+            Carried on the message rather than looked up, because cmd/worker-inbox wires NATS,
+            Redis and Centrifugo and no database -- the process that publishes the realtime
+            event has no way to read it back.
         recipient:
           type: object
           additionalProperties:
@@ -466,15 +481,18 @@ components:
 
     MessageMetadata:
       type: object
-      required:
-        - group
+      description: >-
+        Hermes's own routing information about the send. Not to be confused with
+        `client_metadata`, which is the sender's opaque object for the recipient's client.
+
+        Badly named, and known to be: it predates there being any other kind of metadata on
+        these messages. Renaming it to `template` is wanted but is not a safe single step,
+        because an old Send's `{"metadata": {...}}` would still be on a retained WorkQueue
+        stream when a new Dispatch started reading.
       properties:
-        group:
+        template:
           type: string
-          description: Group slug
-        type:
-          type: string
-          description: Notification type slug (present for type-based sends)
+          description: Template slug. Absent when the send supplied direct content instead.
 
     InboxUpdatedEvent:
       type: object
@@ -554,3 +572,37 @@ components:
               format: uri
             label:
               type: string
+        metadata:
+          $ref: '#/components/schemas/NotificationMetadata'
+
+    NotificationMetadata:
+      type: object
+      description: >-
+        Opaque metadata supplied by the sender, stored with the notification and echoed back
+        here and on the REST inbox row.
+
+        Hermes reads exactly two keys from it and never interprets anything else. That is a
+        commitment rather than an implementation detail: reserving a further bare top-level name
+        later would break any caller already using it for their own purposes.
+
+        Omitted entirely when the sender supplied none, so a send without metadata produces the
+        same frame clients see today.
+      additionalProperties: true
+      properties:
+        level:
+          type: string
+          enum: [info, success, warning, error]
+          description: >-
+            How a client should present this notification.
+
+            Distinct from the `severity` on a delivery event, which is the operational log and
+            uses `info`/`warn`/`error`. A client meeting a value it does not recognise should
+            treat the notification as having no level, not reject it -- levels may be added.
+        toast:
+          type: boolean
+          description: >-
+            Whether a client should surface this transiently -- a toast on the web, a heads-up
+            banner on mobile -- rather than waiting for the user to open their inbox.
+
+            A hint, not a delivery channel: it does not affect routing, and a client with no
+            such surface is free to ignore it.

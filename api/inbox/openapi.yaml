@@ -139,6 +139,22 @@ components:
           type: string
         idempotency_key:
           type: string
+        metadata:
+          additionalProperties: true
+          description: Opaque metadata stored with the notification and echoed back. Hermes reads only 'level' and 'toast'; every other key round-trips untouched.
+          properties:
+            level:
+              description: How a client should present this notification.
+              enum:
+                - info
+                - success
+                - warning
+                - error
+              type: string
+            toast:
+              description: Whether a client should surface this transiently rather than waiting for the user to open their inbox.
+              type: boolean
+          type: object
         organization_id:
           type: string
         read_at:
