@@ -46,12 +46,14 @@ __all__ = [
     "Notification",
     "NotificationEvent",
     "NotificationItem",
+    "NotificationMetadata",
     "NotificationStatusOutputBody",
     "NotificationTemplate",
     "OrganizationItem",
     "RateLimitError",
     "SendContent",
     "SendInputBody",
+    "SendInputBodyMetadata",
     "SendOutputBody",
     "SendRecipient",
     "SetAPIKeyRateLimitInputBody",
@@ -98,12 +100,14 @@ from hermes_server_sdk.models.error_model import ErrorModel as ErrorModel
 from hermes_server_sdk.models.notification import Notification as Notification
 from hermes_server_sdk.models.notification_event import NotificationEvent as NotificationEvent
 from hermes_server_sdk.models.notification_item import NotificationItem as NotificationItem
+from hermes_server_sdk.models.notification_metadata import NotificationMetadata as NotificationMetadata
 from hermes_server_sdk.models.notification_status_output_body import NotificationStatusOutputBody as NotificationStatusOutputBody
 from hermes_server_sdk.models.notification_template import NotificationTemplate as NotificationTemplate
 from hermes_server_sdk.models.organization_item import OrganizationItem as OrganizationItem
 from hermes_server_sdk.models.rate_limit_error import RateLimitError as RateLimitError
 from hermes_server_sdk.models.send_content import SendContent as SendContent
 from hermes_server_sdk.models.send_input_body import SendInputBody as SendInputBody
+from hermes_server_sdk.models.send_input_body_metadata import SendInputBodyMetadata as SendInputBodyMetadata
 from hermes_server_sdk.models.send_output_body import SendOutputBody as SendOutputBody
 from hermes_server_sdk.models.send_recipient import SendRecipient as SendRecipient
 from hermes_server_sdk.models.set_api_key_rate_limit_input_body import SetAPIKeyRateLimitInputBody as SetAPIKeyRateLimitInputBody

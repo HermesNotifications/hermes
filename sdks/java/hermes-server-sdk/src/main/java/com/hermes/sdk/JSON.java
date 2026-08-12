@@ -108,12 +108,14 @@ public class JSON {
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.Notification.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationEvent.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationItem.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationMetadata.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationStatusOutputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.NotificationTemplate.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.OrganizationItem.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.RateLimitError.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendContent.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendInputBody.CustomTypeAdapterFactory());
+        gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendInputBodyMetadata.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendOutputBody.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SendRecipient.CustomTypeAdapterFactory());
         gsonBuilder.registerTypeAdapterFactory(new com.hermes.sdk.model.SetAPIKeyRateLimitInputBody.CustomTypeAdapterFactory());

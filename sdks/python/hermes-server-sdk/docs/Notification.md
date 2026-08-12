@@ -16,6 +16,7 @@ Name | Type | Description | Notes
 **delivered_at** | **datetime** |  | [optional] 
 **id** | **str** |  | 
 **idempotency_key** | **str** |  | [optional] 
+**metadata** | [**NotificationMetadata**](NotificationMetadata.md) |  | [optional] 
 **organization_id** | **str** |  | 
 **read_at** | **datetime** |  | [optional] 
 **sent_at** | **datetime** |  | [optional] 

@@ -25,12 +25,14 @@ from hermes_server_sdk.models.error_model import ErrorModel
 from hermes_server_sdk.models.notification import Notification
 from hermes_server_sdk.models.notification_event import NotificationEvent
 from hermes_server_sdk.models.notification_item import NotificationItem
+from hermes_server_sdk.models.notification_metadata import NotificationMetadata
 from hermes_server_sdk.models.notification_status_output_body import NotificationStatusOutputBody
 from hermes_server_sdk.models.notification_template import NotificationTemplate
 from hermes_server_sdk.models.organization_item import OrganizationItem
 from hermes_server_sdk.models.rate_limit_error import RateLimitError
 from hermes_server_sdk.models.send_content import SendContent
 from hermes_server_sdk.models.send_input_body import SendInputBody
+from hermes_server_sdk.models.send_input_body_metadata import SendInputBodyMetadata
 from hermes_server_sdk.models.send_output_body import SendOutputBody
 from hermes_server_sdk.models.send_recipient import SendRecipient
 from hermes_server_sdk.models.set_api_key_rate_limit_input_body import SetAPIKeyRateLimitInputBody

@@ -17,6 +17,7 @@ docs/ErrorModel.md
 docs/Notification.md
 docs/NotificationEvent.md
 docs/NotificationItem.md
+docs/NotificationMetadata.md
 docs/NotificationStatusOutputBody.md
 docs/NotificationTemplate.md
 docs/NotificationsApi.md
@@ -25,6 +26,7 @@ docs/OrganizationsApi.md
 docs/RateLimitError.md
 docs/SendContent.md
 docs/SendInputBody.md
+docs/SendInputBodyMetadata.md
 docs/SendOutputBody.md
 docs/SendRecipient.md
 docs/SetAPIKeyRateLimitInputBody.md
@@ -66,12 +68,14 @@ hermes_server_sdk/models/error_model.py
 hermes_server_sdk/models/notification.py
 hermes_server_sdk/models/notification_event.py
 hermes_server_sdk/models/notification_item.py
+hermes_server_sdk/models/notification_metadata.py
 hermes_server_sdk/models/notification_status_output_body.py
 hermes_server_sdk/models/notification_template.py
 hermes_server_sdk/models/organization_item.py
 hermes_server_sdk/models/rate_limit_error.py
 hermes_server_sdk/models/send_content.py
 hermes_server_sdk/models/send_input_body.py
+hermes_server_sdk/models/send_input_body_metadata.py
 hermes_server_sdk/models/send_output_body.py
 hermes_server_sdk/models/send_recipient.py
 hermes_server_sdk/models/set_api_key_rate_limit_input_body.py

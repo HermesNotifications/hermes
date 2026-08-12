@@ -20,6 +20,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from hermes_server_sdk.models.notification_metadata import NotificationMetadata
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -38,6 +39,7 @@ class Notification(BaseModel):
     delivered_at: Optional[datetime] = None
     id: StrictStr
     idempotency_key: Optional[StrictStr] = None
+    metadata: Optional[NotificationMetadata] = None
     organization_id: StrictStr
     read_at: Optional[datetime] = None
     sent_at: Optional[datetime] = None
@@ -45,7 +47,8 @@ class Notification(BaseModel):
     template_id: Optional[StrictStr] = None
     title: StrictStr
     user_id: StrictStr
-    __properties: ClassVar[List[str]] = ["action_label", "action_url", "archived_at", "body", "category_id", "channels", "created_at", "deleted_at", "delivered_at", "id", "idempotency_key", "organization_id", "read_at", "sent_at", "status", "template_id", "title", "user_id"]
+    additional_properties: Dict[str, Any] = {}
+    __properties: ClassVar[List[str]] = ["action_label", "action_url", "archived_at", "body", "category_id", "channels", "created_at", "deleted_at", "delivered_at", "id", "idempotency_key", "metadata", "organization_id", "read_at", "sent_at", "status", "template_id", "title", "user_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -77,8 +80,10 @@ class Notification(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -86,6 +91,14 @@ class Notification(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of metadata
+        if self.metadata:
+            _dict['metadata'] = self.metadata.to_dict()
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+
         # set to None if channels (nullable) is None
         # and model_fields_set contains the field
         if self.channels is None and "channels" in self.model_fields_set:
@@ -114,6 +127,7 @@ class Notification(BaseModel):
             "delivered_at": obj.get("delivered_at"),
             "id": obj.get("id"),
             "idempotency_key": obj.get("idempotency_key"),
+            "metadata": NotificationMetadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None,
             "organization_id": obj.get("organization_id"),
             "read_at": obj.get("read_at"),
             "sent_at": obj.get("sent_at"),
@@ -122,6 +136,11 @@ class Notification(BaseModel):
             "title": obj.get("title"),
             "user_id": obj.get("user_id")
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 

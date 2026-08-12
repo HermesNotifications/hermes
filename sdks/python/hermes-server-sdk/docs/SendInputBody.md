@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **channels** | **List[str]** | Explicit delivery channels | [optional] 
 **content** | [**SendContent**](SendContent.md) | Direct content (mutually exclusive with template) | [optional] 
 **data** | **Dict[str, object]** | Template data for rendering | [optional] 
+**metadata** | [**SendInputBodyMetadata**](SendInputBodyMetadata.md) |  | [optional] 
 **template** | **str** | Notification template slug (mutually exclusive with content) | [optional] 
 **to** | [**SendRecipient**](SendRecipient.md) | Notification recipient | 
 

@@ -17,27 +17,29 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
-from hermes_server_sdk.models.send_content import SendContent
-from hermes_server_sdk.models.send_input_body_metadata import SendInputBodyMetadata
-from hermes_server_sdk.models.send_recipient import SendRecipient
 from typing import Optional, Set
 from typing_extensions import Self
 
-class SendInputBody(BaseModel):
+class NotificationMetadata(BaseModel):
     """
-    SendInputBody
+    Opaque metadata stored with the notification and echoed back. Hermes reads only 'level' and 'toast'; every other key round-trips untouched.
     """ # noqa: E501
-    var_schema: Optional[StrictStr] = Field(default=None, description="A URL to the JSON Schema for this object.", alias="$schema")
-    channels: Optional[List[StrictStr]] = Field(default=None, description="Explicit delivery channels")
-    content: Optional[SendContent] = Field(default=None, description="Direct content (mutually exclusive with template)")
-    data: Optional[Dict[str, Any]] = Field(default=None, description="Template data for rendering")
-    metadata: Optional[SendInputBodyMetadata] = None
-    template: Optional[StrictStr] = Field(default=None, description="Notification template slug (mutually exclusive with content)")
-    to: SendRecipient = Field(description="Notification recipient")
+    level: Optional[StrictStr] = Field(default=None, description="How a client should present this notification.")
+    toast: Optional[StrictBool] = Field(default=None, description="Whether a client should surface this transiently rather than waiting for the user to open their inbox.")
     additional_properties: Dict[str, Any] = {}
-    __properties: ClassVar[List[str]] = ["$schema", "channels", "content", "data", "metadata", "template", "to"]
+    __properties: ClassVar[List[str]] = ["level", "toast"]
+
+    @field_validator('level')
+    def level_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['info', 'success', 'warning', 'error']):
+            raise ValueError("must be one of enum values ('info', 'success', 'warning', 'error')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -57,7 +59,7 @@ class SendInputBody(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of SendInputBody from a JSON string"""
+        """Create an instance of NotificationMetadata from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -69,11 +71,9 @@ class SendInputBody(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
-        * OpenAPI `readOnly` fields are excluded.
         * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
-            "var_schema",
             "additional_properties",
         ])
 
@@ -82,30 +82,16 @@ class SendInputBody(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of content
-        if self.content:
-            _dict['content'] = self.content.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of metadata
-        if self.metadata:
-            _dict['metadata'] = self.metadata.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of to
-        if self.to:
-            _dict['to'] = self.to.to_dict()
         # puts key-value pairs in additional_properties in the top level
         if self.additional_properties is not None:
             for _key, _value in self.additional_properties.items():
                 _dict[_key] = _value
 
-        # set to None if channels (nullable) is None
-        # and model_fields_set contains the field
-        if self.channels is None and "channels" in self.model_fields_set:
-            _dict['channels'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of SendInputBody from a dict"""
+        """Create an instance of NotificationMetadata from a dict"""
         if obj is None:
             return None
 
@@ -113,13 +99,8 @@ class SendInputBody(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "$schema": obj.get("$schema"),
-            "channels": obj.get("channels"),
-            "content": SendContent.from_dict(obj["content"]) if obj.get("content") is not None else None,
-            "data": obj.get("data"),
-            "metadata": SendInputBodyMetadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None,
-            "template": obj.get("template"),
-            "to": SendRecipient.from_dict(obj["to"]) if obj.get("to") is not None else None
+            "level": obj.get("level"),
+            "toast": obj.get("toast")
         })
         # store additional fields in additional_properties
         for _key in obj.keys():

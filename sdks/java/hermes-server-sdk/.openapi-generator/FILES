@@ -19,6 +19,7 @@ docs/ErrorModel.md
 docs/Notification.md
 docs/NotificationEvent.md
 docs/NotificationItem.md
+docs/NotificationMetadata.md
 docs/NotificationStatusOutputBody.md
 docs/NotificationTemplate.md
 docs/NotificationsApi.md
@@ -27,6 +28,7 @@ docs/OrganizationsApi.md
 docs/RateLimitError.md
 docs/SendContent.md
 docs/SendInputBody.md
+docs/SendInputBodyMetadata.md
 docs/SendOutputBody.md
 docs/SendRecipient.md
 docs/SetAPIKeyRateLimitInputBody.md
@@ -87,12 +89,14 @@ src/main/java/com/hermes/sdk/model/ErrorModel.java
 src/main/java/com/hermes/sdk/model/Notification.java
 src/main/java/com/hermes/sdk/model/NotificationEvent.java
 src/main/java/com/hermes/sdk/model/NotificationItem.java
+src/main/java/com/hermes/sdk/model/NotificationMetadata.java
 src/main/java/com/hermes/sdk/model/NotificationStatusOutputBody.java
 src/main/java/com/hermes/sdk/model/NotificationTemplate.java
 src/main/java/com/hermes/sdk/model/OrganizationItem.java
 src/main/java/com/hermes/sdk/model/RateLimitError.java
 src/main/java/com/hermes/sdk/model/SendContent.java
 src/main/java/com/hermes/sdk/model/SendInputBody.java
+src/main/java/com/hermes/sdk/model/SendInputBodyMetadata.java
 src/main/java/com/hermes/sdk/model/SendOutputBody.java
 src/main/java/com/hermes/sdk/model/SendRecipient.java
 src/main/java/com/hermes/sdk/model/SetAPIKeyRateLimitInputBody.java

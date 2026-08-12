@@ -38,15 +38,17 @@ namespace Hermes.ServerSdk.Model
         /// <param name="channels">Explicit delivery channels</param>
         /// <param name="content">Direct content (mutually exclusive with template)</param>
         /// <param name="data">Template data for rendering</param>
+        /// <param name="metadata">metadata</param>
         /// <param name="template">Notification template slug (mutually exclusive with content)</param>
         [JsonConstructor]
-        public SendInputBody(SendRecipient to, Option<string?> schema = default, Option<List<string>?> channels = default, Option<SendContent?> content = default, Option<Dictionary<string, Object>?> data = default, Option<string?> template = default)
+        public SendInputBody(SendRecipient to, Option<string?> schema = default, Option<List<string>?> channels = default, Option<SendContent?> content = default, Option<Dictionary<string, Object>?> data = default, Option<SendInputBodyMetadata?> metadata = default, Option<string?> template = default)
         {
             To = to;
             SchemaOption = schema;
             ChannelsOption = channels;
             ContentOption = content;
             DataOption = data;
+            MetadataOption = metadata;
             TemplateOption = template;
             OnCreated();
         }
@@ -117,6 +119,19 @@ namespace Hermes.ServerSdk.Model
         public Dictionary<string, Object>? Data { get { return this.DataOption; } set { this.DataOption = new(value); } }
 
         /// <summary>
+        /// Used to track the state of Metadata
+        /// </summary>
+        [JsonIgnore]
+        [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+        public Option<SendInputBodyMetadata?> MetadataOption { get; private set; }
+
+        /// <summary>
+        /// Gets or Sets Metadata
+        /// </summary>
+        [JsonPropertyName("metadata")]
+        public SendInputBodyMetadata? Metadata { get { return this.MetadataOption; } set { this.MetadataOption = new(value); } }
+
+        /// <summary>
         /// Used to track the state of Template
         /// </summary>
         [JsonIgnore]
@@ -131,6 +146,12 @@ namespace Hermes.ServerSdk.Model
         public string? Template { get { return this.TemplateOption; } set { this.TemplateOption = new(value); } }
 
         /// <summary>
+        /// Gets or Sets additional properties
+        /// </summary>
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement> AdditionalProperties { get; } = new Dictionary<string, JsonElement>();
+
+        /// <summary>
         /// Returns the string presentation of the object
         /// </summary>
         /// <returns>String presentation of the object</returns>
@@ -143,7 +164,9 @@ namespace Hermes.ServerSdk.Model
             sb.Append("  Channels: ").Append(Channels).Append("\n");
             sb.Append("  Content: ").Append(Content).Append("\n");
             sb.Append("  Data: ").Append(Data).Append("\n");
+            sb.Append("  Metadata: ").Append(Metadata).Append("\n");
             sb.Append("  Template: ").Append(Template).Append("\n");
+            sb.Append("  AdditionalProperties: ").Append(AdditionalProperties).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }
@@ -186,6 +209,7 @@ namespace Hermes.ServerSdk.Model
             Option<List<string>?> channels = default;
             Option<SendContent?> content = default;
             Option<Dictionary<string, Object>?> data = default;
+            Option<SendInputBodyMetadata?> metadata = default;
             Option<string?> template = default;
 
             while (utf8JsonReader.Read())
@@ -218,6 +242,9 @@ namespace Hermes.ServerSdk.Model
                         case "data":
                             data = new Option<Dictionary<string, Object>?>(JsonSerializer.Deserialize<Dictionary<string, Object>>(ref utf8JsonReader, jsonSerializerOptions)!);
                             break;
+                        case "metadata":
+                            metadata = new Option<SendInputBodyMetadata?>(JsonSerializer.Deserialize<SendInputBodyMetadata>(ref utf8JsonReader, jsonSerializerOptions)!);
+                            break;
                         case "template":
                             template = new Option<string?>(utf8JsonReader.GetString()!);
                             break;
@@ -242,10 +269,13 @@ namespace Hermes.ServerSdk.Model
             if (data.IsSet && data.Value == null)
                 throw new ArgumentNullException(nameof(data), "Property is not nullable for class SendInputBody.");
 
+            if (metadata.IsSet && metadata.Value == null)
+                throw new ArgumentNullException(nameof(metadata), "Property is not nullable for class SendInputBody.");
+
             if (template.IsSet && template.Value == null)
                 throw new ArgumentNullException(nameof(template), "Property is not nullable for class SendInputBody.");
 
-            return new SendInputBody(to.Value!, schema, channels, content, data, template);
+            return new SendInputBody(to.Value!, schema, channels, content, data, metadata, template);
         }
 
         /// <summary>
@@ -284,6 +314,9 @@ namespace Hermes.ServerSdk.Model
             if (sendInputBody.DataOption.IsSet && sendInputBody.Data == null)
                 throw new ArgumentNullException(nameof(sendInputBody.Data), "Property is required for class SendInputBody.");
 
+            if (sendInputBody.MetadataOption.IsSet && sendInputBody.Metadata == null)
+                throw new ArgumentNullException(nameof(sendInputBody.Metadata), "Property is required for class SendInputBody.");
+
             if (sendInputBody.TemplateOption.IsSet && sendInputBody.Template == null)
                 throw new ArgumentNullException(nameof(sendInputBody.Template), "Property is required for class SendInputBody.");
 
@@ -309,6 +342,11 @@ namespace Hermes.ServerSdk.Model
             {
                 writer.WritePropertyName("data");
                 JsonSerializer.Serialize(writer, sendInputBody.Data, jsonSerializerOptions);
+            }
+            if (sendInputBody.MetadataOption.IsSet)
+            {
+                writer.WritePropertyName("metadata");
+                JsonSerializer.Serialize(writer, sendInputBody.Metadata, jsonSerializerOptions);
             }
             if (sendInputBody.TemplateOption.IsSet)
                 writer.WriteString("template", sendInputBody.Template);

@@ -19,6 +19,7 @@ Name | Type | Description | Notes
 **DeletedAt** | **DateTime** |  | [optional] 
 **DeliveredAt** | **DateTime** |  | [optional] 
 **IdempotencyKey** | **string** |  | [optional] 
+**Metadata** | [**NotificationMetadata**](NotificationMetadata.md) |  | [optional] 
 **ReadAt** | **DateTime** |  | [optional] 
 **SentAt** | **DateTime** |  | [optional] 
 **TemplateId** | **string** |  | [optional] 
