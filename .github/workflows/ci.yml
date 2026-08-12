@@ -554,14 +554,19 @@ jobs:
       # The nine services still cannot pull, so they stay at replicas=0. natsProvision is off
       # for the same reason. What remains is exactly the path under test: Postgres, the
       # migration that creates api_keys, and the bootstrap Job.
+      #
+      # The NATS and Centrifugo sub-charts stay ENABLED even though nothing here uses them.
+      # Disabling one without supplying the matching external* connection is refused by the
+      # schema, correctly — an install with neither a bundled bus nor an external one has no
+      # bus at all. They pull from their own registries, so unlike the Hermes images they
+      # start fine; they just cost a little wall-clock.
       - name: Install
         run: |
           helm install hermes charts/hermes/ \
             --namespace hermes-bootstrap-gate --create-namespace \
             --set hermes.jwt.secret=citest --set hermes.apiKey.hmacSecret=citest \
             --set global.domain=ci.example.com \
-            --set natsProvision.enabled=false --set nats.enabled=false \
-            --set centrifugo.enabled=false \
+            --set natsProvision.enabled=false \
             --set admin.replicas=0 --set send.replicas=0 --set dispatch.replicas=0 \
             --set inbox.replicas=0 --set user.replicas=0 \
             --set workerEmail.replicas=0 --set workerSms.replicas=0 \
