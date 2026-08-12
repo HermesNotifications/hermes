@@ -105,6 +105,29 @@ global:
 track a mutable tag, where the node otherwise keeps its first copy forever — the failure is a
 deploy that appears to succeed and changes nothing.
 
+### Ingress controller
+
+```yaml
+ingress:
+  className: traefik      # or nginx
+  controller: ""          # inferred from className; override for e.g. traefik-internal
+```
+
+The chart supports **ingress-nginx** and **Traefik**, and they are not interchangeable. The
+realtime route has to strip `/realtime` before Centrifugo sees it — nginx does that with a
+regex path plus `rewrite-target`, and Traefik v3 removed regex from Ingress paths, so the
+nginx form matches nothing there. Under `controller: traefik` the chart emits a `stripPrefix`
+Middleware and a plain prefix path instead, and expresses the API rate limit as a Traefik
+`rateLimit` Middleware rather than nginx annotations that Traefik would accept and ignore.
+
+Both need the `traefik.io` CRDs, which ship with Traefik itself.
+
+If your class is named something the inference cannot see through — `traefik-internal`,
+`nginx-public` — set `controller` explicitly. Anything unrecognised is treated as nginx.
+
+Any other controller renders the nginx form: routing works, but the realtime prefix strip and
+the ingress rate limit will not. `rateLimit.perIP` inside the services works everywhere.
+
 ### Private registries
 
 `global.imagePullSecrets` names secrets you have already created; the chart does not create

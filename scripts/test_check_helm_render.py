@@ -250,6 +250,99 @@ def _configmap(name, data):
     return {"kind": "ConfigMap", "metadata": {"name": name}, "data": data}
 
 
+def _realtime_ingress(path, annotations, path_type="Prefix"):
+    return {
+        "kind": "Ingress",
+        "metadata": {"name": "hermes-realtime", "annotations": annotations},
+        "spec": {
+            "rules": [
+                {
+                    "http": {
+                        "paths": [
+                            {"path": path, "pathType": path_type,
+                             "backend": {"service": {"name": "centrifugo", "port": {"number": 8000}}}}
+                        ]
+                    }
+                }
+            ]
+        },
+    }
+
+
+def _stripprefix_middleware(name, prefixes=("/realtime",)):
+    return {
+        "kind": "Middleware",
+        "metadata": {"name": name},
+        "spec": {"stripPrefix": {"prefixes": list(prefixes)}},
+    }
+
+
+class TestRealtimePrefixStrip(unittest.TestCase):
+    """Centrifugo serves from its root, so /realtime must be stripped — by either dialect.
+
+    Every failure below is silent at install time: the Ingress is accepted, the widget
+    connects to nothing, falls down the whole transport ladder and reports itself
+    disconnected, and no log names the ingress.
+    """
+
+    NGINX = {
+        "nginx.ingress.kubernetes.io/rewrite-target": "/$2",
+        "nginx.ingress.kubernetes.io/use-regex": "true",
+    }
+    TRAEFIK = {
+        "traefik.ingress.kubernetes.io/router.middlewares":
+            "hermes-hermes-realtime-stripprefix@kubernetescrd",
+    }
+
+    def test_nginx_regex_form_passes(self):
+        docs = [_realtime_ingress("/realtime(/|$)(.*)", self.NGINX, "ImplementationSpecific")]
+        self.assertEqual(check.check_realtime_prefix_strip(docs), [])
+
+    def test_traefik_middleware_form_passes(self):
+        docs = [
+            _realtime_ingress("/realtime", self.TRAEFIK),
+            _stripprefix_middleware("hermes-realtime-stripprefix"),
+        ]
+        self.assertEqual(check.check_realtime_prefix_strip(docs), [])
+
+    def test_an_nginx_regex_path_under_traefik_is_flagged(self):
+        # The defect this check was written for. Traefik v3 removed regex from Ingress paths,
+        # so it matches this literally, no request ever has that prefix, and /realtime 404s
+        # while every /v1 route works — which reads as "Centrifugo is broken".
+        docs = [
+            _realtime_ingress("/realtime(/|$)(.*)", self.TRAEFIK, "ImplementationSpecific"),
+            _stripprefix_middleware("hermes-realtime-stripprefix"),
+        ]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("regex" in f for f in failures), failures)
+
+    def test_a_middleware_reference_with_no_middleware_is_flagged(self):
+        docs = [_realtime_ingress("/realtime", self.TRAEFIK)]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("no Middleware" in f or "stripPrefix" in f for f in failures), failures)
+
+    def test_a_bare_middleware_name_is_flagged(self):
+        # Traefik needs <namespace>-<name>@kubernetescrd. A bare name resolves to nothing and
+        # is skipped without complaint, so the prefix is never stripped.
+        docs = [
+            _realtime_ingress("/realtime", {
+                "traefik.ingress.kubernetes.io/router.middlewares": "hermes-realtime-stripprefix",
+            }),
+            _stripprefix_middleware("hermes-realtime-stripprefix"),
+        ]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("kubernetescrd" in f for f in failures), failures)
+
+    def test_stripping_nothing_at_all_is_flagged(self):
+        docs = [_realtime_ingress("/realtime", {})]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("neither strips" in f for f in failures), failures)
+
+    def test_ingresses_that_do_not_touch_realtime_are_ignored(self):
+        docs = [_ingress("hermes", [("/v1/send", "hermes-send")])]
+        self.assertEqual(check.check_realtime_prefix_strip(docs), [])
+
+
 class TestPodTemplates(unittest.TestCase):
     def test_collects_deployments_jobs_cronjobs_and_bare_pods(self):
         docs = [

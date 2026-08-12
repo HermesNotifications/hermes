@@ -737,6 +737,18 @@ ingress:
   enabled: true
   # -- Ingress class name (e.g. nginx, traefik)
   className: ""
+  # -- Which controller's dialect to emit. Inferred from className; set only when your class
+  # is named something the inference cannot see through (`traefik-internal`, `nginx-public`).
+  #
+  # This is not cosmetic. The realtime route has to strip `/realtime` before Centrifugo sees
+  # it, and the two controllers cannot express that the same way: nginx uses a regex path
+  # with rewrite-target, and Traefik v3 removed regex from Ingress paths, so the nginx form
+  # matches nothing at all there. Getting this wrong gives you a working API and a realtime
+  # endpoint that 404s, with nothing in any log naming the ingress.
+  #
+  # One of: "" (infer), "nginx", "traefik". Anything unrecognised is treated as nginx, which
+  # is what the chart emitted before this existed.
+  controller: ""
   # -- Additional ingress annotations
   annotations: {}
   # -- Per-IP flood shielding on the API ingress (nginx ingress controller only;

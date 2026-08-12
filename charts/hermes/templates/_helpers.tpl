@@ -109,6 +109,30 @@ imagePullSecrets:
 {{- end }}
 
 {{/*
+Which ingress controller the chart is rendering for.
+
+The two differ in a way that cannot be papered over with annotations. The realtime route has
+to strip `/realtime` before forwarding to Centrifugo: nginx does that with a regex path plus
+rewrite-target, and Traefik v3 removed regex support from Ingress paths entirely, so the same
+manifest produces a route that never matches. Both failures are silent -- the Ingress is
+accepted, the widget connects to nothing.
+
+Inferred from `ingress.className` because that is the value people already set, and
+overridable with `ingress.controller` for a class named something else (`traefik-internal`,
+`nginx-external`). Anything unrecognised falls back to nginx, which is what the chart has
+always emitted.
+*/}}
+{{- define "hermes.ingressController" -}}
+{{- if .Values.ingress.controller -}}
+{{- .Values.ingress.controller -}}
+{{- else if contains "traefik" (.Values.ingress.className | lower) -}}
+traefik
+{{- else -}}
+nginx
+{{- end -}}
+{{- end }}
+
+{{/*
 Name of the Secret holding the bootstrap API key.
 
 Referenced from three places that must agree or the RBAC silently does not cover the Secret

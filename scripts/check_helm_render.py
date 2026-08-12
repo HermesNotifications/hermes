@@ -652,9 +652,80 @@ def check_rewrite_targets(docs):
     return failures
 
 
+def check_realtime_prefix_strip(docs):
+    """The realtime route must actually strip /realtime, whichever controller renders it.
+
+    Centrifugo serves /connection/... at its root, so the ingress has to remove the /realtime
+    prefix. nginx does it with a regex path plus rewrite-target; Traefik v3 removed regex from
+    Ingress paths entirely, so the nginx form matches nothing there and /realtime returns 404
+    while every other route works.
+
+    Both failures are silent in the same way: the Ingress is accepted, the widget connects to
+    nothing, falls down the whole transport ladder (ADR 0017) and reports itself disconnected,
+    with no error anywhere that names the ingress. So this asserts the mechanism is present
+    and matches the dialect the rest of the manifest is written in.
+    """
+    failures = []
+    middlewares = {
+        (doc.get("metadata") or {}).get("name")
+        for doc in docs
+        if doc.get("kind") == "Middleware" and "stripPrefix" in (doc.get("spec") or {})
+    }
+
+    for doc in docs:
+        if doc.get("kind") != "Ingress":
+            continue
+        meta = doc.get("metadata") or {}
+        name = meta.get("name", "?")
+        annotations = meta.get("annotations") or {}
+
+        paths = [
+            path
+            for rule in (doc.get("spec") or {}).get("rules") or []
+            for path in ((rule.get("http") or {}).get("paths") or [])
+            if str(path.get("path", "")).startswith("/realtime")
+        ]
+        if not paths:
+            continue
+
+        traefik_ref = annotations.get("traefik.ingress.kubernetes.io/router.middlewares", "")
+        nginx_rewrite = annotations.get("nginx.ingress.kubernetes.io/rewrite-target", "")
+
+        if traefik_ref:
+            # <namespace>-<name>@kubernetescrd. A bare name resolves to nothing and Traefik
+            # skips the middleware without complaint.
+            if not traefik_ref.endswith("@kubernetescrd"):
+                failures.append(
+                    f"Ingress {name!r} references middleware {traefik_ref!r}, which is not in "
+                    "Traefik's <namespace>-<name>@kubernetescrd form. Traefik resolves it to "
+                    "nothing and skips it, so /realtime reaches Centrifugo unstripped."
+                )
+                continue
+            referenced = traefik_ref.rsplit("@", 1)[0]
+            if not any(referenced.endswith(m) for m in middlewares):
+                failures.append(
+                    f"Ingress {name!r} references stripPrefix middleware {referenced!r}, but no "
+                    f"Middleware with a stripPrefix spec renders. Found: {sorted(middlewares)}."
+                )
+            for path in paths:
+                if "(" in str(path.get("path", "")):
+                    failures.append(
+                        f"Ingress {name!r} is annotated for Traefik but its path "
+                        f"{path['path']!r} is an nginx regex. Traefik v3 removed regex from "
+                        "Ingress paths and matches this literally, so the route never fires."
+                    )
+        elif not nginx_rewrite:
+            failures.append(
+                f"Ingress {name!r} routes {paths[0]['path']!r} to Centrifugo but neither strips "
+                "the prefix (nginx rewrite-target) nor references a Traefik stripPrefix "
+                "middleware. Centrifugo would receive /realtime/... and 404 every connection."
+            )
+    return failures
+
+
 # CHECKS maps a --only name to the check it selects. The names are part of the CLI, so
 # renaming one is a breaking change to whatever invokes this.
-CHECK_NAMES = ("routes", "rewrites", "provisioner", "images", "config", "hook-refs")
+CHECK_NAMES = ("routes", "rewrites", "realtime", "provisioner", "images", "config", "hook-refs")
 
 
 def evaluate(docs, source, only=None):
@@ -666,6 +737,8 @@ def evaluate(docs, source, only=None):
         failures += check_ingress_routes(docs, source.routes)
     if "rewrites" in enabled:
         failures += check_rewrite_targets(docs)
+    if "realtime" in enabled:
+        failures += check_realtime_prefix_strip(docs)
     if "provisioner" in enabled:
         failures += check_provisioner(docs, source.stream_services, source.provisioner)
     if "images" in enabled:

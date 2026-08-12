@@ -335,6 +335,10 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "className": { "type": "string" },
+        "controller": {
+          "enum": ["", "nginx", "traefik"],
+          "description": "Controller dialect to emit. Empty infers from className. nginx and Traefik express the realtime prefix strip differently and are not interchangeable."
+        },
         "annotations": { "type": "object" },
         "rateLimit": {
           "$comment": "Applied to the API ingress only; the realtime ingress is deliberately excluded because its connections are long-lived WebSockets.",
