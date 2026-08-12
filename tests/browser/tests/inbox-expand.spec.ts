@@ -9,6 +9,7 @@ import {
   openPanel,
   rows,
   test,
+  waitForInboxLoaded,
   waitForRealtimeReady,
 } from "../fixtures/demo.js";
 
@@ -123,14 +124,21 @@ test.describe("expanding a long notification", () => {
   }) => {
     // Expanded rows are keyed by notification id rather than by position, so appending a page
     // must not move the expansion onto a different row.
-    await waitForRealtimeReady(demoPage);
-    await hermesUser.send({ title: "Keep me open", body: LONG_BODY });
-    await expect(badge(demoPage)).toHaveText("1");
-    for (let i = 0; i < 21; i++) {
-      await hermesUser.send({ title: `Filler ${i}`, body: LONG_BODY });
+    //
+    // Seeded server-side and then reloaded, rather than sent into an open page. `hasMore` comes
+    // from the cursor on the *initial list response*: a widget that loaded an empty inbox and
+    // then received 22 arrivals over the websocket has 22 rows and no cursor, so "Load more"
+    // never renders and this test waits forever on a control that cannot appear.
+    for (let i = 0; i < 22; i++) {
+      await hermesUser.send({ title: `Seeded ${i}`, body: LONG_BODY });
     }
-    await hermesUser.waitFor((page) => page.data.length >= 20);
+    await hermesUser.waitFor((page) => page.data.length >= 20, { limit: 25 });
+
+    await demoPage.reload();
+    await waitForInboxLoaded(demoPage);
     await openPanel(demoPage);
+    // One page's worth, plus a cursor -- which is what makes the control exist.
+    await expect(rows(demoPage)).toHaveCount(20);
 
     // Expand the oldest visible row, then page in more beneath it.
     const target = rows(demoPage).last();
