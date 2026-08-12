@@ -16,7 +16,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:darylrobbins/hermes.git
+    repoURL: git@github.com:HermesNotifications/hermes.git
     targetRevision: main
     path: deploy/k8s/overlays/staging
   destination:

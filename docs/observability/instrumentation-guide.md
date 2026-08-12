@@ -15,7 +15,7 @@ Everything developer-facing about emitting telemetry from a Hermes service.
 In `cmd/<service>/main.go`:
 
 ```go
-import "github.com/hermes-notifications/hermes/internal/observability"
+import "github.com/hermesnotifications/hermes/internal/observability"
 
 func main() {
     ctx := context.Background()
@@ -115,7 +115,7 @@ Use the carrier from `internal/observability/nats.go`:
 import (
     "go.opentelemetry.io/otel"
     "go.opentelemetry.io/otel/propagation"
-    obsnats "github.com/hermes-notifications/hermes/internal/observability"
+    obsnats "github.com/hermesnotifications/hermes/internal/observability"
 )
 
 // Publisher

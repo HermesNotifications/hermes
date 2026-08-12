@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
 )
 
 func TestGenerator_New_WithPrefix(t *testing.T) {

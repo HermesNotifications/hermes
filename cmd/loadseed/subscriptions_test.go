@@ -10,7 +10,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

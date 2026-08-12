@@ -30,11 +30,20 @@ Create chart name and version as used by the chart label.
 
 {{/*
 Common labels shared across all resources.
+
+app.kubernetes.io/version belongs HERE and not in hermes.serviceSelectorLabels. A Deployment's
+`spec.selector` is immutable, so a version in the selector would make every upgrade fail with
+"field is immutable" and need the Deployment deleted by hand. It is here so that `kubectl get
+deploy -L app.kubernetes.io/version` answers "what is actually running?" -- which nothing on a
+live cluster could answer before, since the binaries do not report a version either.
 */}}
 {{- define "hermes.labels" -}}
 helm.sh/chart: {{ include "hermes.chart" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: hermes
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -66,6 +75,74 @@ Merges global registry/tag with per-service overrides.
 {{- printf "%s/%s:%s" $registry $repository $tag -}}
 {{- else -}}
 {{- printf "%s:%s" $repository $tag -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Image pull policy. Call with (dict "root" . "service" .Values.admin) -- `service` may be a
+block with no `image` key, so this tolerates its absence.
+
+Was hardcoded IfNotPresent in twelve templates, which is right for the immutable semver tags
+this chart defaults to and wrong for anyone tracking a mutable tag or loading images into a
+kind/k3d node by hand: the node keeps the stale copy forever and the deploy silently does
+nothing.
+*/}}
+{{- define "hermes.imagePullPolicy" -}}
+{{- $service := .service | default dict -}}
+{{- $image := get $service "image" | default dict -}}
+{{- get $image "pullPolicy" | default .root.Values.global.image.pullPolicy -}}
+{{- end }}
+
+{{/*
+imagePullSecrets for a pod spec, rendered as a complete key (or nothing at all).
+
+Emits the key only when there is at least one secret, because `imagePullSecrets: []` and an
+absent key are not the same to some admission controllers. Call with the root context.
+*/}}
+{{- define "hermes.imagePullSecrets" -}}
+{{- with .Values.global.imagePullSecrets }}
+imagePullSecrets:
+{{- range . }}
+  - name: {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Which ingress controller the chart is rendering for.
+
+The two differ in a way that cannot be papered over with annotations. The realtime route has
+to strip `/realtime` before forwarding to Centrifugo: nginx does that with a regex path plus
+rewrite-target, and Traefik v3 removed regex support from Ingress paths entirely, so the same
+manifest produces a route that never matches. Both failures are silent -- the Ingress is
+accepted, the widget connects to nothing.
+
+Inferred from `ingress.className` because that is the value people already set, and
+overridable with `ingress.controller` for a class named something else (`traefik-internal`,
+`nginx-external`). Anything unrecognised falls back to nginx, which is what the chart has
+always emitted.
+*/}}
+{{- define "hermes.ingressController" -}}
+{{- if .Values.ingress.controller -}}
+{{- .Values.ingress.controller -}}
+{{- else if contains "traefik" (.Values.ingress.className | lower) -}}
+traefik
+{{- else -}}
+nginx
+{{- end -}}
+{{- end }}
+
+{{/*
+Name of the Secret holding the bootstrap API key.
+
+Referenced from three places that must agree or the RBAC silently does not cover the Secret
+the Job writes: the Job's argument, the Role's resourceNames, and NOTES.txt.
+*/}}
+{{- define "hermes.bootstrapSecretName" -}}
+{{- if .Values.hermes.bootstrap.secretName -}}
+{{- .Values.hermes.bootstrap.secretName -}}
+{{- else -}}
+{{- include "hermes.fullname" . }}-bootstrap
 {{- end -}}
 {{- end }}
 

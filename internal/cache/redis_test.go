@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/cache"
 )
 
 func testRedisURL(t *testing.T) string {

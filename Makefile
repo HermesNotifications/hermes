@@ -264,6 +264,15 @@ verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it
 	  --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
 	  --set observability.enabled=true \
 	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	@# Traefik renders a different realtime route entirely -- a stripPrefix Middleware and a
+	@# plain prefix, because Traefik v3 removed regex from Ingress paths and the nginx form
+	@# matches nothing there. Checking only the nginx render would leave half the
+	@# self-hosting world (every k3s cluster) on a silently dead websocket endpoint.
+	helm template verify charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set ingress.className=traefik \
+	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
 	@# The production posture must be refused at render time, not discovered as a
 	@# crash-loop. Bundled sub-charts cannot satisfy config.Validate(), so this must fail.
 	@if helm template verify charts/hermes/ \

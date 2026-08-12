@@ -15,16 +15,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/dispatch"
-	"github.com/hermes-notifications/hermes/internal/dispatchbench"
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
-	"github.com/hermes-notifications/hermes/internal/store"
-	"github.com/hermes-notifications/hermes/internal/store/cached"
-	"github.com/hermes-notifications/hermes/internal/store/dynamo"
-	"github.com/hermes-notifications/hermes/internal/store/postgres"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/dispatch"
+	"github.com/hermesnotifications/hermes/internal/dispatchbench"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/store/cached"
+	"github.com/hermesnotifications/hermes/internal/store/dynamo"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 )
 
 // envOr returns the value of environment variable k, or d if unset.

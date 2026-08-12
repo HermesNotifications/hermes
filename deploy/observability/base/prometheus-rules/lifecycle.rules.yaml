@@ -23,7 +23,7 @@ spec:
           annotations:
             summary: "Database pool over 90% acquired on {{ $labels.job }}"
             description: "{{ $labels.job }} has held more than 90% of its connections for 5 minutes. Requests are close to queueing on acquire, which surfaces as latency with no slow query to blame."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
 
         # The leading indicator: waiting for a connection is already latency, and it starts
         # before saturation is sustained enough to trip the alert above.
@@ -36,7 +36,7 @@ spec:
           annotations:
             summary: "Requests are waiting for a database connection on {{ $labels.job }}"
             description: "{{ $labels.job }} has been finding its pool empty on acquire for 10 minutes."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
 
         # Should be zero. Non-zero means a pod was still running handlers when its drain budget
         # expired: the messages are safe (unacked, so redelivered) but their side effects will
@@ -50,7 +50,7 @@ spec:
           annotations:
             summary: "{{ $labels.job }} did not finish draining before its budget expired"
             description: "{{ $value }} shutdown(s) in the last 15 minutes abandoned in-flight handlers. Those messages will be redelivered and their side effects repeated."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/ungraceful-shutdown.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/ungraceful-shutdown.md"
 
         # Redis deliberately does not gate readiness — every read it serves falls back to
         # Postgres — so a failing Redis leaves every probe green. This is the only signal.
@@ -63,7 +63,7 @@ spec:
           annotations:
             summary: "Cache errors on {{ $labels.job }} ({{ $labels.op }})"
             description: "{{ $labels.job }} has been failing to read the cache for 10 minutes and is falling back to the database. Correct, but slower and more load than intended — and invisible in readiness by design."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/cache-degraded.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/cache-degraded.md"
 
         # ADR 0016. With distributed rate limiting on, this is the only thing that says the
         # advertised limit has stopped being cluster-wide. The fallback to each replica's
@@ -79,7 +79,7 @@ spec:
           annotations:
             summary: "Rate limiting fell back to per-replica buckets on {{ $labels.job }}"
             description: "{{ $labels.job }} has been unable to reach the shared rate limiter for 5 minutes and is deciding requests from its local bucket. Requests still flow; the effective ceiling is now the configured rate times the replica count."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/rate-limit-backend-degraded.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/rate-limit-backend-degraded.md"
 
         # The metric that says whether AckWait is right. Once p99 handler duration approaches
         # the configured AckWait, JetStream begins redelivering messages whose handlers are
@@ -95,4 +95,4 @@ spec:
           annotations:
             summary: "Over 10% of messages redelivered on {{ $labels.stream }}/{{ $labels.consumer }}"
             description: "Redeliveries without a matching rise in handler failures point at AckWait rather than a downstream fault: handlers are outliving their ack deadline and their side effects are repeating."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/messaging-redeliveries.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/messaging-redeliveries.md"

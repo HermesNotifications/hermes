@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/httputil"
 )
 
 // APIKeyValidator validates a raw API key and returns the validated key on success.

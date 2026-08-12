@@ -21,7 +21,7 @@ spec:
           annotations:
             summary: "Service {{ $labels.job }} is down"
             description: "No successful scrape for {{ $labels.job }} (pod {{ $labels.pod }}) for 2 minutes."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/service-down.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/service-down.md"
 
         - alert: HighErrorRate
           expr: |
@@ -36,7 +36,7 @@ spec:
           annotations:
             summary: "High 5xx error rate on {{ $labels.service }}"
             description: "{{ $labels.service }} 5xx rate is {{ $value | humanizePercentage }} (>1%) for 5 minutes."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/high-error-rate.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/high-error-rate.md"
 
         - alert: HighLatency
           expr: |
@@ -50,4 +50,4 @@ spec:
           annotations:
             summary: "High p95 latency on {{ $labels.service }}"
             description: "{{ $labels.service }} p95 is {{ $value }}s (>1s) for 10 minutes."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/high-latency.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/high-latency.md"

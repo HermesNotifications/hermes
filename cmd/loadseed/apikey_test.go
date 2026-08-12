@@ -11,8 +11,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/database"
 )
 
 func TestInsertAPIKey(t *testing.T) {

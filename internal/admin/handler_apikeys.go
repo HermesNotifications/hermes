@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // The rate limit fields are pointers throughout, and absent means "use the service

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/database"
 )
 
 type Config struct {

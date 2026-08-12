@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // APIKeyCacheTTL is how long a validated key's record is held in Redis.

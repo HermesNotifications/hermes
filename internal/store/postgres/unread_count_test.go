@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/store/postgres"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

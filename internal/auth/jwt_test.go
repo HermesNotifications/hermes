@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 func makeJWT(t *testing.T, secret []byte, userID, organizationID string) string {

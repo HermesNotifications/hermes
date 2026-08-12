@@ -13,10 +13,10 @@ import (
 	texttemplate "text/template"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/provider"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/provider"
+	"github.com/hermesnotifications/hermes/internal/store"
 )
 
 type TemplateResolver struct {

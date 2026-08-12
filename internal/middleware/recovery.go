@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/httputil"
 )
 
 func Recovery(logger *slog.Logger) func(http.Handler) http.Handler {

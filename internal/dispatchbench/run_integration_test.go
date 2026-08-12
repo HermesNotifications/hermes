@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/dispatchbench"
+	"github.com/hermesnotifications/hermes/internal/dispatchbench"
 )
 
 // TestRunnerDrainSmoke documents that the runner's control flow is verified for

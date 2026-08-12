@@ -49,10 +49,11 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
+      {{- include "hermes.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: migrate
           image: {{ include "hermes.image" (dict "root" . "service" .Values.migration) }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ include "hermes.imagePullPolicy" (dict "root" . "service" .Values.migration) }}
           args: ["-migrations-path", "/migrations"]
           env:
             {{- if .Values.externalPostgresql.existingSecret }}

@@ -93,14 +93,67 @@ admin:
     tag: ""                     # overrides global.image.tag for this service only
 ```
 
-Pull policy is `IfNotPresent` in the templates and is not configurable.
+Pull policy defaults to `IfNotPresent` and is settable globally or per service:
 
-> Three repository identities coexist in this project and only the source location is
-> settled — the repository is `github.com/darylrobbins/hermes`. The chart publishes to
-> `ghcr.io/hermesnotifications` while `go.mod` declares module
-> `github.com/hermes-notifications/hermes`. The registry above matches the chart, which is
-> what actually publishes. See finding 31.12 in
-> [the 2026-07-27 review](../reviews/2026-07-27-architecture-review.md).
+```yaml
+global:
+  image:
+    pullPolicy: IfNotPresent   # or per service: admin.image.pullPolicy
+```
+
+`IfNotPresent` is right for the immutable semver tags the chart defaults to. Change it if you
+track a mutable tag, where the node otherwise keeps its first copy forever — the failure is a
+deploy that appears to succeed and changes nothing.
+
+### Ingress controller
+
+```yaml
+ingress:
+  className: traefik      # or nginx
+  controller: ""          # inferred from className; override for e.g. traefik-internal
+```
+
+The chart supports **ingress-nginx** and **Traefik**, and they are not interchangeable. The
+realtime route has to strip `/realtime` before Centrifugo sees it — nginx does that with a
+regex path plus `rewrite-target`, and Traefik v3 removed regex from Ingress paths, so the
+nginx form matches nothing there. Under `controller: traefik` the chart emits a `stripPrefix`
+Middleware and a plain prefix path instead, and expresses the API rate limit as a Traefik
+`rateLimit` Middleware rather than nginx annotations that Traefik would accept and ignore.
+
+Both need the `traefik.io` CRDs, which ship with Traefik itself.
+
+If your class is named something the inference cannot see through — `traefik-internal`,
+`nginx-public` — set `controller` explicitly. Anything unrecognised is treated as nginx.
+
+Any other controller renders the nginx form: routing works, but the realtime prefix strip and
+the ingress rate limit will not. `rateLimit.perIP` inside the services works everywhere.
+
+### Private registries
+
+`global.imagePullSecrets` names secrets you have already created; the chart does not create
+registry credentials.
+
+```yaml
+global:
+  imagePullSecrets:
+    - my-registry-credentials
+  image:
+    pullSecretNames:            # the NATS sub-chart spells it differently
+      - my-registry-credentials
+```
+
+Both keys are needed if you run the bundled NATS: a parent chart cannot template a sub-chart's
+values, and the NATS chart reads `global.image.pullSecretNames` rather than
+`global.imagePullSecrets`. The first key covers everything else the chart owns, including the
+bundled Postgres and Redis and the `helm test` pods. Centrifugo reads it too.
+
+> The project used to carry three spellings of its own name. That is settled: the repository
+> is `github.com/HermesNotifications/hermes`, the module is
+> `github.com/hermesnotifications/hermes`, and images and charts publish under
+> `ghcr.io/hermesnotifications`. See [ADR 0020](../adr/0020-project-identity-and-registry.md),
+> which resolves finding 31.12 of
+> [the 2026-07-27 review](../reviews/2026-07-27-architecture-review.md). (The npm packages
+> keep the hyphenated `@hermes-notifications` scope; npm and Go namespaces are unrelated.)
 
 ## Email
 
@@ -532,8 +585,8 @@ documented on this page at some point, and none of them ever did anything:
 | `replicaCount` | `replicas` |
 | `networkPolicies` | `networkPolicy` |
 | `ingress.host` | `global.domain` |
-| `image.registry` / `image.tag` / `image.pullPolicy` | `global.image.registry` / `global.image.tag`; pull policy is not configurable |
-| `imagePullSecrets` | *no equivalent* |
+| `image.registry` / `image.tag` / `image.pullPolicy` | `global.image.registry` / `global.image.tag` / `global.image.pullPolicy` |
+| top-level `imagePullSecrets` | `global.imagePullSecrets` (plus `global.image.pullSecretNames` for the NATS sub-chart) |
 | `hermes.logLevel` | *no equivalent — services do not read a log level* |
 | `hermes.email.smtp.from` | `hermes.email.from` |
 | `hermes.email.provider: webhook` + `hermes.email.webhook.*` | `provider: smtp` or `provider: ses` |

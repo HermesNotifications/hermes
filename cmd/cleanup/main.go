@@ -12,9 +12,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/bootstrap"
-	"github.com/hermes-notifications/hermes/internal/config"
-	"github.com/hermes-notifications/hermes/internal/store/postgres"
+	"github.com/hermesnotifications/hermes/internal/bootstrap"
+	"github.com/hermesnotifications/hermes/internal/config"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 )
 
 func main() {

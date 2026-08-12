@@ -14,15 +14,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/time/rate"
 )
 
-var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/middleware")
+var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/middleware")
 
 // rateLimitCounter is deliberately labelled by decision and scope alone. The
 // caller key is the one label an operator would reach for and the one that must

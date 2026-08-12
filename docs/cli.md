@@ -7,7 +7,7 @@ through the Go client in `pkg/client`.
 ## Install
 
 ```bash
-go install github.com/hermes-notifications/hermes/cmd/hermes@latest
+go install github.com/hermesnotifications/hermes/cmd/hermes@latest
 # or from a checkout:
 go install ./cmd/hermes
 ```

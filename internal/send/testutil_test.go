@@ -11,8 +11,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/send"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/send"
 )
 
 // mockStore implements send.SendStore with in-memory storage.

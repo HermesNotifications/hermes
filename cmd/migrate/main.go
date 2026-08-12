@@ -10,7 +10,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/database"
 )
 
 func main() {

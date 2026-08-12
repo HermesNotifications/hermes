@@ -64,6 +64,63 @@ You should see all tests pass, confirming that each service's health endpoint is
 Running `helm test` while the migration and provisioner Jobs are still finishing will fail
 for that reason rather than a real one.
 
+## Get your first API key
+
+Every admin endpoint requires an API key, and creating an API key is itself an admin endpoint
+requiring `apikeys:manage` — so there is no way to make the first one through the API. The
+chart runs a bootstrap Job that creates it and writes it to a Secret:
+
+```bash
+export HERMES_KEY=$(kubectl -n hermes get secret hermes-bootstrap \
+  -o jsonpath='{.data.HERMES_API_KEY}' | base64 -d)
+```
+
+The Secret is empty until the bootstrap Job finishes; it waits for the migration that creates
+the `api_keys` table, so give it the same minute the rest of the install takes.
+
+Check it works. An empty list is the correct answer on a fresh install — an organization is a
+*customer*, and the chart deliberately does not invent one for you
+([ADR 0012](../adr/0012-api-keys-are-not-scoped-to-organizations.md)):
+
+```bash
+curl -H "Authorization: Bearer $HERMES_KEY" https://hermes.example.com/v1/organizations
+# => []
+```
+
+> **This key carries every permission, including `apikeys:manage`.** It has to — otherwise it
+> could not create the key meant to replace it. Treat it as a root credential: mint a scoped
+> key for your application and revoke this one.
+>
+> ```bash
+> curl -X POST https://hermes.example.com/v1/apikeys \
+>   -H "Authorization: Bearer $HERMES_KEY" -H 'content-type: application/json' \
+>   -d '{"name":"my-app","permissions":["notifications:send"]}'
+>
+> curl -X DELETE https://hermes.example.com/v1/apikeys/<bootstrap-key-id> \
+>   -H "Authorization: Bearer $HERMES_KEY"
+> ```
+
+`helm uninstall` deliberately leaves this Secret in place, so reinstalling against a surviving
+database re-adopts the same key rather than issuing a new one and invalidating everywhere you
+pasted it. If your cluster policy forbids workloads creating Secrets, supply the key yourself
+instead and the Job will only insert the database row:
+
+```yaml
+hermes:
+  bootstrap:
+    existingSecret: my-hermes-key    # created by ESO, Vault, SOPS or by hand
+```
+
+## Create your first organization
+
+```bash
+ORG=$(curl -sX POST https://hermes.example.com/v1/organizations \
+  -H "Authorization: Bearer $HERMES_KEY" -H 'content-type: application/json' \
+  -d '{"name":"Acme"}' | jq -r .id)
+```
+
+That id is what every send request carries as `organization_id`.
+
 ## Access the API
 
 Ingress is enabled by default (`ingress.enabled: true`), so if you have an ingress controller

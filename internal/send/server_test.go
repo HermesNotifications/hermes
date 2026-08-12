@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/send"
+	"github.com/hermesnotifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/send"
 )
 
 const testHMACSecret = "test-hmac-secret"

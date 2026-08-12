@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 func (s *Store) CreateOrganization(ctx context.Context, id, name string) (*models.Organization, error) {

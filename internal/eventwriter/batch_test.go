@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/eventwriter"
+	"github.com/hermesnotifications/hermes/internal/eventwriter"
 )
 
 func TestBatch_FlushOnSize(t *testing.T) {

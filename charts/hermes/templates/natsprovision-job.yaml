@@ -44,10 +44,11 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
+      {{- include "hermes.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: natsprovision
           image: {{ include "hermes.image" (dict "root" . "service" .Values.natsProvision) }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ include "hermes.imagePullPolicy" (dict "root" . "service" .Values.natsProvision) }}
           {{- if .Values.externalNats.existingSecret }}
           env:
             - name: HERMES_NATS_URL

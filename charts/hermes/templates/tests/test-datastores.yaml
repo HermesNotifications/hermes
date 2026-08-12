@@ -32,6 +32,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   restartPolicy: Never
+  {{- include "hermes.imagePullSecrets" . | nindent 2 }}
   containers:
     {{- if .Values.postgresql.enabled }}
     - name: postgresql

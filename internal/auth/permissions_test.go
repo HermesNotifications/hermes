@@ -9,7 +9,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 // Finding 3. RequirePermission was `func(http.Handler) http.Handler`, which cannot be

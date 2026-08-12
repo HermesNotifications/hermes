@@ -21,10 +21,11 @@ spec:
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
+          {{- include "hermes.imagePullSecrets" . | nindent 10 }}
           containers:
             - name: cleanup
               image: {{ include "hermes.image" (dict "root" . "service" (dict "image" (dict "repository" "hermes-cleanup" "tag" ""))) }}
-              imagePullPolicy: IfNotPresent
+              imagePullPolicy: {{ include "hermes.imagePullPolicy" (dict "root" . "service" (dict "image" (dict "repository" "hermes-cleanup" "tag" ""))) }}
               env:
                 {{- if .Values.externalPostgresql.existingSecret }}
                 - name: HERMES_DATABASE_URL

@@ -2710,3 +2710,29 @@ for `infra/terraform/` code this change does not own, and, decisively, terraform
 on this machine by default, so it could not be watched failing. A harness written blind is the
 defect this section is about. `terraform validate` now runs in CI, which gives it somewhere to
 plug in; it is left to the unit that owns those modules.
+
+---
+
+## Resolved 2026-08-12 — finding 31.12 fully settled
+
+The 2026-07-29 entry above settled only the *source location* of finding 31.12 and deliberately
+left the other two identities in place, on the grounds that changing the module path "would touch
+every import". That reasoning held until the first release was attempted, at which point it
+stopped holding for a reason the original note could not have seen: `secrets.GITHUB_TOKEN` in a
+`darylrobbins`-owned repository cannot write packages to a `hermesnotifications` namespace, so
+**every publish path in the repository would have 403'd on the first tag push**. Neither
+`cd.yml`'s GHCR step nor `release-chart.yml` had ever run, so this had never been observed.
+
+All three identities now agree. The repository is `github.com/HermesNotifications/hermes`, the Go
+module is `github.com/hermesnotifications/hermes`, and artifacts publish to
+`ghcr.io/hermesnotifications`. The module rename touched 179 files and changed nothing but import
+paths — the cost the earlier note was avoiding, paid once. Recorded as
+[ADR 0020](../adr/0020-project-identity-and-registry.md).
+
+Two consequences worth noting here rather than only in the ADR. `go install
+github.com/hermesnotifications/hermes/cmd/hermes@latest` in `docs/cli.md` had never worked, since
+the old module path resolved to a repository that did not exist; it starts working at `v0.1.0`.
+And the AWS OIDC trust policy is scoped by `repo:<org>/<repo>`, so `infra/terraform/environments/
+*.tfvars` were updated and **require an apply** — until then `cd.yml`'s ECR push fails
+authentication. That apply is the one piece of this finding that cannot be closed from inside the
+repository.

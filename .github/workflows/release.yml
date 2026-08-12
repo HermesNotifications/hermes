@@ -1,0 +1,207 @@
+name: Release
+
+# The public release path: images and the Helm chart, straight to GHCR.
+#
+# Deliberately independent of cd.yml, which delivers SHA-tagged images to a private ECR for this
+# project's own AWS estate. That separation is the point:
+#
+#   * A release must not depend on an AWS account and an OIDC role whose trust policy names one
+#     repository. As long as it did, nobody but the maintainer could ever cut one.
+#   * cd.yml re-pushes an already-present SHA tag on a tag push, and the ECR repositories are
+#     IMMUTABLE. Building here instead sidesteps that entirely.
+#   * `provenance` and `sbom` are one line each on a direct build and impossible on a manifest
+#     copy out of another registry.
+#
+# The cost, stated plainly: the published digest is a rebuild of the commit CI validated rather
+# than the exact bits CI validated. Same source, cache-hit layers.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the GitHub Release
+  packages: write   # push images and the chart to GHCR
+
+env:
+  REGISTRY: ghcr.io/hermesnotifications
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Refuse to release something that was never green, or whose version does not
+  # agree with itself. Both failures are cheap here and expensive downstream: an
+  # image tagged 0.2.0 against a chart claiming 0.1.0 is not recoverable by
+  # deleting a tag, because someone may already have pulled it.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0   # need main's history for the ancestry check below
+
+      - name: Assert the tag, Chart.yaml version and appVersion agree
+        id: version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          chart_version=$(grep '^version:' charts/hermes/Chart.yaml | awk '{print $2}')
+          app_version=$(grep '^appVersion:' charts/hermes/Chart.yaml | awk '{print $2}' | tr -d '"')
+
+          if [ "$version" != "$chart_version" ] || [ "$version" != "$app_version" ]; then
+            echo "::error::tag v${version} disagrees with charts/hermes/Chart.yaml" \
+                 "(version: ${chart_version}, appVersion: ${app_version})."
+            echo "Bump Chart.yaml in a PR, merge it, then tag that commit."
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      # CI runs on `push: branches: [main]` and on pull_request -- not on tags. So a tag can
+      # point at a commit that never passed CI, or was never on main at all. Check rather than
+      # trust: this is the failure that happens late at night.
+      - name: Assert the tagged commit is on main
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${GITHUB_SHA} is not an ancestor of origin/main."
+            echo "Tags are cut from merged, CI-passed commits."
+            exit 1
+          fi
+
+  images:
+    name: ${{ matrix.service }}
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      # One red service must not leave the other eleven published: let them all finish so the
+      # release is either whole or obviously not.
+      fail-fast: false
+      matrix:
+        # KEEP IN SYNC with cd.yml's matrix. scripts/check_helm_render.py reads *this* list to
+        # decide whether an image the chart references can actually be pulled, and asserts the
+        # two agree -- the public registry is the one the chart's default points at.
+        service:
+          - admin
+          - dispatch
+          - send
+          - worker-events
+          - worker-email
+          - worker-sms
+          - worker-inbox
+          - inbox
+          - user
+          - migrate
+          - natsprovision
+          - cleanup
+          # Creates the first API key. Without it a fresh install cannot be authenticated
+          # against at all, so it is as load-bearing as migrate.
+          - bootstrap
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          # Cross-compiled, not emulated: deploy/docker/Dockerfile builds from $BUILDPLATFORM and
+          # sets GOARCH=$TARGETARCH, so arm64 costs a compile rather than a QEMU run.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            VERSION=${{ needs.verify.outputs.version }}
+          tags: ${{ env.REGISTRY }}/hermes-${{ matrix.service }}:${{ needs.verify.outputs.version }}
+          # Shared with cd.yml on purpose -- same Dockerfile, same layers.
+          cache-from: type=gha,scope=cd-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=cd-${{ matrix.service }}
+          provenance: true
+          sbom: true
+
+  chart:
+    name: Helm chart
+    # After the images, so the chart is never installable before the images its appVersion
+    # references exist. A chart that resolves to an ImagePullBackOff is worse than no chart.
+    needs: [verify, images]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+
+      # `helm dependency build` resolves from the local repository cache against Chart.lock and
+      # fails with "no cached repository" on a cold runner. ci.yml has always done this; this
+      # workflow's predecessor did not, and had never run, so nobody had found out.
+      - name: Add sub-chart repositories
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm repo add centrifugal https://centrifugal.github.io/helm-charts
+          helm repo update
+
+      - name: Build dependencies
+        run: helm dependency build charts/hermes/
+
+      - name: Lint chart
+        run: |
+          helm lint charts/hermes/ \
+            --set hermes.jwt.secret=test \
+            --set hermes.apiKey.hmacSecret=test \
+            --set global.domain=test.example.com
+
+      # No --version/--app-version override. Chart.yaml is the source of truth and the verify job
+      # has already asserted it matches the tag, so `helm package charts/hermes/` on a laptop
+      # produces the identical artifact.
+      - name: Package chart
+        run: helm package charts/hermes/
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push chart
+        run: helm push "hermes-${{ needs.verify.outputs.version }}.tgz" oci://${{ env.REGISTRY }}/charts
+
+  github-release:
+    name: GitHub Release
+    needs: [verify, images, chart]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes=$(awk -v v="## ${VERSION}" '
+            $0 ~ "^" v { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)
+
+          if [ -z "$notes" ]; then
+            echo "::error::CHANGELOG.md has no '## ${VERSION}' section."
+            exit 1
+          fi
+
+          printf '%s\n' "$notes" | gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file -
+
+      # GHCR packages are private on first push and there is no API-free way around it. Say so
+      # here rather than let the first release 404 for everyone who reads the quickstart.
+      - name: Remind about package visibility
+        run: |
+          echo "::warning::New GHCR packages default to PRIVATE. Flip all 12 hermes-* images and" \
+               "charts/hermes to public at https://github.com/orgs/HermesNotifications/packages" \
+               "or anonymous 'helm install' and 'docker pull' will 403."

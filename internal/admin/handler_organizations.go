@@ -11,7 +11,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 type organizationItem struct {

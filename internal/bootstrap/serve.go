@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 

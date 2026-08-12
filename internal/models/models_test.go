@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 func TestNotificationTemplate_ContentJSON(t *testing.T) {

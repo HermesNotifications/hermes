@@ -1,0 +1,62 @@
+{{- if and .Values.hermes.bootstrap.enabled (not .Values.hermes.bootstrap.existingSecret) }}
+{{/*
+The chart's first and only ServiceAccount and RBAC. Every other workload runs as `default`,
+which is why this file is worth reading closely rather than copying.
+
+Scoped as narrowly as the API allows:
+
+  * `create` on secrets cannot take resourceNames -- the object does not exist yet, so there
+    is nothing to name. This is the one unavoidably broad verb here.
+  * `get` IS restricted by resourceNames, so the Job can read its own Secret and no other.
+    Without that restriction this role would read every Secret in the namespace, including
+    the one holding HERMES_JWT_SECRET and the HMAC secret.
+  * No `update`, no `delete`, no `list`, no `watch`. Rotation is a deliberate operator
+    action, not something a Job may do on its own, and without `update` a compromised
+    bootstrap pod cannot overwrite the release's own Secret. Without `list` it cannot
+    enumerate what else is in the namespace.
+
+Not rendered at all when hermes.bootstrap.existingSecret is set: the Job then reads the key
+from a Secret you manage and only writes to Postgres, so it needs no Kubernetes access
+whatsoever. That is the path for clusters whose policy forbids workloads creating Secrets.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "hermes.fullname" . }}-bootstrap
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "hermes.fullname" . }}-bootstrap
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - {{ include "hermes.bootstrapSecretName" . | quote }}
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "hermes.fullname" . }}-bootstrap
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "hermes.fullname" . }}-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hermes.fullname" . }}-bootstrap
+    namespace: {{ .Release.Namespace }}
+{{- end }}

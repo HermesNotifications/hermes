@@ -19,11 +19,11 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/database"
-	"github.com/hermes-notifications/hermes/internal/inbox"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/store/postgres"
+	"github.com/hermesnotifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/inbox"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 )
 
 const testJWTSecret = "test-inbox-jwt-secret-for-integration"

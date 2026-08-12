@@ -7,7 +7,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 // APIKeyLimitKey buckets by validated key ID rather than by the raw

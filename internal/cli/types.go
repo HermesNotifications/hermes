@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hermes-notifications/hermes/pkg/client"
+	"github.com/hermesnotifications/hermes/pkg/client"
 	"github.com/spf13/cobra"
 )
 

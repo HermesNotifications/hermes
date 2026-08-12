@@ -21,7 +21,7 @@ spec:
         - name: registry
           value: 471524413120.dkr.ecr.us-east-1.amazonaws.com
         - name: repoURL
-          value: git@github.com:darylrobbins/hermes.git
+          value: git@github.com:HermesNotifications/hermes.git
       steps:
         - uses: git-clone
           config:
@@ -85,7 +85,7 @@ spec:
             apps:
               - name: hermes-production
                 sources:
-                  - repoURL: git@github.com:darylrobbins/hermes.git
+                  - repoURL: git@github.com:HermesNotifications/hermes.git
   # Finding 35's residue. This block did not exist, so nothing verified a production
   # promotion: `argocd-update` returning success meant only that ArgoCD accepted the sync,
   # and the Freight was marked promoted whether or not a single pod came up. Every other

@@ -7,7 +7,7 @@ package delivery
 import (
 	"context"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 type DeliveryRequest struct {

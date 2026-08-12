@@ -10,7 +10,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // storedInternalSecret returns the secret on the hermes-internal signing key,

@@ -14,12 +14,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/provider"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/provider"
+	"github.com/hermesnotifications/hermes/internal/store"
 )
 
 // eventNotificationSent is published once per notification, after the fan-out, and is the

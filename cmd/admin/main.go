@@ -10,13 +10,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/admin"
-	"github.com/hermes-notifications/hermes/internal/bootstrap"
-	"github.com/hermes-notifications/hermes/internal/config"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/store/cached"
-	"github.com/hermes-notifications/hermes/internal/store/dynamo"
-	"github.com/hermes-notifications/hermes/internal/store/postgres"
+	"github.com/hermesnotifications/hermes/internal/admin"
+	"github.com/hermesnotifications/hermes/internal/bootstrap"
+	"github.com/hermesnotifications/hermes/internal/config"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/store/cached"
+	"github.com/hermesnotifications/hermes/internal/store/dynamo"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 )
 
 func main() {

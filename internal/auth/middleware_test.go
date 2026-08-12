@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 // serveWith runs one request through mw and reports the status plus the key the handler

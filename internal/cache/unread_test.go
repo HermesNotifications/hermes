@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/cache"
 	"github.com/redis/go-redis/v9"
 )
 

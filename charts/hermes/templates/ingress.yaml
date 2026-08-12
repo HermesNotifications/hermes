@@ -32,6 +32,29 @@ with no rule and a rule with no endpoint both fail the build.
   (dict "path" "/v1/users/me"      "service" "user"  "port" .Values.user.port)
   (dict "path" "/v1/users"         "service" "admin" "port" .Values.admin.port)
 -}}
+{{- $apiController := include "hermes.ingressController" . -}}
+{{- if and .Values.ingress.rateLimit.enabled (eq $apiController "traefik") }}
+{{/*
+The same flood bound as the nginx annotations below, expressed the way Traefik expresses it.
+
+Rendered rather than skipped because the annotations below are inert on Traefik: they are
+accepted, ignored, and leave an installation that reads as rate limited in every manifest
+and is not. `average` is requests per `period`, and sourceCriterion defaults to the client
+address, so this is per-IP as the nginx form is.
+*/}}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullName }}-ratelimit
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ .Values.ingress.rateLimit.rps }}
+    burst: {{ mul .Values.ingress.rateLimit.rps .Values.ingress.rateLimit.burstMultiplier }}
+    period: 1s
+---
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -49,16 +72,20 @@ metadata:
     lookup per request before it is rejected and never reaches a bucket.
 
     The default rps matches send's per-credential sustained ceiling rather than
-    sitting below it: nginx cannot distinguish an authenticated request from an
+    sitting below it: the ingress cannot distinguish an authenticated request from an
     unauthenticated one, so a lower value would make the documented per-credential
     limit unreachable for a legitimate caller behind one egress IP. This bounds a
-    flood; it is not a quota. nginx-only — other ingress controllers ignore these.
+    flood; it is not a quota.
     */}}
+    {{- if eq $apiController "traefik" }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{ $fullName }}-ratelimit@kubernetescrd
+    {{- else }}
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.rateLimit.rps | quote }}
     nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.rateLimit.burstMultiplier | quote }}
     nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.rateLimit.connections | quote }}
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
     nginx.ingress.kubernetes.io/limit-conn-status-code: "429"
+    {{- end }}
     {{- end }}
 spec:
   {{- if .Values.ingress.className }}
@@ -82,6 +109,33 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 {{- if or .Values.centrifugo.enabled .Values.externalCentrifugo.ingressServiceName }}
+{{- $controller := include "hermes.ingressController" . -}}
+{{- if eq $controller "traefik" }}
+---
+{{/*
+Traefik strips the prefix with a Middleware, because it cannot do it the way nginx does.
+
+Traefik v3 removed regex support from Kubernetes Ingress paths, so the nginx form below --
+`path: /realtime(/|$)(.*)` with `rewrite-target: /$2` -- produces a route that matches
+nothing at all: the path is taken literally, no request ever has that prefix, and /realtime
+returns 404 while every other route works. The widget then reports itself disconnected and
+falls all the way down the transport ladder to nothing (ADR 0017), with no error anywhere
+that names the ingress.
+
+This needs the traefik.io CRDs, which ship with Traefik itself, so a cluster running Traefik
+has them by definition.
+*/}}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullName }}-realtime-stripprefix
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /realtime
+{{- end }}
 ---
 # Realtime ingress for Centrifugo WebSocket connections.
 # When using external Centrifugo without ingressServiceName, create your own
@@ -96,6 +150,12 @@ metadata:
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+    {{- if eq $controller "traefik" }}
+    # The <namespace>-<name>@kubernetescrd form is Traefik's, not Kubernetes': a bare name
+    # resolves to nothing and the middleware is skipped without complaint, which would leave
+    # Centrifugo receiving /realtime/... and answering 404 on every connection.
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{ $fullName }}-realtime-stripprefix@kubernetescrd
+    {{- else }}
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
@@ -115,6 +175,7 @@ metadata:
     # works today by luck — a cluster-wide ConfigMap enabling buffering would break realtime
     # with nothing in any log to explain it. Websockets are unaffected either way.
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
@@ -123,8 +184,18 @@ spec:
     - host: {{ .Values.global.domain | quote }}
       http:
         paths:
+          {{- if eq $controller "traefik" }}
+          {{/* A plain prefix: the Middleware above does the stripping. ADR 0017 requires
+               /realtime to stay a PREFIX so the http_stream and sse fallbacks, which live
+               on sub-paths, are reachable -- an Exact match would leave the websocket
+               working and both fallbacks 404, which is the worst of the three outcomes
+               because it only shows up on a degraded network. */}}
+          - path: /realtime
+            pathType: Prefix
+          {{- else }}
           - path: /realtime(/|$)(.*)
             pathType: ImplementationSpecific
+          {{- end }}
             backend:
               service:
                 {{- if .Values.centrifugo.enabled }}

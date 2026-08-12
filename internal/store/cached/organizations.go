@@ -8,9 +8,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/store"
 )
 
 // OrganizationRepository wraps a store.OrganizationRepository with Redis caching.

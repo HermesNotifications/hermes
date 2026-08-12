@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 type listUsersInput struct {

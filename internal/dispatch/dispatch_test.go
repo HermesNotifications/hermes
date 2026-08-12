@@ -12,9 +12,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/models"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/models"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
 )
 
 // The "sent" status was unreachable. eventwriter.eventToStatus maps "notification.sent" to

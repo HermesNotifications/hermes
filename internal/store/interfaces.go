@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // OrganizationRepository defines operations for managing organizations.

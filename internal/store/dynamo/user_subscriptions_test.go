@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/store/dynamo"
+	"github.com/hermesnotifications/hermes/internal/store/dynamo"
 	"github.com/jackc/pgx/v5"
 )
 

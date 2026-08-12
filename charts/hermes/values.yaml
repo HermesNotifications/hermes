@@ -5,6 +5,35 @@ global:
     registry: ghcr.io/hermesnotifications
     # -- Global image tag override (defaults to Chart appVersion)
     tag: ""
+    # -- Image pull policy for every Hermes image, overridable per service.
+    #
+    # IfNotPresent is right for the immutable semver tags this chart defaults to, and wrong
+    # in two cases that are easy to hit and hard to diagnose, because both fail by silently
+    # doing nothing: tracking a mutable tag (the node keeps its stale copy forever), and
+    # side-loading an image into a kind/k3d node, where Always would try the registry and
+    # fail. Set it deliberately for either.
+    pullPolicy: IfNotPresent
+  # -- Secrets used to pull every Hermes image, by name.
+  #
+  # Required for a private registry or an air-gapped mirror, which is most regulated
+  # environments -- and also for this project's own images before their GHCR packages are
+  # made public. Create the secret yourself (`kubectl create secret docker-registry`) and
+  # name it here; the chart does not manufacture registry credentials.
+  #
+  # Reaches every workload this chart owns, including the bundled Postgres and Redis (which
+  # pull from Docker Hub and so need it just as much) and the two `helm test` pods. The
+  # Centrifugo sub-chart reads this same key and picks it up too.
+  #
+  # The NATS sub-chart is the exception: it spells the same idea `global.image.pullSecretNames`,
+  # so set BOTH if you enable the bundled bus behind a private registry. A parent chart cannot
+  # template a sub-chart's values, so this cannot be wired up for you:
+  #
+  #   global:
+  #     imagePullSecrets: [my-registry-credentials]     # Hermes, Postgres, Redis, Centrifugo
+  #     image:
+  #       pullSecretNames: [my-registry-credentials]    # the NATS sub-chart
+  imagePullSecrets: []
+  #  - my-registry-credentials
   # -- Primary domain for ingress routing
   domain: ""
 
@@ -102,6 +131,57 @@ hermes:
     enabled: false
     # -- Cron schedule for cleanup job
     schedule: "0 3 * * *"
+
+  # -- First API key, created at install time.
+  #
+  # Creating an API key requires an API key -- POST /v1/apikeys demands apikeys:manage -- so
+  # without this a clean install produces a healthy cluster you cannot make a single
+  # authenticated call against. Turning it off leaves you no supported way to get a first
+  # credential short of writing an api_keys row by hand.
+  #
+  # Read it after installing:
+  #
+  #   kubectl -n <namespace> get secret <release>-hermes-bootstrap \
+  #     -o jsonpath='{.data.HERMES_API_KEY}' | base64 -d
+  #
+  # It carries every permission, including apikeys:manage -- it has to, or it could not mint
+  # the narrower key meant to replace it. Trade it for a scoped key and revoke it.
+  bootstrap:
+    # -- Create the first API key
+    enabled: true
+    # -- Name of the Secret to write. Defaults to <release>-hermes-bootstrap.
+    #
+    # The Secret is deliberately NOT tracked by Helm: `helm uninstall` leaves it, so a
+    # reinstall against a surviving database re-adopts the same key instead of issuing a new
+    # one and invalidating every place the old one was pasted.
+    secretName: ""
+    # -- Read the key from a Secret you manage instead of creating one.
+    #
+    # For clusters whose policy forbids workloads creating Secrets. Supply the key via ESO,
+    # Vault, SOPS or by hand; the Job then only ensures the database row, and the chart
+    # renders no ServiceAccount and no RBAC at all.
+    existingSecret: ""
+    # -- Key within existingSecret holding the raw API key
+    existingSecretKey: HERMES_API_KEY
+    # -- Label stored on the api_keys row
+    keyName: "Bootstrap"
+    # -- Port the Kubernetes API server listens on, for the networkPolicy egress rule.
+    #
+    # 443 on a managed control plane (EKS, GKE, AKS); 6443 on k3s, kind, k3d and RKE. Only
+    # matters when networkPolicy.enabled is true, and getting it wrong there costs a Job that
+    # hangs until its deadline rather than one that fails with something readable.
+    apiServerPort: 443
+    image:
+      # -- Bootstrap job image repository
+      repository: hermes-bootstrap
+      # -- Image tag override
+      tag: ""
+    # -- Retries before the Job is marked failed. 6 for the same reason migration uses 6:
+    # it is applied in the same pass as the database and the migration that creates
+    # api_keys, so on a first install it retries while both catch up.
+    backoffLimit: 6
+    # -- Resource requests and limits for the bootstrap job
+    resources: {}
 
 # ---------------------------------------------------------------------------
 # Per-service configuration
@@ -657,6 +737,18 @@ ingress:
   enabled: true
   # -- Ingress class name (e.g. nginx, traefik)
   className: ""
+  # -- Which controller's dialect to emit. Inferred from className; set only when your class
+  # is named something the inference cannot see through (`traefik-internal`, `nginx-public`).
+  #
+  # This is not cosmetic. The realtime route has to strip `/realtime` before Centrifugo sees
+  # it, and the two controllers cannot express that the same way: nginx uses a regex path
+  # with rewrite-target, and Traefik v3 removed regex from Ingress paths, so the nginx form
+  # matches nothing at all there. Getting this wrong gives you a working API and a realtime
+  # endpoint that 404s, with nothing in any log naming the ingress.
+  #
+  # One of: "" (infer), "nginx", "traefik". Anything unrecognised is treated as nginx, which
+  # is what the chart emitted before this existed.
+  controller: ""
   # -- Additional ingress annotations
   annotations: {}
   # -- Per-IP flood shielding on the API ingress (nginx ingress controller only;
@@ -705,6 +797,20 @@ observability:
 networkPolicy:
   # -- Enable network policies to restrict inter-service traffic
   enabled: false
+
+# ---------------------------------------------------------------------------
+# helm test
+# ---------------------------------------------------------------------------
+
+# -- Configuration for the `helm test` hooks
+tests:
+  # -- Image used by the connectivity test pod, which curls every service's /healthz.
+  #
+  # Pinned rather than `:latest`, so `helm test` means the same thing next month as today,
+  # and settable so it can point at a mirror -- a hardcoded docker.io reference makes the
+  # test unrunnable on an air-gapped cluster, which is the same gap as global.imagePullSecrets
+  # and worth closing in the same place. It is the only third-party image `helm test` pulls.
+  image: curlimages/curl:8.21.0
 
 # ---------------------------------------------------------------------------
 # External services (when sub-charts are disabled)

@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/cli"
+	"github.com/hermesnotifications/hermes/internal/cli"
 )
 
 // captureBody returns an httptest.Server that stores the decoded request body

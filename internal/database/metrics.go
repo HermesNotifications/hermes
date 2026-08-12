@@ -7,7 +7,7 @@ package database
 import (
 	"context"
 
-	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -15,7 +15,7 @@ import (
 
 func stateAttr(state string) attribute.KeyValue { return attribute.String("state", state) }
 
-var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/database")
+var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/database")
 
 // instrumentPool publishes pool saturation as observable gauges.
 //

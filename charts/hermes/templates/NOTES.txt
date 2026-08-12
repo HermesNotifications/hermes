@@ -10,11 +10,41 @@ Watch the rollout:
 
     kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=hermes -w
 
+{{ if .Values.hermes.bootstrap.enabled }}{{ if .Values.hermes.bootstrap.existingSecret }}YOUR FIRST API KEY is the one you supplied, in secret {{ .Values.hermes.bootstrap.existingSecret }}
+(key {{ .Values.hermes.bootstrap.existingSecretKey }}). The bootstrap Job has inserted it into the database; it
+creates no Secret and holds no Kubernetes permissions.
+{{ else }}YOUR FIRST API KEY:
+
+    kubectl -n {{ .Release.Namespace }} get secret {{ include "hermes.bootstrapSecretName" . }} \
+      -o jsonpath='{.data.HERMES_API_KEY}' | base64 -d
+
+Empty until the bootstrap Job finishes — it waits for the migration that creates the table,
+so give it the same minute the rest of the install takes. This is the ONLY supported way to
+get a first credential: creating an API key requires an API key, so there is no path back to
+this point through the API.
+
+  It carries EVERY permission, including apikeys:manage — it has to, or it could not create
+  the key meant to replace it. Treat it as a root credential: mint a narrow key for your
+  application, then revoke this one.
+
+      curl -H "Authorization: Bearer $KEY" -X POST https://{{ .Values.global.domain }}/v1/apikeys ...
+      curl -H "Authorization: Bearer $KEY" -X DELETE https://{{ .Values.global.domain }}/v1/apikeys/<id>
+
+  The Secret is NOT tracked by Helm, so `helm uninstall` leaves it behind. That is
+  deliberate: reinstalling against a surviving database re-adopts this same key rather than
+  issuing a new one and invalidating every place you pasted it.
+{{ end }}{{ else }}
+  WARNING: hermes.bootstrap.enabled=false, and there is no other supported way to obtain a
+  first API key. Creating one requires apikeys:manage on a key you do not have. Unless you
+  are supplying a key another way, you will have a running cluster you cannot authenticate
+  against, and recovering means writing an api_keys row by hand.
+{{ end }}
 EXPECT ABOUT A MINUTE OF CrashLoopBackOff ON A FIRST INSTALL. It converges; do not start
-debugging yet. Two Jobs provision what the services refuse to start without:
+debugging yet. These Jobs provision what the services refuse to start without:
 
   {{ include "hermes.fullname" . }}-migrate-{{ .Release.Revision }} (database schema){{ if .Values.natsProvision.enabled }}
-  {{ include "hermes.fullname" . }}-natsprovision-{{ .Release.Revision }} (JetStream streams){{ end }}
+  {{ include "hermes.fullname" . }}-natsprovision-{{ .Release.Revision }} (JetStream streams){{ end }}{{ if .Values.hermes.bootstrap.enabled }}
+  {{ include "hermes.fullname" . }}-bootstrap-{{ .Release.Revision }} (first API key){{ end }}
 
 They are ordinary resources, not Helm hooks, and they run alongside the services rather
 than before them — neither hook phase can work here (see ADR 0008). The services exit at

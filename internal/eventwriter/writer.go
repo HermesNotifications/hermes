@@ -10,11 +10,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/models"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
-	"github.com/hermes-notifications/hermes/internal/observability"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/models"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/store"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -78,7 +78,7 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 		}
 	}
 
-	tracer := otel.Tracer("github.com/hermes-notifications/hermes/internal/eventwriter")
+	tracer := otel.Tracer("github.com/hermesnotifications/hermes/internal/eventwriter")
 	ctx, span := tracer.Start(context.Background(), "eventwriter.flush",
 		trace.WithLinks(links...),
 		trace.WithAttributes(

@@ -8,8 +8,8 @@ import (
 	"context"
 	"fmt"
 
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
-	"github.com/hermes-notifications/hermes/internal/models"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 var templateIDGen = id.NewGenerator(id.Config{Prefix: "ntpl", TimeBits: 48, RandBits: 80})

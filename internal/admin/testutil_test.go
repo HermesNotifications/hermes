@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/admin"
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/admin"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // mockStore implements admin.AdminStore with in-memory storage.

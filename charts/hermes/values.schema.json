@@ -97,8 +97,18 @@
               "type": "string",
               "description": "Registry for Hermes' own images. Note that Helm merges `global` into every sub-chart and the NATS chart reads this same key, which is why values.yaml pins nats.*.image.registry explicitly."
             },
-            "tag": { "type": "string" }
+            "tag": { "type": "string" },
+            "pullPolicy": {
+              "enum": ["Always", "IfNotPresent", "Never"],
+              "description": "Pull policy for every Hermes image, overridable per service. The NATS sub-chart reads this same key, so setting it here also applies to the bundled bus — which is consistent rather than surprising.",
+              "default": "IfNotPresent"
+            }
           }
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Names of existing image pull secrets, applied to every Hermes pod. The chart does not create them."
         }
       }
     },
@@ -205,6 +215,35 @@
             "enabled": { "type": "boolean" },
             "schedule": { "type": "string", "minLength": 1 }
           }
+        },
+        "bootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "First API key, created at install time. Without it a fresh install cannot be authenticated against at all.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" },
+            "existingSecret": { "type": "string" },
+            "existingSecretKey": { "type": "string", "minLength": 1 },
+            "keyName": { "type": "string", "minLength": 1 },
+            "apiServerPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "Kubernetes API server port for the networkPolicy egress rule. 443 on managed control planes, 6443 on k3s/kind/k3d/RKE."
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": { "type": "string", "minLength": 1 },
+                "tag": { "type": "string" },
+                "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "resources": { "type": "object" }
+          }
         }
       }
     },
@@ -296,6 +335,10 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "className": { "type": "string" },
+        "controller": {
+          "enum": ["", "nginx", "traefik"],
+          "description": "Controller dialect to emit. Empty infers from className. nginx and Traefik express the realtime prefix strip differently and are not interchangeable."
+        },
         "annotations": { "type": "object" },
         "rateLimit": {
           "$comment": "Applied to the API ingress only; the realtime ingress is deliberately excluded because its connections are long-lived WebSockets.",
@@ -351,6 +394,18 @@
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" }
+      }
+    },
+
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Image for the `helm test` connectivity pod. Pinned, and settable so it can point at a mirror on an air-gapped cluster."
+        }
       }
     },
 

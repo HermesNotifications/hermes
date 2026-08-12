@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 	"github.com/jackc/pgx/v5"
 )
 

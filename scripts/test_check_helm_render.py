@@ -126,6 +126,7 @@ func other() {
 
 
 class TestParsePublishedImages(unittest.TestCase):
+    # cd.yml: the matrix block is terminated by a job-level `env:`.
     CD = '''
     strategy:
       matrix:
@@ -138,9 +139,31 @@ class TestParsePublishedImages(unittest.TestCase):
       IMAGE_TAG: something
 '''
 
+    # release.yml: no job-level `env:`, so the block runs to `steps:` instead. Parsing this
+    # one by looking only for `env:` swallowed the whole file and read the step names as
+    # services.
+    RELEASE = '''
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - admin
+          - dispatch
+          - natsprovision
+    steps:
+      - uses: actions/checkout@abc
+      - name: Build and push
+'''
+
     def test_reads_the_publish_matrix(self):
         self.assertEqual(
             check.parse_published_images(self.CD),
+            {"hermes-admin", "hermes-dispatch", "hermes-natsprovision"},
+        )
+
+    def test_reads_a_matrix_terminated_by_steps(self):
+        self.assertEqual(
+            check.parse_published_images(self.RELEASE),
             {"hermes-admin", "hermes-dispatch", "hermes-natsprovision"},
         )
 
@@ -225,6 +248,99 @@ def _ingress(name, rules):
 
 def _configmap(name, data):
     return {"kind": "ConfigMap", "metadata": {"name": name}, "data": data}
+
+
+def _realtime_ingress(path, annotations, path_type="Prefix"):
+    return {
+        "kind": "Ingress",
+        "metadata": {"name": "hermes-realtime", "annotations": annotations},
+        "spec": {
+            "rules": [
+                {
+                    "http": {
+                        "paths": [
+                            {"path": path, "pathType": path_type,
+                             "backend": {"service": {"name": "centrifugo", "port": {"number": 8000}}}}
+                        ]
+                    }
+                }
+            ]
+        },
+    }
+
+
+def _stripprefix_middleware(name, prefixes=("/realtime",)):
+    return {
+        "kind": "Middleware",
+        "metadata": {"name": name},
+        "spec": {"stripPrefix": {"prefixes": list(prefixes)}},
+    }
+
+
+class TestRealtimePrefixStrip(unittest.TestCase):
+    """Centrifugo serves from its root, so /realtime must be stripped — by either dialect.
+
+    Every failure below is silent at install time: the Ingress is accepted, the widget
+    connects to nothing, falls down the whole transport ladder and reports itself
+    disconnected, and no log names the ingress.
+    """
+
+    NGINX = {
+        "nginx.ingress.kubernetes.io/rewrite-target": "/$2",
+        "nginx.ingress.kubernetes.io/use-regex": "true",
+    }
+    TRAEFIK = {
+        "traefik.ingress.kubernetes.io/router.middlewares":
+            "hermes-hermes-realtime-stripprefix@kubernetescrd",
+    }
+
+    def test_nginx_regex_form_passes(self):
+        docs = [_realtime_ingress("/realtime(/|$)(.*)", self.NGINX, "ImplementationSpecific")]
+        self.assertEqual(check.check_realtime_prefix_strip(docs), [])
+
+    def test_traefik_middleware_form_passes(self):
+        docs = [
+            _realtime_ingress("/realtime", self.TRAEFIK),
+            _stripprefix_middleware("hermes-realtime-stripprefix"),
+        ]
+        self.assertEqual(check.check_realtime_prefix_strip(docs), [])
+
+    def test_an_nginx_regex_path_under_traefik_is_flagged(self):
+        # The defect this check was written for. Traefik v3 removed regex from Ingress paths,
+        # so it matches this literally, no request ever has that prefix, and /realtime 404s
+        # while every /v1 route works — which reads as "Centrifugo is broken".
+        docs = [
+            _realtime_ingress("/realtime(/|$)(.*)", self.TRAEFIK, "ImplementationSpecific"),
+            _stripprefix_middleware("hermes-realtime-stripprefix"),
+        ]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("regex" in f for f in failures), failures)
+
+    def test_a_middleware_reference_with_no_middleware_is_flagged(self):
+        docs = [_realtime_ingress("/realtime", self.TRAEFIK)]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("no Middleware" in f or "stripPrefix" in f for f in failures), failures)
+
+    def test_a_bare_middleware_name_is_flagged(self):
+        # Traefik needs <namespace>-<name>@kubernetescrd. A bare name resolves to nothing and
+        # is skipped without complaint, so the prefix is never stripped.
+        docs = [
+            _realtime_ingress("/realtime", {
+                "traefik.ingress.kubernetes.io/router.middlewares": "hermes-realtime-stripprefix",
+            }),
+            _stripprefix_middleware("hermes-realtime-stripprefix"),
+        ]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("kubernetescrd" in f for f in failures), failures)
+
+    def test_stripping_nothing_at_all_is_flagged(self):
+        docs = [_realtime_ingress("/realtime", {})]
+        failures = check.check_realtime_prefix_strip(docs)
+        self.assertTrue(any("neither strips" in f for f in failures), failures)
+
+    def test_ingresses_that_do_not_touch_realtime_are_ignored(self):
+        docs = [_ingress("hermes", [("/v1/send", "hermes-send")])]
+        self.assertEqual(check.check_realtime_prefix_strip(docs), [])
 
 
 class TestPodTemplates(unittest.TestCase):
@@ -638,6 +754,7 @@ class TestEvaluate(unittest.TestCase):
         provisioner="hermes-natsprovision",
         email_providers={"smtp"},
         published_images={"hermes-admin", "hermes-send", "hermes-natsprovision"},
+        internal_images={"hermes-admin", "hermes-send", "hermes-natsprovision"},
         registry="ghcr.io/hermesnotifications",
     )
 
@@ -660,9 +777,9 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertEqual(stats["workloads"], 3)
 
-    def test_an_image_the_cd_matrix_does_not_build_is_flagged(self):
-        # `hermes-cleanup` is exactly this case in the real repo: charts reference it,
-        # cd.yml does not build it.
+    def test_an_image_the_release_matrix_does_not_build_is_flagged(self):
+        # `hermes-cleanup` was exactly this case in the real repo: charts reference it,
+        # the build matrix did not build it.
         source = check.Source(**{**self.SOURCE._asdict(),
                                  "published_images": {"hermes-admin", "hermes-natsprovision"}})
         failures, _ = check.evaluate(self._good_docs(), source)
@@ -757,36 +874,50 @@ class TestEvaluateOnly(unittest.TestCase):
 class TestMainGuards(unittest.TestCase):
     """The gate must not report success when it read nothing."""
 
+    @staticmethod
+    def _source(**overrides):
+        base = dict(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
+                    email_providers={"smtp"}, published_images={"x"}, internal_images={"x"},
+                    registry="r")
+        return check.Source(**{**base, **overrides})
+
     def test_source_with_no_routes_is_rejected(self):
-        empty = check.Source(routes={}, stream_services={"hermes-send"}, provisioner="p",
-                             email_providers={"smtp"}, published_images={"x"}, registry="r")
-        problems = check.source_problems(empty)
+        problems = check.source_problems(self._source(routes={}))
         self.assertTrue(any("route" in p for p in problems), problems)
 
     def test_source_with_no_stream_services_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services=set(), provisioner="p",
-                             email_providers={"smtp"}, published_images={"x"}, registry="r")
-        self.assertTrue(check.source_problems(empty))
+        self.assertTrue(check.source_problems(self._source(stream_services=set())))
 
     def test_source_with_no_provisioner_identity_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner=None,
-                             email_providers={"smtp"}, published_images={"x"}, registry="r")
-        self.assertTrue(check.source_problems(empty))
+        self.assertTrue(check.source_problems(self._source(provisioner=None)))
 
     def test_source_with_no_email_providers_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
-                             email_providers=set(), published_images={"x"}, registry="r")
-        self.assertTrue(check.source_problems(empty))
+        self.assertTrue(check.source_problems(self._source(email_providers=set())))
 
     def test_source_with_no_published_images_is_rejected(self):
-        empty = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
-                             email_providers={"smtp"}, published_images=set(), registry="r")
-        self.assertTrue(check.source_problems(empty))
+        problems = check.source_problems(self._source(published_images=set()))
+        self.assertTrue(any("release.yml" in p for p in problems), problems)
+
+    def test_source_with_no_internal_images_is_rejected(self):
+        problems = check.source_problems(self._source(internal_images=set()))
+        self.assertTrue(any("cd.yml" in p for p in problems), problems)
+
+    def test_a_service_published_but_never_delivered_is_flagged(self):
+        # In release.yml, absent from cd.yml: Kargo has nothing to promote.
+        problems = check.source_problems(
+            self._source(published_images={"x", "hermes-new"}, internal_images={"x"}))
+        self.assertTrue(any("hermes-new" in p and "Kargo" in p for p in problems), problems)
+
+    def test_a_service_delivered_but_never_published_is_flagged(self):
+        # In cd.yml, absent from release.yml: no self-hoster can pull it. This is the
+        # direction that hurts strangers rather than the maintainer, so it must not be
+        # silent.
+        problems = check.source_problems(
+            self._source(published_images={"x"}, internal_images={"x", "hermes-new"}))
+        self.assertTrue(any("hermes-new" in p and "self-hoster" in p for p in problems), problems)
 
     def test_a_complete_source_has_no_problems(self):
-        ok = check.Source(routes={"a": {"/v1/x"}}, stream_services={"s"}, provisioner="p",
-                          email_providers={"smtp"}, published_images={"x"}, registry="r")
-        self.assertEqual(check.source_problems(ok), [])
+        self.assertEqual(check.source_problems(self._source()), [])
 
 
 if __name__ == "__main__":

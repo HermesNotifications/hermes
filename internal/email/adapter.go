@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/hermes-notifications/hermes/internal/delivery"
+	"github.com/hermesnotifications/hermes/internal/delivery"
 )
 
 // DeliveryAdapter wraps an email Provider to satisfy the delivery.Provider interface.

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 )
 
 // ADR 0005 phase 3, verified against a real cluster rather than the embedded server in

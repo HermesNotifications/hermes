@@ -5,7 +5,7 @@
 package postgres
 
 import (
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

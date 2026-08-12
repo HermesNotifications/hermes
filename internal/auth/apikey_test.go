@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 func TestHMACHashAndVerify(t *testing.T) {

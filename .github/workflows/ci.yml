@@ -248,6 +248,17 @@ jobs:
             --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
             --set observability.enabled=true \
             | python3 scripts/check_helm_render.py - --source-root=.
+      # Traefik gets a different realtime route entirely: a stripPrefix Middleware and a plain
+      # prefix, because Traefik v3 removed regex from Ingress paths and the nginx form matches
+      # nothing there. Checking only the nginx render leaves every k3s cluster — probably the
+      # most common self-hosting setup — with a silently dead websocket endpoint.
+      - name: Check the Traefik render too
+        run: |
+          helm template test charts/hermes/ \
+            --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+            --set global.domain=test.example.com \
+            --set ingress.className=traefik \
+            | python3 scripts/check_helm_render.py - --source-root=.
       - name: A production install on bundled sub-charts must be refused at render time
         run: |
           if helm template test charts/hermes/ \
@@ -264,6 +275,26 @@ jobs:
                --set global.domain=test.example.com --set adminPortal.enabled=true \
                > /dev/null 2>&1; then
             echo "::error::adminPortal.enabled=true rendered against hermes-admin-portal, which nothing in this repository builds"
+            exit 1
+          fi
+      # release.yml asserts the same thing against the tag, but only once a tag exists — by
+      # which point the fix is a new tag rather than a commit. Catch it on the PR instead.
+      # The chart's appVersion is what _helpers.tpl defaults every image tag to, so a chart
+      # claiming 0.1.0 while version says 0.2.0 renders images that were never published.
+      - name: Chart version and appVersion must agree, and be in the changelog
+        run: |
+          set -euo pipefail
+          version=$(grep '^version:' charts/hermes/Chart.yaml | awk '{print $2}')
+          app_version=$(grep '^appVersion:' charts/hermes/Chart.yaml | awk '{print $2}' | tr -d '"')
+
+          if [ "$version" != "$app_version" ]; then
+            echo "::error::charts/hermes/Chart.yaml version ($version) != appVersion ($app_version)."
+            echo "They are one number: appVersion is the default tag for every Hermes image."
+            exit 1
+          fi
+          if ! grep -q "^## ${version}\$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## ${version}' section."
+            echo "release.yml builds the GitHub Release notes from it and fails without one."
             exit 1
           fi
 
@@ -481,3 +512,129 @@ jobs:
           kubectl -n hermes-chart-gate get pods
           echo "--- datastore test output (the assertion this job exists for) ---"
           kubectl -n hermes-chart-gate logs hermes-test-datastores --all-containers || true
+
+  bootstrap-key:
+    # The first API key is the one thing whose absence makes a whole install useless, and it
+    # is the newest code here — so unlike the services above, it gets real coverage rather
+    # than a note explaining why it cannot.
+    #
+    # It does not need a published image: migrate and bootstrap are built from this commit,
+    # tagged as the exact reference the chart renders, and loaded into kind. The default
+    # IfNotPresent then uses the loaded copy and never reaches the registry. That is also
+    # incidentally a test that the rendered image reference is the one we think it is.
+    name: First API key bootstrap on kind
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: helm/kind-action@99576bfa6ddf9a8e612d83b513da5a75875caced # v1.9.0
+        with:
+          cluster_name: hermes-bootstrap-gate
+
+      - name: Build migrate and bootstrap from this commit
+        run: |
+          set -euo pipefail
+          for svc in migrate bootstrap; do
+            docker buildx build \
+              --build-arg SERVICE="$svc" \
+              -t "ghcr.io/hermesnotifications/hermes-${svc}:$(grep '^appVersion:' charts/hermes/Chart.yaml | awk '{print $2}' | tr -d '\"')" \
+              --cache-from "type=gha,scope=cd-${svc}" \
+              --load -f deploy/docker/Dockerfile .
+          done
+          kind load docker-image --name hermes-bootstrap-gate \
+            $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'hermes-(migrate|bootstrap):')
+
+      - name: Add chart repositories
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm repo add centrifugal https://centrifugal.github.io/helm-charts
+          helm dependency build charts/hermes/
+
+      # The nine services still cannot pull, so they stay at replicas=0. natsProvision is off
+      # for the same reason. What remains is exactly the path under test: Postgres, the
+      # migration that creates api_keys, and the bootstrap Job.
+      #
+      # The NATS and Centrifugo sub-charts stay ENABLED even though nothing here uses them.
+      # Disabling one without supplying the matching external* connection is refused by the
+      # schema, correctly — an install with neither a bundled bus nor an external one has no
+      # bus at all. They pull from their own registries, so unlike the Hermes images they
+      # start fine; they just cost a little wall-clock.
+      - name: Install
+        run: |
+          helm install hermes charts/hermes/ \
+            --namespace hermes-bootstrap-gate --create-namespace \
+            --set hermes.jwt.secret=citest --set hermes.apiKey.hmacSecret=citest \
+            --set global.domain=ci.example.com \
+            --set natsProvision.enabled=false \
+            --set admin.replicas=0 --set send.replicas=0 --set dispatch.replicas=0 \
+            --set inbox.replicas=0 --set user.replicas=0 \
+            --set workerEmail.replicas=0 --set workerSms.replicas=0 \
+            --set workerInbox.replicas=0 --set workerEvents.replicas=0 \
+            --wait --wait-for-jobs --timeout 10m
+
+      - name: A usable key must exist in the Secret
+        run: |
+          set -euo pipefail
+          key=$(kubectl -n hermes-bootstrap-gate get secret hermes-bootstrap \
+                  -o jsonpath='{.data.HERMES_API_KEY}' | base64 -d)
+          if [ -z "$key" ]; then
+            echo "::error::the bootstrap Secret holds no key; a fresh install would be unusable"
+            exit 1
+          fi
+
+          # Raw keys are hms_key_<id>_<secret> (auth.GenerateAPIKey), so the api_keys id is
+          # `key_<id>` -- fields 2 and 3. The secret is field 4 and must never be echoed.
+          key_id=$(echo "$key" | cut -d_ -f2-3)
+          echo "key id: ${key_id}"
+
+          # The key is worthless unless the database agrees. Compare the id in the Secret with
+          # the row, rather than trusting that the Job exited 0.
+          rows=$(kubectl -n hermes-bootstrap-gate exec statefulset/hermes-postgresql -- \
+                   psql -U hermes -d hermes -tAc \
+                   "SELECT count(*) FROM api_keys WHERE id = '${key_id}'")
+          if [ "$rows" != "1" ]; then
+            echo "::error::the key in the Secret has no api_keys row (found ${rows}); it would not authenticate"
+            exit 1
+          fi
+
+          # apikeys:manage specifically: without it the bootstrap key cannot mint the narrow
+          # key meant to replace it, so it could never be retired.
+          perms=$(kubectl -n hermes-bootstrap-gate exec statefulset/hermes-postgresql -- \
+                    psql -U hermes -d hermes -tAc \
+                    "SELECT permissions FROM api_keys WHERE id = '${key_id}'")
+          case "$perms" in
+            *apikeys:manage*) ;;
+            *) echo "::error::bootstrap key lacks apikeys:manage (got ${perms})"; exit 1 ;;
+          esac
+
+      - name: An upgrade must not mint a second key
+        run: |
+          set -euo pipefail
+          before=$(kubectl -n hermes-bootstrap-gate get secret hermes-bootstrap \
+                     -o jsonpath='{.data.HERMES_API_KEY}')
+
+          helm upgrade hermes charts/hermes/ \
+            --namespace hermes-bootstrap-gate --reuse-values \
+            --wait --wait-for-jobs --timeout 10m
+
+          after=$(kubectl -n hermes-bootstrap-gate get secret hermes-bootstrap \
+                    -o jsonpath='{.data.HERMES_API_KEY}')
+          if [ "$before" != "$after" ]; then
+            echo "::error::the key changed across an upgrade; every place it was pasted would break"
+            exit 1
+          fi
+
+          count=$(kubectl -n hermes-bootstrap-gate exec statefulset/hermes-postgresql -- \
+                    psql -U hermes -d hermes -tAc "SELECT count(*) FROM api_keys")
+          if [ "$count" != "1" ]; then
+            echo "::error::${count} api_keys rows after one upgrade; keys are leaking per revision"
+            exit 1
+          fi
+
+      - name: Show what actually ran
+        if: always()
+        run: |
+          kubectl -n hermes-bootstrap-gate get pods,jobs
+          kubectl -n hermes-bootstrap-gate logs -l app.kubernetes.io/component=bootstrap \
+            --tail=50 --prefix || true

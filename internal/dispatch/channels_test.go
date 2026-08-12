@@ -7,8 +7,8 @@ package dispatch_test
 import (
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/dispatch"
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/dispatch"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 func TestFilterChannelsForTemplate_AllTemplates(t *testing.T) {

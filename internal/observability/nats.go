@@ -42,7 +42,7 @@ func (c NATSHeaderCarrier) Keys() []string {
 // message headers, and returns the context + span. Caller MUST call
 // span.End() when the publish call returns.
 func InjectNATS(ctx context.Context, msg *nats.Msg) (context.Context, trace.Span) {
-	tracer := otel.Tracer("github.com/hermes-notifications/hermes/internal/observability")
+	tracer := otel.Tracer("github.com/hermesnotifications/hermes/internal/observability")
 	ctx, span := tracer.Start(ctx, "nats.publish",
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
@@ -65,7 +65,7 @@ func InjectNATS(ctx context.Context, msg *nats.Msg) (context.Context, trace.Span
 // span.End() when processing is done.
 func ExtractNATS(ctx context.Context, headers nats.Header, subject string) (context.Context, trace.Span) {
 	ctx = otel.GetTextMapPropagator().Extract(ctx, NATSHeaderCarrier(headers))
-	tracer := otel.Tracer("github.com/hermes-notifications/hermes/internal/observability")
+	tracer := otel.Tracer("github.com/hermesnotifications/hermes/internal/observability")
 	ctx, span := tracer.Start(ctx, "nats.consume",
 		trace.WithSpanKind(trace.SpanKindConsumer),
 		trace.WithAttributes(

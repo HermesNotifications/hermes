@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 )
 
 func writeFile(t *testing.T, path, content string) {

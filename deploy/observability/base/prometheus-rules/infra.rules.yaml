@@ -22,7 +22,7 @@ spec:
           annotations:
             summary: "Postgres connection pool >90% saturated"
             description: "Active connections {{ $value | humanizePercentage }} of max_connections for 5 minutes."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/db-pool-saturated.md"
 
         - alert: PrometheusTargetDown
           expr: up == 0
@@ -33,7 +33,7 @@ spec:
           annotations:
             summary: "Prometheus target {{ $labels.job }} down"
             description: "Prometheus has been unable to scrape {{ $labels.job }} ({{ $labels.instance }}) for 10 minutes."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/prometheus-target-down.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/prometheus-target-down.md"
 
         - alert: DiskPressure
           expr: |
@@ -46,4 +46,4 @@ spec:
           annotations:
             summary: "Observability PV {{ $labels.persistentvolumeclaim }} >80% full"
             description: "PVC {{ $labels.persistentvolumeclaim }} utilization {{ $value | humanizePercentage }}."
-            runbook_url: "https://github.com/darylrobbins/hermes/blob/main/docs/observability/runbooks/disk-pressure.md"
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/disk-pressure.md"

@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/config"
-	"github.com/hermes-notifications/hermes/internal/middleware"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/config"
+	"github.com/hermesnotifications/hermes/internal/middleware"
 )
 
 // RateLimited is the slice of a service Server this package configures. All four

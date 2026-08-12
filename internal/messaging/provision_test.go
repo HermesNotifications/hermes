@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 )
 
 // ADR 0005 phase 4. Stream declaration moves to one provisioning identity, so services need a

@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 func TestHandleCreateSubscription(t *testing.T) {

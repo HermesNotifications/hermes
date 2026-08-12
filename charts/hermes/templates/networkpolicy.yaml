@@ -196,4 +196,16 @@ spec:
           protocol: TCP
         - port: 25
           protocol: TCP
+    {{- if and .Values.hermes.bootstrap.enabled (not .Values.hermes.bootstrap.existingSecret) }}
+    # Kubernetes API server, for the bootstrap Job's Secret write.
+    #
+    # 443 above covers a managed control plane, but k3s, kind, k3d and RKE serve the API on
+    # 6443 — so on exactly the clusters someone is most likely to evaluate on, the Job would
+    # hang until its context deadline and the install would look like a database problem.
+    # Rendered only when the Job actually needs the API server: with existingSecret set it
+    # talks to Postgres and nothing else.
+    - ports:
+        - port: {{ .Values.hermes.bootstrap.apiServerPort }}
+          protocol: TCP
+    {{- end }}
 {{- end }}

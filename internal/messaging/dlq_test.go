@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"testing"
 
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
 )
 
 type permErr struct{ msg string }

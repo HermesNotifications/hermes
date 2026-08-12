@@ -7,7 +7,7 @@ package dispatch_test
 import (
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/dispatch"
+	"github.com/hermesnotifications/hermes/internal/dispatch"
 )
 
 func TestClampWorkersToPool(t *testing.T) {

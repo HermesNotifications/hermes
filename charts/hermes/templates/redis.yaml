@@ -69,6 +69,7 @@ spec:
         runAsGroup: 999
         fsGroup: 999
         runAsNonRoot: true
+      {{- include "hermes.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: redis
           image: {{ printf "%s:%s" .Values.redis.image.repository .Values.redis.image.tag | quote }}

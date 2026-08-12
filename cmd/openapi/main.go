@@ -13,10 +13,10 @@ import (
 	"os"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/hermes-notifications/hermes/internal/admin"
-	"github.com/hermes-notifications/hermes/internal/inbox"
-	"github.com/hermes-notifications/hermes/internal/send"
-	"github.com/hermes-notifications/hermes/internal/userservice"
+	"github.com/hermesnotifications/hermes/internal/admin"
+	"github.com/hermesnotifications/hermes/internal/inbox"
+	"github.com/hermesnotifications/hermes/internal/send"
+	"github.com/hermesnotifications/hermes/internal/userservice"
 )
 
 func main() {
