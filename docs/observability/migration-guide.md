@@ -54,7 +54,7 @@ Redis go-redis has its OTel hook in the extras module: `github.com/redis/go-redi
 Replace:
 
 ```go
-import "github.com/hermes-notifications/hermes/internal/tracing"
+import "github.com/hermesnotifications/hermes/internal/tracing"
 
 func main() {
     tracing.Start("hermes-send")
@@ -66,7 +66,7 @@ func main() {
 with:
 
 ```go
-import "github.com/hermes-notifications/hermes/internal/observability"
+import "github.com/hermesnotifications/hermes/internal/observability"
 
 func main() {
     ctx := context.Background()

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/pkg/client"
+	"github.com/hermesnotifications/hermes/pkg/client"
 )
 
 func TestCategoriesList(t *testing.T) {

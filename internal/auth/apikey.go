@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
 )
 
 var apiKeyIDGen = id.NewGenerator(id.Config{Prefix: "key", RandBits: 36})

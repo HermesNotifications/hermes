@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/store"
-	"github.com/hermes-notifications/hermes/internal/store/dynamo"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/store/dynamo"
 )
 
 // TestInsertEvent_Single inserts a single event and reads it back via GetNotificationEvents.

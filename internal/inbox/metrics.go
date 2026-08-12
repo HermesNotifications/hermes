@@ -7,12 +7,12 @@ package inbox
 import (
 	"context"
 
-	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
-var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/inbox")
+var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/inbox")
 
 // cacheResults records the outcome of every cache consultation.
 //

@@ -7,7 +7,7 @@ package models_test
 import (
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 func TestStatusRank(t *testing.T) {

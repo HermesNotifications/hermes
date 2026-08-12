@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/inbox"
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/inbox"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // mockInboxStore implements inbox.InboxStore with in-memory storage.

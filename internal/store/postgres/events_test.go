@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
-	"github.com/hermes-notifications/hermes/internal/models"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 func TestEventInsertAndStatusRollup(t *testing.T) {

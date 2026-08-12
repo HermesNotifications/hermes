@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/cache"
 )
 
 var keySeq atomic.Int64

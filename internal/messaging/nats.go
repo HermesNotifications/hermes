@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel/attribute"

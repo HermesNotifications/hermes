@@ -12,7 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/hermes-notifications/hermes/pkg/client"
+	"github.com/hermesnotifications/hermes/pkg/client"
 )
 
 // -- Styles --

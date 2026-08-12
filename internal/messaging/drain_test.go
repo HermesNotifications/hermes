@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 )
 
 // The property that makes a rolling restart safe: a handler already running when shutdown

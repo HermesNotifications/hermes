@@ -12,8 +12,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
 )
 
 // mockProvider is a test implementation of Provider.

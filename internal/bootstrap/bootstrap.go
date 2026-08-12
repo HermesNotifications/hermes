@@ -9,12 +9,12 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/config"
-	"github.com/hermes-notifications/hermes/internal/database"
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/observability"
-	"github.com/hermes-notifications/hermes/internal/store/dynamo"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/config"
+	"github.com/hermesnotifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/store/dynamo"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

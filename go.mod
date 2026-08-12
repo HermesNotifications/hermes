@@ -1,4 +1,4 @@
-module github.com/hermes-notifications/hermes
+module github.com/hermesnotifications/hermes
 
 go 1.26
 

@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/pkg/client"
+	"github.com/hermesnotifications/hermes/pkg/client"
 )
 
 func TestNew(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/database"
 )
 
 func TestSeeder_EndToEnd(t *testing.T) {

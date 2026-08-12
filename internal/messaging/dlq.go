@@ -9,8 +9,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/observability"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/observability"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -20,7 +20,7 @@ import (
 // inspection reads during an incident.
 const dlqStreamName = "DLQ"
 
-var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/messaging")
+var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/messaging")
 
 var deadLetterCounter, _ = meter.Int64Counter(
 	"hermes.messaging.dead_letters",

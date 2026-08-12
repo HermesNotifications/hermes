@@ -11,12 +11,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/bootstrap"
-	"github.com/hermes-notifications/hermes/internal/config"
-	"github.com/hermes-notifications/hermes/internal/delivery"
-	"github.com/hermes-notifications/hermes/internal/email"
-	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/bootstrap"
+	"github.com/hermesnotifications/hermes/internal/config"
+	"github.com/hermesnotifications/hermes/internal/delivery"
+	"github.com/hermesnotifications/hermes/internal/email"
+	"github.com/hermesnotifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 )
 
 func main() {

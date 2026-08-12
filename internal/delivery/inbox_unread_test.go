@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/centrifugo"
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/centrifugo"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // capturingCentrifugo records the payload of each publish and can be told to fail, which is how

@@ -7,7 +7,7 @@ package main
 import (
 	"context"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

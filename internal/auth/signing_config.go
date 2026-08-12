@@ -4,7 +4,7 @@
 
 package auth
 
-import "github.com/hermes-notifications/hermes/internal/models"
+import "github.com/hermesnotifications/hermes/internal/models"
 
 // SigningConfigsFromKeys converts a slice of JWTSigningKey models into
 // the auth package's JWTSigningConfig representation.

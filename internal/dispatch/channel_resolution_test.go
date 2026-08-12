@@ -9,7 +9,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // Finding 32. ResolveChannels had ZERO test coverage — its only reference outside its own

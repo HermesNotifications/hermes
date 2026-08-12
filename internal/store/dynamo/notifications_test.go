@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/store"
-	"github.com/hermes-notifications/hermes/internal/store/dynamo"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/store/dynamo"
 	"github.com/jackc/pgx/v5"
 )
 

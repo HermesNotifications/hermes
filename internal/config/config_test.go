@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/config"
+	"github.com/hermesnotifications/hermes/internal/config"
 )
 
 func TestLoad_Defaults(t *testing.T) {

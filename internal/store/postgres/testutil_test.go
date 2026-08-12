@@ -11,8 +11,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/database"
-	"github.com/hermes-notifications/hermes/internal/store/postgres"
+	"github.com/hermesnotifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

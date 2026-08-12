@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/database"
 )
 
 func testDatabaseURL(t *testing.T) string {

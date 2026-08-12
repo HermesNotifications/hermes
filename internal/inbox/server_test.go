@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/inbox"
+	"github.com/hermesnotifications/hermes/internal/inbox"
 )
 
 // ADR 0005 phase 3. Under per-service NATS credentials, every connection costs an NKey user

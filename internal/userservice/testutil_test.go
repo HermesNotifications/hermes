@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/userservice"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/userservice"
 	"github.com/jackc/pgx/v5"
 )
 

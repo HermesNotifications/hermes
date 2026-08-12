@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/httputil"
 )
 
 func probe(t *testing.T, r *httputil.Readiness) (int, string) {

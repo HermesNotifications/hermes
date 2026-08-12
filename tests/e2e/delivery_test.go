@@ -19,17 +19,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hermes-notifications/hermes/internal/auth"
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/centrifugo"
-	"github.com/hermes-notifications/hermes/internal/database"
-	"github.com/hermes-notifications/hermes/internal/delivery"
-	"github.com/hermes-notifications/hermes/internal/dispatch"
-	"github.com/hermes-notifications/hermes/internal/eventwriter"
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	"github.com/hermes-notifications/hermes/internal/models"
-	"github.com/hermes-notifications/hermes/internal/send"
-	"github.com/hermes-notifications/hermes/internal/store/postgres"
+	"github.com/hermesnotifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/centrifugo"
+	"github.com/hermesnotifications/hermes/internal/database"
+	"github.com/hermesnotifications/hermes/internal/delivery"
+	"github.com/hermesnotifications/hermes/internal/dispatch"
+	"github.com/hermesnotifications/hermes/internal/eventwriter"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/send"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 )
 
 func TestDeliveryPipeline(t *testing.T) {

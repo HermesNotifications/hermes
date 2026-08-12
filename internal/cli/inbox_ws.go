@@ -10,7 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/centrifugal/centrifuge-go"
-	"github.com/hermes-notifications/hermes/pkg/client"
+	"github.com/hermesnotifications/hermes/pkg/client"
 )
 
 func setupWebSocket(centrifugoURL, jwt, internalUserID string, program *tea.Program) (*centrifuge.Client, *centrifuge.Subscription, error) {

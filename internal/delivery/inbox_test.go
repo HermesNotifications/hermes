@@ -11,8 +11,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/centrifugo"
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/centrifugo"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 func TestInboxProvider_Send_Success(t *testing.T) {

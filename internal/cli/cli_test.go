@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/cli"
+	"github.com/hermesnotifications/hermes/internal/cli"
 )
 
 func TestCategoriesListTableOutput(t *testing.T) {

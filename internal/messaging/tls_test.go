@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 )
 
 // ADR 0005 phase 2. These tests are deliberately infrastructure-free: they stand up a

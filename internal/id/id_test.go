@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/id"
+	"github.com/hermesnotifications/hermes/internal/id"
 )
 
 func TestNew_Returns26CharString(t *testing.T) {

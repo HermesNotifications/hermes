@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/hermes-notifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/httputil"
 )
 
 type contextKey string

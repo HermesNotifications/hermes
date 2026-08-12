@@ -10,7 +10,7 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/hermes-notifications/hermes/internal/delivery"
+	"github.com/hermesnotifications/hermes/internal/delivery"
 )
 
 type mockEmailProvider struct {

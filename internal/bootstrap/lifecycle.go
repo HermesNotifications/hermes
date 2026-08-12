@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/httputil"
-	"github.com/hermes-notifications/hermes/internal/messaging"
+	"github.com/hermesnotifications/hermes/internal/httputil"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"

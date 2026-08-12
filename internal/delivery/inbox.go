@@ -10,9 +10,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/centrifugo"
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/centrifugo"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // unreadCountedTTL bounds how long a notification is remembered as already counted. It only has

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/inbox"
+	"github.com/hermesnotifications/hermes/internal/inbox"
 )
 
 // fakeUnreadCache is a hand-written stand-in for the Redis client, typed against

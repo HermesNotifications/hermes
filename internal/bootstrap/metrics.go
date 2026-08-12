@@ -5,11 +5,11 @@
 package bootstrap
 
 import (
-	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"go.opentelemetry.io/otel/metric"
 )
 
-var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/bootstrap")
+var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/bootstrap")
 
 var (
 	// shutdownDuration measures each phase of the shutdown sequence.

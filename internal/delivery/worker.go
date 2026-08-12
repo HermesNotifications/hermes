@@ -11,8 +11,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/messaging"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/messaging"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
 )
 
 // permanentError marks a failure that retrying cannot fix. It implements

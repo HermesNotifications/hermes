@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/models"
 )
 
 // The API key store had no coverage at all. The admin handlers exercise it through a mock,

@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hermes-notifications/hermes/internal/cache"
-	"github.com/hermes-notifications/hermes/internal/models"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
-	"github.com/hermes-notifications/hermes/internal/provider"
-	"github.com/hermes-notifications/hermes/internal/store"
+	"github.com/hermesnotifications/hermes/internal/cache"
+	"github.com/hermesnotifications/hermes/internal/models"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/provider"
+	"github.com/hermesnotifications/hermes/internal/store"
 )
 
 // channelStore composes the repository interfaces needed for channel resolution.

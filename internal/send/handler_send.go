@@ -12,15 +12,15 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/hermes-notifications/hermes/internal/auth"
-	id "github.com/hermes-notifications/hermes/internal/id/v2"
-	"github.com/hermes-notifications/hermes/internal/models"
-	hermenats "github.com/hermes-notifications/hermes/internal/nats"
-	"github.com/hermes-notifications/hermes/internal/observability"
+	"github.com/hermesnotifications/hermes/internal/auth"
+	id "github.com/hermesnotifications/hermes/internal/id/v2"
+	"github.com/hermesnotifications/hermes/internal/models"
+	hermenats "github.com/hermesnotifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"go.opentelemetry.io/otel/metric"
 )
 
-var meter = observability.Meter("github.com/hermes-notifications/hermes/internal/send")
+var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/send")
 
 // publishRejectionCounter is the signal that the pipeline is refusing work.
 // Before the work streams were bounded this could only mean NATS was

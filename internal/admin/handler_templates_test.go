@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hermes-notifications/hermes/internal/auth"
+	"github.com/hermesnotifications/hermes/internal/auth"
 )
 
 // Finding 3. Every template operation is gated on templates:manage, not just the read.
