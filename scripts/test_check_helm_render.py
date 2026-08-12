@@ -686,6 +686,74 @@ class TestEvaluate(unittest.TestCase):
             self.assertIn(expected, joined)
 
 
+class TestServiceBackendIdentity(unittest.TestCase):
+    """The chart labels Services; the kustomize overlays name them.
+
+    This gate was written against the chart and only ever run against it. Pointing it at
+    the overlays — which is where the route drift actually was — reported every rule as
+    sending traffic to None, because the overlays set only `part-of`.
+    """
+
+    def test_prefers_the_app_name_label(self):
+        docs = [_service("rel-hermes-admin", "hermes-admin")]
+        self.assertEqual(check.service_backends(docs), {"rel-hermes-admin": "hermes-admin"})
+
+    def test_falls_back_to_the_service_name_when_unlabelled(self):
+        # The overlays' shape: no app.kubernetes.io/name, and the Service is already
+        # named for its identity.
+        docs = [{"kind": "Service", "metadata": {
+            "name": "hermes-admin", "labels": {"app.kubernetes.io/part-of": "hermes"}}}]
+        self.assertEqual(check.service_backends(docs), {"hermes-admin": "hermes-admin"})
+
+    def test_the_label_wins_over_the_name(self):
+        # Under the chart the Service name carries a release prefix, so falling back to it
+        # would be the wrong string. The fallback must only apply when the label is absent.
+        docs = [_service("rel-hermes-admin", "hermes-admin")]
+        self.assertNotEqual(check.service_backends(docs)["rel-hermes-admin"], "rel-hermes-admin")
+
+    def test_routes_resolve_against_an_unlabelled_service(self):
+        docs = [
+            {"kind": "Service", "metadata": {"name": "hermes-admin", "labels": {}}},
+            _ingress("hermes-ingress", [("/v1/users", "hermes-admin")]),
+        ]
+        self.assertEqual(check.check_ingress_routes(docs, {"hermes-admin": {"/v1/users"}}), [])
+
+
+class TestEvaluateOnly(unittest.TestCase):
+    """--only exists so the overlays can be gated on routes without the image check.
+
+    Overlay image tags are SET_BY_CD_PIPELINE placeholders until Kargo rewrites them at
+    promotion, so running the image check there would fail permanently and the gate would
+    be turned off again.
+    """
+
+    SOURCE = TestEvaluate.SOURCE
+
+    def _docs_with_two_defects(self):
+        return [
+            _service("rel-hermes-admin", "hermes-admin"),
+            # Wrong route, and an untagged image.
+            _ingress("rel-hermes", [("/v1/types", "rel-hermes-admin")]),
+            _deployment("rel-hermes-admin", "hermes-admin", ["hermes-admin"]),
+        ]
+
+    def test_only_routes_reports_route_defects(self):
+        failures, _ = check.evaluate(self._docs_with_two_defects(), self.SOURCE, only=["routes"])
+        self.assertTrue(any("/v1/types" in f for f in failures), failures)
+
+    def test_only_routes_suppresses_the_image_check(self):
+        failures, _ = check.evaluate(self._docs_with_two_defects(), self.SOURCE, only=["routes"])
+        self.assertFalse(any("not tagged" in f for f in failures), failures)
+
+    def test_no_selection_runs_everything(self):
+        failures, _ = check.evaluate(self._docs_with_two_defects(), self.SOURCE)
+        self.assertTrue(any("not tagged" in f for f in failures), failures)
+
+    def test_an_unknown_check_name_is_rejected_rather_than_ignored(self):
+        # Silently running nothing is the failure mode this whole script exists to prevent.
+        self.assertEqual(check.main(["-", "--only=nonsense"]), 2)
+
+
 class TestMainGuards(unittest.TestCase):
     """The gate must not report success when it read nothing."""
 

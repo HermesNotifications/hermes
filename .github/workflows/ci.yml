@@ -299,6 +299,27 @@ jobs:
           kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_networkpolicy_selectors.py -
           kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_networkpolicy_selectors.py -
 
+      # Every alert MUST ship with a runbook (CLAUDE.md), and the rules files have claimed
+      # a CI check enforced that since they were written. None did. A runbook_url is
+      # followed by whoever is paged; a 404 there costs the minutes it exists to save.
+      - name: Every alert must have a runbook that exists
+        run: python3 scripts/check_runbook_links.py
+
+      # The route gate ran over the Helm chart only. The overlays are what actually deploy
+      # staging and production, and they had drifted to 7 of base's 12 rules: /v1/templates,
+      # /v1/apikeys, /v1/organizations and /v1/subscriptions unreachable in both
+      # environments, and /v1/users pointed at the user service instead of admin. A
+      # strategic-merge patch adding a `host` has to restate the whole atomic rules list,
+      # so the copy drifted from base and rendered perfectly the entire time.
+      #
+      # --only excludes the image check: overlay tags are SET_BY_CD_PIPELINE placeholders
+      # until Kargo rewrites them at promotion, so that check belongs to the chart job.
+      - name: Ingress rules must reach every Go route
+        run: |
+          kubectl kustomize deploy/k8s/overlays/local | python3 scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
+          kubectl kustomize deploy/k8s/overlays/staging | python3 scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
+          kubectl kustomize deploy/k8s/overlays/production | python3 scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
+
       # ADR 0005 phase 4. This gate has been in `make verify` since it was written and was
       # never added here — the same "exists but does not run on the merge path" gap the
       # NetworkPolicy step above closed one release earlier.

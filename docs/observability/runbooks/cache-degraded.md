@@ -8,7 +8,8 @@ Responses are still **correct** — that is the point of the fallback — but th
 every one of them is now load the database was not supposed to carry.
 
 **Readiness will not tell you about this, by design.** Redis deliberately does not gate
-`/readyz` (ADR 0012): every read it serves has a database fallback, and marking pods unready for
+`/readyz` ([ADR 0015](../../adr/0015-lifecycle-and-jetstream-durability.md#readiness)): every
+read it serves has a database fallback, and marking pods unready for
 a fault they can work around would pull every replica of every service out of its Service at
 once — turning a degradation users would barely notice into a total outage. The consequence is
 that Redis can be failing continuously with every probe green and every pod Ready. This alert is
@@ -54,7 +55,8 @@ this one, because the fallback traffic lands on Postgres.
 - **Timeouts under load:** scale Redis, or split the Centrifugo engine onto its own instance.
 - **Pool exhaustion:** raise `HERMES_REDIS_POOL_SIZE`.
 
-Do **not** "fix" this by making Redis gate readiness. See ADR 0012 for why that trade is
+Do **not** "fix" this by making Redis gate readiness. See [ADR 0015](../../adr/0015-lifecycle-and-jetstream-durability.md#readiness)
+for why that trade is
 inverted.
 
 ## Escalation

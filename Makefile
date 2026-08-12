@@ -101,8 +101,22 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# PR #73 carried an 0010 against main's different 0010, and a branch stacked on it added
 	@# an 0011 and 0012 against main's own -- three collisions, found by reading.
 	$(PYTHON) scripts/check_adr_numbering.py
+	@# The rules files have said "CI check enforces this pairing" in capitals since they were
+	@# written, and nothing did. A runbook_url is followed by whoever is paged, at 3am, and a
+	@# 404 there costs exactly the minutes the annotation exists to save.
+	$(PYTHON) scripts/check_runbook_links.py
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_networkpolicy_selectors.py -
+	@# The route gate ran over the Helm chart only, and the overlays are what deploy staging
+	@# and production. They had drifted to 7 of base's 12 rules -- /v1/templates, /v1/apikeys,
+	@# /v1/organizations and /v1/subscriptions unreachable in both environments, and /v1/users
+	@# pointed at the user service instead of admin -- because a strategic-merge patch adding
+	@# a `host` has to restate the whole atomic rules list. Rendering perfectly is exactly
+	@# what made it survive. --only excludes the image check: overlay tags are placeholders
+	@# until Kargo rewrites them at promotion, so that check belongs to the chart.
+	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
+	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
+	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
 	@# ADR 0005 phase 4: the CA private key must not render into the application namespace.
 	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_ca_key_location.py - --namespace hermes
