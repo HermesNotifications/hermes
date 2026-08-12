@@ -229,10 +229,26 @@ ingress:
 The host comes from `global.domain`. **`ingress.host` does not exist** — setting it changes
 nothing, and the Ingress is still bound to `global.domain`.
 
-The chart renders two Ingress resources when enabled: the API routes
-(`/v1/send`, `/v1/types`, `/v1/groups`, `/v1/notifications`, `/v1/auth`, `/v1/inbox`,
-`/v1/users`) and a `/realtime` route for Centrifugo WebSockets, which carries nginx
-long-timeout annotations. Both use the same `global.domain` and the same `ingress.tls`.
+The chart renders two Ingress resources when enabled: the API routes and a `/realtime` route
+for Centrifugo WebSockets, which carries nginx long-timeout annotations. Both use the same
+`global.domain` and the same `ingress.tls`.
+
+| Path | Service |
+|---|---|
+| `/v1/send` | send |
+| `/v1/auth`, `/v1/notifications`, `/v1/templates`, `/v1/apikeys`, `/v1/organizations`, `/v1/subscriptions` | admin |
+| `/v1/inbox` | inbox |
+| `/v1/users/me` | user |
+| `/v1/users` | admin |
+| `/realtime/…` | centrifugo |
+
+`/v1/users/me` and `/v1/users` are a deliberate longest-prefix split: self-service profile
+reads are JWT-authenticated and served by the user service, while the admin listing under the
+same prefix is API-key-authenticated and served by admin. An ingress that sends all of
+`/v1/users` to one of them breaks the other.
+
+This list is checked against the Go handlers at build time by
+`scripts/check_helm_render.py`, so it cannot silently drift from what the services serve.
 
 With external Centrifugo, the realtime Ingress is only rendered if you set
 `externalCentrifugo.ingressServiceName` to a Service you have created yourself.

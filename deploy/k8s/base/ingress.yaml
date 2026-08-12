@@ -39,20 +39,10 @@ spec:
                 name: hermes-send
                 port:
                   number: 8088
-          - path: /v1/types
-            pathType: Prefix
-            backend:
-              service:
-                name: hermes-admin
-                port:
-                  number: 8080
-          - path: /v1/groups
-            pathType: Prefix
-            backend:
-              service:
-                name: hermes-admin
-                port:
-                  number: 8080
+          # /v1/types and /v1/groups used to live here. They were removed when the
+          # group/type rename landed: no Go handler has served either since, so the rules
+          # only turned an ingress-level 404 into a service-level one. The replacements
+          # are /v1/subscriptions/categories and /v1/subscriptions.
           - path: /v1/notifications
             pathType: Prefix
             backend:
