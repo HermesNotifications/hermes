@@ -91,7 +91,7 @@ class OrganizationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "OrganizationItem",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -158,7 +158,7 @@ class OrganizationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "OrganizationItem",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -225,7 +225,7 @@ class OrganizationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "OrganizationItem",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -361,7 +361,7 @@ class OrganizationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[OrganizationItem]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -424,7 +424,7 @@ class OrganizationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[OrganizationItem]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -487,7 +487,7 @@ class OrganizationsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[OrganizationItem]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,

@@ -222,6 +222,11 @@ export interface components {
             title: string;
             user_id: string;
         };
+        /** @description The error envelope written by the rate limit middleware. */
+        RateLimitError: {
+            /** @description Human-readable reason. */
+            error?: string;
+        };
         UnreadCountOutputBody: {
             /**
              * Format: uri
@@ -283,10 +288,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -332,10 +334,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -381,10 +380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -433,10 +429,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -485,10 +478,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -537,10 +527,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -589,10 +576,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -641,10 +625,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */

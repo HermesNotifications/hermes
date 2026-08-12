@@ -14,7 +14,6 @@ docs/CreateSubscriptionInputBody.md
 docs/CreateTemplateInputBody.md
 docs/ErrorDetail.md
 docs/ErrorModel.md
-docs/ListApiKeys429Response.md
 docs/Notification.md
 docs/NotificationEvent.md
 docs/NotificationItem.md
@@ -23,6 +22,7 @@ docs/NotificationTemplate.md
 docs/NotificationsApi.md
 docs/OrganizationItem.md
 docs/OrganizationsApi.md
+docs/RateLimitError.md
 docs/SendContent.md
 docs/SendInputBody.md
 docs/SendOutputBody.md
@@ -63,13 +63,13 @@ hermes_server_sdk/models/create_subscription_input_body.py
 hermes_server_sdk/models/create_template_input_body.py
 hermes_server_sdk/models/error_detail.py
 hermes_server_sdk/models/error_model.py
-hermes_server_sdk/models/list_api_keys429_response.py
 hermes_server_sdk/models/notification.py
 hermes_server_sdk/models/notification_event.py
 hermes_server_sdk/models/notification_item.py
 hermes_server_sdk/models/notification_status_output_body.py
 hermes_server_sdk/models/notification_template.py
 hermes_server_sdk/models/organization_item.py
+hermes_server_sdk/models/rate_limit_error.py
 hermes_server_sdk/models/send_content.py
 hermes_server_sdk/models/send_input_body.py
 hermes_server_sdk/models/send_output_body.py
@@ -91,7 +91,5 @@ setup.cfg
 setup.py
 test-requirements.txt
 test/__init__.py
-test/test_api_key_view.py
-test/test_list_api_keys429_response.py
-test/test_set_api_key_rate_limit_input_body.py
+test/test_rate_limit_error.py
 tox.ini

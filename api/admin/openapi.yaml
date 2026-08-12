@@ -510,6 +510,13 @@ components:
         - user_count
         - created_at
       type: object
+    RateLimitError:
+      description: The error envelope written by the rate limit middleware.
+      properties:
+        error:
+          description: Human-readable reason.
+          type: string
+      type: object
     SendContent:
       additionalProperties: false
       properties:
@@ -883,11 +890,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -934,11 +937,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -984,11 +983,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1045,11 +1040,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1097,11 +1088,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1158,11 +1145,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1212,11 +1195,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1262,11 +1241,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1313,11 +1288,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1372,11 +1343,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1422,11 +1389,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1473,11 +1436,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1531,11 +1490,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1590,11 +1545,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1640,11 +1591,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1699,11 +1646,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1749,11 +1692,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1808,11 +1747,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1858,11 +1793,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1909,11 +1840,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -1959,11 +1886,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -2018,11 +1941,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:
@@ -2076,11 +1995,7 @@ paths:
           content:
             application/json:
               schema:
-                properties:
-                  error:
-                    description: Human-readable reason.
-                    type: string
-                type: object
+                $ref: "#/components/schemas/RateLimitError"
           description: Too Many Requests. The caller exceeded its rate limit. Honour Retry-After; retrying sooner does not shorten the wait. A 429 from the pre-authentication per-address bound carries only Retry-After, without the RateLimit-* headers.
           headers:
             RateLimit-Limit:

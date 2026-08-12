@@ -28,7 +28,7 @@ import java.io.IOException;
 
 
 import com.hermes.sdk.model.ErrorModel;
-import com.hermes.sdk.model.ListApiKeys429Response;
+import com.hermes.sdk.model.RateLimitError;
 import com.hermes.sdk.model.UserItem;
 
 import java.lang.reflect.Type;

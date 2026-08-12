@@ -229,7 +229,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="ICreateSubscriptionApiResponse"/>
     /// </summary>
-    public interface ICreateSubscriptionApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.Subscription?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface ICreateSubscriptionApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.Subscription?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 201 Created
@@ -253,7 +253,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="ICreateSubscriptionCategoryApiResponse"/>
     /// </summary>
-    public interface ICreateSubscriptionCategoryApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.SubscriptionCategory?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface ICreateSubscriptionCategoryApiResponse : Hermes.ServerSdk.Client.IApiResponse, ICreated<Hermes.ServerSdk.Model.SubscriptionCategory?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 201 Created
@@ -277,7 +277,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IDeleteSubscriptionApiResponse"/>
     /// </summary>
-    public interface IDeleteSubscriptionApiResponse : Hermes.ServerSdk.Client.IApiResponse, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IDeleteSubscriptionApiResponse : Hermes.ServerSdk.Client.IApiResponse, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 204 NoContent
@@ -301,7 +301,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IDeleteSubscriptionCategoryApiResponse"/>
     /// </summary>
-    public interface IDeleteSubscriptionCategoryApiResponse : Hermes.ServerSdk.Client.IApiResponse, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IDeleteSubscriptionCategoryApiResponse : Hermes.ServerSdk.Client.IApiResponse, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 204 NoContent
@@ -325,7 +325,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IListSubscriptionCategoriesApiResponse"/>
     /// </summary>
-    public interface IListSubscriptionCategoriesApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<SubscriptionCategory>?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IListSubscriptionCategoriesApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<SubscriptionCategory>?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
@@ -349,7 +349,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IListSubscriptionsApiResponse"/>
     /// </summary>
-    public interface IListSubscriptionsApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<Subscription>?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IListSubscriptionsApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<List<Subscription>?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
@@ -373,7 +373,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IUpdateSubscriptionApiResponse"/>
     /// </summary>
-    public interface IUpdateSubscriptionApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<Hermes.ServerSdk.Model.Subscription?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IUpdateSubscriptionApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<Hermes.ServerSdk.Model.Subscription?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
@@ -397,7 +397,7 @@ namespace Hermes.ServerSdk.Api
     /// <summary>
     /// The <see cref="IUpdateSubscriptionCategoryApiResponse"/>
     /// </summary>
-    public interface IUpdateSubscriptionCategoryApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<Hermes.ServerSdk.Model.SubscriptionCategory?>, ITooManyRequests<Hermes.ServerSdk.Model.ListApiKeys429Response?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
+    public interface IUpdateSubscriptionCategoryApiResponse : Hermes.ServerSdk.Client.IApiResponse, IOk<Hermes.ServerSdk.Model.SubscriptionCategory?>, ITooManyRequests<Hermes.ServerSdk.Model.RateLimitError?>, IDefault<Hermes.ServerSdk.Model.ErrorModel?>
     {
         /// <summary>
         /// Returns true if the response is 200 Ok
@@ -889,11 +889,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -902,7 +902,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 
@@ -1220,11 +1220,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -1233,7 +1233,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 
@@ -1507,11 +1507,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -1520,7 +1520,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 
@@ -1794,11 +1794,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -1807,7 +1807,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 
@@ -2089,11 +2089,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -2102,7 +2102,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 
@@ -2408,11 +2408,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -2421,7 +2421,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 
@@ -2750,11 +2750,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -2763,7 +2763,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 
@@ -3092,11 +3092,11 @@ namespace Hermes.ServerSdk.Api
             /// Deserializes the response if the response is 429 TooManyRequests
             /// </summary>
             /// <returns></returns>
-            public Hermes.ServerSdk.Model.ListApiKeys429Response? TooManyRequests()
+            public Hermes.ServerSdk.Model.RateLimitError? TooManyRequests()
             {
                 // This logic may be modified with the AsModel.mustache template
                 return IsTooManyRequests
-                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.ListApiKeys429Response>(RawContent, _jsonSerializerOptions)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Hermes.ServerSdk.Model.RateLimitError>(RawContent, _jsonSerializerOptions)
                     : null;
             }
 
@@ -3105,7 +3105,7 @@ namespace Hermes.ServerSdk.Api
             /// </summary>
             /// <param name="result"></param>
             /// <returns></returns>
-            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.ListApiKeys429Response? result)
+            public bool TryTooManyRequests([NotNullWhen(true)]out Hermes.ServerSdk.Model.RateLimitError? result)
             {
                 result = null;
 

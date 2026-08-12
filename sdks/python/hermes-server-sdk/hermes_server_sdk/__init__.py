@@ -43,13 +43,13 @@ __all__ = [
     "CreateTemplateInputBody",
     "ErrorDetail",
     "ErrorModel",
-    "ListApiKeys429Response",
     "Notification",
     "NotificationEvent",
     "NotificationItem",
     "NotificationStatusOutputBody",
     "NotificationTemplate",
     "OrganizationItem",
+    "RateLimitError",
     "SendContent",
     "SendInputBody",
     "SendOutputBody",
@@ -95,13 +95,13 @@ from hermes_server_sdk.models.create_subscription_input_body import CreateSubscr
 from hermes_server_sdk.models.create_template_input_body import CreateTemplateInputBody as CreateTemplateInputBody
 from hermes_server_sdk.models.error_detail import ErrorDetail as ErrorDetail
 from hermes_server_sdk.models.error_model import ErrorModel as ErrorModel
-from hermes_server_sdk.models.list_api_keys429_response import ListApiKeys429Response as ListApiKeys429Response
 from hermes_server_sdk.models.notification import Notification as Notification
 from hermes_server_sdk.models.notification_event import NotificationEvent as NotificationEvent
 from hermes_server_sdk.models.notification_item import NotificationItem as NotificationItem
 from hermes_server_sdk.models.notification_status_output_body import NotificationStatusOutputBody as NotificationStatusOutputBody
 from hermes_server_sdk.models.notification_template import NotificationTemplate as NotificationTemplate
 from hermes_server_sdk.models.organization_item import OrganizationItem as OrganizationItem
+from hermes_server_sdk.models.rate_limit_error import RateLimitError as RateLimitError
 from hermes_server_sdk.models.send_content import SendContent as SendContent
 from hermes_server_sdk.models.send_input_body import SendInputBody as SendInputBody
 from hermes_server_sdk.models.send_output_body import SendOutputBody as SendOutputBody

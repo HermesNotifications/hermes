@@ -92,7 +92,7 @@ class UsersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[UserItem]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -159,7 +159,7 @@ class UsersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[UserItem]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -226,7 +226,7 @@ class UsersApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[UserItem]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,

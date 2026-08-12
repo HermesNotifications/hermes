@@ -95,7 +95,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "ApiKeyCreatedOutputBody",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -162,7 +162,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "ApiKeyCreatedOutputBody",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -229,7 +229,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "ApiKeyCreatedOutputBody",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -369,7 +369,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -436,7 +436,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -503,7 +503,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -626,7 +626,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[ApiKeyView]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -689,7 +689,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[ApiKeyView]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -752,7 +752,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[ApiKeyView]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -881,7 +881,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ApiKeyView",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -953,7 +953,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ApiKeyView",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1025,7 +1025,7 @@ class APIKeysApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ApiKeyView",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,

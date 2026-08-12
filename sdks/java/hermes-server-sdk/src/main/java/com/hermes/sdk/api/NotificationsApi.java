@@ -28,9 +28,9 @@ import java.io.IOException;
 
 
 import com.hermes.sdk.model.ErrorModel;
-import com.hermes.sdk.model.ListApiKeys429Response;
 import com.hermes.sdk.model.NotificationItem;
 import com.hermes.sdk.model.NotificationStatusOutputBody;
+import com.hermes.sdk.model.RateLimitError;
 import com.hermes.sdk.model.SendInputBody;
 import com.hermes.sdk.model.SendOutputBody;
 

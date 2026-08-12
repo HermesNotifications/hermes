@@ -65,6 +65,10 @@ func main() {
 	}
 }
 
+// rateLimitErrorSchema names the shared 429 body component. It is part of the generated
+// SDKs' public surface, so renaming it is a breaking change to every SDK.
+const rateLimitErrorSchema = "RateLimitError"
+
 // addRateLimitResponse documents 429 on every operation.
 //
 // It is applied here rather than on each huma.Register call because the limiter
@@ -82,12 +86,30 @@ func addRateLimitResponse(spec *huma.OpenAPI) {
 		return
 	}
 
-	body := &huma.Schema{
-		Type: "object",
+	// The body is registered as a named component and referenced, not inlined on each
+	// operation.
+	//
+	// An identical inline schema on 35 operations is deduplicated by openapi-generator into
+	// a single model named after whichever operation it happened to reach first —
+	// "ListApiKeys429Response" on one run. spec.Paths is a Go map, so that order is not
+	// stable, and the generated SDKs differed between a local run and CI for no reason
+	// anyone could see from the diff. A named component is both deterministic and a better
+	// name for a shape every endpoint shares.
+	if spec.Components == nil {
+		spec.Components = &huma.Components{}
+	}
+	if spec.Components.Schemas == nil {
+		spec.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", huma.DefaultSchemaNamer)
+	}
+	spec.Components.Schemas.Map()[rateLimitErrorSchema] = &huma.Schema{
+		Type:        "object",
+		Description: "The error envelope written by the rate limit middleware.",
 		Properties: map[string]*huma.Schema{
 			"error": {Type: "string", Description: "Human-readable reason."},
 		},
 	}
+
+	body := &huma.Schema{Ref: "#/components/schemas/" + rateLimitErrorSchema}
 
 	seconds := &huma.Schema{Type: "integer"}
 	newResponse := func() *huma.Response {

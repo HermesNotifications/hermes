@@ -148,6 +148,11 @@ export interface components {
             slug: string;
             toggleable: boolean;
         };
+        /** @description The error envelope written by the rate limit middleware. */
+        RateLimitError: {
+            /** @description Human-readable reason. */
+            error?: string;
+        };
         SetPreferenceInputBody: {
             /**
              * Format: uri
@@ -241,10 +246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -294,10 +296,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -343,10 +342,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -399,10 +395,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */
@@ -451,10 +444,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description Human-readable reason. */
-                        error?: string;
-                    };
+                    "application/json": components["schemas"]["RateLimitError"];
                 };
             };
             /** @description Error */

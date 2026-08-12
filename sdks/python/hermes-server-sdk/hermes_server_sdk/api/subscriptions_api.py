@@ -101,7 +101,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "Subscription",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -172,7 +172,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "Subscription",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -243,7 +243,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "Subscription",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -386,7 +386,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "SubscriptionCategory",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -453,7 +453,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "SubscriptionCategory",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -520,7 +520,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '201': "SubscriptionCategory",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -660,7 +660,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -727,7 +727,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -794,7 +794,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -921,7 +921,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -988,7 +988,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1055,7 +1055,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '204': None,
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1178,7 +1178,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[SubscriptionCategory]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1241,7 +1241,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[SubscriptionCategory]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1304,7 +1304,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[SubscriptionCategory]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1428,7 +1428,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[Subscription]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1495,7 +1495,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[Subscription]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1562,7 +1562,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "List[Subscription]",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1693,7 +1693,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "Subscription",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1764,7 +1764,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "Subscription",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1835,7 +1835,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "Subscription",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1982,7 +1982,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SubscriptionCategory",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -2053,7 +2053,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SubscriptionCategory",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -2124,7 +2124,7 @@ class SubscriptionsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "SubscriptionCategory",
-            '429': "ListApiKeys429Response",
+            '429': "RateLimitError",
         }
         response_data = self.api_client.call_api(
             *_param,

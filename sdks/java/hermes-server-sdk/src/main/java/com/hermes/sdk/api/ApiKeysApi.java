@@ -31,7 +31,7 @@ import com.hermes.sdk.model.ApiKeyCreatedOutputBody;
 import com.hermes.sdk.model.ApiKeyView;
 import com.hermes.sdk.model.CreateAPIKeyInputBody;
 import com.hermes.sdk.model.ErrorModel;
-import com.hermes.sdk.model.ListApiKeys429Response;
+import com.hermes.sdk.model.RateLimitError;
 import com.hermes.sdk.model.SetAPIKeyRateLimitInputBody;
 
 import java.lang.reflect.Type;

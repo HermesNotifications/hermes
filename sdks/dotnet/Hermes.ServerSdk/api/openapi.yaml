@@ -24,7 +24,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -83,7 +83,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -143,7 +143,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -217,7 +217,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -277,7 +277,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -347,7 +347,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -411,7 +411,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -468,7 +468,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -527,7 +527,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -597,7 +597,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -654,7 +654,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -713,7 +713,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -780,7 +780,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -849,7 +849,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -909,7 +909,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -978,7 +978,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -1038,7 +1038,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -1107,7 +1107,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -1164,7 +1164,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -1223,7 +1223,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -1283,7 +1283,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -1352,7 +1352,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -1419,7 +1419,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/list_api_keys_429_response"
+                $ref: "#/components/schemas/RateLimitError"
           description: "Too Many Requests. The caller exceeded its rate limit. Honour\
             \ Retry-After; retrying sooner does not shorten the wait. A 429 from the\
             \ pre-authentication per-address bound carries only Retry-After, without\
@@ -2033,6 +2033,14 @@ components:
       - id
       - name
       - user_count
+    RateLimitError:
+      description: The error envelope written by the rate limit middleware.
+      example:
+        error: error
+      properties:
+        error:
+          description: Human-readable reason.
+          type: string
     SendContent:
       additionalProperties: false
       properties:
@@ -2423,11 +2431,4 @@ components:
       - locale
       - organization_id
       - organization_name
-    list_api_keys_429_response:
-      example:
-        error: error
-      properties:
-        error:
-          description: Human-readable reason.
-          type: string
 

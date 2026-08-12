@@ -29,8 +29,8 @@ import java.io.IOException;
 
 import com.hermes.sdk.model.CreateOrganizationInputBody;
 import com.hermes.sdk.model.ErrorModel;
-import com.hermes.sdk.model.ListApiKeys429Response;
 import com.hermes.sdk.model.OrganizationItem;
+import com.hermes.sdk.model.RateLimitError;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;

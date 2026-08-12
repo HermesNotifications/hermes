@@ -30,7 +30,7 @@ import java.io.IOException;
 import com.hermes.sdk.model.CreateCategoryInputBody;
 import com.hermes.sdk.model.CreateSubscriptionInputBody;
 import com.hermes.sdk.model.ErrorModel;
-import com.hermes.sdk.model.ListApiKeys429Response;
+import com.hermes.sdk.model.RateLimitError;
 import com.hermes.sdk.model.Subscription;
 import com.hermes.sdk.model.SubscriptionCategory;
 import com.hermes.sdk.model.UpdateCategoryInputBody;
