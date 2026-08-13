@@ -58,6 +58,18 @@ func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 		`DELETE FROM notifications WHERE organization_id = ANY($1)`, allOrganizations); err != nil {
 		return fmt.Errorf("delete notifications: %w", err)
 	}
+	// VACUUM between deleting the notifications and deleting the users they referenced.
+	//
+	// Not tidiness -- the users delete does not complete without it. Every user deleted is
+	// checked against notifications.user_id, and immediately after a mass delete that index
+	// is still full of dead entries which each check has to walk. Measured on this database:
+	// removing 220k users ran past ten minutes and was cancelled, then completed in 7m10s
+	// once notifications had been vacuumed, with nothing else changed.
+	//
+	// It has to be its own statement because VACUUM cannot run inside a transaction block.
+	if _, err := pool.Exec(ctx, `VACUUM (ANALYZE) notifications`); err != nil {
+		return fmt.Errorf("vacuum notifications: %w", err)
+	}
 	if _, err := pool.Exec(ctx, `DELETE FROM notification_templates WHERE id = ANY($1)`, allTmpl); err != nil {
 		return fmt.Errorf("delete templates: %w", err)
 	}
@@ -67,25 +79,35 @@ func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 	if _, err := pool.Exec(ctx, `DELETE FROM subscription_categories WHERE id = ANY($1)`, allCat); err != nil {
 		return fmt.Errorf("delete categories: %w", err)
 	}
-	// KNOWN LIMITATION: this does not finish in reasonable time on a large seed.
-	//
-	// Deleting 60k users out of 100k ran for 19 minutes without committing and had to be
-	// cancelled, against a bundled single-pod Postgres on replicated (Longhorn) storage. The
-	// plan itself is fine -- a nested loop over a hash aggregate, and rewriting `= ANY($1)`
-	// as the unnest below changed nothing measurable -- so the cost is in the referential
-	// integrity triggers, which fire per deleted row against notifications,
-	// user_contact_points (two rows per user) and user_subscriptions, each with its own
-	// fsync-bound write.
-	//
-	// Batching the delete and vacuuming between batches is the fix, and it has not been
-	// done. Until it is, cleaning up a large seed means dropping and recreating the database,
-	// or leaving the rows in place -- they are inert.
+	// Expect this to be the slow step: roughly 2ms per user, so ~7 minutes for 220k, even
+	// with the vacuum above. Deleting the notifications themselves is two orders of magnitude
+	// faster -- 668k rows in 11 seconds -- because nothing references them and there is no
+	// per-row work. Users are the opposite: each one is checked against notifications and
+	// user_subscriptions and cascades into user_contact_points, and per-row trigger work on
+	// replicated storage is what costs the time. Reducing it means fewer referencing tables,
+	// not a better query.
 	if _, err := pool.Exec(ctx,
 		`DELETE FROM users WHERE id IN (SELECT unnest($1::text[]))`, allUsers); err != nil {
 		return fmt.Errorf("delete users: %w", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM organizations WHERE id = ANY($1)`, allOrganizations); err != nil {
 		return fmt.Errorf("delete organizations: %w", err)
+	}
+	// Sweep events orphaned during the run above.
+	//
+	// The pipeline is still draining when cleanup starts: the event writer keeps flushing
+	// batches for notifications that were deleted seconds earlier, and since migration 000014
+	// dropped the foreign key there is nothing to reject them. They land referencing rows
+	// that no longer exist. Observed after a real run: 794 events arrived after their
+	// notifications were gone, and no id-based delete would have caught them because the ids
+	// they point at had already been removed from the manifest's reach.
+	//
+	// Deliberately not scoped to this run: an event whose notification does not exist cannot
+	// be attributed to a run, and is unreadable garbage whoever created it.
+	if _, err := pool.Exec(ctx,
+		`DELETE FROM notification_events e
+		  WHERE NOT EXISTS (SELECT 1 FROM notifications n WHERE n.id = e.notification_id)`); err != nil {
+		return fmt.Errorf("sweep orphaned events: %w", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM api_keys WHERE name = $1`, "loadtest-"+m.RunSeedID); err != nil {
 		return fmt.Errorf("delete api key: %w", err)
