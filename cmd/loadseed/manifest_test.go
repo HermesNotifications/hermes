@@ -17,8 +17,9 @@ func TestManifest_RoundTrip(t *testing.T) {
 		APIKey:    "hms_dev_key_xxx_yyy",
 		Organizations: []Organization{
 			{
-				ID:    "t1",
-				Users: []string{"u1", "u2"},
+				ID:        "t1",
+				Index:     0,
+				UserCount: 2,
 				Categories: []Category{
 					{ID: "c1", Subscriptions: []Subscription{
 						{ID: "s1", Templates: []Template{
@@ -39,6 +40,16 @@ func TestManifest_RoundTrip(t *testing.T) {
 	}
 	if got.APIKey != m.APIKey || len(got.Organizations) != 1 || got.Organizations[0].Categories[0].Subscriptions[0].Templates[0].ID != "tmpl1" {
 		t.Fatalf("mismatch: %+v", got)
+	}
+	// Users are regenerated from the counts, and both halves must come back: the scenarios
+	// send ExternalID as to.user_id and subscribe to user#<ID>. Carrying only one of them
+	// is what made ws_push_e2e_latency measure nothing.
+	users := got.UsersOf(got.Organizations[0])
+	if len(users) != 2 {
+		t.Fatalf("want 2 regenerated users, got %d", len(users))
+	}
+	if users[0].ID != "lt-abc123-t0-u0" || users[0].ExternalID != "ext-0-0" {
+		t.Fatalf("regenerated user does not match the seeder's formula: %+v", users[0])
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("file not created: %v", err)

@@ -24,7 +24,9 @@ func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 	var allTmpl, allSub, allCat, allUsers, allOrganizations []string
 	for _, o := range m.Organizations {
 		allOrganizations = append(allOrganizations, o.ID)
-		allUsers = append(allUsers, o.Users...)
+		for _, u := range m.UsersOf(o) {
+			allUsers = append(allUsers, u.ID)
+		}
 		for _, c := range o.Categories {
 			allCat = append(allCat, c.ID)
 			for _, s := range c.Subscriptions {

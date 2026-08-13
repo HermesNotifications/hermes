@@ -3,12 +3,11 @@
 // See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 import ws from 'k6/ws';
-import { jwtFor } from './auth.js';
+import { jwtFor, internalID } from './auth.js';
 import {
   wsConnectLatency, wsConnectionsOpened, wsConnectionsClosed, wsConnectionDrops,
   pushReceived, wsPushE2ELatency, wsReconnectDuration,
 } from './metrics.js';
-import { takeSent } from './shared.js';
 
 // When this VU's previous socket closed, or 0 on its first iteration. Module scope is per-VU in
 // k6, so this needs no keying. It is how the churn scenario measures reconnect time: a VU whose
@@ -24,9 +23,15 @@ export function centrifugoURL() {
 // connect opens a Centrifugo WS connection for the given user, subscribes to
 // their personal channel, and invokes onPush(notification_id) for each
 // incoming publication. Blocks until the socket is closed by setTimeout.
-export function connect(userID, organizationID, onPush) {
+//
+// `user` is a {id, external_id} pair from the seed manifest. The channel and the token
+// subject are both the INTERNAL id: the inbox worker publishes to `user#<internal id>`
+// (internal/delivery/inbox.go), so subscribing with anything else yields a socket that
+// connects, subscribes successfully, and then never receives a thing.
+export function connect(user, organizationID, onPush) {
   const url = centrifugoURL();
-  const token = jwtFor(userID, organizationID);
+  const userID = internalID(user);
+  const token = jwtFor(user, organizationID);
 
   const start = Date.now();
   return ws.connect(url, {}, function (socket) {
@@ -54,13 +59,7 @@ export function connect(userID, organizationID, onPush) {
       // Publications arrive as { push: { channel, pub: { data: {...} } } }.
       if (msg.push && msg.push.pub && msg.push.pub.data) {
         pushReceived.add(1);
-        const payload = msg.push.pub.data;
-        // `id` first: an arrival is a `notification.new`, whose id field is `id`. Only
-        // `inbox.updated` uses `notification_id`, and the load test never generates one — so
-        // reading only `notification_id` meant ws_push_e2e_latency recorded nothing at all
-        // while reporting itself as a configured metric.
-        const id = payload.id || payload.notification_id;
-        if (id) onPush(id);
+        onPush(msg.push.pub.data);
       }
     });
 
@@ -75,9 +74,13 @@ export function connect(userID, organizationID, onPush) {
   });
 }
 
-// recordE2EOnPush looks up the send timestamp in the shared map and, if
-// present, records the end-to-end latency trend.
-export function recordE2EOnPush(notificationID) {
-  const t = takeSent(notificationID);
-  if (t !== undefined) wsPushE2ELatency.add(Date.now() - t);
+// recordE2EOnPush measures POST /v1/send -> WebSocket arrival from the timestamp
+// buildSendBody stamped into the notification's metadata.
+//
+// Both ends of the subtraction come from the same k6 process: instanceRange shards the
+// user population per runner pod, so a given user's sends and that user's socket always
+// live on one pod. No cross-node clock comparison is involved.
+export function recordE2EOnPush(payload) {
+  const sent = payload && payload.metadata && payload.metadata.lt_sent_ms;
+  if (typeof sent === 'number') wsPushE2ELatency.add(Date.now() - sent);
 }

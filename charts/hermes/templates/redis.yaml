@@ -37,6 +37,12 @@ spec:
       port: 6379
       targetPort: redis
       protocol: TCP
+    {{- if .Values.redis.metrics.enabled }}
+    - name: metrics
+      port: 9121
+      targetPort: metrics
+      protocol: TCP
+    {{- end }}
   selector:
     app.kubernetes.io/name: {{ include "hermes.name" . }}-redis
     app.kubernetes.io/instance: {{ .Release.Name }}
@@ -162,6 +168,46 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+{{- if .Values.redis.metrics.enabled }}
+        {{/*
+        Redis speaks its own protocol and serves no HTTP, so there is nothing to scrape
+        without an exporter beside it. That matters more than it looks: this Redis is not
+        only the template cache and the idempotency store, it is also the Centrifugo engine
+        once the realtime tier runs more than one replica -- which is to say it carries
+        websocket fan-out for every connected user, while being the one component in the
+        namespace that nothing can observe.
+        */}}
+        - name: metrics
+          image: {{ printf "%s:%s" .Values.redis.metrics.image.repository .Values.redis.metrics.image.tag | quote }}
+          imagePullPolicy: {{ .Values.redis.metrics.image.pullPolicy }}
+          args:
+            - "--redis.addr"
+            {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
+            - "rediss://localhost:6379"
+            - "--redis.ca-cert-file"
+            - "/etc/redis/certs/ca.crt"
+            {{- else }}
+            - "redis://localhost:6379"
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 9121
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.redis.metrics.resources | nindent 12 }}
+          {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
+          volumeMounts:
+            - name: certs
+              mountPath: /etc/redis/certs
+              readOnly: true
+          {{- end }}
+{{- end }}
             {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
             - name: certs
               mountPath: /etc/redis/certs

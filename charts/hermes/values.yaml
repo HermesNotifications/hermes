@@ -1011,6 +1011,23 @@ redis:
     # -- Empty uses the cluster default StorageClass.
     storageClass: ""
   resources: {}
+  metrics:
+    # -- Run a redis_exporter sidecar exposing Prometheus metrics on port 9121, and add a
+    # `metrics` port to the Redis Service.
+    #
+    # Off by default to keep the evaluation install small, but worth turning on before this
+    # Redis carries anything you would miss. It is not only a cache: it holds the
+    # idempotency keys that stop a retried send being delivered twice, and when Centrifugo
+    # runs on the Redis engine it is also the realtime broker every websocket publication
+    # passes through -- so it becomes load-bearing for connection fan-out at exactly the
+    # point you scale the realtime tier out. Nothing else in the chart exposes its state.
+    enabled: false
+    image:
+      # -- The exporter the Prometheus community maintains for Redis.
+      repository: docker.io/oliver006/redis_exporter
+      tag: "v1.67.0"
+      pullPolicy: IfNotPresent
+    resources: {}
 
 # -- NATS sub-chart configuration
 nats:

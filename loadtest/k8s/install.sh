@@ -16,12 +16,18 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
 helm repo update >/dev/null
 
-# k6-operator
+# k6-operator.
+#
+# namespace.create=false because namespace.yaml above already created it, and it carries a
+# label of our own (purpose: load-testing). Left at the chart default, Helm refuses to adopt
+# a namespace it did not create -- "invalid ownership metadata; missing key
+# app.kubernetes.io/managed-by" -- and the install fails on a fresh cluster every time.
 helm upgrade --install k6-operator grafana/k6-operator \
   --namespace loadtest \
+  --set namespace.create=false \
   --set tolerations[0].key=loadtest \
   --set tolerations[0].operator=Equal \
-  --set tolerations[0].value=true \
+  --set-string tolerations[0].value=true \
   --set tolerations[0].effect=NoSchedule \
   --set nodeSelector.pool=loadtest-generators
 

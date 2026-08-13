@@ -543,7 +543,26 @@
             "storageClass": { "type": "string" }
           }
         },
-        "resources": { "type": "object" }
+        "resources": { "type": "object" },
+        "metrics": {
+          "type": "object",
+          "$comment": "redis_exporter sidecar. Redis serves no HTTP of its own, so without this there is no scrape target at all -- and this Redis holds the idempotency keys and, when Centrifugo runs the Redis engine, every realtime publication.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": { "type": "string", "minLength": 1 },
+                "tag": { "type": "string", "minLength": 1 },
+                "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+              },
+              "required": ["repository", "tag"]
+            },
+            "resources": { "type": "object" }
+          }
+        }
       }
     },
     "nats": {

@@ -25,12 +25,12 @@
 
 import http from 'k6/http';
 import { check } from 'k6';
-import { organizations, pickTemplate, instanceRange } from '../lib/seed.js';
+import exec from 'k6/execution';
+import { pickTemplate, userAt, totalUsers } from '../lib/seed.js';
 import { adminHeaders, userHeaders } from '../lib/auth.js';
 import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
 import { connect, recordE2EOnPush } from '../lib/centrifugo.js';
 import { sendAckLatency, sendErrors, inboxListLatency } from '../lib/metrics.js';
-import { recordSent } from '../lib/shared.js';
 export { handleSummary } from '../lib/summary.js';
 
 const VUS       = parseInt(__ENV.VUS || '100', 10);
@@ -40,19 +40,11 @@ const DURATION  = __ENV.DURATION || '5m';
 const SEND_URL  = __ENV.SEND_URL || __ENV.ADMIN_URL || 'http://localhost:8088';
 const INBOX_URL = __ENV.INBOX_URL || 'http://localhost:8086';
 
-const instCount  = parseInt(__ENV.INSTANCE_COUNT || '1', 10);
-const perPodVUs  = Math.max(1, Math.floor(VUS / instCount));
-const perPodSend = Math.max(1, Math.floor(SEND_RPS / instCount));
-const perPodPoll = Math.max(1, Math.floor(POLL_RPS / instCount));
-
-const allPairs = (function () {
-  const pairs = [];
-  for (const t of organizations) {
-    for (const u of t.users) pairs.push({ organization: t, user: u });
-  }
-  const [s, e] = instanceRange(pairs.length);
-  return pairs.slice(s, e);
-})();
+// Not divided by an instance count: k6-operator shards with --execution-segment and k6
+// applies that per scenario. See the longer note in inbox-mixed.js.
+const perPodVUs  = VUS;
+const perPodSend = SEND_RPS;
+const perPodPoll = POLL_RPS;
 
 export const options = {
   scenarios: {
@@ -102,6 +94,8 @@ export const options = {
 
     // End-to-end push must keep working across the restart, not merely resume after it.
     ws_push_e2e_latency: ['p(95)<3000'],
+    // See inbox-mixed.js: a percentile over an empty trend passes, a count does not.
+    ws_push_received: ['count>0'],
   },
   tags: {
     scenario: 'churn',
@@ -111,17 +105,27 @@ export const options = {
   },
 };
 
-function vuPair() {
-  return allPairs[(__VU + __ITER) % allPairs.length];
+// Same constraint as inbox-mixed.js: a push only exercises the realtime path if it is
+// addressed to a user holding a socket, and __VU is per-instance and interleaved between
+// scenarios, so it cannot be used to line the two up. Sockets spread by globally-unique
+// id; sends sample the same window at random.
+const connectedCount = Math.min(VUS, totalUsers);
+
+function connectedPair(i) {
+  return userAt(i % connectedCount);
+}
+
+function randomConnectedPair() {
+  return userAt(Math.floor(Math.random() * connectedCount));
 }
 
 export function wsHold() {
-  const p = allPairs[__VU % allPairs.length];
+  const p = connectedPair(exec.vu.idInTest);
   connect(p.user, p.organization.id, recordE2EOnPush);
 }
 
 export function drive() {
-  const p = vuPair();
+  const p = randomConnectedPair();
   const tpl = pickTemplate(p.organization);
   const body = buildSendBody(p.organization, p.user, tpl);
   const headers = adminHeaders({ 'X-Idempotency-Key': idempotencyKey() });
@@ -129,14 +133,10 @@ export function drive() {
   const res = http.post(`${SEND_URL}/v1/send`, JSON.stringify(body), { headers });
   sendAckLatency.add(Date.now() - start);
   if (res.status !== 202) { sendErrors.add(1); return; }
-  try {
-    const parsed = JSON.parse(res.body);
-    if (parsed.notification_id) recordSent(parsed.notification_id);
-  } catch (e) {}
 }
 
 export function pollInbox() {
-  const p = vuPair();
+  const p = randomConnectedPair();
   const h = userHeaders(p.user, p.organization.id);
   const start = Date.now();
   const res = http.get(`${INBOX_URL}/v1/inbox?limit=20`, { headers: h });
