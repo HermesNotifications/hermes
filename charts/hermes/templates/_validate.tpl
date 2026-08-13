@@ -89,6 +89,103 @@ install can, which is how it reached CI rather than a local check.
 {{- end -}}
 {{- end }}
 
+{{/*
+dispatch.concurrency and dispatch.database.maxConns describe one thing, and every way of
+getting them out of step fails quietly.
+
+cmd/dispatch caps the worker pool at the database pool size at startup -- each worker holds a
+connection for as long as it is processing, so workers past the pool only add contention. The
+cap is right, and its consequence is that raising concurrency against an unchanged pool changes
+throughput by exactly nothing. The only evidence is one Warn line at boot, in a service whose
+logs nobody reads until something is already wrong. That is why hermes.dispatchDatabaseMaxConns
+derives the pool instead of defaulting it, and why the three cases the derivation cannot cover
+are refused here.
+
+The last of the three is the server side. Connections are a fixed, shared, cluster-wide budget:
+every service holds its own pool and Postgres ships with max_connections=100. Nothing in
+dispatch fails when that runs out -- Postgres refuses whichever service connects next, so the
+damage lands on inbox or admin while dispatch runs happily at the concurrency you asked for.
+The arithmetic is checkable for the bundled server (the chart knows its max_connections) and
+not for an external one, so it is checked in the first case and documented in both.
+*/}}
+{{- define "hermes.validateDispatchPool" -}}
+{{- $workers := include "hermes.dispatchConcurrency" . | int -}}
+{{- $pool := include "hermes.dispatchDatabaseMaxConns" . | int -}}
+{{- $explicit := get (.Values.dispatch.database | default dict) "maxConns" -}}
+{{/*
+1. Set by hand, below the worker count. Clamped at runtime to $pool, so the install would run
+   narrower than the values say and nothing but a log line would disagree.
+*/}}
+{{- if and $explicit (lt $pool $workers) -}}
+{{-   fail (printf "dispatch.database.maxConns is %d but dispatch.concurrency is %d. cmd/dispatch clamps the worker pool to the database pool at startup, so dispatch would run %d wide while these values claim %d -- reported only as one warning in the dispatch log. Leave dispatch.database.maxConns empty to derive it (concurrency + 2 = %d), or set it to at least %d." $pool $workers $pool $workers (add $workers 2) $workers) -}}
+{{- end -}}
+{{/*
+2. pool_max_conns in an inline external URL. database.NewPoolWithConfig lets URL pool_* win over
+   HERMES_DATABASE_MAX_CONNS -- deliberately, so cmd/dispatchbench can sweep pool sizes -- which
+   means a URL carrying it overrides what this chart renders, for every service that shares the
+   URL. Only an inline url can be inspected; externalPostgresql.existingSecret is opaque at
+   render time and pretending otherwise would be worse than not checking (see below).
+*/}}
+{{- if and (not .Values.postgresql.enabled) (not .Values.externalPostgresql.existingSecret) -}}
+{{-   $url := .Values.externalPostgresql.url | default "" -}}
+{{-   if contains "pool_max_conns" $url -}}
+{{-     if $explicit -}}
+{{-       fail (printf "externalPostgresql.url carries pool_max_conns and dispatch.database.maxConns is set to %v. The URL wins (database.NewPoolWithConfig gives URL pool_* parameters precedence over HERMES_DATABASE_MAX_CONNS), so the chart value would be rendered and ignored. Remove pool_max_conns from the URL -- note it sizes every service's pool, not just dispatch's -- and size dispatch here." $explicit) -}}
+{{-     end -}}
+{{-     $found := regexFind "pool_max_conns=[0-9]+" $url -}}
+{{-     if $found -}}
+{{-       $urlPool := $found | trimPrefix "pool_max_conns=" | int -}}
+{{-       if lt $urlPool $workers -}}
+{{-         fail (printf "externalPostgresql.url sets pool_max_conns=%d, below dispatch.concurrency (%d). URL pool_* parameters win over HERMES_DATABASE_MAX_CONNS, so dispatch would clamp its worker pool to %d and the chart's own pool value could not raise it. Remove pool_max_conns from the URL and let dispatch.database.maxConns size the pool, or raise it to at least %d." $urlPool $workers $urlPool $workers) -}}
+{{-       end -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{/*
+3. The bundled server's connection budget, checked only once dispatch has been tuned past the
+   built-in pool size.
+
+   Gated on that deliberately. At chart defaults the fleet already sits at 9 x 10 = 90 of the
+   image's 100, so an unconditional check would either refuse installs that work today or pick
+   a threshold loose enough to be meaningless. Gating it means the arithmetic appears to the
+   person who changed the number that makes it matter, and an install that never touches these
+   values renders exactly as it did before.
+*/}}
+{{- if and .Values.postgresql.enabled (gt $pool 10) -}}
+{{/*
+ROT: 10 is database.DefaultPoolConfig.MaxConns, the pool every service other than dispatch gets
+because the chart sets HERMES_DATABASE_MAX_CONNS for dispatch alone. If that default moves in
+internal/database, this arithmetic quietly under-counts.
+*/}}
+{{-   $defaultPool := 10 -}}
+{{-   $total := 0 -}}
+{{-   $lines := list -}}
+{{-   range $svc := list "admin" "send" "dispatch" "inbox" "user" "workerEmail" "workerSms" "workerInbox" "workerEvents" -}}
+{{-     $block := index $.Values $svc -}}
+{{-     $auto := $block.autoscaling | default dict -}}
+{{/*
+Worst case, not steady state: under an HPA the ceiling is maxReplicas, and a budget computed
+from minReplicas is a budget that holds until the first time it matters. `int` because YAML
+numbers arrive as float64 and printf %d cannot render one.
+*/}}
+{{-     $replicas := ternary (get $auto "maxReplicas" | default 1) ($block.replicas | default 1) (eq (get $auto "enabled") true) | int -}}
+{{-     $conns := ternary $pool $defaultPool (eq $svc "dispatch") -}}
+{{-     $total = add $total (mul $replicas $conns) -}}
+{{-     $lines = append $lines (printf "%s %dx%d" $svc $replicas $conns) -}}
+{{-   end -}}
+{{/*
+10 held back for superuser_reserved_connections (3 by default), the migration and bootstrap
+Jobs, the cleanup CronJob and whatever psql an operator opens while debugging this.
+*/}}
+{{-   $reserved := 10 -}}
+{{-   $max := .Values.postgresql.maxConnections | default 100 | int -}}
+{{-   $budget := sub $max $reserved -}}
+{{-   if gt $total $budget -}}
+{{-     fail (printf "dispatch is tuned to a pool of %d, which puts the fleet's worst-case Postgres connections at %d (%s) against a budget of %d -- the bundled server's max_connections of %d less %d held back for the migration/bootstrap Jobs, the cleanup CronJob and superuser_reserved_connections. Over that ceiling Postgres refuses whichever service connects next, so this surfaces as inbox or admin failing while dispatch runs fine. Raise postgresql.maxConnections (and postgresql.resources with it), lower dispatch.concurrency, or move to externalPostgresql -- the bundled Postgres is a single unreplicated evaluation instance (ADR 0009) and is not where throughput work belongs." $pool $total (join ", " $lines) $budget $max $reserved) -}}
+{{-   end -}}
+{{- end -}}
+{{- end }}
+
 {{- define "hermes.validateEnvironment" -}}
 {{- if ne .Values.hermes.env "development" -}}
 {{/*
