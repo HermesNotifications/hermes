@@ -44,6 +44,63 @@ Note the chart already says the bundled datastores are for evaluation only. This
 property of *that* deployment, not of Hermes — but it is the deployment most self-hosters will
 start from, and 2,000/s is where it lands.
 
+## Correction: concurrency, not storage, is the first lever
+
+Everything below this heading was written before the write path was benchmarked directly on
+this hardware. `cmd/dispatchbench`, run **inside the cluster** against the same
+Longhorn-backed Postgres:
+
+| dispatch workers | msgs/s |
+|---:|---:|
+| **8 (the default)** | 2,100 |
+| 16 | 3,511 |
+| 32 | 5,534 |
+| 64 | **7,907** |
+
+**3.8× throughput from a configuration change, on the storage that was supposed to be the
+wall.** The raw fsync rate is 1,933/s, and dispatch is doing 7,907 notifications/s over it —
+because Postgres amortises concurrent commits into shared flushes, and the amount of
+amortisation scales with how many commits are in flight. Eight workers simply do not give it
+enough to work with.
+
+So the earlier conclusion — "the wall is fsync, and the fix is storage" — was half right. The
+fsync rate bounds *un-amortised* commits. The pipeline was nowhere near that bound; it was
+bounded by its own concurrency.
+
+Two knobs, and they must move together:
+
+- `HERMES_DISPATCH_CONCURRENCY` (default **8**)
+- `pool_max_conns` in `HERMES_DATABASE_URL` (default **10**)
+
+Worker count is clamped to the pool size by `ClampWorkersToPool`, so raising concurrency alone
+does nothing except log a warning. Watch the server's `max_connections` (100 here) as replicas
+multiply: 64 workers on one replica is already 64 of it.
+
+**Neither knob is exposed by the Helm chart.** `grep` for `pool_max_conns` or
+`DISPATCH_CONCURRENCY` in `charts/hermes/` returns nothing, so the highest-leverage tuning
+available is unreachable for anyone installing the documented way. That is worth fixing before
+any of the options below.
+
+### Batching the inserts does not help — measured, both ways
+
+Implemented and benchmarked. It is a **regression at every concurrency tested**, on both fast
+and slow storage:
+
+| | 8 workers | 32 workers |
+|---|---:|---:|
+| unbatched | 2,100 / 1,917 | 5,534 |
+| batched | 1,606 (b=16), 1,697 (b=64) | 4,111 (b=32) — **−26%** |
+
+The prediction was that batching would pay once flush latency dominated. It does not, and the
+reason is the one the implementation flagged as its own risk: batching funnels every insert
+through a single goroutine and a single connection, which destroys exactly the commit
+concurrency that Postgres's group commit was using to amortise flushes. Explicit batching
+replaces many concurrent commits with one serialised commit, and loses.
+
+The mechanism ships behind `HERMES_DISPATCH_INSERT_BATCH_SIZE`, default `1` (off). Leave it
+off. It is kept because the measurement is worth being able to repeat, not because there is a
+configuration where it currently wins.
+
 ## Options, most leverage first
 
 | lever | expected | cost | needs |
