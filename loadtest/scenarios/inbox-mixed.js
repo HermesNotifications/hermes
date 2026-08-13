@@ -8,11 +8,16 @@ import exec from 'k6/execution';
 import { pickTemplate, userAt, totalUsers } from '../lib/seed.js';
 import { adminHeaders, userHeaders } from '../lib/auth.js';
 import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
-import { connect, recordE2EOnPush } from '../lib/centrifugo.js';
+import { openSocket, recordE2EOnPush } from '../lib/centrifugo.js';
 import { sendAckLatency, sendErrors, inboxListLatency } from '../lib/metrics.js';
 export { handleSummary } from '../lib/summary.js';
 
-const VUS        = parseInt(__ENV.VUS || '100', 10);
+// CONNECTIONS is the thing under test. VUs are just how many event loops carry them:
+// with the async websockets module one VU holds WS_SOCKETS_PER_VU sockets, so the two
+// numbers are no longer the same and only the first one is a property of Hermes.
+const CONNECTIONS   = parseInt(__ENV.CONNECTIONS || __ENV.VUS || '100', 10);
+const SOCKETS_PER_VU = parseInt(__ENV.WS_SOCKETS_PER_VU || '1', 10);
+const VUS        = Math.max(1, Math.ceil(CONNECTIONS / SOCKETS_PER_VU));
 const SEND_RPS   = parseInt(__ENV.SEND_RPS || '50', 10);
 const POLL_RPS   = parseInt(__ENV.POLL_RPS || '10', 10);
 const DURATION   = __ENV.DURATION || '1m';
@@ -94,7 +99,7 @@ export const options = {
 // Hence: the socket side spreads over the window by globally-unique id, and the send side
 // samples the window uniformly at random. Random beats clever here -- a miss costs one
 // unrecorded sample, whereas a systematic offset costs the entire metric.
-const connectedCount = Math.min(VUS, totalUsers);
+const connectedCount = Math.min(CONNECTIONS, totalUsers);
 
 function connectedPair(i) {
   return userAt(i % connectedCount);
@@ -105,9 +110,15 @@ function randomConnectedPair() {
 }
 
 export function wsHold() {
-  // idInTest, not __VU: unique across every pod, so two pods do not both claim user 1.
-  const p = connectedPair(exec.vu.idInTest);
-  connect(p.user, p.organization.id, recordE2EOnPush);
+  // idInTest, not __VU: unique across every pod, so two pods do not both claim the same
+  // block of users. Each VU takes a contiguous run of SOCKETS_PER_VU users from it.
+  const base = (exec.vu.idInTest - 1) * SOCKETS_PER_VU;
+  for (let i = 0; i < SOCKETS_PER_VU; i++) {
+    const p = connectedPair(base + i);
+    openSocket(p.user, p.organization.id, recordE2EOnPush);
+  }
+  // Returns immediately. k6 holds the iteration open while the sockets and their close
+  // timers are outstanding, so the iteration lasts WS_HOLD_SECONDS rather than a moment.
 }
 
 export function drive() {

@@ -29,11 +29,13 @@ import exec from 'k6/execution';
 import { pickTemplate, userAt, totalUsers } from '../lib/seed.js';
 import { adminHeaders, userHeaders } from '../lib/auth.js';
 import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
-import { connect, recordE2EOnPush } from '../lib/centrifugo.js';
+import { openSocket, recordE2EOnPush } from '../lib/centrifugo.js';
 import { sendAckLatency, sendErrors, inboxListLatency } from '../lib/metrics.js';
 export { handleSummary } from '../lib/summary.js';
 
-const VUS       = parseInt(__ENV.VUS || '100', 10);
+const CONNECTIONS    = parseInt(__ENV.CONNECTIONS || __ENV.VUS || '100', 10);
+const SOCKETS_PER_VU = parseInt(__ENV.WS_SOCKETS_PER_VU || '1', 10);
+const VUS       = Math.max(1, Math.ceil(CONNECTIONS / SOCKETS_PER_VU));
 const SEND_RPS  = parseInt(__ENV.SEND_RPS || '50', 10);
 const POLL_RPS  = parseInt(__ENV.POLL_RPS || '10', 10);
 const DURATION  = __ENV.DURATION || '5m';
@@ -89,7 +91,7 @@ export const options = {
     // Sockets on a restarted pod do drop — that is unavoidable, the pod is going away. What
     // must not happen is a cascade, where reconnects overwhelm the survivors and drop those
     // too. Bounded rather than zero.
-    ws_connection_drops: ['count<' + Math.ceil(perPodVUs * 0.5)],
+    ws_connection_drops: ['count<' + Math.ceil(CONNECTIONS * 0.5)],
     ws_reconnect_duration: ['p(95)<5000'],
 
     // End-to-end push must keep working across the restart, not merely resume after it.
@@ -109,7 +111,7 @@ export const options = {
 // addressed to a user holding a socket, and __VU is per-instance and interleaved between
 // scenarios, so it cannot be used to line the two up. Sockets spread by globally-unique
 // id; sends sample the same window at random.
-const connectedCount = Math.min(VUS, totalUsers);
+const connectedCount = Math.min(CONNECTIONS, totalUsers);
 
 function connectedPair(i) {
   return userAt(i % connectedCount);
@@ -120,8 +122,11 @@ function randomConnectedPair() {
 }
 
 export function wsHold() {
-  const p = connectedPair(exec.vu.idInTest);
-  connect(p.user, p.organization.id, recordE2EOnPush);
+  const base = (exec.vu.idInTest - 1) * SOCKETS_PER_VU;
+  for (let i = 0; i < SOCKETS_PER_VU; i++) {
+    const p = connectedPair(base + i);
+    openSocket(p.user, p.organization.id, recordE2EOnPush);
+  }
 }
 
 export function drive() {

@@ -3,9 +3,10 @@
 How far the realtime path scales: concurrent WebSocket connections held against Centrifugo while
 notifications flow through the whole `send → dispatch → worker-inbox → Centrifugo` pipeline.
 
-**Headline: 50,000 concurrent connections on a single unlimited-CPU Centrifugo pod, at 330m CPU
-and 2.6Gi. End-to-end push latency stayed under 10ms at p95 up to 25,000 connections. No Hermes
-pod restarted at any point.**
+**Headline: 100,134 concurrent WebSocket connections across three Centrifugo replicas, with the
+REST API still answering at 2ms p95 and zero failed requests. Hermes was not the limit at any
+point in this exercise — at 100k its node sat at 3–13% CPU. Every degradation observed was
+eventually traced to the load generator.**
 
 ## System under test
 
@@ -61,8 +62,11 @@ mode to care about, precisely because a single-replica Centrifugo guarantees one
 **The 50,000 figure is a floor, not a ceiling, and it is not certain the SUT was the limit.** At
 that step the generator was 20 pods each holding 2,500 blocking VUs at ~1.8Gi, and k6's `k6/ws`
 module is one OS-level socket per VU. The connect-latency and send-ack tails may well be
-generator-side scheduling rather than Hermes. Distinguishing them needs a generator on
-`k6/experimental/websockets` (many sockets per VU) or more nodes.
+generator-side scheduling rather than Hermes.
+
+*Resolved in Run C: they were.* Node metrics showed the generator hosts at a load average of 10.1
+against 12 cores while using 3.4, and moving to the async websockets module halved connect latency
+at 50k without touching Hermes.
 
 ## Run B — Redis engine and three replicas
 
@@ -99,6 +103,63 @@ The cost of the change is that the single bundled Redis is now on the realtime c
 well as being the template cache and idempotency store. It had no metrics endpoint at all, which
 is addressed by the new `redis.metrics.enabled` exporter sidecar in the chart — off by default,
 and worth turning on wherever the Redis engine is in use.
+
+## Run C — 100,000 connections, and what the load generator was hiding
+
+Two changes were needed to get here, and the second one invalidates part of what Runs A and B
+appeared to show.
+
+### The generator had to stop being the bottleneck
+
+`k6/ws` blocks a VU for the life of its socket, so 50,000 connections meant 50,000 VUs. Node
+metrics from Run A show what that cost: the generator hosts ran at a **load average of 10.1
+against 12 cores while consuming 3.4 cores** — runnable threads waiting for a scheduler slot, not
+work — and the peak coincided exactly with the latency tails being attributed to Hermes, whose own
+node was at 38%.
+
+Rewriting `lib/centrifugo.js` onto the async `k6/websockets` module decoupled connections from VUs
+(`WS_SOCKETS_PER_VU`). At 10,000 connections the same test went from 1,100Mi to **385Mi** per
+runner pod and from 10,000 VUs to 400. At 50,000, `ws_connect_latency` p95 fell from **5.7s to
+2.6s** with no change to Hermes at all.
+
+### At 100k, the client was still measuring itself
+
+| Connections | Centrifugo CPU / replica | Centrifugo mem / replica | Hermes node CPU | failed reqs |
+|---:|---:|---:|---:|---:|
+| 10,000 | ~50 m | 250 Mi | 12–19 % | 0 |
+| 50,000 | ~100 m | 1.2 Gi | 24–30 % | 0 |
+| 100,000 | ~150–185 m | 1.8–2.0 Gi | 3–13 % | 0 |
+
+Measured *from the socket-holding pods*, latency looked bad at 100k: `inbox_list_latency` p95
+693ms, `ws_push_e2e_latency` p95 ~400ms. But every server-side number contradicted it — Redis at
+**0.15 cores and 3,000 ops/s**, the inbox pod at **50m CPU and 50Mi against a 256Mi limit**, and
+the actual inbox query at **0.25ms** under `EXPLAIN ANALYZE` on an index built for it
+(`idx_notifications_inbox`), over a table that had grown to 631k rows.
+
+So the API was measured again from a **separate runner pod holding no sockets**, while 99,522
+connections were held by the others:
+
+| Measured from | `inbox_list_latency` p95 | `send_ack_latency` p95 | requests | failures |
+|---|---:|---:|---:|---:|
+| Pods holding 10k sockets each | 693 ms | 2 ms (max 9 s) | — | 0 |
+| **A pod holding none** | **2 ms** | **2 ms** | 42,002 | **0** |
+
+The degradation was entirely in the measuring process. Hermes served the REST API at 2ms p95
+while carrying ~100k concurrent WebSocket connections.
+
+The same caveat now applies to `ws_push_e2e_latency` at high connection counts: its **median stayed
+at 6ms** from 200 connections to 100,000, and only the tail moved. Given the p95 of a co-resident
+HTTP request was inflated ~350×, the push tails at 50k and 100k should be read as *not yet
+measured* rather than as server latency. The medians are trustworthy; the tails are not.
+
+### What would actually be needed to find the ceiling
+
+Nothing in Hermes was near saturation at 100k. To find a real limit you would need to remove the
+remaining generator artifacts first: run socket-holding and traffic-generating pods separately (as
+the probe above does), and add generator nodes rather than density. Centrifugo's own consumption
+— roughly **60 KiB and 5m CPU per 1,000 connections per replica** — suggests a single 4Gi replica
+carries ~65k connections, so the three-replica tier as configured has headroom well past 200k
+before memory becomes the binding constraint.
 
 ## Limits worth knowing before trusting these numbers
 

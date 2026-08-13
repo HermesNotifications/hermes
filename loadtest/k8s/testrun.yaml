@@ -29,6 +29,12 @@ spec:
       - { name: RUN_ID,         value: "${RUN_ID}" }
       - { name: TARGET_RPS,     value: "${TARGET_RPS}" }
       - { name: VUS,            value: "${VUS}" }
+      # Connections, and how many of them each VU carries on its event loop. These are the
+      # knob that decides whether the run measures Hermes or measures k6: at one socket per
+      # VU the generator hosts hit a load average of 10 against 12 cores while using 3 of
+      # them, and the resulting latency tails were indistinguishable from server-side ones.
+      - { name: CONNECTIONS,       value: "${CONNECTIONS}" }
+      - { name: WS_SOCKETS_PER_VU, value: "${WS_SOCKETS_PER_VU}" }
       - { name: SEND_RPS,       value: "${SEND_RPS}" }
       - { name: POLL_RPS,       value: "${POLL_RPS}" }
       - { name: DURATION,       value: "${DURATION}" }
