@@ -97,9 +97,15 @@ through a single goroutine and a single connection, which destroys exactly the c
 concurrency that Postgres's group commit was using to amortise flushes. Explicit batching
 replaces many concurrent commits with one serialised commit, and loses.
 
-The mechanism ships behind `HERMES_DISPATCH_INSERT_BATCH_SIZE`, default `1` (off). Leave it
-off. It is kept because the measurement is worth being able to repeat, not because there is a
-configuration where it currently wins.
+The implementation is **not merged**. It is preserved on the branch
+`experiment/dispatch-insert-batching` — complete, tested against real Postgres and DynamoDB,
+correct on at-least-once and idempotency, and defaulted off. It is not on `main` because
+merging 1,400 lines and a new store-interface method to carry a feature that measurably makes
+things worse is a maintenance cost with no upside.
+
+Recover it from that branch if the storage picture changes enough to invert the arithmetic —
+but re-measure before trusting it, because the arithmetic was what predicted it would help
+here, and it did not.
 
 ## Options, most leverage first
 
