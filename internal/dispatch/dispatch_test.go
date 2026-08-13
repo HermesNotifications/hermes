@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 
 	"github.com/hermesnotifications/hermes/internal/messaging"
@@ -32,7 +33,13 @@ type publishedMsg struct {
 
 // fakeBus records publishes instead of putting them on a bus. Subscribe is never called by
 // the handler path under test.
+//
+// Publish is mutex-guarded because the real thing is called from a worker pool, and the
+// cache tests drive handleSend from several goroutines at once. The readers below are not
+// guarded: they are only meaningful once publishing has quiesced, which every caller
+// arranges by joining its goroutines first.
 type fakeBus struct {
+	mu        sync.Mutex
 	published []publishedMsg
 	failOn    map[string]error // subject -> error to return
 }
@@ -41,6 +48,8 @@ func (f *fakeBus) Publish(_ context.Context, subject string, data []byte) error 
 	if err, ok := f.failOn[subject]; ok {
 		return err
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.published = append(f.published, publishedMsg{Subject: subject, Data: data})
 	return nil
 }
@@ -104,17 +113,25 @@ func (f *fakeBus) deliveries(t *testing.T) []hermenats.DeliveryMessage {
 	return out
 }
 
+// fakeNotifStore remembers the last write of each kind. Guarded for the same reason as
+// fakeBus — the real store is called from a pool — and read directly by the single-send
+// tests, which have no concurrency to observe.
 type fakeNotifStore struct {
+	mu       sync.Mutex
 	created  *models.Notification
 	channels []string
 	failed   bool
 }
 
 func (f *fakeNotifStore) CreateNotification(_ context.Context, n *models.Notification) (*models.Notification, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.created = n
 	return n, nil
 }
 func (f *fakeNotifStore) UpdateNotificationChannels(_ context.Context, _ string, channels []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.channels = channels
 	return nil
 }
@@ -122,6 +139,8 @@ func (f *fakeNotifStore) UpdateNotificationRouting(context.Context, *models.Noti
 	return nil
 }
 func (f *fakeNotifStore) FailNotification(context.Context, string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.failed = true
 	return nil
 }
@@ -138,10 +157,32 @@ func (f *fakeNotifStore) ListRecentNotifications(context.Context, int) ([]models
 	return nil, nil
 }
 
-type fakeUserStore struct{ user *models.User }
+// fakeUserStore answers with a fixed user and counts the calls that reach it, which is how
+// the identity-cache tests tell a hit from a miss. Counters are mutex-guarded because
+// those tests run the handler concurrently.
+//
+// users, when non-nil, is consulted by external id first, so a test can hold more than one
+// recipient; user remains the single-recipient shorthand the older tests use.
+type fakeUserStore struct {
+	mu           sync.Mutex
+	user         *models.User
+	users        map[string]*models.User // external id -> user
+	ensureCalls  int
+	contactCalls int
+}
 
-func (f *fakeUserStore) EnsureUser(context.Context, string, string) (*models.User, error) {
-	return f.user, nil
+func (f *fakeUserStore) lookup(externalID string) *models.User {
+	if u, ok := f.users[externalID]; ok {
+		return u
+	}
+	return f.user
+}
+
+func (f *fakeUserStore) EnsureUser(_ context.Context, _, externalID string) (*models.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ensureCalls++
+	return f.lookup(externalID), nil
 }
 func (f *fakeUserStore) GetUserByID(context.Context, string) (*models.User, error) {
 	return f.user, nil
@@ -150,15 +191,44 @@ func (f *fakeUserStore) UpdateUserContacts(context.Context, string, *string, *st
 	return f.user, nil
 }
 func (f *fakeUserStore) ListUsers(context.Context, string) ([]models.User, error) { return nil, nil }
-func (f *fakeUserStore) GetUserContacts(context.Context, string) (map[string]string, error) {
+func (f *fakeUserStore) GetUserContacts(_ context.Context, userID string) (map[string]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.contactCalls++
+	for _, u := range f.users {
+		if u.ID == userID {
+			return u.Contacts, nil
+		}
+	}
+	if f.user != nil && f.user.ID == userID {
+		return f.user.Contacts, nil
+	}
 	return nil, nil
 }
 func (f *fakeUserStore) SetUserContact(context.Context, string, string, string) error { return nil }
 
-type fakeOrgStore struct{}
+func (f *fakeUserStore) counts() (ensure, contacts int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ensureCalls, f.contactCalls
+}
+
+type fakeOrgStore struct {
+	mu          sync.Mutex
+	ensureCalls int
+}
 
 func (f *fakeOrgStore) EnsureOrganization(_ context.Context, id string) (*models.Organization, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ensureCalls++
 	return &models.Organization{ID: id}, nil
+}
+
+func (f *fakeOrgStore) calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ensureCalls
 }
 func (f *fakeOrgStore) CreateOrganization(context.Context, string, string) (*models.Organization, error) {
 	return nil, nil
@@ -175,14 +245,14 @@ func (f *fakeOrgStore) CountUsersByOrganization(context.Context) (map[string]int
 
 // newTestDispatch wires a Dispatch over fakes. The template and channel resolvers are nil:
 // every case here is a direct-content send, which does not consult either.
+//
+// It goes through NewDispatch rather than a struct literal so these tests run with the
+// identity caches on, the way production does. No case here sends twice through the same
+// Dispatch, so every send is a cache miss and the caches change nothing — which is the
+// point: the routing behaviour below must not depend on them either way.
 func newTestDispatch(bus *fakeBus, notifs *fakeNotifStore, user *models.User) *Dispatch {
-	return &Dispatch{
-		nats:          bus,
-		store:         notifs,
-		users:         &fakeUserStore{user: user},
-		organizations: &fakeOrgStore{},
-		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	return NewDispatch(bus, notifs, &fakeUserStore{user: user}, &fakeOrgStore{}, nil, nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 // directSend builds a direct-content SendMessage for the given channels.
