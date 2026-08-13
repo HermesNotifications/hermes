@@ -137,6 +137,21 @@ hermes:
     # Set explicitly only for an external bus, where the chart cannot know the cluster size.
     # It must not exceed the number of servers, or stream creation fails outright.
     streamReplicas: ""
+    # -- Permit changing the replication factor of streams that ALREADY EXIST.
+    #
+    # Needed exactly once, when raising an existing installation's replica count -- most
+    # likely upgrading a bundled three-node bus that was provisioned at R1 before the chart
+    # derived this. Turn it on, let one upgrade run, turn it off again.
+    #
+    # Off by default because changing a replication factor migrates the whole stream between
+    # peers. That is a maintenance operation on live data, not a config change, and the
+    # provisioner refuses it as a deploy-time side effect (ADR 0015). Leaving this off is what
+    # makes an unintended change fail loudly at provisioning rather than quietly move data
+    # while a rollout is in flight.
+    #
+    # Leaving it ON permanently is the thing to avoid: it turns every future replica change
+    # into something a routine `helm upgrade` can trigger.
+    streamReplicasAllowChange: false
 
   cleanup:
     # -- Enable periodic cleanup of expired events
