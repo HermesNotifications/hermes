@@ -11,6 +11,36 @@ simplification for 0.x; when it stops paying, the chart gets its own `chart-vX.Y
 `version` and its `appVersion` are all the same, and it builds the GitHub Release notes from
 the section below matching the version. A missing section fails the release.
 
+## 0.1.2
+
+### Realtime delivery works
+
+0.1.1 claimed to fix this and did not. There were four faults, not three; it fixed the first
+three. The fourth was that the chart never set `allow_user_limited_channels`.
+
+Hermes puts each user on `user#<internal id>`, and Centrifugo honours that convention only when
+that option is enabled. Without it every subscription was refused `103: permission denied` —
+while the connection itself succeeded, so a widget connected, authenticated, and then received
+nothing at all.
+
+**If you are on 0.1.0 or 0.1.1, realtime has never worked.** Nothing was lost: notifications
+were always stored and appear on reload. Only the live push was missing.
+
+Verified end to end on a real cluster this time, not by a websocket handshake. `tests/realtime`
+is the check that does it — it subscribes, sends through the full pipeline, and waits for the
+publication. A 101 handshake proves the ingress route and nothing more, which is exactly the
+evidence that let three of these faults be reported as fixed while delivery was still broken.
+
+### Upgrading from 0.1.0 with the bundled NATS
+
+`hermes.nats.streamReplicasAllowChange` makes the R1-to-R3 stream migration something you opt
+into, rather than something an upgrade does to you. Without it, upgrading an existing bundled
+install failed, rolled back and retried — churning the datastores each cycle.
+
+See [Upgrading](docs/self-hosting/upgrading.md#011) for the two routes: pin your current replica
+count and migrate nothing, or set the flag for a single upgrade and move to replicated streams
+deliberately.
+
 ## 0.1.1
 
 ### Realtime delivery now works
