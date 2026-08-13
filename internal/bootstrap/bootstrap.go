@@ -80,6 +80,7 @@ func MustConnectRedis(cfg config.Config, logger *slog.Logger) *cache.Client {
 	client, err := cache.ConnectWithOptions(cfg.RedisURL, cache.Options{
 		PoolSize: cfg.RedisPoolSize,
 		Timeout:  cfg.RedisTimeout,
+		CABundle: cfg.RedisCABundlePath,
 	})
 	if err != nil {
 		logger.Error("redis connection failed", "error", err)

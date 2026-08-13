@@ -99,7 +99,17 @@ type Config struct {
 	// whole point of having a fallback.
 	RedisTimeout time.Duration
 
-	RedisURL           string
+	RedisURL string
+	// RedisCABundlePath is a PEM file of the roots that verify the Redis server certificate,
+	// the Redis counterpart of NATSCABundlePath.
+	//
+	// It has to be a separate variable rather than a URL parameter because go-redis, unlike
+	// pgx, offers no `sslrootcert` equivalent: `rediss://` verifies against the system pool
+	// and its parser rejects unknown query parameters outright. Against a private CA that
+	// leaves only "trust nothing" or "verify nothing" — see cache.Options.CABundle.
+	//
+	// Empty means the system pool, which is the local development path.
+	RedisCABundlePath  string
 	JWTSecret          string
 	CentrifugoAPIURL   string
 	CentrifugoAPIKey   string
@@ -194,7 +204,8 @@ func Load() Config {
 
 		RedisPoolSize:    envInt("HERMES_REDIS_POOL_SIZE", 16),
 		RedisTimeout:     envDuration("HERMES_REDIS_TIMEOUT", 500*time.Millisecond),
-		RedisURL:         envStr("HERMES_REDIS_URL", "redis://localhost:6379/0"),
+		RedisURL:          envStr("HERMES_REDIS_URL", "redis://localhost:6379/0"),
+		RedisCABundlePath: envStr("HERMES_REDIS_CA_BUNDLE", ""),
 		JWTSecret:        envStr("HERMES_JWT_SECRET", "hermes-jwt-secret"),
 		CentrifugoAPIURL: envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000"),
 		CentrifugoAPIKey: envStr("HERMES_CENTRIFUGO_API_KEY", "centrifugo-api-key"),

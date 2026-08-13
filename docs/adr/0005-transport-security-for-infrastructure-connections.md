@@ -18,7 +18,8 @@ source: docs/reviews/2026-07-27-architecture-review.md — findings 1, 14 and 19
 **Status:** Accepted (2026-07-29; amended 2026-07-31: the Centrifugo password's first character
 must be an ASCII letter — a cross-component contract binding `cmd/natskeys`, `nats-accounts.conf`
 and anyone setting the Secret by hand; amended 2026-08-05: review findings 38/39 referenced
-below renumbered to 52/53, references only)  
+below renumbered to 52/53, references only; amended 2026-08-12: the Helm chart's bundled
+datastores can now be TLS — see "Amendment 2026-08-12" at the end)  
 **Date:** 2026-07-29  
 **Author:** Daryl Robbins
 
@@ -673,3 +674,77 @@ jobs install it explicitly.
   unexplained `CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY` is left in place pending a real-cluster
   test. Also fixed here because it underpins every claim above: six manifest gates treated a
   missing PyYAML as a reason to skip and pass.
+
+---
+
+## Amendment 2026-08-12 — the Helm chart's bundled datastores can be TLS
+
+This decision scoped the Helm chart's bundled PostgreSQL, Redis and NATS out of transport
+security. `templates/_validate.tpl` enforced that by refusing to render `hermes.env=production`
+with any of them enabled, and `charts/hermes/templates/postgresql.yaml` said so in as many
+words: "no TLS, which is why `_validate.tpl` refuses it."
+
+**That scoping is lifted for TLS, and only for TLS.** With `tls.enabled=true` the chart issues
+cert-manager Certificates for each bundled store, configures the servers to require TLS, and
+generates URLs that satisfy `Config.Validate()` — `sslmode=verify-full` with an `sslrootcert`,
+`rediss://`, `tls://`. Production with bundled datastores is now a supported posture.
+
+Why the original scoping stopped making sense: it forced anyone wanting a defensible install to
+operate three external datastores, which is a reasonable ask of a company and an unreasonable
+one of the single-node self-hoster this chart otherwise serves. The gap it left was not
+"evaluation versus production" but "has a DBA versus does not", and the practical effect was
+people running `hermes.env=development` in earnest — which accepts the published placeholder
+secrets, and is materially worse than a bundled Postgres with a real certificate.
+
+**Decision item 1 of this ADR is now complete.** It promised a verification mode and CA bundle
+path for each datastore and delivered it only for NATS. `HERMES_REDIS_CA_BUNDLE` and
+`cache.Options.CABundle` are the Redis half. They have to exist because go-redis, unlike pgx,
+offers no `sslrootcert` equivalent: `rediss://` verifies against the system pool and its parser
+rejects unknown query parameters, so against a private CA the only options without this were
+"trust nothing" and "verify nothing". PostgreSQL needed no code change — pgx reads
+`sslrootcert` from the URL.
+
+### What is deliberately NOT in scope
+
+**Authentication.** The bundled Redis takes no password and the bundled NATS has no NKey
+accounts, so any pod in the namespace that can reach those ports has full access — it can
+publish `notification.send` or drain `delivery.*`. This amendment moves the attacker from
+"anything on the network" to "anything in this namespace" and no further. The account model in
+phase 3 above remains a `deploy/k8s/` feature: bringing it to the chart means copying a
+358-line accounts file, a parity gate to stop it drifting, and reproducing the
+`require-centrifugo-password` initContainer. Worth doing; not done here; stated in `NOTES.txt`
+and `docs/self-hosting/production.md` rather than left to be discovered.
+
+**The bundled Centrifugo**, which remains refused in production for an unrelated reason: it
+runs the in-memory engine, so a publication reaches only the users connected to the pod that
+received it. That is a correctness property, not a transport one, and no certificate changes it.
+
+### Verified rather than reasoned
+
+Three assumptions were checked against a real cluster before the design was built on them,
+because each would have changed it:
+
+- PostgreSQL accepts a Secret-mounted key at `root:<fsGroup>` mode `0640` — the PG11 root-owned
+  exception. Confirmed with `SHOW ssl` returning `on`. Had it not held, the chart would need an
+  initContainer copying the pair into an `emptyDir`.
+- `redis:7-alpine` has TLS compiled in.
+- The NATS sub-chart's `tlsCA` injects `ca_file` into **both** the client and cluster TLS
+  blocks. Had it injected into only one, cluster route verification would have been decorative.
+
+The Redis client path was then verified against a real TLS-only Redis holding a certificate
+from a private CA, with a negative test proving the connection fails without the bundle — so
+the positive result cannot be passing for some other reason.
+
+### Found while implementing, and fixed here
+
+`hermes.centrifugoApiUrl` named port 8000. Centrifugo serves websocket, http_stream, sse and
+emulation there, and its HTTP API on 9000. **Every realtime publish from the inbox worker was
+returning 404**, and had been since the chart was written. It failed silently because nothing
+depends on the publish succeeding: the notification is already committed to Postgres, so the
+inbox is correct on the next page load and only the live push is missing. Confirmed on a
+running cluster — `:8000/api/publish` → 404, `:9000/api/publish` → 401.
+
+The chart also set `HERMES_CENTRIFUGO_API_KEY` on the clients and never configured the server's
+`http_api.key`, nor `client.token.hmac_secret_key` — so even at the right port every publish
+would have been rejected 401, and Centrifugo could verify no browser token at all. Both are now
+read from the release Secret, and `_validate.tpl` asserts the reference resolves.

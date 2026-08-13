@@ -231,6 +231,10 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 # the bundled NATS images under the Hermes registry. All of it renders cleanly.
 .PHONY: verify-chart
 verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it deploys
+	@# Rendered as release `hermes`, matching the documented install. Not arbitrary: the
+	@# bundled Centrifugo reads two secrets from `<release>-hermes-secrets` by a name written
+	@# out in values.yaml, because a parent chart cannot template a sub-chart's values. A
+	@# different release name is refused at render time rather than silently losing realtime.
 	@# Absent helm must fail loudly. A gate that skips when its tool is missing is the
 	@# same class of defect as the one this target exists to close.
 	@command -v helm >/dev/null 2>&1 || { \
@@ -240,25 +244,25 @@ verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it
 	  echo "    https://helm.sh/docs/intro/install/"; \
 	  exit 1; }
 	helm dependency build charts/hermes/
-	helm template verify charts/hermes/ \
+	helm template hermes charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
 	@# The same two gates the kustomize overlays get. Running them only over kustomize is
 	@# exactly how the chart drifted into shipping no PDBs, no grace periods and empty
 	@# resource requests while the overlays had all three.
-	helm template verify charts/hermes/ \
+	helm template hermes charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  | $(PYTHON) scripts/check_workload_resources.py - --skip=nats,centrifugo,postgresql,redis
-	helm template verify charts/hermes/ \
+	helm template hermes charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  | $(PYTHON) scripts/check_shutdown_budget.py -
 	@# Optional features render into workloads the default install never produces, so they
 	@# need their own pass -- hermes-cleanup was missing from the cd.yml publish matrix and
 	@# only shows up when the CronJob renders.
-	helm template verify charts/hermes/ \
+	helm template hermes charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
@@ -268,25 +272,50 @@ verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it
 	@# plain prefix, because Traefik v3 removed regex from Ingress paths and the nginx form
 	@# matches nothing there. Checking only the nginx render would leave half the
 	@# self-hosting world (every k3s cluster) on a silently dead websocket endpoint.
-	helm template verify charts/hermes/ \
+	helm template hermes charts/hermes/ \
 	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	  --set global.domain=verify.example.com \
 	  --set ingress.className=traefik \
 	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
-	@# The production posture must be refused at render time, not discovered as a
-	@# crash-loop. Bundled sub-charts cannot satisfy config.Validate(), so this must fail.
-	@if helm template verify charts/hermes/ \
+	@# Production on PLAINTEXT bundled datastores must still be refused: the URLs are built as
+	@# ?sslmode=disable, redis:// and nats://, which every workload rejects at startup. This
+	@# used to assert that production+bundled ALWAYS failed; it now asserts the narrower and
+	@# still-true thing, because TLS made the combination legal.
+	@if helm template hermes charts/hermes/ \
 	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	     --set global.domain=verify.example.com --set hermes.env=production >/dev/null 2>&1; then \
-	  echo "ERROR: hermes.env=production rendered with the bundled sub-charts."; \
+	  echo "ERROR: hermes.env=production rendered with plaintext bundled datastores."; \
 	  echo "  It must fail: _validate.tpl should refuse a combination whose workloads all"; \
 	  echo "  exit at startup on config.Validate()."; \
 	  exit 1; \
 	fi
-	@echo "ok: production install with bundled sub-charts is refused at render time"
+	@echo "ok: production on plaintext bundled datastores is refused at render time"
+	@# And the other direction, which is the point of the feature: production WITH TLS must
+	@# render, and must survive the same gates as every other posture. A capability nothing
+	@# exercises is a capability that rots.
+	helm template hermes charts/hermes/ -f charts/hermes/values-production-bundled.yaml \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set hermes.centrifugo.apiKey=verify-centrifugo-key \
+	  --set global.domain=verify.example.com \
+	  --set tls.issuer.name=verify-ca \
+	  --set externalCentrifugo.apiUrl=https://centrifugo.verify.example.com \
+	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	@# The bundled bus needs sub-chart values the parent cannot template, so a mismatched
+	@# secretName must be refused rather than producing a NATS cluster serving plaintext while
+	@# the ConfigMap advertises tls://.
+	@if helm template hermes charts/hermes/ -f charts/hermes/values-production-bundled.yaml \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set hermes.centrifugo.apiKey=verify-centrifugo-key \
+	     --set global.domain=verify.example.com --set tls.issuer.name=verify-ca \
+	     --set externalCentrifugo.apiUrl=https://c.example.com \
+	     --set nats.tlsCA.secretName=wrong >/dev/null 2>&1; then \
+	  echo "ERROR: a NATS TLS secretName that names no certificate rendered cleanly."; \
+	  exit 1; \
+	fi
+	@echo "ok: production on TLS bundled datastores renders, and a mismatched NATS secret is refused"
 	@# No hermes-admin-portal image exists and nothing here can build one, so enabling it
 	@# on chart defaults must be refused rather than deferred to ImagePullBackOff.
-	@if helm template verify charts/hermes/ \
+	@if helm template hermes charts/hermes/ \
 	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
 	     --set global.domain=verify.example.com --set adminPortal.enabled=true >/dev/null 2>&1; then \
 	  echo "ERROR: adminPortal.enabled=true rendered against the unpublished default image."; \

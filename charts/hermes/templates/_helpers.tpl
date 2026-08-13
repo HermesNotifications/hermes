@@ -183,7 +183,24 @@ only at connect time.
 {{- $user := .Values.postgresql.auth.username -}}
 {{- $pass := .Values.postgresql.auth.password -}}
 {{- $db   := .Values.postgresql.auth.database -}}
+{{- if include "hermes.storeTLS" (dict "root" . "store" "postgresql") -}}
+{{- $mode := .Values.postgresql.tls.sslmode -}}
+{{/*
+sslrootcert is emitted ONLY for verify-ca and verify-full, and that is not tidiness.
+
+pgx reads sslrootcert from the URL, and when it is present alongside sslmode=require it
+silently PROMOTES the mode to verify-ca. The value you set and the behaviour you get would
+then disagree, which is the class of defect config.Validate()'s own comments complain about.
+So `require` renders no CA reference and is honestly what it says: encrypted, unauthenticated.
+*/}}
+{{- if has $mode (list "verify-ca" "verify-full") -}}
+{{- printf "postgres://%s:%s@%s:%s/%s?sslmode=%s&sslrootcert=/etc/hermes/tls/postgresql/postgresql-ca.crt" $user $pass $host $port $db $mode -}}
+{{- else -}}
+{{- printf "postgres://%s:%s@%s:%s/%s?sslmode=%s" $user $pass $host $port $db $mode -}}
+{{- end -}}
+{{- else -}}
 {{- printf "postgres://%s:%s@%s:%s/%s?sslmode=disable" $user $pass $host $port $db -}}
+{{- end -}}
 {{- else -}}
 {{- .Values.externalPostgresql.url -}}
 {{- end -}}
@@ -194,7 +211,8 @@ Return the NATS URL.
 */}}
 {{- define "hermes.natsUrl" -}}
 {{- if .Values.nats.enabled -}}
-{{- printf "nats://%s-nats:4222" .Release.Name -}}
+{{- $scheme := ternary "tls" "nats" (eq (include "hermes.storeTLS" (dict "root" . "store" "nats")) "true") -}}
+{{- printf "%s://%s-nats:4222" $scheme .Release.Name -}}
 {{- else -}}
 {{- .Values.externalNats.url -}}
 {{- end -}}
@@ -210,7 +228,21 @@ name).
 */}}
 {{- define "hermes.redisUrl" -}}
 {{- if .Values.redis.enabled -}}
-{{- printf "redis://%s-redis:6379/0" (include "hermes.fullname" .) -}}
+{{- $host := printf "%s-redis" (include "hermes.fullname" .) -}}
+{{- $scheme := ternary "rediss" "redis" (eq (include "hermes.storeTLS" (dict "root" . "store" "redis")) "true") -}}
+{{/*
+No CA in the URL, unlike Postgres. go-redis takes no sslrootcert equivalent -- `rediss://`
+verifies against the system pool and its parser rejects unknown query parameters outright --
+so the bundle travels as HERMES_REDIS_CA_BUNDLE and is applied by cache.ConnectWithOptions.
+
+No password either. The bundled Redis is unauthenticated, TLS or not: encryption means an
+eavesdropper must be a pod in this namespace rather than anything on the network, which is a
+real improvement and is not access control. Adding auth means moving this whole URL from the
+ConfigMap to the Secret, since a password cannot ride in a ConfigMap and `$(VAR)` expansion
+does not happen for values sourced through envFrom. That is a separate change; until then it
+is stated in NOTES.txt rather than left for someone to discover.
+*/}}
+{{- printf "%s://%s:6379/0" $scheme $host -}}
 {{- else -}}
 {{- .Values.externalRedis.url -}}
 {{- end -}}
@@ -221,7 +253,20 @@ Return the Centrifugo API URL.
 */}}
 {{- define "hermes.centrifugoApiUrl" -}}
 {{- if .Values.centrifugo.enabled -}}
-{{- printf "http://%s-centrifugo:8000" .Release.Name -}}
+{{/*
+Port 9000, not 8000. Centrifugo splits its listeners: 8000 ("external") serves websocket,
+http_stream, sse and emulation, while 9000 ("internal") serves the HTTP API, admin, health and
+prometheus. This helper named 8000, so every publish from the inbox worker went to a port with
+no /api on it and came back 404 -- realtime delivery could not work with the bundled
+Centrifugo at all, and never had.
+
+It failed quietly because nothing depends on the publish succeeding: the notification is
+already committed to Postgres by then, so the inbox is correct on the next page load and only
+the live push is missing. Confirmed against a running cluster:
+  :8000/api/publish -> 404
+  :9000/api/publish -> 401 (the API, refusing an unauthenticated call)
+*/}}
+{{- printf "http://%s-centrifugo:9000" .Release.Name -}}
 {{- else -}}
 {{- .Values.externalCentrifugo.apiUrl -}}
 {{- end -}}

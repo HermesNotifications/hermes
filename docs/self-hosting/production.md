@@ -31,12 +31,70 @@ has to deliver:
 The last three defaults are committed to this public repository. A deployment still using one
 does not have a weak secret; it has a published constant.
 
-> **Production mode and the bundled sub-charts are mutually exclusive.** The chart builds the
-> bundled datastore URLs as `postgres://…?sslmode=disable`, `redis://…` and `nats://…`, and
-> the bundled Redis runs with `auth.enabled: false`. All three fail the checks above. Moving
-> to production therefore means disabling all four sub-charts and completing the `external*`
-> sections below — it is not an incremental hardening step. See
-> [Bundled infrastructure is for evaluation](configuration.md#bundled-infrastructure-is-for-evaluation).
+> **Production mode works with the bundled PostgreSQL, Redis and NATS — but only with
+> `tls.enabled: true`.** Without it the chart builds their URLs as
+> `postgres://…?sslmode=disable`, `redis://…` and `nats://…`, all three of which fail the
+> checks above, and the install is refused at render time rather than left to crash-loop.
+>
+> **The bundled Centrifugo is still excluded, for a different reason.** It runs the in-memory
+> engine, so a publication reaches only the users connected to the pod that received it —
+> invisible at one replica, silently half-delivered at two. No transport setting changes that.
+> Production needs an external Centrifugo on the Redis engine.
+>
+> See [Bundled datastores over TLS](#bundled-datastores-over-tls) below.
+
+## Bundled datastores over TLS
+
+The shortest production install that keeps the bundled datastores:
+
+```bash
+helm install hermes oci://ghcr.io/hermesnotifications/charts/hermes \
+  --namespace hermes --create-namespace \
+  -f values-production-bundled.yaml \
+  --set global.domain=hermes.example.com \
+  --set tls.issuer.name=my-ca \
+  --set hermes.jwt.secret="$(openssl rand -base64 32)" \
+  --set hermes.apiKey.hmacSecret="$(openssl rand -base64 32)" \
+  --set hermes.centrifugo.apiKey="$(openssl rand -hex 24)" \
+  --set externalCentrifugo.apiUrl=https://centrifugo.example.com \
+  --wait --wait-for-jobs --timeout 12m
+```
+
+`values-production-bundled.yaml` ships in the chart. It exists because the NATS sub-chart's TLS
+settings cannot be templated by the parent — a parent chart cannot reach a sub-chart's values —
+so three `secretName` references have to be written out. The chart asserts they name the
+certificate it issues; a mismatch is refused rather than producing a NATS cluster serving
+plaintext while the ConfigMap advertises `tls://`.
+
+**Requires cert-manager**, unless you supply certificates yourself with
+`postgresql.tls.existingSecret` and `redis.tls.existingSecret` (each needing `tls.crt`,
+`tls.key` and `ca.crt`). `tls.issuer.create: true` will make a CA for you, at the cost of
+putting a ten-year CA private key in the release namespace, where any Secret reader can mint a
+certificate every Hermes service trusts. Prefer an issuer whose key lives elsewhere.
+
+### What this gives you, and what it does not
+
+**Gives you:** encrypted connections to all three datastores, with each server's identity
+verified against a CA you control. PostgreSQL uses `sslmode=verify-full` by default — not
+`require`, which pgx implements with `InsecureSkipVerify`, so it is encryption with no server
+authentication at all.
+
+**Does not give you authentication on the bus or the cache.** The bundled Redis takes no
+password and the bundled NATS has no NKey accounts, so any pod in the namespace that can reach
+those ports has full access — it can publish `notification.send` or drain `delivery.*`. TLS
+moves the attacker from "anything on the network" to "anything in this namespace". If that is
+not the boundary you need, use external datastores. ADR 0005's NKey account model is a
+`deploy/k8s/` (Kustomize) feature and is not in this chart.
+
+### Certificate renewal is not automatic
+
+None of PostgreSQL, Redis or NATS reloads a certificate from disk on its own, and the NATS
+sub-chart's config reloader watches the config rather than the certificate Secret. A pod that
+is never restarted keeps serving an expired certificate.
+
+Certificates are issued for 90 days and renewed by cert-manager 15 days before expiry. A
+`helm upgrade` or a `kubectl rollout restart` inside that window is what actually picks up the
+new material. If nothing restarts these pods for three months, set yourself a reminder.
 
 ## External PostgreSQL
 

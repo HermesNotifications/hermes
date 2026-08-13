@@ -93,10 +93,55 @@ spec:
             - "--appendonly"
             - "no"
             {{- end }}
+            {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
+            {{/*
+            `--port 0` is what makes this real rather than optional: without it Redis keeps
+            serving plaintext on 6379 alongside TLS, and the whole exercise buys nothing
+            because anything already connecting in the clear continues to.
+
+            tls-auth-clients no: clients present no certificate. Hermes authenticates to
+            Redis not at all -- see the note in values.yaml. This is encryption, not access
+            control.
+            */}}
+            - "--tls-port"
+            - "6379"
+            - "--port"
+            - "0"
+            - "--tls-cert-file"
+            - "/etc/redis/certs/tls.crt"
+            - "--tls-key-file"
+            - "/etc/redis/certs/tls.key"
+            - "--tls-ca-cert-file"
+            - "/etc/redis/certs/ca.crt"
+            - "--tls-auth-clients"
+            - "no"
+            {{- end }}
           ports:
             - name: redis
               containerPort: 6379
               protocol: TCP
+          {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
+          {{/*
+          The probes have to move with the port. `redis-cli ping` speaks plaintext and
+          cannot reach a TLS-only server, so leaving them alone means a pod that serves
+          correctly and never becomes Ready -- and a StatefulSet stuck at 0/1 with a
+          perfectly healthy Redis inside it.
+          */}}
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "--tls", "--cacert", "/etc/redis/certs/ca.crt", "ping"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "--tls", "--cacert", "/etc/redis/certs/ca.crt", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- else }}
           livenessProbe:
             exec:
               command: ["redis-cli", "ping"]
@@ -111,15 +156,31 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
+          {{- end }}
           resources:
             {{- toYaml .Values.redis.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /data
-      {{- if not .Values.redis.persistence.enabled }}
+            {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
+            - name: certs
+              mountPath: /etc/redis/certs
+              readOnly: true
+            {{- end }}
+      {{- if or (not .Values.redis.persistence.enabled) (include "hermes.storeTLS" (dict "root" . "store" "redis")) }}
       volumes:
+        {{- if not .Values.redis.persistence.enabled }}
         - name: data
           emptyDir: {}
+        {{- end }}
+        {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
+        - name: certs
+          secret:
+            secretName: {{ include "hermes.redisTLSSecret" . }}
+            # Redis is less particular than Postgres about key permissions, but the same
+            # root:<fsGroup> 0640 shape works and keeps the two consistent.
+            defaultMode: 0640
+        {{- end }}
       {{- end }}
   {{- if .Values.redis.persistence.enabled }}
   volumeClaimTemplates:

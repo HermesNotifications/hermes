@@ -6,14 +6,32 @@ package cache
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-redis/redis_rate/v10"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
+
+// caPool reads a PEM bundle into a certificate pool.
+func caPool(path string) (*x509.CertPool, error) {
+	pem, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read redis CA bundle: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		// AppendCertsFromPEM reports failure by returning false and nothing else, so an
+		// unreadable bundle would otherwise produce an empty pool that rejects every
+		// certificate with a generic verification error a long way from the cause.
+		return nil, fmt.Errorf("redis CA bundle %s contains no usable certificate", path)
+	}
+	return pool, nil
+}
 
 type Client struct {
 	rdb *redis.Client
@@ -27,6 +45,24 @@ type Options struct {
 	PoolSize int
 	// Timeout applies to reads and writes alike.
 	Timeout time.Duration
+	// CABundle is a path to a PEM file of root certificates used to verify the Redis
+	// server, for `rediss://` URLs.
+	//
+	// This exists because go-redis offers no other way to supply one. `rediss://` builds a
+	// tls.Config that verifies against the SYSTEM pool, and the only TLS knob its URL parser
+	// accepts is `?skip_verify=true` — unknown query parameters are a hard error, so a CA
+	// cannot be smuggled in the URL the way pgx allows with sslrootcert. Against a server
+	// holding a certificate from a private CA, that leaves exactly two options without this
+	// field: trust nothing (every connection fails) or verify nothing.
+	//
+	// ADR 0005's decision promised a verification mode and CA bundle path for each datastore
+	// and delivered it only for NATS. This is the Redis half.
+	//
+	// An empty path is a no-op, which keeps `make infra-up` working: local Redis speaks
+	// plaintext and has no CA. A path that cannot be read fails the connection loudly rather
+	// than falling back to the system pool, so a typo cannot silently become "verify against
+	// the public web".
+	CABundle string
 }
 
 // Defaults are applied when Connect is given the zero Options.
@@ -69,6 +105,24 @@ func ConnectWithOptions(redisURL string, o Options) (*Client, error) {
 	// queue in front of an already-struggling dependency.
 	opts.PoolTimeout = 2 * o.Timeout
 	opts.MaxRetries = 2
+
+	if o.CABundle != "" {
+		if opts.TLSConfig == nil {
+			// A CA bundle against a `redis://` URL is a configuration error, not something to
+			// paper over by silently enabling TLS: the operator believes the connection is
+			// verified and it would not even be encrypted.
+			return nil, fmt.Errorf(
+				"a CA bundle was given but the URL is not rediss://; TLS would not be used at all")
+		}
+		pool, err := caPool(o.CABundle)
+		if err != nil {
+			return nil, err
+		}
+		// Replaces the system pool rather than adding to it. The bundle names exactly who may
+		// vouch for this server, which is the point; leaving the public roots in place would
+		// mean any publicly-trusted certificate for the hostname is also accepted.
+		opts.TLSConfig.RootCAs = pool
+	}
 
 	rdb := redis.NewClient(opts)
 	if err := redisotel.InstrumentTracing(rdb); err != nil {

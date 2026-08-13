@@ -79,3 +79,12 @@ spec:
             capabilities:
               drop:
                 - ALL
+          {{/* cmd/migrate reaches Postgres through golang-migrate's lib/pq driver rather
+               than pgx, but lib/pq honours sslrootcert from the URL the same way -- so the
+               same URL works and the same CA mount is required. Omitting it here breaks
+               migrations while every service connects fine, which reads as a database
+               problem rather than a missing file. */}}
+          volumeMounts:
+            {{- include "hermes.datastoreCAMounts" . | nindent 12 }}
+      volumes:
+        {{- include "hermes.datastoreCAVolumes" . | nindent 8 }}

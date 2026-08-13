@@ -124,10 +124,12 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- include "hermes.datastoreCAMounts" . | nindent 12 }}
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 10Mi
+        {{- include "hermes.datastoreCAVolumes" . | nindent 8 }}
       {{- with .Values.user.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

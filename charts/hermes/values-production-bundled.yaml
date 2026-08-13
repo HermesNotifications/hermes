@@ -1,0 +1,73 @@
+# Production posture on the bundled datastores.
+#
+#   helm install hermes oci://ghcr.io/hermesnotifications/charts/hermes \
+#     -f values-production-bundled.yaml \
+#     --set global.domain=hermes.example.com \
+#     --set tls.issuer.name=<your cert-manager issuer> \
+#     --set hermes.jwt.secret=... --set hermes.apiKey.hmacSecret=... \
+#     --set hermes.centrifugo.apiKey=... \
+#     --set externalCentrifugo.apiUrl=https://centrifugo.example.com
+#
+# WHY THIS FILE EXISTS AT ALL
+#
+# Everything under `nats:` below configures the NATS sub-chart, and a parent chart cannot
+# template a sub-chart's values -- they are merged before rendering, so no Helm expression of
+# ours can reach them. The three secretName references have to name the certificate this chart
+# issues, and the only way to say so is to write them out. templates/_validate.tpl asserts that
+# they match, because the alternative failure is a NATS cluster serving plaintext while the
+# ConfigMap advertises tls://: every workload down, and nothing anywhere explaining why.
+#
+# WHAT THIS DOES AND DOES NOT GIVE YOU
+#
+# Gives you: encrypted connections to Postgres, Redis and NATS, with the servers' identities
+# verified against a CA you control, which is what config.Validate() demands outside
+# development.
+#
+# Does NOT give you authentication on the bus or the cache. The bundled Redis takes no
+# password and the bundled NATS has no NKey accounts, so any pod in this namespace that can
+# reach those ports has full access -- it can publish notification.send or drain delivery.*.
+# ADR 0005's account model is a deploy/k8s/ (Kustomize) feature and is not in this chart.
+# Encryption moves the attacker from "anything on the network" to "anything in this
+# namespace"; if that is not the boundary you need, use external datastores.
+#
+# Centrifugo is not here. The bundled one runs the memory engine, so a publication reaches
+# only the users connected to the pod that received it -- invisible at one replica, silently
+# half-delivered at two. No transport setting changes that, so production requires an external
+# Centrifugo on the Redis engine.
+
+hermes:
+  env: production
+
+tls:
+  enabled: true
+  issuer:
+    # Set to a cert-manager Issuer or ClusterIssuer you already have. `create: true` is
+    # available instead, and puts a ten-year CA key in this namespace -- read the note in
+    # values.yaml before choosing it.
+    name: ""
+    kind: ClusterIssuer
+
+# The bundled Centrifugo cannot serve this posture; supply your own.
+centrifugo:
+  enabled: false
+
+nats:
+  # The CA, mounted at /etc/nats-ca-cert/ca.crt and injected as `ca_file` into BOTH the client
+  # and cluster TLS blocks. Verified by rendering the sub-chart, not assumed: without it the
+  # servers do not verify each other and the cluster's mutual TLS is decorative.
+  tlsCA:
+    enabled: true
+    # MUST equal <release>-nats-tls, the Secret templates/certificates.yaml creates.
+    # _validate.tpl checks this.
+    secretName: hermes-nats-tls
+  config:
+    nats:
+      tls:
+        enabled: true
+        secretName: hermes-nats-tls
+    cluster:
+      enabled: true
+      replicas: 3
+      tls:
+        enabled: true
+        secretName: hermes-nats-tls

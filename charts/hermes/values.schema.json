@@ -216,6 +216,16 @@
             "schedule": { "type": "string", "minLength": 1 }
           }
         },
+        "nats": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "streamReplicas": {
+              "type": ["integer", "string"],
+              "$comment": "Empty derives it from the bundled cluster size. The built-in default of 1 meant a three-node bundled bus carried single-replica streams, so losing one node stopped the pipeline on a cluster sized to survive exactly that."
+            }
+          }
+        },
         "bootstrap": {
           "type": "object",
           "additionalProperties": false,
@@ -409,6 +419,29 @@
       }
     },
 
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "TLS for the bundled datastores, which is what makes hermes.env=production possible with them. Requires cert-manager unless every enabled store carries a per-store tls.existingSecret.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "kind": { "enum": ["Issuer", "ClusterIssuer"] },
+            "create": {
+              "type": "boolean",
+              "$comment": "Creates a namespaced CA. The private key then lives in this namespace, where any Secret reader can mint a certificate every Hermes service trusts -- deploy/k8s/pki/ moved that key out of the application namespace deliberately."
+            }
+          }
+        },
+        "duration": { "type": "string", "minLength": 1 },
+        "renewBefore": { "type": "string", "minLength": 1 }
+      }
+    },
+
     "externalPostgresql": { "$ref": "#/definitions/externalConnection" },
     "externalNats": { "$ref": "#/definitions/externalConnection" },
     "externalRedis": { "$ref": "#/definitions/externalConnection" },
@@ -440,6 +473,18 @@
           },
           "required": ["repository", "tag"]
         },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "existingSecret": { "type": "string" },
+            "sslmode": {
+              "enum": ["require", "verify-ca", "verify-full"],
+              "$comment": "disable, allow and prefer are absent on purpose: config.Validate() rejects all three, and allow/prefer specifically because libpq falls back to plaintext without saying so. require is permitted but is encryption without server authentication -- pgx sets InsecureSkipVerify for it.",
+              "default": "verify-full"
+            }
+          }
+        },
         "auth": {
           "type": "object",
           "additionalProperties": false,
@@ -464,7 +509,7 @@
     },
     "redis": {
       "type": "object",
-      "$comment": "Bundled evaluation Redis, rendered by templates/redis.yaml. No auth block, deliberately: HERMES_REDIS_URL is a ConfigMap value, so a password set here would be written beside it in plaintext. Use externalRedis for an authenticated instance.",
+      "$comment": "Bundled evaluation Redis, rendered by templates/redis.yaml. No auth block, deliberately: HERMES_REDIS_URL is a ConfigMap value, so a password set here would be written beside it in plaintext. Use externalRedis for an authenticated instance. tls encrypts the connection but adds no authentication -- it raises the bar from anything on the network to any pod in this namespace.",
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
@@ -477,6 +522,13 @@
             "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
           },
           "required": ["repository", "tag"]
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "existingSecret": { "type": "string" }
+          }
         },
         "persistence": {
           "type": "object",
