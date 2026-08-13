@@ -50,7 +50,7 @@ start from, and 2,000/s is where it lands.
 |---|---|---|---|
 | Postgres on node-local storage | **~20× fsync headroom** | volume is node-bound; loses Longhorn's replication and reschedule survival | storage class + migration |
 | Batch the notification inserts | multiplies whatever storage gives | larger failure blast radius per batch | code |
-| Cache `EnsureOrganization` / `EnsureUser` | removes 2 of 3 write statements per message | negligible — both are effectively append-only | code |
+| Cache `EnsureOrganization` / `EnsureUser` | removes 1 WAL-reaching write per message, plus a Redis round trip | small — see the correction below | code |
 | `commit_delay` tuning | uncertain, possibly 1.5–3× | none; no durability loss | config |
 | More dispatch replicas | **1.6× for 4×** (measured) | more Postgres connections against `max_connections=100` | none |
 | `synchronous_commit=off` | ~10–20× | loses recently-committed transactions on crash | config + a real decision |
@@ -83,10 +83,26 @@ already arriving in groups.
 
 ### 3. Cache the org and user lookups
 
-Every message runs `EnsureOrganization` then `EnsureUser` before `CreateNotification`. Both
-are `INSERT ... ON CONFLICT DO NOTHING` round trips that write nothing after the first time
-for a given organization or user — and organizations are few while users repeat constantly.
-An in-process cache removes two of the three write statements per notification.
+Every message runs `EnsureOrganization` then `EnsureUser` before `CreateNotification`.
+
+**An earlier draft of this document claimed that caching removes two of three write statements.
+That was wrong, and implementing it is what showed why:**
+
+- `EnsureOrganization` is *already* cached in production. `cmd/dispatch/main.go` wraps the
+  store in `cached.NewOrganizationRepository`, so after the first message for an organization
+  this is a Redis GET, not a Postgres upsert. Caching it in-process is still worth doing — it
+  removes a network round trip from a worker that is holding a message, and one that can time
+  out — but the fsync argument does not apply to it.
+- `EnsureUser` is *two* round trips, not one: the upsert, and then `GetUserContacts`, because
+  `routeAndDeliver` narrows channels to those the recipient has a contact point for. Contact
+  points are mutable (`SetUserContact` / `UpdateUserContacts` in the user service), so caching
+  them would mean mailing a stale address, or silently dropping a channel whose contact was
+  added a minute ago, until an eviction happened to fix it — with no cross-replica
+  invalidation. So the contacts read stays; only the upsert is cached away.
+
+Net effect is therefore **one WAL-reaching statement removed per notification, plus one Redis
+round trip** — real, but a third of what was originally projected. Which is the argument for
+measuring the result rather than trusting this table.
 
 ### 4. What not to bother with
 
