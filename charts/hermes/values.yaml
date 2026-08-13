@@ -137,6 +137,21 @@ hermes:
     # Set explicitly only for an external bus, where the chart cannot know the cluster size.
     # It must not exceed the number of servers, or stream creation fails outright.
     streamReplicas: ""
+    # -- Permit changing the replication factor of streams that ALREADY EXIST.
+    #
+    # Needed exactly once, when raising an existing installation's replica count -- most
+    # likely upgrading a bundled three-node bus that was provisioned at R1 before the chart
+    # derived this. Turn it on, let one upgrade run, turn it off again.
+    #
+    # Off by default because changing a replication factor migrates the whole stream between
+    # peers. That is a maintenance operation on live data, not a config change, and the
+    # provisioner refuses it as a deploy-time side effect (ADR 0015). Leaving this off is what
+    # makes an unintended change fail loudly at provisioning rather than quietly move data
+    # while a rollout is in flight.
+    #
+    # Leaving it ON permanently is the thing to avoid: it turns every future replica change
+    # into something a routine `helm upgrade` can trigger.
+    streamReplicasAllowChange: false
 
   cleanup:
     # -- Enable periodic cleanup of expired events
@@ -1064,6 +1079,24 @@ centrifugo:
     # for anything that can reach the Service.
     admin:
       enabled: false
+    channel:
+      without_namespace:
+        # -- REQUIRED for any client to subscribe. Do not turn this off.
+        #
+        # Hermes puts each user on `user#<internal id>`. The `#` is Centrifugo's user-limited
+        # channel convention: the suffix names the only user allowed to subscribe. But
+        # Centrifugo only honours that when this is enabled — without it every subscription
+        # is refused with "103: permission denied", while the connection itself succeeds.
+        #
+        # So the failure is a widget that connects, authenticates, and silently receives
+        # nothing. The deploy/k8s overlays have always set it; the chart never did, which is
+        # why realtime did not work there even once the API port and token secret were right.
+        #
+        # Note the nesting. This sub-chart ships Centrifugo v6, where the option lives under
+        # channel.without_namespace; in v5 it was top-level, which is the shape the kustomize
+        # overlays use. An unrecognised key is ignored rather than rejected, so the v5 spelling
+        # here would look correct and change nothing.
+        allow_user_limited_channels: true
     engine:
       type: memory
     # -- Fallback transports for the inbox widget's connection ladder

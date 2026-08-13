@@ -223,6 +223,10 @@
             "streamReplicas": {
               "type": ["integer", "string"],
               "$comment": "Empty derives it from the bundled cluster size. The built-in default of 1 meant a three-node bundled bus carried single-replica streams, so losing one node stopped the pipeline on a cluster sized to survive exactly that."
+            },
+            "streamReplicasAllowChange": {
+              "type": "boolean",
+              "$comment": "Permits altering the replication factor of streams that already exist, which migrates them between peers. Needed once when raising an existing installation's replica count; leaving it on makes every future replica change something a routine upgrade can trigger."
             }
           }
         },

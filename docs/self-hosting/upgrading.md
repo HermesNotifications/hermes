@@ -66,6 +66,54 @@ Note: Database migrations cannot be rolled back automatically. If the new versio
 
 ## Version-Specific Notes
 
+### 0.1.2
+
+- **Fixes realtime delivery.** It did not work in 0.1.0 or 0.1.1 — not degraded, never. If you
+  are on either, upgrade. Nothing was lost: notifications were always stored and appear on
+  reload; only the live push was missing.
+
+### 0.1.1
+
+> **If you installed 0.1.0 with the bundled NATS, read this before upgrading.** The upgrade
+> fails, rolls back, and retries — churning your datastores each cycle.
+
+0.1.1 derives `HERMES_NATS_STREAM_REPLICAS` from the bundled cluster size rather than
+defaulting to `1`. On a fresh install that is simply correct, and it closes a real durability
+gap: a three-node bus was carrying single-replica streams, so losing one node stopped the
+pipeline on a cluster sized to survive exactly that.
+
+On an **upgrade** the streams already exist at R1, and the provisioner refuses to change a
+replication factor as part of a deploy. That refusal is deliberate — it migrates the whole
+stream between peers, which is a maintenance operation on live data, not a config change
+([ADR 0015](../adr/0015-lifecycle-and-jetstream-durability.md)).
+
+Pick one:
+
+**a) Keep your current replication factor.** Pin it and upgrade normally. Nothing changes and
+nothing migrates:
+
+```yaml
+hermes:
+  nats:
+    streamReplicas: "1"
+```
+
+**b) Migrate to the replicated streams**, which is what you want on a multi-node bus. Do it
+deliberately, at a quiet moment — it moves stream data between peers:
+
+```bash
+helm upgrade hermes ... --set hermes.nats.streamReplicasAllowChange=true
+```
+
+Then remove the flag. Leaving it on permanently turns every future replica change into
+something a routine upgrade can trigger, which is the situation it exists to prevent.
+
+Verify afterwards:
+
+```bash
+kubectl -n hermes exec deploy/hermes-nats-box -- nats stream info NOTIFICATIONS
+```
+
 ### 0.1.0
 
 - Initial Helm chart release. No upgrade path needed -- fresh install only.

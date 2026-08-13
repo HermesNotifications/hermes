@@ -57,6 +57,15 @@ data:
   */}}
   HERMES_NATS_STREAM_REPLICAS: {{ .Values.nats.config.cluster.replicas | default 1 | quote }}
   {{- end }}
+  {{- if .Values.hermes.nats.streamReplicasAllowChange }}
+  {{/*
+  Only emitted when explicitly asked for. The provisioner refuses to alter an existing
+  stream's replication factor without it, and that refusal is the point: the change migrates
+  the whole stream between peers, so it should be a deliberate maintenance step rather than
+  something a routine upgrade can trigger.
+  */}}
+  HERMES_NATS_STREAM_REPLICAS_ALLOW_CHANGE: "true"
+  {{- end }}
   HERMES_EMAIL_PROVIDER: {{ .Values.hermes.email.provider | quote }}
   HERMES_EMAIL_FROM: {{ .Values.hermes.email.from | quote }}
   {{- if eq .Values.hermes.email.provider "smtp" }}
