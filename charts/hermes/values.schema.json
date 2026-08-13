@@ -508,6 +508,11 @@
             "storageClass": { "type": "string" }
           }
         },
+        "shmSize": {
+          "type": "string",
+          "$comment": "Size of the /dev/shm emptyDir. Kubernetes defaults a container to 64Mi regardless of node memory, and Postgres allocates parallel workers' shared memory there, so a parallel plan over a large table fails with 'could not resize shared memory segment'.",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$"
+        },
         "resources": { "type": "object" }
       }
     },

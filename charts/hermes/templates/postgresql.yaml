@@ -147,13 +147,30 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            {{/*
+            Kubernetes gives a container a 64MB /dev/shm regardless of node memory, and
+            Postgres allocates the shared memory segments for parallel workers out of it. Once
+            a table is large enough for the planner to choose a parallel plan, queries start
+            failing outright rather than running slowly:
+
+              could not resize shared memory segment to 67145344 bytes: No space left on device
+
+            Observed on a parallel VACUUM over a 600k-row table. It affects parallel scans and
+            hash joins on the read path just as much -- it is a packaging default, not a
+            Postgres setting, and no amount of tuning shared_buffers changes it.
+            */}}
+            - name: dshm
+              mountPath: /dev/shm
             {{- if include "hermes.storeTLS" (dict "root" . "store" "postgresql") }}
             - name: certs
               mountPath: /etc/postgresql/certs
               readOnly: true
             {{- end }}
-      {{- if or (not .Values.postgresql.persistence.enabled) (include "hermes.storeTLS" (dict "root" . "store" "postgresql")) }}
       volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.postgresql.shmSize | quote }}
         {{- if not .Values.postgresql.persistence.enabled }}
         - name: data
           emptyDir: {}
@@ -168,7 +185,6 @@ spec:
             # refuse to start. See the args block above.
             defaultMode: 0640
         {{- end }}
-      {{- end }}
   {{- if .Values.postgresql.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

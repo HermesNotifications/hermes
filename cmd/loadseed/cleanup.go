@@ -67,7 +67,17 @@ func runCleanup(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 	// once notifications had been vacuumed, with nothing else changed.
 	//
 	// It has to be its own statement because VACUUM cannot run inside a transaction block.
-	if _, err := pool.Exec(ctx, `VACUUM (ANALYZE) notifications`); err != nil {
+	//
+	// PARALLEL 0 because a container's /dev/shm defaults to 64MB, and parallel vacuum workers
+	// allocate shared memory segments out of it. Against a table this size the plain form
+	// fails outright:
+	//
+	//   could not resize shared memory segment to 67145344 bytes: No space left on device
+	//
+	// Single-threaded is fast enough here and does not depend on how the server was packaged.
+	// The bundled Postgres now also mounts a larger /dev/shm, but this has to work against
+	// whatever is already deployed.
+	if _, err := pool.Exec(ctx, `VACUUM (ANALYZE, PARALLEL 0) notifications`); err != nil {
 		return fmt.Errorf("vacuum notifications: %w", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM notification_templates WHERE id = ANY($1)`, allTmpl); err != nil {
