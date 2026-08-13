@@ -3,10 +3,17 @@
 How far the realtime path scales: concurrent WebSocket connections held against Centrifugo while
 notifications flow through the whole `send → dispatch → worker-inbox → Centrifugo` pipeline.
 
-**Headline: 100,134 concurrent WebSocket connections across three Centrifugo replicas, with the
-REST API still answering at 2ms p95 and zero failed requests. Hermes was not the limit at any
-point in this exercise — at 100k its node sat at 3–13% CPU. Every degradation observed was
-eventually traced to the load generator.**
+**Headline: 250,000 concurrent WebSocket connections held across six Centrifugo replicas, with
+connect latency at 16ms p95, push latency at a 5ms median, and zero failed requests. Sustained
+6,000 sends/s against them with no errors. Hermes was not the limit at any point in this
+exercise — at 250k its nodes sat at 11–24% CPU, and the throughput ceiling that did appear was
+a rate-limit setting, not capacity.**
+
+**Every degradation observed here was eventually traced to the load generator — four separate
+times.** That is the single most useful thing in this document. Each one looked like a server
+limit, and each was measuring the instrument: blocking VUs starving the scheduler, a client
+timing its own busy event loop, a thundering herd of simultaneous connects, and a VU pool
+sized by the wrong unit. The numbers below are the ones that survived a second vantage point.
 
 ## System under test
 
@@ -160,6 +167,63 @@ the probe above does), and add generator nodes rather than density. Centrifugo's
 — roughly **60 KiB and 5m CPU per 1,000 connections per replica** — suggests a single 4Gi replica
 carries ~65k connections, so the three-replica tier as configured has headroom well past 200k
 before memory becomes the binding constraint.
+
+## Run D — 250,000 connections, and the publication-rate ceiling
+
+Six Centrifugo replicas (temporarily; ~2.5Gi each against the 4Gi limit, where three would
+have needed ~5Gi and been OOM-killed).
+
+**250,000 concurrent connections, every threshold green:**
+
+| | |
+|---|---:|
+| connections established | **250,000** of 250,000 |
+| `ws_connect_latency` p95 | **16 ms** |
+| `send_ack_latency` p95 | **1–2 ms** |
+| `ws_push_e2e_latency` | median **5–6 ms**, p90 8 ms |
+| `http_req_failed` | **0.00%** across all 20 runner pods |
+| Centrifugo | ~150m CPU, 1.5–2.1 Gi per replica |
+| node CPU | 11–24% |
+
+### The first attempt failed, and the reason is worth more than the number
+
+Opening all 250k at once plateaued at **162,477** connections with `ws_connect_latency` at
+**30 seconds** and up to 18% HTTP failures. It reads exactly like a server limit. It was a
+thundering herd: `constant-vus` starts every VU simultaneously, the generator hosts hit 80%
+CPU in the first seconds, and a socket that fails to open never retries inside its iteration
+— so the shortfall is permanent. The server side sat at 3–10% throughout.
+
+Adding a 150-second connection ramp (`WS_RAMP_SECONDS`) changed nothing else and took
+`ws_connect_latency` p95 from **30s to 16ms**, a factor of ~2000, with all 250k established.
+
+Real systems do get their whole population at once — after an outage. That case is the churn
+scenario's job, and it should be measured deliberately rather than by accident.
+
+### Publication rate, with 250k connections held
+
+Measured from pods holding no sockets, against the held connections:
+
+| offered | accepted | `send_ack` p95 | `inbox_list` p95 | note |
+|---:|---:|---:|---:|---|
+| 3,000/s | 100% | 130 ms | 41 ms | 4 send replicas |
+| 6,000/s | **100%** | 138 ms | 58 ms | ~160k requests/pod, zero errors |
+| 12,000/s | **~56%** | 297 ms | 160 ms | ~500–610 errors/s per pod |
+
+**The ceiling is configuration, not capacity.** `rateLimit.distributed` is unset, so the
+per-credential limit applies *per replica*: one send pod caps at 2000 rps and rejected 44.7%
+of a 3000/s load; four replicas moved the same wall to ~8000/s. Underneath it, Postgres
+peaked at **2.5 cores** and Redis at **0.7** — neither close to saturated on a 24-core node.
+
+To go past it: raise `rateLimit.perSecond`, enable distributed rate limiting so the budget is
+shared rather than multiplied, or add replicas.
+
+### A third generator artifact
+
+An 8,000/s step OOM-killed every runner pod in 14 seconds. `preAllocatedVUs` was sized as one
+VU per requested rps, which assumes each VU completes one iteration per second — but a send
+returns in ~2ms, so the pool was over-allocated by two orders of magnitude. Invisible below
+~1000/s and fatal above it, and it presents as the system refusing load. Now sized from
+throughput per VU.
 
 ## Limits worth knowing before trusting these numbers
 

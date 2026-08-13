@@ -35,6 +35,10 @@ spec:
       # them, and the resulting latency tails were indistinguishable from server-side ones.
       - { name: CONNECTIONS,       value: "${CONNECTIONS}" }
       - { name: WS_SOCKETS_PER_VU, value: "${WS_SOCKETS_PER_VU}" }
+      # Seconds spent opening connections before the hold. Opening them all at once is a
+      # thundering herd, not a load test -- 250k simultaneous dials drove the generators to
+      # 80% CPU and left a third of the sockets permanently unestablished.
+      - { name: WS_RAMP_SECONDS,   value: "${WS_RAMP_SECONDS}" }
       - { name: SEND_RPS,       value: "${SEND_RPS}" }
       - { name: POLL_RPS,       value: "${POLL_RPS}" }
       - { name: DURATION,       value: "${DURATION}" }

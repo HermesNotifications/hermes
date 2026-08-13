@@ -17,6 +17,8 @@ export { handleSummary } from '../lib/summary.js';
 // numbers are no longer the same and only the first one is a property of Hermes.
 const CONNECTIONS   = parseInt(__ENV.CONNECTIONS || __ENV.VUS || '100', 10);
 const SOCKETS_PER_VU = parseInt(__ENV.WS_SOCKETS_PER_VU || '1', 10);
+// Seconds to spend opening connections before the steady-state hold. 0 opens them all at once.
+const WS_RAMP        = parseInt(__ENV.WS_RAMP_SECONDS || '0', 10);
 const VUS        = Math.max(1, Math.ceil(CONNECTIONS / SOCKETS_PER_VU));
 const SEND_RPS   = parseInt(__ENV.SEND_RPS || '50', 10);
 const POLL_RPS   = parseInt(__ENV.POLL_RPS || '10', 10);
@@ -33,21 +35,59 @@ const perPodVUs  = VUS;
 const perPodSend = SEND_RPS;
 const perPodPoll = POLL_RPS;
 
+// VU pool for the arrival-rate scenarios, sized by throughput per VU rather than one VU
+// per request per second.
+//
+// A VU whose request completes in ~2ms finishes hundreds of iterations a second, so one
+// VU per rps over-allocates by two orders of magnitude. It is invisible at low rates and
+// fatal at high ones: an 8000/s step preallocated 8000 VUs per pod and was OOMKilled 14
+// seconds in, which reads exactly like the system under test refusing the load.
+//
+// ITERS_PER_VU is deliberately pessimistic (50ms per iteration) so the pool still covers a
+// slow server; override with SEND_VUS/POLL_VUS to pin it.
+const ITERS_PER_VU = 20;
+const sendVUs = parseInt(__ENV.SEND_VUS || '0', 10) ||
+  Math.min(2000, Math.max(50, Math.ceil(perPodSend / ITERS_PER_VU)));
+const pollVUs = parseInt(__ENV.POLL_VUS || '0', 10) ||
+  Math.min(1000, Math.max(10, Math.ceil(perPodPoll / ITERS_PER_VU)));
+
 export const options = {
   scenarios: {
-    ws: {
-      executor: 'constant-vus',
-      vus: perPodVUs,
-      duration: DURATION,
-      exec: 'wsHold',
-    },
+    // Ramped rather than all-at-once when WS_RAMP_SECONDS is set.
+    //
+    // `constant-vus` starts every VU simultaneously, which at high connection counts is a
+    // thundering herd rather than a load test: 250k connections opened at once drove the
+    // generator hosts to 80% CPU in the first seconds, ~35% of sockets never established,
+    // and the run plateaued at 162k while the server side sat at 3-10%. Nothing retries,
+    // because a socket that fails to open does not get a second attempt inside its
+    // iteration -- so the shortfall is permanent and looks exactly like a server limit.
+    //
+    // A real system does not receive its entire user base in one instant either. It does
+    // receive them all at once after an outage, which is what the churn scenario is for.
+    ws: WS_RAMP > 0
+      ? {
+          executor: 'ramping-vus',
+          startVUs: 0,
+          stages: [
+            { duration: `${WS_RAMP}s`, target: perPodVUs },
+            { duration: DURATION, target: perPodVUs },
+          ],
+          gracefulRampDown: '0s',
+          exec: 'wsHold',
+        }
+      : {
+          executor: 'constant-vus',
+          vus: perPodVUs,
+          duration: DURATION,
+          exec: 'wsHold',
+        },
     send: {
       executor: 'constant-arrival-rate',
       rate: perPodSend,
       timeUnit: '1s',
       duration: DURATION,
-      preAllocatedVUs: Math.max(50, perPodSend),
-      maxVUs: Math.max(100, perPodSend * 4),
+      preAllocatedVUs: sendVUs,
+      maxVUs: sendVUs * 2,
       exec: 'drive',
     },
     poll: {
@@ -55,8 +95,8 @@ export const options = {
       rate: perPodPoll,
       timeUnit: '1s',
       duration: DURATION,
-      preAllocatedVUs: Math.max(10, perPodPoll),
-      maxVUs: Math.max(50, perPodPoll * 4),
+      preAllocatedVUs: pollVUs,
+      maxVUs: pollVUs * 2,
       exec: 'pollInbox',
     },
   },
