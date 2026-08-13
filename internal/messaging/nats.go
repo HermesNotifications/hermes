@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -26,14 +27,22 @@ type Client struct {
 	// streamMaxBytes bounds each work stream. Zero means DefaultStreamMaxBytes.
 	streamMaxBytes int64
 
+	// logger is where the consumer monitor reports a stall. Never nil — see consumerLogger.
+	logger *slog.Logger
+	// stallTimeout is how long a consumer may hold work while finishing none of it before
+	// ConsumersProgressing reports it. Zero disables stall detection. See stall.go.
+	stallTimeout time.Duration
+
 	// done is closed by Close to unblock the worker pools and fetcher callbacks
 	// started by Subscribe so they exit instead of leaking. closeOnce guards it.
 	done      chan struct{}
 	closeOnce sync.Once
 
-	// mu guards consumeCtxs, which Subscribe appends to and Drain reads.
+	// mu guards consumeCtxs and progress, which Subscribe appends to and Drain reads.
 	mu          sync.Mutex
 	consumeCtxs []jetstream.ConsumeContext
+	// progress holds one stall monitor per Subscribe, read by ConsumersProgressing.
+	progress []*consumerProgress
 	// inflight counts messages handed to a worker pool but not yet finished, so Drain can
 	// wait for them instead of the process exiting mid-handler.
 	inflight sync.WaitGroup
@@ -73,6 +82,10 @@ type Option func(*connectOptions)
 type connectOptions struct {
 	nats           []nats.Option
 	streamMaxBytes int64
+	logger         *slog.Logger
+	// stallTimeout is a pointer so "not configured" (use the default) stays distinguishable from
+	// "configured to zero", which switches stall detection off.
+	stallTimeout *time.Duration
 	// errs collects option failures that cannot be expressed as a nats.Option — loading
 	// an NKey seed happens eagerly, unlike a CA bundle, which nats.go reads at dial
 	// time. Collected rather than returned so Connect reports every problem at once.
@@ -107,6 +120,27 @@ func WithStreamMaxBytes(n int64) Option {
 	}
 }
 
+// WithLogger gives the client the service's own logger, so the consumer monitor's stall report
+// lands in the same JSON stream as everything else rather than in slog's default text output.
+// bootstrap.MustConnectNATS passes it for every service.
+func WithLogger(logger *slog.Logger) Option {
+	return func(o *connectOptions) {
+		o.logger = logger
+	}
+}
+
+// WithConsumerStallTimeout sets how long a consumer may hold work while finishing none of it
+// before ConsumersProgressing reports it stalled. Zero or less switches detection off, which is
+// how HERMES_NATS_CONSUMER_STALL_TIMEOUT=0 disables it; absent means DefaultConsumerStallTimeout.
+func WithConsumerStallTimeout(d time.Duration) Option {
+	return func(o *connectOptions) {
+		if d < 0 {
+			d = 0
+		}
+		o.stallTimeout = &d
+	}
+}
+
 func Connect(url string, opts ...Option) (*Client, error) {
 	var co connectOptions
 	for _, opt := range opts {
@@ -129,7 +163,18 @@ func Connect(url string, opts ...Option) (*Client, error) {
 		nc.Close()
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
-	return &Client{conn: nc, js: js, streamMaxBytes: co.streamMaxBytes, done: make(chan struct{})}, nil
+	stallTimeout := DefaultConsumerStallTimeout
+	if co.stallTimeout != nil {
+		stallTimeout = *co.stallTimeout
+	}
+	return &Client{
+		conn:           nc,
+		js:             js,
+		streamMaxBytes: co.streamMaxBytes,
+		logger:         consumerLogger(co.logger),
+		stallTimeout:   stallTimeout,
+		done:           make(chan struct{}),
+	}, nil
 }
 
 // StreamOptions are the deployment-shaped properties of the streams: how many peers hold each
@@ -400,6 +445,11 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 		return fmt.Errorf("create consumer: %w", err)
 	}
 
+	// One stall monitor per subscription, seeded now: the startup grace period is exactly the
+	// stall timeout measured from here, so a pod that comes up into a backlog gets a full window
+	// to take its first message before anything can call it wedged. See stall.go.
+	prog := newConsumerProgress(streamName, cfg.Consumer, cons, c.stallTimeout)
+
 	// One fetcher (the Consume loop) hands messages to a bounded worker pool over
 	// an unbuffered channel. When all workers are busy the hand-off blocks, which
 	// stops the fetcher draining its prefetch buffer — natural backpressure. The
@@ -411,7 +461,7 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 			for {
 				select {
 				case msg := <-work:
-					c.processMessage(streamName, cfg.Consumer, cfg.Subject, msg, handler, handlerTimeout)
+					c.processMessage(prog, cfg.Subject, msg, handler, handlerTimeout)
 					c.inflight.Done()
 				case <-c.done:
 					return
@@ -443,16 +493,29 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 	// the entire shutdown window.
 	c.mu.Lock()
 	c.consumeCtxs = append(c.consumeCtxs, consumeCtx)
+	c.progress = append(c.progress, prog)
 	c.mu.Unlock()
+
+	if prog.timeout > 0 {
+		go c.watchConsumer(prog)
+	}
 	return nil
 }
 
 // processMessage runs one message through the handler and applies the ack policy.
 // Success acks; a terminal error is dead-lettered then terminated; any other
 // error (including a recovered handler panic) is nak'd for retry with backoff.
-func (c *Client) processMessage(streamName, consumer, subject string, msg jetstream.Msg, handler func(ctx context.Context, data []byte, info DeliveryInfo) error, handlerTimeout time.Duration) {
+func (c *Client) processMessage(prog *consumerProgress, subject string, msg jetstream.Msg, handler func(ctx context.Context, data []byte, info DeliveryInfo) error, handlerTimeout time.Duration) {
+	streamName, consumer := prog.stream, prog.consumer
+
 	ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
 	defer span.End()
+
+	// Every exit from this function has settled the message — acked, nak'd or terminated — so
+	// this is where "the loop is turning" is true, and it is true whether the work succeeded or
+	// failed. A consumer failing everything is retrying, not wedged, and restarting it would not
+	// help; see stall.go.
+	defer prog.finished()
 
 	// Bounded so one unresponsive provider cannot hold a pool worker indefinitely, and so the
 	// handler is guaranteed to return before AckWait expires and JetStream redelivers underneath
@@ -554,7 +617,7 @@ func (c *Client) Drain(timeout time.Duration) error {
 	for _, cc := range ctxs {
 		cc.Stop()
 	}
-	c.closeOnce.Do(func() { close(c.done) })
+	c.closeOnce.Do(c.stopConsuming)
 
 	if !waitTimeout(&c.inflight, timeout) {
 		c.conn.Close()
@@ -598,6 +661,23 @@ func (c *Client) Healthy() error {
 // Close tears the connection down immediately, abandoning in-flight handlers. Prefer Drain on
 // any path where the process is shutting down on purpose.
 func (c *Client) Close() {
-	c.closeOnce.Do(func() { close(c.done) })
+	c.closeOnce.Do(c.stopConsuming)
 	c.conn.Close()
+}
+
+// stopConsuming releases the worker pools and retires the stall monitors. Both halves run under
+// closeOnce, and the monitors are retired here rather than left to notice c.done on their own:
+// a probe that landed in the gap would report a shutting-down consumer as stalled, which is
+// precisely backwards — it has stopped taking work because it was told to.
+func (c *Client) stopConsuming() {
+	close(c.done)
+
+	c.mu.Lock()
+	monitors := make([]*consumerProgress, len(c.progress))
+	copy(monitors, c.progress)
+	c.mu.Unlock()
+
+	for _, p := range monitors {
+		p.stop()
+	}
 }

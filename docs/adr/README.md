@@ -31,6 +31,7 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0019](0019-notification-metadata-passthrough.md) | Carry an opaque metadata object end to end, and reserve exactly two keys in it | Accepted | 2026-08-12 |
 | [0020](0020-project-identity-and-registry.md) | Own one spelling of the project's name, under the `HermesNotifications` org | Accepted | 2026-08-12 |
 | [0021](0021-bootstrap-the-first-api-key-into-a-secret.md) | Create the first API key at install time and put it in a Secret | Accepted | 2026-08-12 |
+| [0022](0022-liveness-follows-consumer-progress.md) | Fail liveness when a NATS consumer holds work and settles none of it | Accepted | 2026-08-13 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/hermesnotifications/hermes/internal/config"
+	"github.com/hermesnotifications/hermes/internal/messaging"
 )
 
 func TestLoad_Defaults(t *testing.T) {
@@ -59,6 +60,24 @@ func TestLoad_NATSNKeySeed(t *testing.T) {
 	t.Setenv("HERMES_NATS_NKEY_SEED", "/etc/nats-nkey/seed.nk")
 	if got := config.Load().NATSNKeySeedPath; got != "/etc/nats-nkey/seed.nk" {
 		t.Fatalf("expected the NKey seed path from the environment, got %q", got)
+	}
+}
+
+// The default here is a literal rather than a reference, because this package deliberately
+// imports nothing of ours. This is the test that keeps the literal honest — and the value is
+// load-bearing in an unusual direction: it feeds a *liveness* probe, so a value that drifted below
+// messaging's retry-backoff ceiling would restart pods that are merely backing off.
+func TestLoad_NATSConsumerStallTimeoutMatchesMessagingDefault(t *testing.T) {
+	if got := config.Load().NATSConsumerStallTimeout; got != messaging.DefaultConsumerStallTimeout {
+		t.Fatalf("HERMES_NATS_CONSUMER_STALL_TIMEOUT defaults to %s but messaging uses %s",
+			got, messaging.DefaultConsumerStallTimeout)
+	}
+
+	// Zero is the documented escape hatch, and it has to survive the round trip: a zero that got
+	// coerced back to the default would leave an operator unable to switch the probe off.
+	t.Setenv("HERMES_NATS_CONSUMER_STALL_TIMEOUT", "0")
+	if got := config.Load().NATSConsumerStallTimeout; got != 0 {
+		t.Fatalf("expected 0 to disable stall detection, got %s", got)
 	}
 }
 

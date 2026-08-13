@@ -19,6 +19,24 @@ spec:
             summary: "NATS consumer lag on {{ $labels.stream }}/{{ $labels.consumer }}"
             description: "{{ $labels.consumer }} on {{ $labels.stream }} has {{ $value }} pending messages for 5 minutes."
             runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/nats-consumer-lag.md"
+        # Fires at half the default liveness window (HERMES_NATS_CONSUMER_STALL_TIMEOUT, 10m), so
+        # an operator gets the chance to look at a live wedged pod. Past 10m the container is
+        # restarted and the evidence is gone — which is exactly what happened to the incident this
+        # detection was built for: the wedged dispatch pod's logs died with it.
+        #
+        # The metric is per pod, and a stalled consumer stops emitting nothing else, so this fires
+        # even while the pod reports itself Ready — the gap NATSConsumerLag above cannot close,
+        # because lag alone does not distinguish a wedged consumer from a busy one.
+        - alert: HermesConsumerStalled
+          expr: hermes_messaging_consumer_progress_age_seconds > 300
+          for: 2m
+          labels:
+            severity: critical
+            component: pipeline
+          annotations:
+            summary: "Consumer {{ $labels.consumer }} on {{ $labels.stream }} has taken no work for {{ $value }}s"
+            description: "The consumer has work waiting and has finished none of it. Liveness fails at the configured stall timeout (10m by default) and the kubelet will restart the container; investigate now if you want the wedged process."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/consumer-stalled.md"
         - alert: HermesDeadLetterDetected
           expr: increase(hermes_messaging_dead_letters_total[15m]) > 0
           for: 1m

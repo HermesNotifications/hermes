@@ -92,6 +92,13 @@ spec:
             httpGet:
               path: /healthz
               port: http
+            # /healthz is no longer a constant 200 on a consuming service: it fails when this
+            # pod's JetStream consumer has work waiting and has settled none of it for
+            # HERMES_NATS_CONSUMER_STALL_TIMEOUT (10m). Dispatch is the service that failure
+            # mode was found on — wedged for three hours, Ready, zero restarts — and a restart
+            # is what cleared it. The kubelet's failureThreshold (3 × 10s) sits on top of that
+            # window, and unacked messages are redelivered, so a wrong restart costs
+            # redeliveries rather than work.
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:

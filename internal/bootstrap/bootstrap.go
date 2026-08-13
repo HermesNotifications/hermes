@@ -52,7 +52,10 @@ func MustConnectDB(ctx context.Context, cfg config.Config, logger *slog.Logger) 
 // from configuration rather than being hardcoded here (ADR 0005 phase 2). Exiting is the
 // fail-closed behaviour: a service that cannot verify the bus does not run.
 func MustConnectNATS(url string, logger *slog.Logger, opts ...messaging.Option) *messaging.Client {
-	client, err := messaging.Connect(url, opts...)
+	// Prepended, not appended, so a caller can still override it. The consumer stall monitor is
+	// the only thing in messaging that logs, and a library logging through slog's default text
+	// handler instead of the service's JSON one is how a stall report ends up unparseable in Loki.
+	client, err := messaging.Connect(url, append([]messaging.Option{messaging.WithLogger(logger)}, opts...)...)
 	if err != nil {
 		logger.Error("nats connection failed", "error", err)
 		os.Exit(1)

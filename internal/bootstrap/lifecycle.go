@@ -86,6 +86,28 @@ func NATSCheck(client *messaging.Client) httputil.Check {
 	}
 }
 
+// ConsumerProgressCheck is the liveness check for a service that consumes from NATS, and the only
+// check any service passes to httputil.HealthzHandler.
+//
+// It belongs to liveness rather than readiness, and the reasoning is worth keeping next to the
+// wiring. Readiness removes a pod from Service endpoints; dispatch and the workers take no inbound
+// traffic, so for them that is close to a no-op — a stalled consumer would keep consuming nothing
+// while its pod looked correctly handled. Restarting is what actually cleared the incident, and it
+// is cheap here: JetStream redelivers whatever was unacked, so the cost of a wrong restart is a
+// few redeliveries.
+//
+// A wrong restart is still the thing to design against, which is why the underlying check reports
+// healthy whenever it cannot tell — an unreachable bus never fails it. See
+// internal/messaging/stall.go for how idle is distinguished from stalled.
+func ConsumerProgressCheck(client *messaging.Client) httputil.Check {
+	return httputil.Check{
+		Name: "consumer-progress",
+		Fn: func(context.Context) error {
+			return client.ConsumersProgressing()
+		},
+	}
+}
+
 // Deliberately absent: a Redis check.
 //
 // Redis backs caches that all fall back to Postgres, and an idempotency window whose loss

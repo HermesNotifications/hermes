@@ -34,7 +34,8 @@ func main() {
 
 	natsClient := bootstrap.MustConnectNATS(cfg.NATSUrl, logger,
 		messaging.WithCABundle(cfg.NATSCABundlePath),
-		messaging.WithIdentity("hermes-dispatch", cfg.NATSNKeySeedPath))
+		messaging.WithIdentity("hermes-dispatch", cfg.NATSNKeySeedPath),
+		messaging.WithConsumerStallTimeout(cfg.NATSConsumerStallTimeout))
 	// ADR 0005 phase 4. Verify, do not declare — see cmd/natsprovision.
 	bootstrap.MustEnsureStreams(ctx, natsClient, "hermes-dispatch", logger)
 	// Drained as a shutdown callback below rather than deferred here — a deferred Close ran
@@ -85,7 +86,11 @@ func main() {
 	)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", httputil.HealthzHandler())
+	// Liveness, not readiness, and this is the service the distinction was learned on: dispatch
+	// once sat wedged with 133k messages pending for three hours while /readyz stayed green,
+	// because taking a pod that receives no traffic out of the Service endpoints changes nothing.
+	// A restart is what fixed it. See internal/messaging/stall.go and bootstrap.ConsumerProgressCheck.
+	mux.HandleFunc("GET /healthz", httputil.HealthzHandler(bootstrap.ConsumerProgressCheck(natsClient)))
 	mux.HandleFunc("GET /readyz", readiness.Handler())
 
 	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
