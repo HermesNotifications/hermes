@@ -74,6 +74,18 @@ Neither produces an error anywhere that names Centrifugo, so this is checked at 
 {{-   if not (hasKey $seen "CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY") -}}
 {{-     fail (printf "the bundled centrifugo has no CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY. The token the widget presents is one Hermes minted with HERMES_JWT_SECRET; without the same secret here Centrifugo can verify no token and refuses every browser. Set centrifugo.envSecret to read it from %s." $want) -}}
 {{-   end -}}
+{{/*
+The reference resolving to the right Secret is not enough -- the KEY has to be in it.
+
+hermes.jwt.existingSecret moves HERMES_JWT_SECRET out of the release Secret, leaving the name
+matching and the key gone. The result is not a render error but a Centrifugo pod stuck in
+CreateContainerConfigError, because an unresolvable secretKeyRef fails when the kubelet builds
+the container rather than when the chart renders. `helm template` cannot see it; only an actual
+install can, which is how it reached CI rather than a local check.
+*/}}
+{{-   if .Values.hermes.jwt.existingSecret -}}
+{{-     fail (printf "hermes.jwt.existingSecret moves HERMES_JWT_SECRET out of %s, but the bundled centrifugo reads its token verification key from there -- the pod would sit in CreateContainerConfigError. Either point centrifugo.envSecret's CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY at %s instead, or disable the bundled centrifugo and use externalCentrifugo." $want .Values.hermes.jwt.existingSecret) -}}
+{{-   end -}}
 {{- end -}}
 {{- end }}
 
