@@ -106,6 +106,7 @@ func (f *fakeBus) deliveries(t *testing.T) []hermenats.DeliveryMessage {
 
 type fakeNotifStore struct {
 	created  *models.Notification
+	batches  [][]string // notification IDs per CreateNotifications call
 	channels []string
 	failed   bool
 }
@@ -113,6 +114,16 @@ type fakeNotifStore struct {
 func (f *fakeNotifStore) CreateNotification(_ context.Context, n *models.Notification) (*models.Notification, error) {
 	f.created = n
 	return n, nil
+}
+
+func (f *fakeNotifStore) CreateNotifications(_ context.Context, ns []*models.Notification) ([]string, error) {
+	ids := make([]string, 0, len(ns))
+	for _, n := range ns {
+		f.created = n
+		ids = append(ids, n.ID)
+	}
+	f.batches = append(f.batches, ids)
+	return ids, nil
 }
 func (f *fakeNotifStore) UpdateNotificationChannels(_ context.Context, _ string, channels []string) error {
 	f.channels = channels

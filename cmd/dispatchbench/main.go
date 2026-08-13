@@ -38,22 +38,24 @@ func intList(s string) []int {
 
 func main() {
 	var (
-		dbURL       = flag.String("db", envOr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"), "Postgres URL (set pool_max_conns >= max workers)")
-		natsURL     = flag.String("nats", envOr("HERMES_NATS_URL", "nats://localhost:4222"), "NATS URL")
-		redisURL    = flag.String("redis", envOr("HERMES_REDIS_URL", "redis://localhost:6379/0"), "Redis URL")
-		dynamoEP    = flag.String("dynamo", os.Getenv("HERMES_DYNAMO_ENDPOINT"), "DynamoDB Local endpoint (empty => skip dynamo cells)")
-		dynamoRgn   = flag.String("dynamo-region", envOr("HERMES_DYNAMO_REGION", "us-east-1"), "DynamoDB region")
-		workersCSV  = flag.String("workers", "1,2,4,8,16", "worker counts")
-		prefetchCSV = flag.String("prefetch", "1,16,64,256", "prefetch values")
-		backendCSV  = flag.String("backends", "postgres", "backends: postgres,dynamo")
-		n           = flag.Int("n", 20000, "messages per drain")
-		reps        = flag.Int("reps", 5, "measured repetitions per cell")
-		warmups     = flag.Int("warmups", 1, "discarded warmup repetitions per cell")
-		users       = flag.Int("users", 1000, "seeded bench users")
-		seed        = flag.Int64("seed", 1, "shuffle seed")
-		drainTO     = flag.Duration("drain-timeout", 2*time.Minute, "max time for one drain before it is abandoned")
-		csvOut      = flag.String("csv", "dispatch-tuning.csv", "CSV output path")
-		mdOut       = flag.String("md", "dispatch-tuning.md", "markdown summary output path")
+		dbURL        = flag.String("db", envOr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"), "Postgres URL (set pool_max_conns >= max workers)")
+		natsURL      = flag.String("nats", envOr("HERMES_NATS_URL", "nats://localhost:4222"), "NATS URL")
+		redisURL     = flag.String("redis", envOr("HERMES_REDIS_URL", "redis://localhost:6379/0"), "Redis URL")
+		dynamoEP     = flag.String("dynamo", os.Getenv("HERMES_DYNAMO_ENDPOINT"), "DynamoDB Local endpoint (empty => skip dynamo cells)")
+		dynamoRgn    = flag.String("dynamo-region", envOr("HERMES_DYNAMO_REGION", "us-east-1"), "DynamoDB region")
+		workersCSV   = flag.String("workers", "1,2,4,8,16", "worker counts")
+		prefetchCSV  = flag.String("prefetch", "1,16,64,256", "prefetch values")
+		backendCSV   = flag.String("backends", "postgres", "backends: postgres,dynamo")
+		insertBatch  = flag.Int("insert-batch", 1, "notifications per insert transaction (1 = one transaction each, the default dispatch ships)")
+		insertLinger = flag.Duration("insert-linger", 0, "how long a partial insert batch waits for more rows (0 = never wait)")
+		n            = flag.Int("n", 20000, "messages per drain")
+		reps         = flag.Int("reps", 5, "measured repetitions per cell")
+		warmups      = flag.Int("warmups", 1, "discarded warmup repetitions per cell")
+		users        = flag.Int("users", 1000, "seeded bench users")
+		seed         = flag.Int64("seed", 1, "shuffle seed")
+		drainTO      = flag.Duration("drain-timeout", 2*time.Minute, "max time for one drain before it is abandoned")
+		csvOut       = flag.String("csv", "dispatch-tuning.csv", "CSV output path")
+		mdOut        = flag.String("md", "dispatch-tuning.md", "markdown summary output path")
 	)
 	flag.Parse()
 
@@ -107,7 +109,8 @@ func main() {
 			fmt.Fprintf(os.Stderr, "skip %s cells: backend unavailable\n", cell.Backend)
 			continue
 		}
-		runner := newRunner(js, *natsURL, *n, benchOrganization, userIDs, notifRepo, pgStore, redisClient, admin, pool, logger)
+		runner := newRunner(js, *natsURL, *n, benchOrganization, userIDs, notifRepo, pgStore, redisClient, admin, pool,
+			insertBatching{size: *insertBatch, linger: *insertLinger}, logger)
 
 		drain := func() (float64, error) {
 			dctx, cancel := context.WithTimeout(ctx, *drainTO)

@@ -43,10 +43,36 @@ type Dispatch struct {
 	templateResolver *TemplateResolver
 	channelResolver  *ChannelResolver
 	logger           *slog.Logger
+
+	// insertBatchSize and insertLinger configure the batcher that Start creates. Held as
+	// settings rather than applied here because the useful batch size is bounded by the worker
+	// count, and only Start is told what that is.
+	insertBatchSize int
+	insertLinger    time.Duration
+	// inserts is nil when batching is off, in which case each notification is written by its
+	// own statement exactly as before. Written by Start, before any handler can run.
+	inserts *insertBatcher
 }
 
-func NewDispatch(nats bus, store store.NotificationRepository, users store.UserRepository, organizations store.OrganizationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
-	return &Dispatch{
+// Option configures a Dispatch at construction.
+type Option func(*Dispatch)
+
+// WithInsertBatching sets how many notifications may share one insert transaction, and how long
+// an unfilled batch is held open waiting for more.
+//
+// A size of 1 or less turns batching off and restores the one-transaction-per-notification write
+// path — the kill switch, if a deployment ever needs to rule this mechanism out. A linger of 0
+// (the default) does not disable anything: batches are assembled from rows that are already
+// waiting, which is where the throughput comes from. See the note atop insertbatch.go.
+func WithInsertBatching(size int, linger time.Duration) Option {
+	return func(d *Dispatch) {
+		d.insertBatchSize = size
+		d.insertLinger = linger
+	}
+}
+
+func NewDispatch(nats bus, store store.NotificationRepository, users store.UserRepository, organizations store.OrganizationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger, opts ...Option) *Dispatch {
+	d := &Dispatch{
 		nats:             nats,
 		store:            store,
 		users:            users,
@@ -54,7 +80,13 @@ func NewDispatch(nats bus, store store.NotificationRepository, users store.UserR
 		templateResolver: templateResolver,
 		channelResolver:  channelResolver,
 		logger:           logger,
+		insertBatchSize:  defaultInsertBatchSize,
+		insertLinger:     defaultInsertLinger,
 	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
 }
 
 // Start begins consuming notification.send with a pool of `workers` processing
@@ -63,6 +95,7 @@ func NewDispatch(nats bus, store store.NotificationRepository, users store.UserR
 // is monotonic downstream — so they can be processed concurrently to lift
 // dispatch throughput.
 func (d *Dispatch) Start(workers, prefetch int) error {
+	d.startInsertBatcher(workers)
 	return d.nats.Subscribe(messaging.SubscribeConfig{
 		Subject:       "notification.send",
 		Consumer:      "dispatch",
@@ -77,6 +110,38 @@ func (d *Dispatch) Start(workers, prefetch int) error {
 	}, func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
 		return d.handleSend(ctx, data, info)
 	})
+}
+
+// startInsertBatcher brings up the insert batcher, capping it at the worker count.
+//
+// The cap is arithmetic rather than caution. Every producer is a pool worker blocked inside
+// Submit until its row is committed, so at most `workers` rows can be waiting at any instant and
+// a larger size is unreachable — it would only mislead the batch-size metric into looking as
+// though the size knob were the thing limiting the batch.
+func (d *Dispatch) startInsertBatcher(workers int) {
+	size := min(d.insertBatchSize, workers)
+	if size <= 1 {
+		// A batch of one is the unbatched path with a goroutine and a channel bolted on.
+		return
+	}
+	if size < d.insertBatchSize {
+		d.logger.Info("insert batch size capped at the dispatch worker count",
+			"requested", d.insertBatchSize, "workers", workers, "effective", size,
+			"hint", "raise HERMES_DISPATCH_CONCURRENCY to batch more rows per transaction")
+	}
+	d.inserts = newInsertBatcher(d.store, size, d.insertLinger, d.logger)
+	go d.inserts.run()
+}
+
+// Stop shuts the insert batcher down, writing whatever it still holds.
+//
+// Call it *after* the NATS drain, never before: handlers parked in Submit can only finish while
+// the batcher is still running, and the drain is what waits for them. Stopping first would leave
+// them to be released with errBatcherStopped and their messages redelivered.
+func (d *Dispatch) Stop() {
+	if d.inserts != nil {
+		d.inserts.stopAndWait()
+	}
 }
 
 // permanentError wraps an error that should not be retried.
@@ -139,8 +204,8 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 		n.IdempotencyKey = &msg.IdempotencyKey
 	}
 
-	if _, err := d.store.CreateNotification(ctx, n); err != nil {
-		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already exists") {
+	if err := d.persistNotification(ctx, n); err != nil {
+		if isDuplicateNotification(err) {
 			log.Info("notification already exists (retry), continuing")
 		} else {
 			log.Error("create notification", "error", err)
@@ -157,6 +222,38 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 	}
 
 	return nil
+}
+
+// persistNotification writes the record that every later phase updates, through the insert
+// batcher when one is running.
+//
+// It returns only once the row is durably committed — or once its failure is known — either
+// way. That is what keeps the ack in internal/messaging behind durability whichever path is
+// taken; see insertbatch.go.
+func (d *Dispatch) persistNotification(ctx context.Context, n *models.Notification) error {
+	if d.inserts != nil {
+		return d.inserts.Submit(ctx, n)
+	}
+	_, err := d.store.CreateNotification(ctx, n)
+	return err
+}
+
+// isDuplicateNotification reports whether the insert failed only because the notification was
+// already persisted — the normal outcome when a message is redelivered, since dispatch reuses
+// the notification ID the Send service minted.
+//
+// The string matching is for the single-row path, where the duplicate arrives as whatever the
+// backend's driver produced (a pgx unique-violation, DynamoDB's condition-check failure). The
+// batch path skips such rows inside the transaction instead of failing them, and reports them
+// as errAlreadyExists.
+func isDuplicateNotification(err error) bool {
+	if errors.Is(err, errAlreadyExists) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate") ||
+		strings.Contains(msg, "unique") ||
+		strings.Contains(msg, "already exists")
 }
 
 // isPermanentDBError reports whether a Postgres error is in class 22 (Data Exception)

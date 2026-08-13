@@ -72,6 +72,22 @@ type UserSubscriptionRepository interface {
 // NotificationRepository defines operations for the notification write path.
 type NotificationRepository interface {
 	CreateNotification(ctx context.Context, n *models.Notification) (*models.Notification, error)
+	// CreateNotifications persists several notifications in one round trip — and, on a
+	// backend that has transactions, one commit — so that a single durability flush is
+	// amortised across the whole batch rather than paid per notification.
+	//
+	// Rows that collide with an existing row are skipped rather than failing the call. That
+	// mirrors the tolerance the single-row path has always relied on: dispatch re-persists
+	// the same notification ID on every redelivery, so "already there" is a normal outcome,
+	// and one such row must not take its blameless neighbours down with it. The returned
+	// slice holds the IDs actually inserted, so a caller can still tell the two apart.
+	//
+	// A non-nil error says nothing about which rows landed. Postgres rolls the transaction
+	// back so none of them did; a backend without cross-item transactions may have applied a
+	// prefix. Callers must therefore treat a failed batch as "no row is known to be
+	// persisted" and retry each row on its own — safe because every insert here is
+	// idempotent on the notification ID. See dispatch's insert batcher.
+	CreateNotifications(ctx context.Context, ns []*models.Notification) (inserted []string, err error)
 	GetNotificationByID(ctx context.Context, id string) (*models.Notification, error)
 	GetNotificationByIdempotencyKey(ctx context.Context, organizationID, key string) (*models.Notification, error)
 	GetNotificationEvents(ctx context.Context, notificationID string) ([]models.NotificationEvent, error)

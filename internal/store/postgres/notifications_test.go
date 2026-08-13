@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	id "github.com/hermesnotifications/hermes/internal/id/v2"
 	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/store/postgres"
 )
 
 func TestCreateNotification_And_GetByID(t *testing.T) {
@@ -183,6 +184,162 @@ func TestCreateNotification_NoMetadataStoresSQLNull(t *testing.T) {
 	}
 	if got.Metadata != nil {
 		t.Errorf("metadata = %#v, want nil", got.Metadata)
+	}
+}
+
+// seedForNotifications creates the organization, user and category a notification row needs, and
+// returns a builder for rows that satisfy its foreign keys.
+func seedForNotifications(t *testing.T, s *postgres.Store) func(id string) *models.Notification {
+	t.Helper()
+	ctx := context.Background()
+
+	organizationID := uuid.New().String()
+	if _, err := s.CreateOrganization(ctx, organizationID, "Batch Test Organization"); err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	user, err := s.EnsureUser(ctx, organizationID, "ext-batch-1")
+	if err != nil {
+		t.Fatalf("EnsureUser: %v", err)
+	}
+	cat, err := s.CreateCategory(ctx, "general", "General", []string{"inbox"}, "on", 0)
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+
+	return func(id string) *models.Notification {
+		return &models.Notification{
+			ID:             id,
+			OrganizationID: organizationID,
+			UserID:         user.ID,
+			CategoryID:     cat.ID,
+			Title:          "Hello",
+			Body:           "World",
+			Channels:       []string{"inbox"},
+			Status:         models.StatusPending,
+		}
+	}
+}
+
+func TestCreateNotifications_InsertsEveryRow(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
+	newNotification := seedForNotifications(t, s)
+
+	ctx := context.Background()
+	ns := []*models.Notification{
+		newNotification(id.Notification.New()),
+		newNotification(id.Notification.New()),
+		newNotification(id.Notification.New()),
+	}
+
+	inserted, err := s.CreateNotifications(ctx, ns)
+	if err != nil {
+		t.Fatalf("CreateNotifications: %v", err)
+	}
+	if len(inserted) != 3 {
+		t.Fatalf("inserted = %v, want all three IDs", inserted)
+	}
+	for _, n := range ns {
+		got, err := s.GetNotificationByID(ctx, n.ID)
+		if err != nil {
+			t.Fatalf("GetNotificationByID(%s): %v", n.ID, err)
+		}
+		if got.Title != "Hello" || got.Status != models.StatusPending {
+			t.Errorf("row %s = %+v, want the values it was inserted with", n.ID, got)
+		}
+		// The single-row path fills CreatedAt from RETURNING; the batch must too, or the two
+		// paths hand the caller back different objects for the same operation.
+		if n.CreatedAt.IsZero() {
+			t.Errorf("row %s: CreatedAt not populated", n.ID)
+		}
+	}
+}
+
+// The redelivery case, which is the common one: dispatch re-persists a notification ID it has
+// already written. That row must be skipped without taking the rest of the batch with it —
+// before batching, the duplicate error belonged to one message and one message only.
+func TestCreateNotifications_SkipsDuplicatesWithoutFailingTheBatch(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
+	newNotification := seedForNotifications(t, s)
+
+	ctx := context.Background()
+	already := newNotification(id.Notification.New())
+	if _, err := s.CreateNotification(ctx, already); err != nil {
+		t.Fatalf("CreateNotification: %v", err)
+	}
+
+	fresh := newNotification(id.Notification.New())
+	other := newNotification(id.Notification.New())
+	inserted, err := s.CreateNotifications(ctx, []*models.Notification{fresh, newNotification(already.ID), other})
+	if err != nil {
+		t.Fatalf("CreateNotifications with a duplicate: %v", err)
+	}
+	if len(inserted) != 2 {
+		t.Fatalf("inserted = %v, want only the two new IDs", inserted)
+	}
+	for _, gotID := range inserted {
+		if gotID == already.ID {
+			t.Errorf("the pre-existing row %s was reported as inserted", already.ID)
+		}
+	}
+	for _, n := range []*models.Notification{fresh, other} {
+		if _, err := s.GetNotificationByID(ctx, n.ID); err != nil {
+			t.Errorf("row %s was lost to its duplicate neighbour: %v", n.ID, err)
+		}
+	}
+}
+
+// The idempotency key has its own partial unique index, so it is a second way to collide. The
+// bare ON CONFLICT DO NOTHING covers both, which is why it carries no conflict target.
+func TestCreateNotifications_SkipsIdempotencyKeyCollisions(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
+	newNotification := seedForNotifications(t, s)
+
+	ctx := context.Background()
+	key := "idem-" + id.Notification.New()
+
+	first := newNotification(id.Notification.New())
+	first.IdempotencyKey = &key
+	second := newNotification(id.Notification.New()) // different ID, same key
+	second.IdempotencyKey = &key
+	third := newNotification(id.Notification.New())
+
+	inserted, err := s.CreateNotifications(ctx, []*models.Notification{first, second, third})
+	if err != nil {
+		t.Fatalf("CreateNotifications with an idempotency-key collision: %v", err)
+	}
+	if len(inserted) != 2 {
+		t.Fatalf("inserted = %v, want two rows (the key collision skipped)", inserted)
+	}
+	if _, err := s.GetNotificationByID(ctx, third.ID); err != nil {
+		t.Errorf("the unrelated row was lost to the key collision: %v", err)
+	}
+}
+
+// A row the database will never accept must abort its own transaction and leave nothing behind,
+// so the caller can tell "none of this landed" from "some of it did" and retry each row alone.
+func TestCreateNotifications_PoisonRowRollsBackTheWholeBatch(t *testing.T) {
+	s, pool := testStore(t)
+	cleanTable(t, pool, "notifications", "users", "notification_templates", "subscription_categories", "organizations")
+	newNotification := seedForNotifications(t, s)
+
+	ctx := context.Background()
+	good := newNotification(id.Notification.New())
+	poison := newNotification(id.Notification.New())
+	poison.UserID = "usr_does_not_exist" // violates the users foreign key
+
+	if _, err := s.CreateNotifications(ctx, []*models.Notification{good, poison}); err == nil {
+		t.Fatal("CreateNotifications = nil error with a foreign-key violation in the batch")
+	}
+	if _, err := s.GetNotificationByID(ctx, good.ID); err == nil {
+		t.Error("a row from a failed batch was persisted; the transaction did not roll back")
+	}
+
+	// And the row that was blameless goes in on the caller's per-row retry.
+	if _, err := s.CreateNotification(ctx, good); err != nil {
+		t.Fatalf("per-row retry after a failed batch: %v", err)
 	}
 }
 

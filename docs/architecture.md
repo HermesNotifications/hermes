@@ -241,6 +241,44 @@ Dispatch's pool is clamped to the Postgres pool size at startup — each worker 
 connection while processing, so more workers than connections only adds contention. The clamp
 logs a warning naming `pool_max_conns` rather than silently accepting the requested value.
 
+#### Batched notification inserts (opt-in)
+
+Dispatch can commit several notifications at once instead of one per transaction. Set
+`HERMES_DISPATCH_INSERT_BATCH_SIZE` above 1 and workers hand their row to an in-process batcher
+(`internal/dispatch/insertbatch.go`) which writes up to that many rows in one transaction. The
+bound it lifts is durability, not CPU: with `synchronous_commit=on` a commit waits for
+`fdatasync`, so committing per notification caps the whole service at the volume's flush rate.
+
+Batches are assembled the way a database assembles a group commit — take the row that arrived,
+take everything already queued behind it, write them — so a batch grows only while a previous
+transaction is committing and nothing ever waits for a row that has not arrived. That also means
+the batch size reports what it found: `hermes.dispatch.insert.batch.size` near 1 means commits on
+this volume are cheap enough that there is nothing to amortise.
+
+**It is off by default, and that is a measurement rather than caution.** Batching trades away
+commit parallelism, so it wins only where the flush is genuinely the constraint. Against the
+volume where the ceiling was diagnosed (1,933 `fdatasync`/s at 517us) it should; against a volume
+doing 10,582/s it measured about 10% slower. Run `pg_test_fsync` and
+`cmd/dispatchbench -insert-batch 16` on the target before turning it on. Note also that the
+insert is one of three commits dispatch makes per notification — `EnsureUser` and
+`UpdateNotificationChannels` are the others — so it can remove at best a third of them.
+
+The guarantees are unchanged whichever way it is set, and the mechanism is arranged so that they
+are:
+
+- **At-least-once.** A worker blocks in the batcher until its own row is committed, so the ack
+  still strictly follows durability. A failed batch fails every message in it, and all of them
+  are redelivered.
+- **Idempotency.** The batch insert skips rows that collide (on the notification ID or on the
+  idempotency key) instead of aborting, so one redelivered message cannot fail the other N-1.
+  Its own worker is told "already exists" and carries on, exactly as before.
+- **Blast radius.** A batch that fails is retried one row at a time, so a row the database will
+  never accept fails alone and is dead-lettered on its own merits while its neighbours commit.
+
+Routing and fan-out (phase 2 of `handleSend`) stay strictly per notification: they are Redis and
+NATS work rather than commits, each notification's outcome is its own, and batching them would
+delay the hand-off to the delivery channels for no gain.
+
 ## Reliability: retries, backoff, and the DLQ
 
 Every consumer runs through the same failure ladder in `internal/messaging`:

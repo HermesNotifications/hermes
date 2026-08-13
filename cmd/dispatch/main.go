@@ -57,7 +57,8 @@ func main() {
 		notifRepo = dynamo.NewNotificationStore(dynamoClient, evStore)
 	}
 
-	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger)
+	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger,
+		dispatch.WithInsertBatching(cfg.DispatchInsertBatchSize, cfg.DispatchInsertBatchLinger))
 
 	// Cap workers at the DB pool size: each worker holds at most one Postgres
 	// connection while processing, so more workers than connections only adds
@@ -93,6 +94,13 @@ func main() {
 			Readiness:       readiness,
 			DrainDelay:      cfg.ShutdownDrainDelay,
 			ShutdownTimeout: cfg.ShutdownTimeout,
-			OnShutdown:      []func(){bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger)},
+			// Order matters: the drain waits for in-flight handlers, and a handler waiting on
+			// the insert batcher can only finish while the batcher is still running. Stopping
+			// it first would release those handlers with an error and have their messages
+			// redelivered — the opposite of what a graceful shutdown is for.
+			OnShutdown: []func(){
+				bootstrap.DrainNATS(natsClient, cfg.NATSDrainTimeout, logger),
+				d.Stop,
+			},
 		})
 }

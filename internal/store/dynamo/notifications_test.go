@@ -159,6 +159,36 @@ func TestCreateNotification_DuplicateFails(t *testing.T) {
 	}
 }
 
+// The batch path exists for Postgres' sake — DynamoDB has no commit flush to amortise — but it
+// must present the same contract on both stores, because dispatch calls it without knowing which
+// one it has: every new row written, every row already there reported as not inserted rather than
+// failing its neighbours.
+func TestCreateNotifications_WritesNewRowsAndSkipsExisting(t *testing.T) {
+	st := testNotifStore(t)
+	ctx := context.Background()
+
+	organizationID := uuid.New().String()
+	already := newNotif(uuid.New().String(), organizationID)
+	if _, err := st.CreateNotification(ctx, already); err != nil {
+		t.Fatalf("CreateNotification: %v", err)
+	}
+
+	fresh := newNotif(uuid.New().String(), organizationID)
+	other := newNotif(uuid.New().String(), organizationID)
+	inserted, err := st.CreateNotifications(ctx, []*models.Notification{fresh, already, other})
+	if err != nil {
+		t.Fatalf("CreateNotifications: %v", err)
+	}
+	if len(inserted) != 2 {
+		t.Fatalf("inserted = %v, want the two new IDs only", inserted)
+	}
+	for _, n := range []*models.Notification{fresh, other} {
+		if _, err := st.GetNotificationByID(ctx, n.ID); err != nil {
+			t.Errorf("row %s was not written: %v", n.ID, err)
+		}
+	}
+}
+
 // ── Idempotency ───────────────────────────────────────────────────────────────
 
 func TestGetNotificationByIdempotencyKey(t *testing.T) {

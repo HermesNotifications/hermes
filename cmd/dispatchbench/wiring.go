@@ -94,6 +94,16 @@ func storeForBackend(ctx context.Context, backend string, pgStore *postgres.Stor
 	}
 }
 
+// insertBatching carries the two knobs of dispatch's insert batcher through to the cells, so a
+// sweep can answer the question the batcher's default is waiting on: whether sharing a
+// transaction between notifications beats committing them in parallel *on this volume*. It is
+// hardware-dependent — see internal/dispatch/insertbatch.go — so it has to be measured, not
+// assumed, and this is the thing that measures it.
+type insertBatching struct {
+	size   int
+	linger time.Duration
+}
+
 // newRunner wires a dispatchbench.Runner with the publish/dispatch/reset closures
 // for one backend's notification repository.
 func newRunner(
@@ -107,6 +117,7 @@ func newRunner(
 	redisClient *cache.Client,
 	admin *messaging.Client,
 	pool *pgxpool.Pool,
+	batching insertBatching,
 	logger *slog.Logger,
 ) *dispatchbench.Runner {
 	publish := func(ctx context.Context, n int) error {
@@ -137,7 +148,8 @@ func newRunner(
 		templateResolver := dispatch.NewTemplateResolver(pgStore, redisClient)
 		channelResolver := dispatch.NewChannelResolver(pgStore, redisClient)
 		organizations := cached.NewOrganizationRepository(pgStore, redisClient)
-		d := dispatch.NewDispatch(client, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger)
+		d := dispatch.NewDispatch(client, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger,
+			dispatch.WithInsertBatching(batching.size, batching.linger))
 		if err := d.Start(workers, prefetch); err != nil {
 			client.Close()
 			return nil, err

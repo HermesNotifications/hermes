@@ -128,6 +128,30 @@ type Config struct {
 	// pipeline stays full without hoarding the backlog. Tunable for load-test sweeps.
 	DispatchPrefetch int
 
+	// DispatchInsertBatchSize is the most notifications dispatch will persist in one database
+	// transaction. 1 — the default — is one transaction per notification, the behaviour that
+	// predates the batcher.
+	//
+	// Raise it where the database's WAL flush is the bound: with synchronous_commit on, a commit
+	// waits for fdatasync, so a write path that commits per notification is capped at the disk's
+	// flush rate no matter how many cores or workers it has. It is a ceiling rather than a
+	// target — batches are assembled from rows already waiting while the previous transaction
+	// commits, so they grow only when commits are slow, and no notification ever waits for one
+	// that has not arrived. The effective size is capped at DispatchConcurrency, since every row
+	// in a batch is a worker blocked waiting for it.
+	//
+	// Off by default because batching also serialises commits the database could have run in
+	// parallel: on a volume whose fdatasync is fast it measured slightly *slower*. Decide it
+	// with pg_test_fsync and cmd/dispatchbench on the target, not from this comment — see
+	// internal/dispatch/insertbatch.go for both sets of numbers.
+	DispatchInsertBatchSize int
+	// DispatchInsertBatchLinger holds an unfilled batch open for this long, trading latency for
+	// larger transactions. Zero — the default — does not wait at all, which is the setting that
+	// scales: a linger of X makes every worker in the pool wait X, so it puts a ceiling of
+	// (concurrency / X) notifications per second on the service. Raise it only with a
+	// measurement in hand.
+	DispatchInsertBatchLinger time.Duration
+
 	// NATSStreamMaxBytes bounds each JetStream work stream on disk. Only the
 	// provisioner Job's value takes effect — under ADR 0005 phase 4 it is the one
 	// identity permitted to create or update a stream. Zero keeps
@@ -224,6 +248,12 @@ func Load() Config {
 		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
 		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 8),
 		DispatchPrefetch:    envInt("HERMES_DISPATCH_PREFETCH", 64),
+
+		// 1 is off. Both defaults follow the measurements in internal/dispatch/insertbatch.go:
+		// batching helps only where the WAL flush is the bound, and lingering for company costs
+		// more throughput than the extra rows return. 16 is the value to try when turning it on.
+		DispatchInsertBatchSize:   envInt("HERMES_DISPATCH_INSERT_BATCH_SIZE", 1),
+		DispatchInsertBatchLinger: envDuration("HERMES_DISPATCH_INSERT_BATCH_LINGER", 0),
 		RateLimitEnabled:    envBool("HERMES_RATELIMIT_ENABLED", true),
 		RateLimitBurst:      envInt("HERMES_RATELIMIT_BURST", 0),
 		RateLimitPerSecond:  envInt("HERMES_RATELIMIT_PER_SECOND", 0),

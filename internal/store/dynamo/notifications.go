@@ -69,6 +69,45 @@ func notifKey(id string) map[string]types.AttributeValue {
 // CreateNotification writes a new notification item. On idempotency-key conflict
 // it returns the error — callers (dispatch) catch duplicate strings to continue.
 func (s *NotificationStore) CreateNotification(ctx context.Context, n *models.Notification) (*models.Notification, error) {
+	created, err := s.putNotification(ctx, n)
+	if err != nil {
+		return nil, fmt.Errorf("create notification: %w", err)
+	}
+	if !created {
+		return nil, fmt.Errorf("create notification: unique constraint violation")
+	}
+	return n, nil
+}
+
+// CreateNotifications persists a batch of notifications.
+//
+// One item at a time, deliberately. The batch exists to amortise a WAL flush, and DynamoDB has
+// no such flush to amortise — TransactWriteItems would cap the batch at 100 items and double
+// the write cost to buy an atomicity nothing here needs. So this satisfies the interface with
+// the same observable contract (skip what is already there, report which IDs were new) and
+// leaves the callers identical across backends.
+//
+// The consequence, spelled out in the interface: a failure part-way through leaves the earlier
+// items written. That is safe only because each write is conditional on the notification ID not
+// already existing, so the caller's per-row retry re-writes nothing.
+func (s *NotificationStore) CreateNotifications(ctx context.Context, ns []*models.Notification) ([]string, error) {
+	inserted := make([]string, 0, len(ns))
+	for _, n := range ns {
+		created, err := s.putNotification(ctx, n)
+		if err != nil {
+			return inserted, fmt.Errorf("create notification %s: %w", n.ID, err)
+		}
+		if created {
+			inserted = append(inserted, n.ID)
+		}
+	}
+	return inserted, nil
+}
+
+// putNotification writes the item, reporting whether it was newly created. A failed condition
+// check means an item with this ID is already there — a distinction the batch path needs and
+// the single-item path flattens back into an error.
+func (s *NotificationStore) putNotification(ctx context.Context, n *models.Notification) (bool, error) {
 	now := time.Now().UTC()
 	if n.CreatedAt.IsZero() {
 		n.CreatedAt = now
@@ -113,7 +152,7 @@ func (s *NotificationStore) CreateNotification(ctx context.Context, n *models.No
 		// A JSON string, matching unmarshalNotif -- see the note there on why not a native M.
 		encoded, err := json.Marshal(n.Metadata)
 		if err != nil {
-			return nil, fmt.Errorf("create notification: marshal metadata: %w", err)
+			return false, fmt.Errorf("marshal metadata: %w", err)
 		}
 		item["metadata"] = strVal(string(encoded))
 	}
@@ -126,11 +165,11 @@ func (s *NotificationStore) CreateNotification(ctx context.Context, n *models.No
 	if err != nil {
 		var ccfe *types.ConditionalCheckFailedException
 		if errors.As(err, &ccfe) {
-			return nil, fmt.Errorf("create notification: unique constraint violation")
+			return false, nil
 		}
-		return nil, fmt.Errorf("create notification: %w", err)
+		return false, err
 	}
-	return n, nil
+	return true, nil
 }
 
 // GetNotificationByID returns a notification by its ID.

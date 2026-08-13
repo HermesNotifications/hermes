@@ -7,6 +7,7 @@ package config_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hermesnotifications/hermes/internal/config"
 )
@@ -30,6 +31,34 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.DispatchPrefetch != 64 {
 		t.Fatalf("expected default DispatchPrefetch 64, got %d", cfg.DispatchPrefetch)
+	}
+	// Insert batching defaults off — one transaction per notification, as before it existed.
+	// It trades commit parallelism for fewer WAL flushes, which is a win only where the flush
+	// is the bound; on a volume with a fast fdatasync it measured slower. See
+	// internal/dispatch/insertbatch.go for the numbers behind this default.
+	if cfg.DispatchInsertBatchSize != 1 {
+		t.Fatalf("expected insert batching to default off (size 1), got %d", cfg.DispatchInsertBatchSize)
+	}
+	// And no linger by default. Making workers wait for company puts a ceiling of
+	// concurrency/linger on the service, which is the opposite of what batching is for.
+	if cfg.DispatchInsertBatchLinger != 0 {
+		t.Fatalf("expected no default DispatchInsertBatchLinger, got %s", cfg.DispatchInsertBatchLinger)
+	}
+}
+
+// Both knobs must be reachable from the environment: the size because the right value depends on
+// the disk under Postgres, and the linger because it is the throughput-for-batch-size trade an
+// operator may want to make against a very slow one.
+func TestLoad_DispatchInsertBatchOverride(t *testing.T) {
+	t.Setenv("HERMES_DISPATCH_INSERT_BATCH_SIZE", "32")
+	t.Setenv("HERMES_DISPATCH_INSERT_BATCH_LINGER", "20ms")
+
+	cfg := config.Load()
+	if cfg.DispatchInsertBatchSize != 32 {
+		t.Fatalf("expected DispatchInsertBatchSize 32, got %d", cfg.DispatchInsertBatchSize)
+	}
+	if cfg.DispatchInsertBatchLinger != 20*time.Millisecond {
+		t.Fatalf("expected DispatchInsertBatchLinger 20ms, got %s", cfg.DispatchInsertBatchLinger)
 	}
 }
 
