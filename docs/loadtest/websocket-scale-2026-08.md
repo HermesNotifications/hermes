@@ -236,6 +236,34 @@ stopped, writing notification rows the whole way. Every `send_ack` in that run w
 This also reframes the ingestion numbers below: they measure what Send *accepts*, not what
 the pipeline *delivers*.
 
+### Dispatch throughput is not per-replica — Postgres commit is the wall
+
+Adding dispatch replicas does not buy proportional throughput:
+
+| dispatch replicas | sustained drain | per replica |
+|---:|---:|---:|
+| 1 | ~1,242/s | 1,242/s |
+| 4 | ~2,006/s | ~500/s |
+
+**Four times the replicas bought 1.6× the throughput.** At 6,000/s offered against four
+replicas the dispatch consumer's pending count climbed to 764,173 while `send_ack_latency`
+p95 stayed at 60ms and `http_req_failed` was 0.00%.
+
+Postgres sat at **2.5 of helium's 24 cores** throughout — it is not CPU-bound. It is
+commit-bound: `synchronous_commit=on` and `fsync=on` against Longhorn-replicated storage
+means every notification insert waits on a replicated disk write, and `shared_buffers` is
+still the 128MB container default.
+
+So the lever past ~2,000/s is storage or batching, not more dispatch pods:
+
+- put the database on local NVMe rather than replicated network storage;
+- batch the notification inserts in dispatch rather than one row per message;
+- or make a deliberate durability tradeoff on `synchronous_commit`.
+
+Adding replicas mostly adds connections to the same fsync queue. Worth checking
+`max_connections` too — it is 100, and four dispatch replicas at a pool of 10 each already
+take 40 of it alongside every other service.
+
 ### An evaluation install's email worker will look like a delivery bottleneck
 
 At 800/s with the default 70/30 inbox/email mix, the DELIVERY stream grew to 43,389 and did
@@ -249,6 +277,17 @@ delivery failed ... attempt 9 ... smtp dial: dial tcp [::1]:1025: connect: conne
 The chart defaults `hermes.email.smtp.host` to empty, so a bundled install routes 30% of
 notifications into an infinite retry loop. Pin `CHANNEL_WEIGHTS=inbox:100` for realtime
 throughput testing, or configure a sink.
+
+With a sink attached (Mailpit, in this cluster's GitOps repo), the picture separates cleanly:
+
+- **Mailpit** handled a measured **~2,200 msg/s** — flat at 50 and 100 concurrent senders, so
+  that is its ceiling rather than the benchmark client's. At the default 30% email share it
+  only becomes the constraint above ~7,300/s of total traffic.
+- **`worker-email` at one replica** fell behind at roughly **600/s** of email, its consumer lag
+  growing to 15,826 while Mailpit itself idled at ~1 core.
+
+So the email tier's limit is the worker, not the sink. Do not assume a dev mail sink is the
+bottleneck without measuring it — and do not assume it is fine either.
 
 ### Ingestion rate (what Send accepts), with 250k connections held
 
