@@ -1,0 +1,161 @@
+{{- if .Values.tls.enabled }}
+{{/*
+Certificates for the bundled datastores.
+
+Only rendered for stores that are BOTH bundled and not already carrying an existingSecret --
+there is nothing to issue for an external endpoint, and nothing to issue when the operator
+supplied the material themselves.
+
+The chart does not mint certificates itself. Helm's genCA/genSignedCert would remove the
+cert-manager dependency and were rejected: the material regenerates on every render, so
+`helm template` and `--dry-run` disagree with `install`, every Argo or Flux reconcile churns
+it, and keeping it stable requires `lookup`, which returns empty under exactly those renders.
+*/}}
+{{- $fullName := include "hermes.fullname" . -}}
+{{- $issuerName := .Values.tls.issuer.name -}}
+{{- $issuerKind := .Values.tls.issuer.kind -}}
+
+{{- if .Values.tls.issuer.create }}
+{{/*
+A self-signed CA scoped to this release, for a cluster with cert-manager but no CA of its own.
+
+The two-step shape is cert-manager's standard bootstrap: a selfSigned Issuer cannot itself act
+as a CA for other certificates, so it signs a CA certificate which a second Issuer then uses.
+
+Both Issuers are NAMESPACED, and that is the cost being accepted: the CA private key lives in
+a Secret in this namespace, so anyone able to read Secrets here can mint a certificate every
+Hermes service trusts. deploy/k8s/pki/ deliberately moved that key out of the application
+namespace. Prefer tls.issuer.name.
+*/}}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $fullName }}-selfsigned
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $fullName }}-ca
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: {{ $fullName }} internal CA
+  secretName: {{ $fullName }}-ca
+  # Long-lived, because rotating a CA means re-establishing trust in every workload that
+  # holds it -- which for this chart means restarting everything.
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ $fullName }}-selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $fullName }}-ca
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ $fullName }}-ca
+{{- $issuerName = printf "%s-ca" $fullName -}}
+{{- $issuerKind = "Issuer" -}}
+{{- end }}
+
+{{- if and .Values.postgresql.enabled (not .Values.postgresql.tls.existingSecret) }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $fullName }}-postgresql-tls
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $fullName }}-postgresql-tls
+  duration: {{ .Values.tls.duration }}
+  renewBefore: {{ .Values.tls.renewBefore }}
+  issuerRef:
+    name: {{ $issuerName }}
+    kind: {{ $issuerKind }}
+  commonName: {{ $fullName }}-postgresql
+  {{/* Every name a client could dial it by. sslmode=verify-full checks the hostname, so a
+       missing SAN is a connection that fails rather than one that is merely less verified. */}}
+  dnsNames:
+    - {{ $fullName }}-postgresql
+    - {{ $fullName }}-postgresql.{{ .Release.Namespace }}
+    - {{ $fullName }}-postgresql.{{ .Release.Namespace }}.svc
+    - {{ $fullName }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}
+
+{{- if and .Values.redis.enabled (not .Values.redis.tls.existingSecret) }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $fullName }}-redis-tls
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $fullName }}-redis-tls
+  duration: {{ .Values.tls.duration }}
+  renewBefore: {{ .Values.tls.renewBefore }}
+  issuerRef:
+    name: {{ $issuerName }}
+    kind: {{ $issuerKind }}
+  commonName: {{ $fullName }}-redis
+  dnsNames:
+    - {{ $fullName }}-redis
+    - {{ $fullName }}-redis.{{ .Release.Namespace }}
+    - {{ $fullName }}-redis.{{ .Release.Namespace }}.svc
+    - {{ $fullName }}-redis.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}
+
+{{- if .Values.nats.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-nats-tls
+  labels:
+    {{- include "hermes.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Release.Name }}-nats-tls
+  duration: {{ .Values.tls.duration }}
+  renewBefore: {{ .Values.tls.renewBefore }}
+  issuerRef:
+    name: {{ $issuerName }}
+    kind: {{ $issuerKind }}
+  commonName: {{ .Release.Name }}-nats
+  {{/*
+  The wildcards are what make cluster routes verify, and they are the entry most easily left
+  out. The sub-chart generates routes as tls://<release>-nats-0.<release>-nats-headless:6222 --
+  per-pod names under the headless Service, and NOT fully qualified (config.cluster.routeURLs
+  .useFQDN defaults false). Without the short wildcard the three servers refuse each other's
+  certificates and the cluster never forms, while each server looks healthy on its own.
+
+  Computed from .Release.Name rather than written out, so a release under a different name
+  cannot silently produce a certificate for the wrong hostnames.
+  */}}
+  dnsNames:
+    - {{ .Release.Name }}-nats
+    - {{ .Release.Name }}-nats.{{ .Release.Namespace }}
+    - {{ .Release.Name }}-nats.{{ .Release.Namespace }}.svc
+    - {{ .Release.Name }}-nats.{{ .Release.Namespace }}.svc.cluster.local
+    - {{ .Release.Name }}-nats-headless
+    - {{ .Release.Name }}-nats-headless.{{ .Release.Namespace }}
+    - {{ .Release.Name }}-nats-headless.{{ .Release.Namespace }}.svc
+    - {{ .Release.Name }}-nats-headless.{{ .Release.Namespace }}.svc.cluster.local
+    - "*.{{ .Release.Name }}-nats-headless"
+    - "*.{{ .Release.Name }}-nats-headless.{{ .Release.Namespace }}"
+    - "*.{{ .Release.Name }}-nats-headless.{{ .Release.Namespace }}.svc"
+    - "*.{{ .Release.Name }}-nats-headless.{{ .Release.Namespace }}.svc.cluster.local"
+{{- end }}
+{{- end }}

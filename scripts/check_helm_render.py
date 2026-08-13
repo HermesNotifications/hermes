@@ -652,6 +652,64 @@ def check_rewrite_targets(docs):
     return failures
 
 
+def _rendered_secret_keys(docs):
+    """Keys in each Secret this render creates, from either stringData or data."""
+    secrets = {}
+    for doc in docs:
+        if doc.get("kind") != "Secret":
+            continue
+        name = (doc.get("metadata") or {}).get("name")
+        if not name:
+            continue
+        keys = set((doc.get("stringData") or {}).keys())
+        keys |= set((doc.get("data") or {}).keys())
+        secrets[name] = keys
+    return secrets
+
+
+def _iter_env_refs(docs):
+    """Every secretKeyRef in the render, as (workload, container, env name, ref)."""
+    for owner, kind, _, containers in pod_templates(docs):
+        for container in containers:
+            for entry in container.get("env") or []:
+                ref = (entry.get("valueFrom") or {}).get("secretKeyRef")
+                if ref:
+                    yield f"{kind}/{owner}", container.get("name", "?"), entry.get("name", "?"), ref
+
+
+def check_secret_refs(docs):
+    """A secretKeyRef naming a key the chart does not put in that Secret.
+
+    Only Secrets this render CREATES are checked. A reference to an externally-supplied Secret
+    (externalPostgresql.existingSecret and friends) names something the chart cannot see, and
+    asserting about its contents would be pretending to knowledge we do not have.
+
+    Where the chart owns both sides, a missing key is unambiguous — and invisible to every
+    other gate. `helm template` renders it, `helm lint` accepts it, and the failure arrives
+    when the kubelet builds the container: CreateContainerConfigError, on a pod whose manifest
+    reads correctly. That is how the bundled Centrifugo shipped a reference to
+    HERMES_CENTRIFUGO_API_KEY, a key templates/secret.yaml only wrote when it happened to be
+    set.
+    """
+    failures = []
+    secrets = _rendered_secret_keys(docs)
+
+    for owner, container, env_name, ref in _iter_env_refs(docs):
+        target, key = ref.get("name"), ref.get("key")
+        if target not in secrets:
+            continue  # externally supplied; not ours to judge
+        if ref.get("optional"):
+            continue
+        if key not in secrets[target]:
+            failures.append(
+                f"{owner} container {container!r} env {env_name!r} reads {target}/{key}, "
+                f"but this chart creates {target} without that key "
+                f"(it has: {', '.join(sorted(secrets[target])) or 'nothing'}). The pod would "
+                "sit in CreateContainerConfigError; a rendered manifest cannot show this."
+            )
+    return failures
+
+
 def check_realtime_prefix_strip(docs):
     """The realtime route must actually strip /realtime, whichever controller renders it.
 
@@ -725,7 +783,10 @@ def check_realtime_prefix_strip(docs):
 
 # CHECKS maps a --only name to the check it selects. The names are part of the CLI, so
 # renaming one is a breaking change to whatever invokes this.
-CHECK_NAMES = ("routes", "rewrites", "realtime", "provisioner", "images", "config", "hook-refs")
+CHECK_NAMES = (
+    "routes", "rewrites", "realtime", "provisioner", "images", "config", "hook-refs",
+    "secret-refs",
+)
 
 
 def evaluate(docs, source, only=None):
@@ -739,6 +800,8 @@ def evaluate(docs, source, only=None):
         failures += check_rewrite_targets(docs)
     if "realtime" in enabled:
         failures += check_realtime_prefix_strip(docs)
+    if "secret-refs" in enabled:
+        failures += check_secret_refs(docs)
     if "provisioner" in enabled:
         failures += check_provisioner(docs, source.stream_services, source.provisioner)
     if "images" in enabled:

@@ -94,6 +94,28 @@ spec:
             capabilities:
               drop:
                 - ALL
+          {{- if include "hermes.storeTLS" (dict "root" . "store" "postgresql") }}
+          {{/*
+          `args` replaces the image's CMD, so `postgres` must lead or the entrypoint script
+          has no server to exec. The script still runs: it recognises `postgres` as the
+          command and does its usual initialisation first.
+
+          The key file permissions are the fiddly part, and were verified on a real kubelet
+          rather than reasoned about. Postgres refuses to start if its key is group- or
+          world-readable, with one exception since PG11: a root-owned key may be 0640. A
+          Secret volume mounts files as root:<fsGroup>, and fsGroup is 999 above, so
+          defaultMode 0640 gives root:999 0640 -- which satisfies the root-owned rule while
+          staying readable by the postgres user. Confirmed: `SHOW ssl` returns on.
+          */}}
+          args:
+            - postgres
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/etc/postgresql/certs/tls.crt
+            - -c
+            - ssl_key_file=/etc/postgresql/certs/tls.key
+          {{- end }}
           envFrom:
             - secretRef:
                 name: {{ $name }}
@@ -125,10 +147,27 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
-      {{- if not .Values.postgresql.persistence.enabled }}
+            {{- if include "hermes.storeTLS" (dict "root" . "store" "postgresql") }}
+            - name: certs
+              mountPath: /etc/postgresql/certs
+              readOnly: true
+            {{- end }}
+      {{- if or (not .Values.postgresql.persistence.enabled) (include "hermes.storeTLS" (dict "root" . "store" "postgresql")) }}
       volumes:
+        {{- if not .Values.postgresql.persistence.enabled }}
         - name: data
           emptyDir: {}
+        {{- end }}
+        {{- if include "hermes.storeTLS" (dict "root" . "store" "postgresql") }}
+        - name: certs
+          secret:
+            secretName: {{ include "hermes.postgresqlTLSSecret" . }}
+            # 0640, not 0600. A Secret volume mounts files owned by root:<fsGroup>, so the
+            # postgres user reads this through its group -- 0600 would make the key
+            # unreadable to the very process that needs it, and 0644 would make Postgres
+            # refuse to start. See the args block above.
+            defaultMode: 0640
+        {{- end }}
       {{- end }}
   {{- if .Values.postgresql.persistence.enabled }}
   volumeClaimTemplates:

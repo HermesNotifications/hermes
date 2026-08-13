@@ -126,6 +126,18 @@ hermes:
     # -- Number of days to retain notification events
     retentionDays: 90
 
+  nats:
+    # -- Replicas per JetStream work stream (HERMES_NATS_STREAM_REPLICAS).
+    #
+    # Empty derives it from the bundled cluster size, which is the sane default and was not
+    # what happened before: the built-in default is 1, so a three-node bundled cluster carried
+    # single-replica streams and losing one node stopped the pipeline. Nothing surfaced that
+    # -- the streams exist and the cluster reports healthy right up until a node goes away.
+    #
+    # Set explicitly only for an external bus, where the chart cannot know the cluster size.
+    # It must not exceed the number of servers, or stream creation fails outright.
+    streamReplicas: ""
+
   cleanup:
     # -- Enable periodic cleanup of expired events
     enabled: false
@@ -799,6 +811,54 @@ networkPolicy:
   enabled: false
 
 # ---------------------------------------------------------------------------
+# TLS for the bundled datastores
+# ---------------------------------------------------------------------------
+
+# -- Encrypt the connections to the bundled PostgreSQL, Redis and NATS.
+#
+# This is what makes `hermes.env: production` possible with the bundled sub-charts. Without
+# it they speak plaintext, which config.Validate() rejects outside development -- so before
+# this existed, "bundled" and "production" were mutually exclusive and the chart said so at
+# render time.
+#
+# Requires cert-manager, unless you supply certificates yourself with the per-store
+# `tls.existingSecret`. The chart does not mint certificates: Helm's genCA/genSignedCert
+# regenerate on every `helm template`, so `--dry-run` would disagree with `install` and every
+# Argo or Flux render would churn the material. `existingSecret` is the same capability
+# without that.
+#
+# Off by default, so an evaluation install is unchanged.
+tls:
+  # -- Issue certificates for the bundled datastores
+  enabled: false
+  issuer:
+    # -- Name of an existing cert-manager Issuer or ClusterIssuer to sign with.
+    #
+    # This is the recommended path. Most clusters that run cert-manager already have a CA
+    # whose private key lives somewhere deliberate.
+    name: ""
+    # -- Issuer or ClusterIssuer
+    kind: ClusterIssuer
+    # -- Create a self-signed CA in THIS namespace instead of using an existing issuer.
+    #
+    # For a cluster that has cert-manager but no CA of its own. Understand the trade before
+    # enabling it: this puts a ten-year CA private key in a Secret in the release namespace,
+    # where anyone who can read Secrets there can mint a certificate every Hermes service
+    # trusts. deploy/k8s/pki/ moved that key OUT of the application namespace on purpose
+    # (ADR 0005). Prefer `issuer.name` pointing at a cluster-scoped CA whose key lives
+    # elsewhere.
+    create: false
+  # -- Certificate lifetime and renewal window, matching deploy/k8s/.
+  #
+  # Renewal is not automatic in the sense you might expect: none of Postgres, Redis or NATS
+  # reloads a certificate from disk on its own, and the NATS sub-chart's config reloader
+  # watches the config rather than the certificate Secret. A pod that is never restarted
+  # keeps serving an expired certificate. A `helm upgrade` or a rollout restart inside the
+  # renewal window is the mechanism -- 15 days of slack, deliberately generous.
+  duration: 2160h
+  renewBefore: 360h
+
+# ---------------------------------------------------------------------------
 # helm test
 # ---------------------------------------------------------------------------
 
@@ -879,6 +939,22 @@ postgresql:
     username: hermes
     password: hermes
     database: hermes
+  tls:
+    # -- Bring your own certificate instead of having the chart issue one. Needs tls.crt,
+    # tls.key and ca.crt -- the shape cert-manager produces, and equally the shape
+    # `openssl` or an internal PKI can. This is the path that needs no cert-manager.
+    existingSecret: ""
+    # -- Verification mode written into HERMES_DATABASE_URL.
+    #
+    # verify-full by default, and that default matters. pgx sets InsecureSkipVerify for
+    # `require`, so `require` is encryption with no server authentication: anything that
+    # can win a DNS race is the database. Full verification costs one query parameter,
+    # because pgx reads sslrootcert from the URL.
+    #
+    # `require` remains available for a deployment that cannot mount the CA. It renders no
+    # sslrootcert -- deliberately, since pgx silently promotes the mode to verify-ca when
+    # both are present, making the setting and the behaviour disagree.
+    sslmode: verify-full
   persistence:
     # -- With persistence off the database is an emptyDir and every pod restart starts empty.
     enabled: true
@@ -900,6 +976,16 @@ redis:
     # -- Matches docker-compose.yml.
     tag: "7-alpine"
     pullPolicy: IfNotPresent
+  tls:
+    # -- Bring your own certificate. See postgresql.tls.existingSecret.
+    #
+    # Note that TLS here buys encryption, not access control: the bundled Redis requires no
+    # password with or without it, so any pod in this namespace that can reach port 6379
+    # still has full read/write on the idempotency keys and unread counts. It raises the bar
+    # from "anything on the network" to "a pod in this namespace", which is worth having and
+    # is not the same as authentication. Adding a password means moving HERMES_REDIS_URL out
+    # of the ConfigMap and into the Secret; that has not been done.
+    existingSecret: ""
   persistence:
     # -- Redis holds the Centrifugo engine state, the type-config cache and idempotency-key
     # dedup. None is a system of record, but losing the dedup keys on restart reopens a
@@ -946,7 +1032,38 @@ nats:
 # -- Centrifugo sub-chart configuration
 centrifugo:
   enabled: true
+  # -- Secrets Centrifugo needs, read from the Hermes release Secret.
+  #
+  # Both are REQUIRED for realtime to work at all, and both were missing:
+  #
+  #   CENTRIFUGO_HTTP_API_KEY must equal HERMES_CENTRIFUGO_API_KEY, or every publish from the
+  #   inbox worker is rejected 401. Centrifugo 6 requires API authentication by default; the
+  #   chart set the key on the clients and never on the server.
+  #
+  #   CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY must equal HERMES_JWT_SECRET, because the token
+  #   the widget presents is one Hermes minted. Without it Centrifugo cannot verify any token
+  #   and refuses every browser, while the websocket handshake itself still succeeds -- so the
+  #   route looks healthy and no client can subscribe.
+  #
+  # The secret name has to be spelled out because a parent chart cannot template a sub-chart's
+  # values. It is `<release>-hermes-secrets` for a release named `hermes`; adjust it if you
+  # install under a different name, or set hermes.existingSecret and name that instead.
+  # templates/_validate.tpl checks that this points at the Secret the chart actually creates.
+  envSecret:
+    - name: CENTRIFUGO_HTTP_API_KEY
+      secretKeyRef:
+        name: hermes-secrets
+        key: HERMES_CENTRIFUGO_API_KEY
+    - name: CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY
+      secretKeyRef:
+        name: hermes-secrets
+        key: HERMES_JWT_SECRET
   config:
+    # -- The admin UI. Off: it is served on the same internal port as the API and, with no
+    # admin password configured, enabling it is an unauthenticated console onto every channel
+    # for anything that can reach the Service.
+    admin:
+      enabled: false
     engine:
       type: memory
     # -- Fallback transports for the inbox widget's connection ladder

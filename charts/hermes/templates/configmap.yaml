@@ -1,5 +1,6 @@
 {{- include "hermes.validateEnvironment" . -}}
 {{- include "hermes.validateAdminPortal" . -}}
+{{- include "hermes.validateCentrifugoSecrets" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -30,6 +31,31 @@ data:
   {{- $redisUrl := include "hermes.redisUrl" . }}
   {{- if $redisUrl }}
   HERMES_REDIS_URL: {{ $redisUrl | quote }}
+  {{- end }}
+  {{- if include "hermes.storeTLS" (dict "root" . "store" "redis") }}
+  {{/*
+  go-redis verifies rediss:// against the SYSTEM pool and its URL parser rejects unknown
+  query parameters, so unlike Postgres the CA cannot ride in the URL. This variable is the
+  only way to tell it what may vouch for the bundled server -- see cache.Options.CABundle.
+  Paths are set by hermes.datastoreCAMounts and must change together with it.
+  */}}
+  HERMES_REDIS_CA_BUNDLE: "/etc/hermes/tls/redis/redis-ca.crt"
+  {{- end }}
+  {{- if include "hermes.storeTLS" (dict "root" . "store" "nats") }}
+  HERMES_NATS_CA_BUNDLE: "/etc/hermes/tls/nats/nats-ca.crt"
+  {{- end }}
+  {{- if .Values.hermes.nats.streamReplicas }}
+  HERMES_NATS_STREAM_REPLICAS: {{ .Values.hermes.nats.streamReplicas | quote }}
+  {{- else if .Values.nats.enabled }}
+  {{/*
+  Derived from the bundled cluster size rather than left at the built-in default of 1.
+
+  The default was a live defect: the chart runs a three-node NATS and provisioned R1 streams
+  into it, so losing the single node holding a stream stopped the pipeline on a cluster
+  specifically sized to survive that. Nothing reported it -- the streams exist, the cluster is
+  healthy, and the exposure is invisible until a node goes away.
+  */}}
+  HERMES_NATS_STREAM_REPLICAS: {{ .Values.nats.config.cluster.replicas | default 1 | quote }}
   {{- end }}
   HERMES_EMAIL_PROVIDER: {{ .Values.hermes.email.provider | quote }}
   HERMES_EMAIL_FROM: {{ .Values.hermes.email.from | quote }}

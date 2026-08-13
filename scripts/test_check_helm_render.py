@@ -277,6 +277,71 @@ def _stripprefix_middleware(name, prefixes=("/realtime",)):
     }
 
 
+def _secret(name, keys, string_data=True):
+    field = "stringData" if string_data else "data"
+    return {"kind": "Secret", "metadata": {"name": name}, field: {k: "x" for k in keys}}
+
+
+def _deployment_with_secret_ref(name, env_name, secret, key, optional=False):
+    ref = {"name": secret, "key": key}
+    if optional:
+        ref["optional"] = True
+    return {
+        "kind": "Deployment",
+        "metadata": {"name": name},
+        "spec": {"template": {"metadata": {"labels": {"app.kubernetes.io/name": name}},
+                              "spec": {"containers": [
+                                  {"name": "c", "image": "x",
+                                   "env": [{"name": env_name, "valueFrom": {"secretKeyRef": ref}}]}
+                              ]}}},
+    }
+
+
+class TestSecretRefs(unittest.TestCase):
+    """A secretKeyRef naming a key the chart does not create.
+
+    Invisible to every other gate: `helm template` renders it, `helm lint` accepts it, and the
+    failure arrives when the kubelet builds the container. This is the shape that shipped a
+    Centrifugo reference to a key templates/secret.yaml only wrote when it happened to be set.
+    """
+
+    def test_a_resolvable_reference_passes(self):
+        docs = [
+            _secret("hermes-secrets", ["HERMES_JWT_SECRET"]),
+            _deployment_with_secret_ref("d", "TOKEN", "hermes-secrets", "HERMES_JWT_SECRET"),
+        ]
+        self.assertEqual(check.check_secret_refs(docs), [])
+
+    def test_a_missing_key_in_a_chart_owned_secret_is_flagged(self):
+        docs = [
+            _secret("hermes-secrets", ["HERMES_JWT_SECRET"]),
+            _deployment_with_secret_ref("d", "APIKEY", "hermes-secrets", "HERMES_CENTRIFUGO_API_KEY"),
+        ]
+        failures = check.check_secret_refs(docs)
+        self.assertTrue(any("HERMES_CENTRIFUGO_API_KEY" in f for f in failures), failures)
+        self.assertTrue(any("CreateContainerConfigError" in f for f in failures), failures)
+
+    def test_base64_data_secrets_are_read_too(self):
+        docs = [
+            _secret("hermes-secrets", ["HERMES_JWT_SECRET"], string_data=False),
+            _deployment_with_secret_ref("d", "TOKEN", "hermes-secrets", "HERMES_JWT_SECRET"),
+        ]
+        self.assertEqual(check.check_secret_refs(docs), [])
+
+    def test_an_externally_supplied_secret_is_not_judged(self):
+        # externalPostgresql.existingSecret and friends name Secrets the chart never sees.
+        # Asserting about their contents would be pretending to knowledge we do not have.
+        docs = [_deployment_with_secret_ref("d", "URL", "my-own-secret", "anything")]
+        self.assertEqual(check.check_secret_refs(docs), [])
+
+    def test_an_optional_reference_is_allowed_to_be_absent(self):
+        docs = [
+            _secret("hermes-secrets", ["HERMES_JWT_SECRET"]),
+            _deployment_with_secret_ref("d", "SEED", "hermes-secrets", "absent", optional=True),
+        ]
+        self.assertEqual(check.check_secret_refs(docs), [])
+
+
 class TestRealtimePrefixStrip(unittest.TestCase):
     """Centrifugo serves from its root, so /realtime must be stripped — by either dialect.
 

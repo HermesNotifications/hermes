@@ -234,7 +234,7 @@ jobs:
       # registry. Every one of those rendered cleanly.
       - name: Check the rendered chart against the Go source
         run: |
-          helm template test charts/hermes/ \
+          helm template hermes charts/hermes/ \
             --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
             --set global.domain=test.example.com \
             | python3 scripts/check_helm_render.py - --source-root=.
@@ -242,7 +242,7 @@ jobs:
       # was missing from the cd.yml publish matrix and only surfaces when the CronJob renders.
       - name: Check the optional-feature render too
         run: |
-          helm template test charts/hermes/ \
+          helm template hermes charts/hermes/ \
             --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
             --set global.domain=test.example.com \
             --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
@@ -254,23 +254,49 @@ jobs:
       # most common self-hosting setup — with a silently dead websocket endpoint.
       - name: Check the Traefik render too
         run: |
-          helm template test charts/hermes/ \
+          helm template hermes charts/hermes/ \
             --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
             --set global.domain=test.example.com \
             --set ingress.className=traefik \
             | python3 scripts/check_helm_render.py - --source-root=.
-      - name: A production install on bundled sub-charts must be refused at render time
+      # Production on PLAINTEXT bundled datastores is still refused. This assertion used to say
+      # production+bundled always failed; TLS made the combination legal, so it now asserts the
+      # narrower and still-true thing.
+      - name: A production install on plaintext bundled datastores must be refused
         run: |
-          if helm template test charts/hermes/ \
+          if helm template hermes charts/hermes/ \
                --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
                --set global.domain=test.example.com --set hermes.env=production \
                > /dev/null 2>&1; then
-            echo "::error::hermes.env=production rendered with bundled sub-charts; every workload would exit on config.Validate()"
+            echo "::error::hermes.env=production rendered with plaintext bundled datastores; every workload would exit on config.Validate()"
+            exit 1
+          fi
+      # The other direction. A capability nothing exercises is a capability that rots, and this
+      # one spans a preset file, three certificates and a set of sub-chart values the parent
+      # cannot template.
+      - name: A production install on TLS bundled datastores must render and pass the gates
+        run: |
+          helm template hermes charts/hermes/ -f charts/hermes/values-production-bundled.yaml \
+            --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+            --set hermes.centrifugo.apiKey=test-centrifugo-key \
+            --set global.domain=test.example.com \
+            --set tls.issuer.name=test-ca \
+            --set externalCentrifugo.apiUrl=https://centrifugo.test.example.com \
+            | python3 scripts/check_helm_render.py - --source-root=.
+      - name: A NATS TLS secret that names no certificate must be refused
+        run: |
+          if helm template hermes charts/hermes/ -f charts/hermes/values-production-bundled.yaml \
+               --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
+               --set hermes.centrifugo.apiKey=test-centrifugo-key \
+               --set global.domain=test.example.com --set tls.issuer.name=test-ca \
+               --set externalCentrifugo.apiUrl=https://c.example.com \
+               --set nats.tlsCA.secretName=wrong > /dev/null 2>&1; then
+            echo "::error::a NATS TLS secretName naming no certificate rendered cleanly; NATS would serve plaintext while the ConfigMap advertises tls://"
             exit 1
           fi
       - name: The admin portal on its unpublished default image must be refused
         run: |
-          if helm template test charts/hermes/ \
+          if helm template hermes charts/hermes/ \
                --set hermes.jwt.secret=test --set hermes.apiKey.hmacSecret=test \
                --set global.domain=test.example.com --set adminPortal.enabled=true \
                > /dev/null 2>&1; then
