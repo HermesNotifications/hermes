@@ -160,10 +160,23 @@ connections were held by the others:
 The degradation was entirely in the measuring process. Hermes served the REST API at 2ms p95
 while carrying ~100k concurrent WebSocket connections.
 
-The same caveat now applies to `ws_push_e2e_latency` at high connection counts: its **median stayed
+The same caveat applied to `ws_push_e2e_latency` at high connection counts: its **median stayed
 at 6ms** from 200 connections to 100,000, and only the tail moved. Given the p95 of a co-resident
-HTTP request was inflated ~350×, the push tails at 50k and 100k should be read as *not yet
-measured* rather than as server latency. The medians are trustworthy; the tails are not.
+HTTP request was inflated ~350×, the push tails were read as *not yet measured* rather than as
+server latency.
+
+**Since resolved, and they were artifacts.** Measured again at 250,000 held connections from a
+runner pod carrying only 500 sockets of its own — the same socket-free-probe technique, applied
+to push latency rather than to the REST API:
+
+| measured from | push e2e median | p90 | p95 | pushes |
+|---|---:|---:|---:|---:|
+| pods holding 12,500 sockets each | 5–6 ms | 8 ms | ~400 ms | — |
+| **a pod holding 500** | **8 ms** | **9 ms** | **11 ms** | 10,476 |
+
+So push latency at a quarter of a million connections is **11 ms at p95**, not hundreds. The
+medians were trustworthy throughout; the tails were the generator timing its own event loop,
+for the fifth time in this exercise.
 
 ### What would actually be needed to find the ceiling
 
@@ -319,6 +332,35 @@ VU per requested rps, which assumes each VU completes one iteration per second �
 returns in ~2ms, so the pool was over-allocated by two orders of magnitude. Invisible below
 ~1000/s and fatal above it, and it presents as the system refusing load. Now sized from
 throughput per VU.
+
+## Unexplained: dispatch stopped consuming and reported healthy for three hours
+
+During the repeat 250k run, dispatch was found **idle at 1m CPU with 133,472 messages pending**
+on its JetStream consumer. Its last log line was 2h58m earlier. Throughout that window the pod
+was `Ready=true` with **zero restarts**, so nothing in Kubernetes noticed and nothing would
+have alerted. A rollout restart resolved it immediately — CPU went 1m → 1,159m and the backlog
+drained.
+
+The write path was completely stopped for three hours and every health signal was green.
+
+**The trigger is not identified.** The obvious hypothesis was that the `nats stream purge` used
+in load-test cleanup had wedged the attached consumer. That was tested directly — 20 sends
+consumed cleanly, purge, 20 more sends — and the consumer advanced normally through it. So
+purging is *not* the cause, at least not on an idle stream.
+
+The wedged pod's logs were lost by restarting it before capturing them, which is the mistake to
+avoid if this recurs: capture `kubectl logs` and `consumer info` **before** restarting. The
+window may still be in SigNoz, which collects the `hermes` namespace.
+
+What is actionable regardless of trigger:
+
+- **`/readyz` does not reflect whether the NATS consumer is consuming.** A service whose entire
+  job is draining a work queue can stop draining it and still pass its readiness probe. Making
+  readiness (or a liveness check) depend on consumer progress would turn a silent three-hour
+  outage into a pod restart.
+- **Alert on JetStream consumer lag**, which is the same conclusion the throughput measurements
+  reached from the other direction. It is the one signal that was screaming while every other
+  one was green.
 
 ## Limits worth knowing before trusting these numbers
 
