@@ -9,11 +9,17 @@ connect latency at 16ms p95, push latency at a 5ms median, and zero failed reque
 exercise — at 250k its nodes sat at 11–24% CPU, and the throughput ceiling that did appear was
 a rate-limit setting, not capacity.**
 
-**Every degradation observed here was eventually traced to the load generator — four separate
-times.** That is the single most useful thing in this document. Each one looked like a server
-limit, and each was measuring the instrument: blocking VUs starving the scheduler, a client
-timing its own busy event loop, a thundering herd of simultaneous connects, and a VU pool
-sized by the wrong unit. The numbers below are the ones that survived a second vantage point.
+**Two findings matter more than the connection count:**
+
+1. **Sustained throughput is ~1,000/s per dispatch replica, and `send_ack_latency` cannot see
+   it.** Send publishes to JetStream and returns in ~2ms whether or not anything downstream
+   keeps up. A 12,000/s run left **1,010,571 messages** queued while every response looked
+   healthy. Alert on consumer lag, not on ingestion latency.
+
+2. **Every latency degradation observed here traced back to the load generator — four separate
+   times.** Blocking VUs starving the scheduler; a client timing its own busy event loop; a
+   thundering herd of simultaneous connects; a VU pool sized by the wrong unit. Each looked
+   like a server limit. The numbers below are the ones that survived a second vantage point.
 
 ## System under test
 
@@ -199,7 +205,52 @@ Adding a 150-second connection ramp (`WS_RAMP_SECONDS`) changed nothing else and
 Real systems do get their whole population at once — after an outage. That case is the churn
 scenario's job, and it should be measured deliberately rather than by accident.
 
-### Publication rate, with 250k connections held
+### Sustained throughput is ~1,000/s per dispatch replica, and the API does not tell you
+
+This is the most operationally important number here, and the one that latency hides.
+
+Measured with JetStream consumer lag rather than response time, inbox-only channel, one
+dispatch replica, 2,000 sends/s offered for 180s:
+
+| | |
+|---|---:|
+| `dispatch` consumer pending | 15,882 → **174,639**, growing linearly |
+| `worker-inbox` consumer pending | **0**, throughout |
+| drain rate once load stopped | **~1,242/s** |
+| `send_ack_latency` p95 during | **11 ms** |
+| `http_req_failed` | **0.00%** |
+
+So dispatch drains ~1,000–1,250 notifications/s per replica, and the Centrifugo publish path
+is never the constraint. Above that rate the queue grows without bound.
+
+**`send_ack_latency` stayed at 1–7ms the entire time.** Send is a thin ingestion layer: it
+authenticates, dedupes and publishes to JetStream, so it answers in milliseconds regardless
+of whether anything downstream can keep up. Ingestion latency is not backpressure, and a
+dashboard built on it shows a perfectly healthy API while the system falls irrecoverably
+behind. **Alert on consumer lag, not on send latency.**
+
+The earlier 12,000/s test made this concrete: it left **1,010,571 messages** queued on
+NOTIFICATIONS and 600,500 on DELIVERY, still draining at ~940/s ten minutes after the load
+stopped, writing notification rows the whole way. Every `send_ack` in that run was ~2ms.
+
+This also reframes the ingestion numbers below: they measure what Send *accepts*, not what
+the pipeline *delivers*.
+
+### An evaluation install's email worker will look like a delivery bottleneck
+
+At 800/s with the default 70/30 inbox/email mix, the DELIVERY stream grew to 43,389 and did
+not drain. That is not the delivery tier failing to keep up — the inbox consumer was at zero
+pending throughout. It is `worker-email` retrying against an SMTP server that does not exist:
+
+```
+delivery failed ... attempt 9 ... smtp dial: dial tcp [::1]:1025: connect: connection refused
+```
+
+The chart defaults `hermes.email.smtp.host` to empty, so a bundled install routes 30% of
+notifications into an infinite retry loop. Pin `CHANNEL_WEIGHTS=inbox:100` for realtime
+throughput testing, or configure a sink.
+
+### Ingestion rate (what Send accepts), with 250k connections held
 
 Measured from pods holding no sockets, against the held connections:
 
@@ -209,13 +260,18 @@ Measured from pods holding no sockets, against the held connections:
 | 6,000/s | **100%** | 138 ms | 58 ms | ~160k requests/pod, zero errors |
 | 12,000/s | **~56%** | 297 ms | 160 ms | ~500–610 errors/s per pod |
 
-**The ceiling is configuration, not capacity.** `rateLimit.distributed` is unset, so the
-per-credential limit applies *per replica*: one send pod caps at 2000 rps and rejected 44.7%
-of a 3000/s load; four replicas moved the same wall to ~8000/s. Underneath it, Postgres
+**The ingestion ceiling is configuration, not capacity.** `rateLimit.distributed` is unset, so
+the per-credential limit applies *per replica*: one send pod caps at 2000 rps and rejected
+44.7% of a 3000/s load; four replicas moved the same wall to ~8000/s. Underneath it, Postgres
 peaked at **2.5 cores** and Redis at **0.7** — neither close to saturated on a 24-core node.
 
-To go past it: raise `rateLimit.perSecond`, enable distributed rate limiting so the budget is
+To raise it: raise `rateLimit.perSecond`, enable distributed rate limiting so the budget is
 shared rather than multiplied, or add replicas.
+
+But note what these rows do *not* say. Every one of them was accepted by Send and queued; the
+sustained figure is ~1,000/s per dispatch replica, above. **6,000/s accepted with zero errors
+is a statement about ingestion, and the queue absorbing the difference is the design working
+as intended — right up until nobody is watching the queue.**
 
 ### A third generator artifact
 

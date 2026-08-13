@@ -39,6 +39,13 @@ spec:
       # thundering herd, not a load test -- 250k simultaneous dials drove the generators to
       # 80% CPU and left a third of the sockets permanently unestablished.
       - { name: WS_RAMP_SECONDS,   value: "${WS_RAMP_SECONDS}" }
+      # Channel mix, e.g. "inbox:100" to exercise the realtime path alone.
+      #
+      # Worth pinning for a throughput test: an evaluation install has no SMTP server, so
+      # every notification routed to email fails and is retried, and the resulting DELIVERY
+      # backlog looks exactly like the delivery tier failing to keep up. It is not -- the
+      # inbox consumer sat at zero pending throughout.
+      - { name: CHANNEL_WEIGHTS,   value: "${CHANNEL_WEIGHTS}" }
       - { name: SEND_RPS,       value: "${SEND_RPS}" }
       - { name: POLL_RPS,       value: "${POLL_RPS}" }
       - { name: DURATION,       value: "${DURATION}" }
