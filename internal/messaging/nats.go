@@ -46,6 +46,20 @@ type Client struct {
 	// inflight counts messages handed to a worker pool but not yet finished, so Drain can
 	// wait for them instead of the process exiting mid-handler.
 	inflight sync.WaitGroup
+
+	// drainMu closes the gap between "no new deliveries" and "no Add in progress".
+	//
+	// ConsumeContext.Stop() stops *future* invocations of the consume callback; it does not
+	// wait for one already running. So Drain could reach inflight.Wait() while a callback was
+	// still between entry and inflight.Add(1) -- and Add concurrent with Wait is a data race,
+	// not merely a lost count. The race detector finds it as soon as anything drains a client
+	// with a live consume loop, which nothing did until TestStall_DrainingClientIsNotStalled.
+	//
+	// Readers (the callback) take RLock to test draining and Add under it; Drain takes the
+	// write lock to set draining, which cannot be granted until every in-progress Add has
+	// released. After that no Add can begin, so Wait is safe.
+	drainMu  sync.RWMutex
+	draining bool
 }
 
 // DefaultStreamMaxBytes bounds each of the three work streams on disk.
@@ -474,10 +488,19 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 		// Counted here, in the fetcher, rather than in the worker that picks the message up.
 		// A worker cannot increment until it has been scheduled, which leaves a window where a
 		// message has left the fetcher but is not yet counted -- and Drain, waiting on the
-		// counter, would sail straight past it. Drain waits for this callback to be retired
-		// (ConsumeContext.Closed) before it reads the counter, so the total can only fall from
-		// there. Stop() alone is not that point: it returns while a delivery is still in here.
+		// counter, would sail straight past it. Counting here means the total can only fall
+		// once draining begins.
+		//
+		// Under drainMu because Stop() does not wait for a callback already in flight: see the
+		// field's comment. Once Drain has taken the write lock this returns without acking, and
+		// the message is redelivered -- the same outcome as the shutdown branch below.
+		c.drainMu.RLock()
+		if c.draining {
+			c.drainMu.RUnlock()
+			return
+		}
 		c.inflight.Add(1)
+		c.drainMu.RUnlock()
 		select {
 		case work <- msg:
 		case <-c.done:
@@ -589,10 +612,9 @@ func safeHandle(ctx context.Context, handler func(ctx context.Context, data []by
 	return handler(ctx, data, info)
 }
 
-// ErrDrainTimeout reports that consumers had not come to rest -- fetchers still tearing down, or
-// handlers still running -- when Drain's budget ran out. The messages they held are not lost --
-// they were never acked, so JetStream redelivers them after AckWait -- but their side effects will
-// be repeated, which is worth alerting on.
+// ErrDrainTimeout reports that handlers were still running when Drain's budget ran out. The
+// messages they held are not lost -- they were never acked, so JetStream redelivers them after
+// AckWait -- but their side effects will be repeated, which is worth alerting on.
 var ErrDrainTimeout = errors.New("messaging: drain timed out with handlers still in flight")
 
 // Drain stops consuming, waits for in-flight handlers, then flushes the connection.
@@ -604,16 +626,13 @@ var ErrDrainTimeout = errors.New("messaging: drain timed out with handlers still
 //     intention of finishing.
 //  2. Close done, releasing any hand-off blocked on a busy pool. Those messages are dropped
 //     unacked and redelivered.
-//  3. Wait for each fetcher to actually settle, so the in-flight count can no longer rise.
-//  4. Wait for handlers already running. Without this the process exits mid-handler, and every
+//  3. Wait for handlers already running. Without this the process exits mid-handler, and every
 //     rolling restart re-executes whatever side effects were in progress -- a sent email, a
 //     published Centrifugo event -- when JetStream redelivers.
-//  5. Flush pending publishes, so acks and dead letters produced in step 4 actually leave.
+//  4. Flush pending publishes, so acks and dead letters produced in step 3 actually leave.
 //
 // Call it before the HTTP server drains, not after: this releases work, that releases traffic.
 func (c *Client) Drain(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-
 	c.mu.Lock()
 	ctxs := make([]jetstream.ConsumeContext, len(c.consumeCtxs))
 	copy(ctxs, c.consumeCtxs)
@@ -624,12 +643,14 @@ func (c *Client) Drain(timeout time.Duration) error {
 	}
 	c.closeOnce.Do(c.stopConsuming)
 
-	// Stop only *starts* the teardown: the subscription's delivery goroutine can still be inside
-	// the Consume callback, which is where inflight is incremented. Waiting on the counter while
-	// it can still rise from zero is a WaitGroup misuse -- and worse than pedantic, it lets Drain
-	// sail past a message the fetcher accepted a moment ago. Closed() is closed only once that
-	// delivery goroutine has exited, so past this point the count can only fall.
-	if !waitClosed(ctxs, time.Until(deadline)) || !waitTimeout(&c.inflight, time.Until(deadline)) {
+	// Barrier between Stop() and Wait(). Acquiring the write lock cannot succeed until every
+	// consume callback that had already begun has finished its Add, and once it is held no
+	// further Add can start -- which is what makes the Wait below free of a concurrent Add.
+	c.drainMu.Lock()
+	c.draining = true
+	c.drainMu.Unlock()
+
+	if !waitTimeout(&c.inflight, timeout) {
 		c.conn.Close()
 		return ErrDrainTimeout
 	}
@@ -637,20 +658,6 @@ func (c *Client) Drain(timeout time.Duration) error {
 		return fmt.Errorf("nats drain: %w", err)
 	}
 	return nil
-}
-
-// waitClosed reports whether every consume context finished tearing down before timeout elapsed.
-func waitClosed(ctxs []jetstream.ConsumeContext, timeout time.Duration) bool {
-	timer := time.NewTimer(max(timeout, 0))
-	defer timer.Stop()
-	for _, cc := range ctxs {
-		select {
-		case <-cc.Closed():
-		case <-timer.C:
-			return false
-		}
-	}
-	return true
 }
 
 // waitTimeout reports whether wg reached zero before timeout elapsed.
