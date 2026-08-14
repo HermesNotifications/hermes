@@ -57,7 +57,8 @@ func main() {
 		notifRepo = dynamo.NewNotificationStore(dynamoClient, evStore)
 	}
 
-	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger)
+	d := dispatch.NewDispatch(natsClient, notifRepo, pgStore, organizations, templateResolver, channelResolver, logger,
+		dispatch.WithIdentityCache(cfg.DispatchIdentityCacheSize))
 
 	// Cap workers at the DB pool size: each worker holds at most one Postgres
 	// connection while processing, so more workers than connections only adds
