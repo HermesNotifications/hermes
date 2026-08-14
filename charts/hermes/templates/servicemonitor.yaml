@@ -46,6 +46,39 @@ redis.metrics produced an endpoint and no time series.
 Kept in this file rather than redis.yaml so every ServiceMonitor in the chart sits behind the
 same CRD guard above.
 */ -}}
+{{- /*
+Centrifugo. Rendered here rather than by the sub-chart, whose own ServiceMonitor template is
+guarded by its `metrics.serviceMonitor.enabled` flag alone -- no capability check -- so enabling
+it breaks `helm install` outright on a cluster without the Prometheus Operator CRDs.
+
+`centrifugo_node_num_clients` is the connection count for the whole realtime tier, and it was
+previously read by hand: it confirmed the count exactly at every step of the 250k exercise, from
+a curl, because nothing scraped it. Scraped per-pod, which matters here -- connections are held
+per node, so a single Service-level scrape would report one replica's share of them.
+
+Selector and port name match what the sub-chart renders (app.kubernetes.io/name: centrifugo on
+the `internal` port); they move only if the sub-chart is upgraded.
+*/ -}}
+{{- if .Values.centrifugo.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-centrifugo
+  labels:
+    {{- $labels | nindent 4 }}
+    app.kubernetes.io/component: centrifugo
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: centrifugo
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - port: internal
+      path: /metrics
+      interval: 30s
+{{- end }}
+
 {{- if and .Values.redis.enabled .Values.redis.metrics.enabled }}
 ---
 apiVersion: monitoring.coreos.com/v1

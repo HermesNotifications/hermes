@@ -1332,17 +1332,21 @@ centrifugo:
     OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.observability.svc:4317"
     OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
     OTEL_SERVICE_NAME: "hermes-centrifugo"
-  # -- Scrape Centrifugo's Prometheus endpoint (always served on the internal port, 9000).
+  # -- Left OFF, and the ServiceMonitor for Centrifugo is rendered by this chart instead, in
+  # templates/servicemonitor.yaml.
   #
-  # `centrifugo_node_num_clients` is the connection count for the whole realtime tier and it
-  # was previously read by hand: it "confirmed the connection count exactly at every step" of
-  # the 250k exercise, from a curl, because nothing scraped it. The ServiceMonitor discovers
-  # every replica individually, which matters here — connections are per-node and a per-Service
-  # scrape would have shown one replica's share of them.
+  # Not a preference. The sub-chart's ServiceMonitor template is guarded only by this flag,
+  # with no `.Capabilities.APIVersions` check — so turning it on makes `helm install` fail with
+  # `no matches for kind "ServiceMonitor"` on any cluster that has never installed the
+  # Prometheus Operator. That is most evaluation installs, and it is not visible from
+  # `helm template`, which reports no capabilities either way. It took a real kind install in
+  # CI to surface it.
+  #
+  # Hermes' own copy carries the guard every other ServiceMonitor here does, and scrapes the
+  # same endpoint (`internal` port, 9000).
   metrics:
     serviceMonitor:
-      enabled: true
-      interval: 30s
+      enabled: false
   # -- The sub-chart ships `resources: {}`, which schedules Centrifugo as BestEffort -- the
   # first QoS class the kubelet evicts under node pressure, for the one pod that holds every
   # live websocket in the deployment. Evicting it drops every connection at once.

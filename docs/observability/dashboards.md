@@ -53,12 +53,23 @@ If your logs aren't showing the pivot button:
 
 Cross-reference when tuning thresholds:
 
+Rows marked *no panel yet* have an alert and a runbook but nothing to look at while triaging.
+Listed rather than omitted, because the gap is the point: an alert whose runbook says "check
+the dashboard" and whose dashboard has no such panel wastes the minutes the annotation exists
+to save. The queries are given so a panel can be added, or so you can paste them into Explore.
+
 | Alert rule | Panel that shows the signal |
 |---|---|
 | `ServiceDown` | kube-prometheus-stack default "Pods" dashboard |
 | `HighErrorRate` | Hermes service overview → Error rate |
 | `HighLatency` | Hermes service overview → Latency p95 |
-| `NATSConsumerLag` | Hermes infra → NATS consumer lag |
+| `SendIngestionLatency` | Hermes service overview → Latency p95, filtered to `hermes-send` |
+| `NATSConsumerBacklogGrowing` | Hermes infra → NATS consumer lag |
+| `NATSConsumerBacklogUnbounded` | Hermes infra → NATS consumer lag |
+| `HermesWorkerPoolSaturated` | *no panel yet* — `hermes_messaging_inflight / hermes_messaging_workers_limit` |
+| `HermesProbeLoss` | *no panel yet* — `hermes_probe_results_total` by `result` |
+| `HermesProbeAbsent` | *no panel yet* — same series; alerts on its absence |
+| `HermesProbeLatency` | *no panel yet* — `hermes_probe_e2e_duration_seconds` |
 | `DBPoolSaturated` | Hermes infra → Postgres active connections |
 | `PrometheusTargetDown` | Observability health → Prometheus scrape success rate |
 | `DiskPressure` | kube-prometheus-stack default "Persistent Volumes" |
