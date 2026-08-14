@@ -474,8 +474,9 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 		// Counted here, in the fetcher, rather than in the worker that picks the message up.
 		// A worker cannot increment until it has been scheduled, which leaves a window where a
 		// message has left the fetcher but is not yet counted -- and Drain, waiting on the
-		// counter, would sail straight past it. Stop() guarantees this callback is no longer
-		// invoked, so counting here means the total can only fall once draining begins.
+		// counter, would sail straight past it. Drain waits for this callback to be retired
+		// (ConsumeContext.Closed) before it reads the counter, so the total can only fall from
+		// there. Stop() alone is not that point: it returns while a delivery is still in here.
 		c.inflight.Add(1)
 		select {
 		case work <- msg:
@@ -588,9 +589,10 @@ func safeHandle(ctx context.Context, handler func(ctx context.Context, data []by
 	return handler(ctx, data, info)
 }
 
-// ErrDrainTimeout reports that handlers were still running when Drain's budget ran out. The
-// messages they held are not lost -- they were never acked, so JetStream redelivers them after
-// AckWait -- but their side effects will be repeated, which is worth alerting on.
+// ErrDrainTimeout reports that consumers had not come to rest -- fetchers still tearing down, or
+// handlers still running -- when Drain's budget ran out. The messages they held are not lost --
+// they were never acked, so JetStream redelivers them after AckWait -- but their side effects will
+// be repeated, which is worth alerting on.
 var ErrDrainTimeout = errors.New("messaging: drain timed out with handlers still in flight")
 
 // Drain stops consuming, waits for in-flight handlers, then flushes the connection.
@@ -602,13 +604,16 @@ var ErrDrainTimeout = errors.New("messaging: drain timed out with handlers still
 //     intention of finishing.
 //  2. Close done, releasing any hand-off blocked on a busy pool. Those messages are dropped
 //     unacked and redelivered.
-//  3. Wait for handlers already running. Without this the process exits mid-handler, and every
+//  3. Wait for each fetcher to actually settle, so the in-flight count can no longer rise.
+//  4. Wait for handlers already running. Without this the process exits mid-handler, and every
 //     rolling restart re-executes whatever side effects were in progress -- a sent email, a
 //     published Centrifugo event -- when JetStream redelivers.
-//  4. Flush pending publishes, so acks and dead letters produced in step 3 actually leave.
+//  5. Flush pending publishes, so acks and dead letters produced in step 4 actually leave.
 //
 // Call it before the HTTP server drains, not after: this releases work, that releases traffic.
 func (c *Client) Drain(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
 	c.mu.Lock()
 	ctxs := make([]jetstream.ConsumeContext, len(c.consumeCtxs))
 	copy(ctxs, c.consumeCtxs)
@@ -619,7 +624,12 @@ func (c *Client) Drain(timeout time.Duration) error {
 	}
 	c.closeOnce.Do(c.stopConsuming)
 
-	if !waitTimeout(&c.inflight, timeout) {
+	// Stop only *starts* the teardown: the subscription's delivery goroutine can still be inside
+	// the Consume callback, which is where inflight is incremented. Waiting on the counter while
+	// it can still rise from zero is a WaitGroup misuse -- and worse than pedantic, it lets Drain
+	// sail past a message the fetcher accepted a moment ago. Closed() is closed only once that
+	// delivery goroutine has exited, so past this point the count can only fall.
+	if !waitClosed(ctxs, time.Until(deadline)) || !waitTimeout(&c.inflight, time.Until(deadline)) {
 		c.conn.Close()
 		return ErrDrainTimeout
 	}
@@ -627,6 +637,20 @@ func (c *Client) Drain(timeout time.Duration) error {
 		return fmt.Errorf("nats drain: %w", err)
 	}
 	return nil
+}
+
+// waitClosed reports whether every consume context finished tearing down before timeout elapsed.
+func waitClosed(ctxs []jetstream.ConsumeContext, timeout time.Duration) bool {
+	timer := time.NewTimer(max(timeout, 0))
+	defer timer.Stop()
+	for _, cc := range ctxs {
+		select {
+		case <-cc.Closed():
+		case <-timer.C:
+			return false
+		}
+	}
+	return true
 }
 
 // waitTimeout reports whether wg reached zero before timeout elapsed.
