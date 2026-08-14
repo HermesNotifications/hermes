@@ -1,0 +1,169 @@
+# API services — higher resource allocation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-admin
+spec:
+  template:
+    spec:
+      containers:
+        - name: admin
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+# Finding 8's capacity half. hermes-send had no production resources block at all, so it ran
+# on the base request of 50m/64Mi.
+#
+# Its load profile is deliberately NOT admin's, and the numbers differ in both directions.
+# Send is a thin ingestion layer: authenticate the API key (HMAC-SHA256), dedupe on the
+# idempotency key in Redis, publish to NATS. No template resolution, no notification record,
+# no channel fan-out — dispatch does all of that. So per request the work is small but almost
+# entirely CPU-shaped (hash, JSON decode, publish), where admin's is IO-shaped (Postgres round
+# trips) and spends its time blocked rather than running.
+#
+# What differs is the rate. The rate limiter admits 2000 req/s sustained with a 5000 burst per
+# credential (send's defaultRateLimitPerSecond/defaultRateLimitBurst in internal/send/server.go),
+# four times admin's 500/s and 1000 — and admin's ceiling is really Postgres, not the limiter.
+# Both are overridable per Deployment via HERMES_RATELIMIT_BURST / HERMES_RATELIMIT_PER_SECOND,
+# and both are enforced PER REPLICA, so the cluster ceiling scales with the HPA below. CPU is
+# therefore both the binding resource and the right autoscaling signal, which is why the
+# request is 300m rather than admin's 200m: the HPA targets 70% of it, so a higher request
+# means each replica absorbs more before a scale-up, and the committed floor is honest about
+# what a busy send pod actually reserves.
+#
+# Memory matches admin at 256Mi/512Mi despite the lighter per-request work, because the thing
+# that sets send's heap is concurrent in-flight request bodies at burst, not retained state.
+# There is no CPU limit here, matching every other service in this file — a CPU limit on the
+# ingestion path converts a burst into throttling and queueing rather than into a scale-up.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-send
+spec:
+  template:
+    spec:
+      containers:
+        - name: send
+          resources:
+            requests:
+              cpu: 300m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-dispatch
+spec:
+  template:
+    spec:
+      containers:
+        - name: dispatch
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-inbox
+spec:
+  template:
+    spec:
+      containers:
+        - name: inbox
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-user
+spec:
+  template:
+    spec:
+      containers:
+        - name: user
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+# Workers
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-events
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-events
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-email
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-email
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-sms
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-sms
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-inbox
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker-inbox
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi

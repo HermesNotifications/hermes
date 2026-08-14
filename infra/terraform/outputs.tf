@@ -47,6 +47,35 @@ output "private_subnet_ids" {
   value       = module.vpc.private_subnet_ids
 }
 
+output "workload_subnet_ids" {
+  description = "Private subnets the node groups schedule into. A single entry when single_az_workloads is set, otherwise all of them."
+  value       = local.workload_subnet_ids
+}
+
+# Empty string, not null, for multi-AZ environments: the bootstrap script interpolates
+# this straight into the EnvironmentConfig, and `terraform output -raw` on a null prints
+# the word "null".
+#
+# When it is non-empty, it is the AZ that infra/crossplane/claims/loadtest/*.yaml must
+# name in `availabilityZone`. Terraform cannot set that itself — Aurora and ElastiCache
+# are Crossplane's — so this output is how the two stay in agreement. Check it with:
+#
+#   ./scripts/tfenv.sh loadtest output -raw workload_availability_zone
+output "workload_availability_zone" {
+  description = "AZ that workloads are pinned to, or \"\" when they are spread across all AZs. Crossplane claims for a single-AZ environment must match this."
+  value       = var.single_az_workloads ? module.vpc.first_availability_zone : ""
+}
+
+output "availability_zones" {
+  description = "Availability zones the VPC spans, in subnet index order"
+  value       = module.vpc.availability_zones
+}
+
+output "loadtest_generator_node_group_name" {
+  description = "Name of the k6 load generator node group, or null when the environment has no pool"
+  value       = module.eks.loadtest_generator_node_group_name
+}
+
 output "node_security_group_id" {
   description = "EKS node security group ID"
   value       = module.eks.node_security_group_id

@@ -156,6 +156,19 @@ spec:
                   - type: convert
                     convert:
                       toType: bool
+              # Pin the node to one AZ when the claim names one. The patch policy
+              # defaults to Optional, so a claim that omits spec.availabilityZone leaves
+              # preferredCacheClusterAzs unset and ElastiCache places the node itself —
+              # which is what staging and production want. A single-AZ environment must
+              # set it, or the cache lands in the AZ the EKS nodes are not in and every
+              # cache read and write crosses a billed boundary.
+              #
+              # Only index 0 is patched: this is for nodeCount 1. Pinning several nodes
+              # into one AZ would defeat automatic failover, which the numCacheClusters
+              # map above turns on at 2.
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.availabilityZone
+                toFieldPath: spec.forProvider.preferredCacheClusterAzs[0]
               - type: FromEnvironmentFieldPath
                 fromFieldPath: region
                 toFieldPath: spec.forProvider.region

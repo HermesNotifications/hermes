@@ -3,12 +3,12 @@
 # See LICENSE in the project root for license terms and DISCLAIMER.md for important usage information.
 
 variable "environment" {
-  description = "Environment name (staging or production)"
+  description = "Environment name (staging, production or loadtest)"
   type        = string
 
   validation {
-    condition     = contains(["staging", "production"], var.environment)
-    error_message = "Environment must be 'staging' or 'production'."
+    condition     = contains(["staging", "production", "loadtest"], var.environment)
+    error_message = "Environment must be 'staging', 'production' or 'loadtest'."
   }
 }
 
@@ -37,7 +37,8 @@ variable "aws_region" {
 #   10.10.0.0/16  Reserved for a future dev/sandbox environment.
 #   10.20.0.0/16  staging      (infra/terraform/environments/staging.tfvars)
 #   10.30.0.0/16  production   (infra/terraform/environments/production.tfvars)
-#   10.40.0.0/16+ Unallocated.
+#   10.40.0.0/16  loadtest     (infra/terraform/environments/loadtest.tfvars)
+#   10.50.0.0/16+ Unallocated.
 #
 # A /16 is 65,536 addresses. See modules/vpc/variables.tf for how it is carved up and why
 # the private subnets are /20 rather than /24.
@@ -49,6 +50,68 @@ variable "vpc_cidr" {
     condition     = can(cidrhost(var.vpc_cidr, 0)) && can(regex("/16$", var.vpc_cidr))
     error_message = "vpc_cidr must be a valid /16 CIDR block (the subnet layout in modules/vpc assumes a /16). See the allocation register in infra/terraform/variables.tf."
   }
+}
+
+# ------------------------------------------------------------------------------
+# Network topology
+# ------------------------------------------------------------------------------
+#
+# These two used to be expressions on the environment NAME in main.tf:
+#
+#   single_nat_gateway = var.environment == "staging"
+#   az_count           = var.environment == "production" ? 3 : 2
+#
+# That reads fine with two environments and silently mis-sizes the third: `loadtest`
+# is not "staging", so it would have inherited production's per-AZ NAT gateways —
+# three of them, for an environment whose entire point is to not pay for cross-AZ
+# anything. Deciding topology from a string comparison also means the only way to see
+# what an environment actually builds is to evaluate a conditional in your head.
+#
+# No defaults, deliberately, matching the treatment of vpc_cidr above: both are
+# ForceNew-adjacent (lowering az_count destroys subnets, and a subnet cannot be
+# destroyed while EKS or an RDS subnet group holds an ENI in it), so a silently
+# inherited default is the failure mode worth ruling out. Every tfvars file sets both.
+variable "vpc_az_count" {
+  description = "Number of availability zones the VPC spans. Two is the floor — EKS requires control-plane subnets in at least two AZs, including for single-AZ workload environments. See single_az_workloads."
+  type        = number
+
+  validation {
+    condition     = var.vpc_az_count >= 2 && var.vpc_az_count <= 6
+    error_message = "vpc_az_count must be between 2 and 6. Two is EKS's minimum for the control plane; above six, revisit the subnet layout in modules/vpc/main.tf first."
+  }
+}
+
+variable "vpc_single_nat_gateway" {
+  description = "Route every private subnet through one NAT gateway instead of one per AZ. Cheaper and not highly available: losing that AZ takes egress with it."
+  type        = bool
+}
+
+# Cross-AZ data transfer is billed per gigabyte in BOTH directions, on traffic that
+# never leaves the region and never appears on a bandwidth bill anyone is watching.
+# For the loadtest environment that traffic is the entire workload — generators to
+# services, services to Aurora, services to ElastiCache, NATS between pods — and a
+# multi-AZ spread would mean paying for roughly half of it twice, for an environment
+# whose availability requirement is nil.
+#
+# What this flag does and does not do:
+#
+#   DOES  pin the EKS node group (and the load generator pool) to the FIRST private
+#         subnet, so every pod, and therefore every pod-to-pod hop, lands in one AZ.
+#   DOES  require a single NAT gateway, which lives in the public subnet of that same
+#         AZ, so egress is same-AZ too.
+#   DOES NOT collapse the VPC to one AZ. EKS rejects a cluster whose vpc_config names
+#         subnets in fewer than two AZs, and an RDS DB subnet group needs two as well.
+#         The second AZ's subnets exist and stay empty; empty subnets cost nothing.
+#   DOES NOT pin Aurora or ElastiCache. Those are Crossplane's, not Terraform's — the
+#         claim sets `availabilityZone` and it must match the AZ this outputs as
+#         `workload_availability_zone`. See infra/crossplane/claims/loadtest/.
+#
+# The honest cost of turning it on: the environment dies with its AZ. That is the
+# correct trade for a load-test rig and the wrong one for anything serving users.
+variable "single_az_workloads" {
+  description = "Pin the node groups and NAT gateway to a single AZ to avoid cross-AZ data transfer charges. Trades availability for cost — the whole environment fails with that AZ. Requires vpc_single_nat_gateway."
+  type        = bool
+  default     = false
 }
 
 variable "eks_cluster_version" {
@@ -118,6 +181,38 @@ variable "eks_cluster_log_retention_days" {
   description = "CloudWatch retention for EKS control plane logs, audit logs included."
   type        = number
   default     = 90
+}
+
+# The pool contract in loadtest/k8s/node-pool.md — name, taint and label — is what every
+# manifest under loadtest/k8s/ already tolerates and selects on. It said "the actual pool
+# is created by Terraform / Crossplane under infra/", and until now nothing did. This is
+# that pool.
+#
+# Null means no pool, which is the right answer for staging and production: generators
+# hammering the same nodes as the services under test measures the noisy neighbour, not
+# the system. min_size 0 is deliberate — the pool scales to nothing between runs, so an
+# idle loadtest environment carries no generator spend at all.
+variable "loadtest_generator_node_pool" {
+  description = "Dedicated tainted node group for k6 load generators, per loadtest/k8s/node-pool.md. Null (the default) creates no pool."
+  type = object({
+    instance_types = list(string)
+    min_size       = number
+    max_size       = number
+    desired_size   = number
+  })
+  default = null
+
+  validation {
+    condition = var.loadtest_generator_node_pool == null || try(
+      var.loadtest_generator_node_pool.min_size >= 0 &&
+      var.loadtest_generator_node_pool.desired_size >= var.loadtest_generator_node_pool.min_size &&
+      var.loadtest_generator_node_pool.max_size >= var.loadtest_generator_node_pool.desired_size &&
+      var.loadtest_generator_node_pool.max_size > 0 &&
+      length(var.loadtest_generator_node_pool.instance_types) > 0,
+      false
+    )
+    error_message = "loadtest_generator_node_pool needs 0 <= min_size <= desired_size <= max_size, max_size > 0, and at least one instance type."
+  }
 }
 
 variable "github_org" {

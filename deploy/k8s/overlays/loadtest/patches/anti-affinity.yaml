@@ -1,0 +1,188 @@
+# Spread pods across NODES. Deliberately NOT a copy of ../../production/patches/anti-affinity.yaml.
+#
+# Production's file carries a `topology.kubernetes.io/zone` constraint alongside every
+# hostname one. Here every node is in the same zone by design (ADR 0023: the node group is
+# pinned to one subnet), so a zone constraint has exactly one topology domain to spread
+# across and is satisfied by any placement at all. Carrying it would be dead configuration
+# that reads like a high-availability control — the thing worth avoiding is a reader
+# concluding this environment is zone-spread when nothing here can make it so.
+#
+# What is kept, because it changes results:
+#
+#   * Soft hostname spread on the Deployments. Six send replicas stacked on one node while
+#     two nodes idle does not measure Hermes, it measures one node. `ScheduleAnyway` rather
+#     than a hard rule so a replica count above the node count still schedules — a run
+#     should degrade its spread, not fail to start.
+#
+#   * HARD hostname anti-affinity on NATS, matching production. JetStream's meta layer
+#     needs 2 of 3, and all three on one node means a single node loss takes the bus down
+#     mid-run. The cost is production's cost: **the loadtest node group needs at least 3
+#     schedulable nodes**, which is why eks_node_min_size is 3 in loadtest.tfvars. Below
+#     that a NATS pod stays Pending — loud, and diagnosable before a four-hour soak rather
+#     than during it.
+#
+# There is no PDB or HPA in this overlay to cross-reference; see kustomization.yaml for why.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-admin
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-admin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-send
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-send
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-dispatch
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-dispatch
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-inbox
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-inbox
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-user
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-user
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-events
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-events
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-email
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-email
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-sms
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-sms
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-inbox
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hermes-worker-inbox
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: centrifugo
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: centrifugo
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: nats

@@ -1,0 +1,67 @@
+# Image tags for the loadtest environment.
+#
+# UNLIKE ../../staging/images and ../../production/images, this file is NOT managed by
+# Kargo, and that is deliberate rather than an omission.
+#
+# Kargo promotes on new Freight. A loadtest environment wired into that chain would update
+# its images whenever a build landed — including partway through the four-hour nightly
+# soak, which would roll every Deployment and silently split the run across two builds.
+# The resulting number would be attributable to neither. There is no Stage for `loadtest`
+# in deploy/kargo/stages/ for the same reason.
+#
+# So tags here are set deliberately, by whoever is running the test, to the build under
+# test. All twelve images come from one commit (cd.yml builds them together), so in
+# practice that is one SHA pasted twelve times:
+#
+#   cd deploy/k8s/overlays/loadtest/images
+#   for i in admin dispatch inbox migrate send user worker-email worker-events \
+#            worker-inbox worker-sms natsprovision cleanup; do
+#     kustomize edit set image \
+#       "hermes-$i=471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-$i:<sha>"
+#   done
+#
+# Then commit — ArgoCD syncs from git, so an uncommitted change deploys nothing.
+#
+# Adding a new image to the platform means adding it here too. An image that appears in
+# ../../base but not in this list keeps its bare name, e.g. `hermes-cleanup`, which
+# resolves to docker.io/library/hermes-cleanup:latest — a render that passes every gate and
+# an ImagePullBackOff on apply.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+images:
+  - name: hermes-admin
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-admin
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-dispatch
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-dispatch
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-inbox
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-inbox
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-migrate
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-migrate
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-send
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-send
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-user
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-user
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-worker-email
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-email
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-worker-events
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-events
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-worker-inbox
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-inbox
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-worker-sms
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-worker-sms
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-natsprovision
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-natsprovision
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559
+  - name: hermes-cleanup
+    newName: 471524413120.dkr.ecr.us-east-1.amazonaws.com/hermes-cleanup
+    newTag: 78330aec9ad6368db7f1bc779da830be4f7e9559

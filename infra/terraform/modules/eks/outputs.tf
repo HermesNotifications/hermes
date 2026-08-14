@@ -51,3 +51,8 @@ output "crossplane_role_arn" {
   description = "IAM role ARN for Crossplane AWS provider (IRSA)"
   value       = aws_iam_role.crossplane.arn
 }
+
+output "loadtest_generator_node_group_name" {
+  description = "Name of the load generator node group, or null when no pool was requested"
+  value       = one(aws_eks_node_group.loadtest_generators[*].node_group_name)
+}

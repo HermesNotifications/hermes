@@ -1,0 +1,32 @@
+# NATS stays at the base's 3-replica cluster, unlike staging.
+#
+# Staging drops to 1 replica and overrides nats.conf to remove the cluster block, because a
+# one-peer JetStream meta layer never reaches quorum. That is the right trade for a
+# rehearsal environment and the wrong one here: JetStream replication is on the hot path of
+# every message this environment exists to measure, and a single-peer bus does no
+# replication at all — the run would report a throughput number that production can never
+# reproduce.
+#
+# So the args and nats.conf are untouched (base's clustered config applies), and the only
+# thing this patch changes is storage: the volumeClaimTemplate needs an explicit
+# storageClassName because ../storage-class.yaml is what defines gp3 here, and the disk is
+# larger than staging's because HERMES_NATS_STREAM_MAX_BYTES in kustomization.yaml is sized
+# for a sustained run rather than a smoke test.
+#
+# Note that volumeClaimTemplates are immutable on a StatefulSet: changing this size later
+# means deleting the StatefulSet (with --cascade=orphan, or accepting the data loss, which
+# in this environment is free).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 20Gi

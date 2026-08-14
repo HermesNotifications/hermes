@@ -216,7 +216,7 @@ resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${local.cluster_name}-nodes"
   node_role_arn   = aws_iam_role.node_group.arn
-  subnet_ids      = var.private_subnet_ids
+  subnet_ids      = var.node_subnet_ids
   instance_types  = var.node_instance_types
   ami_type        = "AL2023_ARM_64_STANDARD"
 
@@ -232,6 +232,19 @@ resource "aws_eks_node_group" "main" {
     max_unavailable = 1
   }
 
+  # Catching this at plan time rather than as an EKS API error mid-apply, by which point
+  # the cluster and the KMS key already exist.
+  lifecycle {
+    precondition {
+      condition     = length(var.node_subnet_ids) > 0
+      error_message = "node_subnet_ids is empty. A node group with no subnets cannot launch instances; pass at least one of private_subnet_ids."
+    }
+    precondition {
+      condition     = length(setsubtract(var.node_subnet_ids, var.private_subnet_ids)) == 0
+      error_message = "node_subnet_ids contains subnets that are not in private_subnet_ids. Nodes can only join subnets the cluster's vpc_config registered, and EKS reports the mismatch as a generic InvalidParameterException during apply."
+    }
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.node_worker,
     aws_iam_role_policy_attachment.node_cni,
@@ -240,6 +253,70 @@ resource "aws_eks_node_group" "main" {
 
   tags = {
     Name = "${local.cluster_name}-nodes"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# Load generator node group (optional)
+# ------------------------------------------------------------------------------
+#
+# Shares the node_group IAM role with the main pool: generators pull images from the
+# same ECR repositories and need the same CNI and worker permissions, and nothing about
+# running k6 wants anything more.
+#
+# It schedules into var.node_subnet_ids, the same subnets as the main pool. That is the
+# point in a single-AZ environment — generator-to-service traffic IS the load test, and
+# putting the generators in another AZ would bill every request twice on top of
+# measuring a network path production does not have.
+resource "aws_eks_node_group" "loadtest_generators" {
+  count = var.loadtest_generator_node_pool == null ? 0 : 1
+
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "loadtest-generators"
+  node_role_arn   = aws_iam_role.node_group.arn
+  subnet_ids      = var.node_subnet_ids
+  instance_types  = var.loadtest_generator_node_pool.instance_types
+  ami_type        = "AL2023_ARM_64_STANDARD"
+
+  disk_size = 50
+
+  scaling_config {
+    min_size     = var.loadtest_generator_node_pool.min_size
+    max_size     = var.loadtest_generator_node_pool.max_size
+    desired_size = var.loadtest_generator_node_pool.desired_size
+  }
+
+  # loadtest/k8s/node-pool.md. Both values are load-bearing: every manifest in
+  # loadtest/k8s/ carries a matching toleration and nodeSelector, so a change here
+  # leaves generator pods Pending with no obvious cause.
+  labels = {
+    pool = "loadtest-generators"
+  }
+
+  taint {
+    key    = "loadtest"
+    value  = "true"
+    effect = "NO_SCHEDULE"
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node_worker,
+    aws_iam_role_policy_attachment.node_cni,
+    aws_iam_role_policy_attachment.node_ecr,
+  ]
+
+  # desired_size is the autoscaler's after the first run. Terraform reasserting the
+  # configured value on every apply would yank capacity out from under a running test.
+  lifecycle {
+    ignore_changes = [scaling_config[0].desired_size]
+  }
+
+  tags = {
+    Name = "${local.cluster_name}-loadtest-generators"
   }
 }
 
