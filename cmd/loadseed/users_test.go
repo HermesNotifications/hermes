@@ -28,14 +28,30 @@ func TestInsertUsers_Copy(t *testing.T) {
 	}
 	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM organizations WHERE id = ANY($1)`, organizationIDs) }()
 
-	ids, err := insertUsers(ctx, pool, organizationIDs[0], 500, rid, 0)
+	users, err := insertUsers(ctx, pool, organizationIDs[0], 500, rid, 0)
 	if err != nil {
 		t.Fatalf("users: %v", err)
 	}
+	ids := make([]string, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
 	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = ANY($1)`, ids) }()
 
-	if len(ids) != 500 {
-		t.Fatalf("want 500 ids, got %d", len(ids))
+	if len(users) != 500 {
+		t.Fatalf("want 500 users, got %d", len(users))
+	}
+
+	// The returned ExternalID must be the one actually stored, because the scenarios
+	// send it as to.user_id and dispatch resolves it with EnsureUser(org, external_id).
+	// If it drifts, dispatch creates a fresh user and the inbox push goes to a channel
+	// nobody is subscribed to.
+	var storedExt string
+	if err := pool.QueryRow(ctx, `SELECT external_id FROM users WHERE id = $1`, users[0].ID).Scan(&storedExt); err != nil {
+		t.Fatalf("external_id: %v", err)
+	}
+	if storedExt != users[0].ExternalID {
+		t.Fatalf("external_id mismatch: manifest %q, database %q", users[0].ExternalID, storedExt)
 	}
 
 	var count int

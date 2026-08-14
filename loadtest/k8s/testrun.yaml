@@ -18,16 +18,41 @@ spec:
         effect: NoSchedule
     nodeSelector:
       pool: loadtest-generators
+    # Generator sizing, not system-under-test sizing. Requests are what cap how many runner
+    # pods fit on the generator nodes, so they are overridable: holding sockets is cheap on
+    # CPU and the default 2-core request reserves far more than a runner uses, which limits
+    # the connection count long before anything in Hermes is stressed.
     resources:
-      requests: { cpu: 2,  memory: 4Gi }
-      limits:   { cpu: 4,  memory: 8Gi }
+      requests: { cpu: "${RUNNER_CPU_REQ}",  memory: "${RUNNER_MEM_REQ}" }
+      limits:   { cpu: "${RUNNER_CPU_LIM}",  memory: "${RUNNER_MEM_LIM}" }
     env:
       - { name: RUN_ID,         value: "${RUN_ID}" }
       - { name: TARGET_RPS,     value: "${TARGET_RPS}" }
       - { name: VUS,            value: "${VUS}" }
+      # Connections, and how many of them each VU carries on its event loop. These are the
+      # knob that decides whether the run measures Hermes or measures k6: at one socket per
+      # VU the generator hosts hit a load average of 10 against 12 cores while using 3 of
+      # them, and the resulting latency tails were indistinguishable from server-side ones.
+      - { name: CONNECTIONS,       value: "${CONNECTIONS}" }
+      - { name: WS_SOCKETS_PER_VU, value: "${WS_SOCKETS_PER_VU}" }
+      # Seconds spent opening connections before the hold. Opening them all at once is a
+      # thundering herd, not a load test -- 250k simultaneous dials drove the generators to
+      # 80% CPU and left a third of the sockets permanently unestablished.
+      - { name: WS_RAMP_SECONDS,   value: "${WS_RAMP_SECONDS}" }
+      # Channel mix, e.g. "inbox:100" to exercise the realtime path alone.
+      #
+      # Worth pinning for a throughput test: an evaluation install has no SMTP server, so
+      # every notification routed to email fails and is retried, and the resulting DELIVERY
+      # backlog looks exactly like the delivery tier failing to keep up. It is not -- the
+      # inbox consumer sat at zero pending throughout.
+      - { name: CHANNEL_WEIGHTS,   value: "${CHANNEL_WEIGHTS}" }
       - { name: SEND_RPS,       value: "${SEND_RPS}" }
       - { name: POLL_RPS,       value: "${POLL_RPS}" }
       - { name: DURATION,       value: "${DURATION}" }
+      # Must be >= DURATION for a steady connection-hold test. Left at the lib default of
+      # 60s, every VU closes and reopens its socket each minute, so a long run measures
+      # reconnect churn rather than the ceiling of concurrently held connections.
+      - { name: WS_HOLD_SECONDS, value: "${WS_HOLD_SECONDS}" }
       - { name: ADMIN_URL,      value: "${ADMIN_URL}" }
       - { name: SEND_URL,       value: "${SEND_URL}" }
       - { name: INBOX_URL,      value: "${INBOX_URL}" }
@@ -37,7 +62,9 @@ spec:
       - { name: SEED_MANIFEST,  value: "/manifest/seed-manifest.json" }
     volumeMounts:
       - { name: manifest, mountPath: /manifest, readOnly: true }
-  volumes:
-    - name: manifest
-      secret:
-        secretName: loadtest-manifest
+    # Under `runner`, not at the top of `spec`. The TestRun CRD uses strict decoding, so a
+    # top-level `spec.volumes` is rejected outright rather than ignored.
+    volumes:
+      - name: manifest
+        secret:
+          secretName: loadtest-manifest

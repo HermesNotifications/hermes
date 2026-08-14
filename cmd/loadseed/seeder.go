@@ -32,8 +32,7 @@ func runSeed(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 
 	m.Organizations = make([]Organization, cfg.Organizations)
 	for i, tid := range organizationIDs {
-		userIDs, err := insertUsers(ctx, pool, tid, cfg.UsersPerOrganization, rid, i)
-		if err != nil {
+		if _, err := insertUsers(ctx, pool, tid, cfg.UsersPerOrganization, rid, i); err != nil {
 			return fmt.Errorf("users[%d]: %w", i, err)
 		}
 		cats, err := insertSubscriptionTree(ctx, pool, rid, i,
@@ -41,7 +40,12 @@ func runSeed(ctx context.Context, pool *pgxpool.Pool, cfg Config) error {
 		if err != nil {
 			return fmt.Errorf("tree[%d]: %w", i, err)
 		}
-		m.Organizations[i] = Organization{ID: tid, Users: userIDs, Categories: cats}
+		m.Organizations[i] = Organization{
+			ID:         tid,
+			Index:      i,
+			UserCount:  cfg.UsersPerOrganization,
+			Categories: cats,
+		}
 	}
 
 	if err := m.Write(cfg.OutputPath); err != nil {
