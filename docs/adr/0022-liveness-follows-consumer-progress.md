@@ -1,6 +1,6 @@
 # ADR 0022: Make liveness follow consumer progress
 
-**Status:** Accepted  
+**Status:** Accepted — clarified 2026-08-13 (the lag alert this contrasts against has been replaced; the decision is unchanged)  
 **Date:** 2026-08-13  
 **Author:** Platform
 
@@ -21,6 +21,17 @@ because of what the signals actually asked:
 - `NATSConsumerLag` (warn, `num_pending > 1000` for 5m) asked whether a backlog existed. A backlog
   also exists during a legitimate traffic spike, so the alert cannot distinguish "busy" from
   "wedged" and does not page.
+
+> **Clarification, 2026-08-13.** `NATSConsumerLag` no longer exists. That third bullet was a
+> correct criticism of a static depth threshold, and it has since been acted on: the rule was
+> replaced by `NATSConsumerBacklogGrowing` (time-to-drain) and `NATSConsumerBacklogUnbounded`
+> (sustained growth), which *do* separate a queue absorbing a burst from one losing a race.
+>
+> This does not weaken the decision below. Neither replacement can distinguish a wedged consumer
+> from an idle one — both are derived from backlog, and a wedged consumer with an empty queue
+> produces no backlog at all. Consumer *progress* remains the only signal that answers the
+> question this ADR is about, and the time-to-drain rule deliberately excludes a zero drain rate
+> so the two alerts do not double-fire on the same wedge.
 
 Nothing asked whether the consumer was still taking work. The trigger was never identified — the
 leading hypothesis, a `nats stream purge` wedging the attached consumer, was tested directly and
