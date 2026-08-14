@@ -1,8 +1,22 @@
-# Runbook: `HighLatency`
+# Runbook: `HighLatency` / `SendIngestionLatency`
 
 ## What this alert means
 
-p95 latency on the service's HTTP endpoints is above 1s for 10 minutes. Users are experiencing noticeable slowness.
+p95 latency on the service's HTTP endpoints is above threshold for 10 minutes. Users are experiencing noticeable slowness.
+
+| alert | covers | threshold |
+|---|---|---|
+| `HighLatency` | every service except `hermes-send` | p95 > 1s |
+| `SendIngestionLatency` | `hermes-send` only | p95 > 100ms |
+
+> **Neither alert can tell you whether notifications are being delivered.** Send publishes to
+> JetStream and returns, so it answers in ~2ms whether or not anything downstream keeps up. At
+> 6,000/s offered with **764,173** messages backed up behind it, send's p95 read 60ms and its
+> error rate was 0.00%. Send has its own tighter threshold precisely because 1s was
+> unreachable for it — but even at 100ms, this is a statement about *ingestion*, not delivery.
+>
+> For delivery, see [nats-consumer-lag.md](nats-consumer-lag.md). Alert on consumer backlog,
+> never on ingestion latency.
 
 ## Immediate triage
 
@@ -30,7 +44,9 @@ p95 latency on the service's HTTP endpoints is above 1s for 10 minutes. Users ar
 
 ### If downstream saturation
 
-- Check `NATSConsumerLag` alert — if firing, see that runbook.
+- Check `NATSConsumerBacklogGrowing` / `NATSConsumerBacklogUnbounded` — if firing, see
+  [nats-consumer-lag.md](nats-consumer-lag.md).
+- Check `HermesWorkerPoolSaturated` — see [worker-pool-saturated.md](worker-pool-saturated.md).
 - Check `DBPoolSaturated` — if firing, see that runbook.
 
 ### If traffic spike
@@ -41,7 +57,36 @@ p95 latency on the service's HTTP endpoints is above 1s for 10 minutes. Users ar
 ### If GC
 
 - Usually means a memory leak or recently added unbounded allocation. Check heap trend over the past 24h.
-- Go profiling: `pprof` at `:6060/debug/pprof/heap`. Phase 2 wires continuous profiling.
+
+### Profiling
+
+Requires `HERMES_DEBUG_PORT` set on the service (off by default; the port is deliberately not
+in any Service, so reaching it needs a port-forward). Images are `FROM scratch` with no shell,
+so fetch the profile and analyse it locally against the binary:
+
+```bash
+kubectl -n hermes port-forward deploy/hermes-<service> 6060:6060
+
+go tool pprof -http=:8090 bin/<service>/service http://localhost:6060/debug/pprof/heap
+go tool pprof -http=:8091 bin/<service>/service 'http://localhost:6060/debug/pprof/profile?seconds=30'
+```
+
+**A CPU profile is usually the wrong first look here.** At 250,000 connections Hermes sat at
+11–24% node CPU with the inbox pod at 50m — the time goes on waiting, not computing, and only
+the block and mutex profiles record waiting. Those need `HERMES_BLOCK_PROFILE_RATE` /
+`HERMES_MUTEX_PROFILE_FRACTION` set as well:
+
+```bash
+go tool pprof -http=:8092 bin/<service>/service http://localhost:6060/debug/pprof/block
+```
+
+For a service that has stopped doing anything rather than slowed down, capture the full
+goroutine dump **before** restarting the pod — it is the artifact that was lost the first time
+a consumer wedged:
+
+```bash
+curl -s 'localhost:6060/debug/pprof/goroutine?debug=2' > wedge.txt
+```
 
 ## Escalation
 

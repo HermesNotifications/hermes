@@ -464,6 +464,12 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 	// to take its first message before anything can call it wedged. See stall.go.
 	prog := newConsumerProgress(streamName, cfg.Consumer, cons, c.stallTimeout)
 
+	// Publish the pool size so hermes.messaging.inflight has a denominator. See metrics.go.
+	workersLimit.Add(context.Background(), int64(workers), metric.WithAttributes(
+		attribute.String("stream", streamName),
+		attribute.String("consumer", cfg.Consumer),
+	))
+
 	// One fetcher (the Consume loop) hands messages to a bounded worker pool over
 	// an unbuffered channel. When all workers are busy the hand-off blocks, which
 	// stops the fetcher draining its prefetch buffer — natural backpressure. The

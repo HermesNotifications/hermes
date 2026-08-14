@@ -38,10 +38,16 @@ spec:
             description: "{{ $labels.service }} 5xx rate is {{ $value | humanizePercentage }} (>1%) for 5 minutes."
             runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/high-error-rate.md"
 
+        # Read-path services only. hermes-send is excluded and has its own rule below, because
+        # a 1s threshold on it is not a loose threshold -- it is an unreachable one. Send
+        # authenticates, dedupes and publishes to JetStream, so it answers in ~2ms regardless
+        # of whether anything downstream can keep up: at 6,000/s offered with 764,173 messages
+        # backed up behind it, its p95 was 60ms. This rule would never have fired, and cannot,
+        # for any write-path failure.
         - alert: HighLatency
           expr: |
             histogram_quantile(0.95,
-              sum by (service, le) (rate(http_server_request_duration_seconds_bucket{service=~"hermes-.+"}[5m]))
+              sum by (service, le) (rate(http_server_request_duration_seconds_bucket{service=~"hermes-.+",service!="hermes-send"}[5m]))
             ) > 1.0
           for: 10m
           labels:
@@ -50,4 +56,26 @@ spec:
           annotations:
             summary: "High p95 latency on {{ $labels.service }}"
             description: "{{ $labels.service }} p95 is {{ $value }}s (>1s) for 10 minutes."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/high-latency.md"
+
+        # Send gets a threshold matched to what it actually does. 100ms is ~50x its measured
+        # p95 under load, so it still only fires on a real regression -- but a regression is
+        # now detectable, which at 1s it was not.
+        #
+        # This alert says nothing about whether notifications are being delivered. Ingestion
+        # latency and pipeline health are independent by design; the queue absorbing the
+        # difference is the architecture working. NATSConsumerBacklogUnbounded is the alert
+        # that covers delivery.
+        - alert: SendIngestionLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (service, le) (rate(http_server_request_duration_seconds_bucket{service="hermes-send"}[5m]))
+            ) > 0.1
+          for: 10m
+          labels:
+            severity: warn
+            component: service
+          annotations:
+            summary: "Send ingestion p95 is {{ $value }}s"
+            description: "hermes-send p95 is {{ $value }}s (>100ms) for 10 minutes. Send is a thin ingestion layer and normally answers in ~2ms; this is a regression in auth, idempotency or the JetStream publish. It is NOT a signal about delivery -- check consumer backlog for that."
             runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/high-latency.md"

@@ -1,68 +1,112 @@
-# Runbook: `NATSConsumerLag`
+# Runbook: `NATSConsumerBacklogGrowing` / `NATSConsumerBacklogUnbounded`
 
-## What this alert means
+## What these alerts mean
 
-A NATS JetStream consumer has more than 1000 pending messages that haven't been delivered and acknowledged for at least 5 minutes. Either the worker is slow, the worker is down, or upstream is publishing faster than workers can consume.
+Both are about a JetStream consumer that is behind. They differ in what "behind" means, and
+the distinction is the point — a queue absorbing a burst and a pipeline losing a race look
+identical if you only measure depth.
+
+| alert | fires when | says |
+|---|---|---|
+| `NATSConsumerBacklogGrowing` | time-to-drain > 5 min for 10 min | the backlog is deep relative to how fast it clears |
+| `NATSConsumerBacklogUnbounded` | backlog growing continuously for 15 min | offered rate exceeds drain rate; it will not recover on its own |
+
+`NATSConsumerBacklogUnbounded` is the more serious of the two. A deep backlog that is draining
+resolves itself; one that grows does not.
+
+> **Do not judge this from API latency.** Send publishes to JetStream and returns in about 2ms
+> whether or not anything downstream keeps up. A 12,000/s run left **1,010,571 messages**
+> queued while `send_ack_latency` p95 read 2ms and `http_req_failed` was 0.00%. The write path
+> can be completely stopped with every HTTP signal green — that is what
+> `hermes_messaging_consumer_progress_age_seconds` and these alerts exist for.
 
 ## Immediate triage
 
 ```bash
-# Which stream/consumer is lagging? The alert label shows it.
-# kubectl port-forward the NATS service to get a local CLI:
+# What the alert is computed from, in one place:
+#   backlog        hermes:consumer_pending
+#   drain rate     hermes:consumer_drain_rate
+#   seconds behind hermes:consumer_seconds_to_drain
+
 kubectl -n hermes port-forward svc/nats 8222:8222 &
 nats consumer info <stream> <consumer>
 ```
 
-Dashboard: **Hermes infra** → "NATS consumer pending messages" panel.
+Dashboard: **Hermes pipeline** → "Consumer backlog and drain rate".
 
-## Common causes (ranked by frequency)
+The two numbers to read together are backlog and drain rate. Backlog alone tells you nothing:
+5,000 messages draining at 1,242/s is four seconds; 5,000 draining at 5/s is sixteen minutes.
 
-1. **Worker is down or scaled to zero.** Check the corresponding worker's `ServiceDown` status.
-2. **Worker is slow.** Its HTTP-like throughput (messages/sec) has dropped. Often a downstream dependency is to blame — check the worker's error rate and latency.
-3. **Upstream spike.** Legitimate traffic surge. Workers are healthy but not scaled enough.
-4. **Poison message stalling the consumer.** Worker can't process message X, keeps retrying, nothing behind X moves. Check worker logs for repeated errors.
-5. **NATS broker issue.** Rare but check `nats stream info` — is the stream reporting healthy? Disk full?
+## Is it stalled, or just slow?
+
+Check `HermesConsumerStalled` first. A drain rate of **exactly zero** with work pending is a
+wedged consumer, not a slow one, and it has its own runbook
+([consumer-stalled.md](consumer-stalled.md)) — including the instruction to capture logs and
+`consumer info` *before* restarting, which is the step that was missed the first time this
+happened.
+
+## Common causes, ranked
+
+1. **Worker pool saturated.** Every worker busy, queue growing. See
+   [worker-pool-saturated.md](worker-pool-saturated.md) — this is a concurrency setting, and
+   it is the most common cause on dispatch.
+2. **Worker down or scaled to zero.** Check `ServiceDown` for the corresponding service.
+3. **A downstream dependency is slow.** Check `hermes_messaging_handler_duration_seconds` p95
+   for the consumer, and the dependency's own metrics.
+4. **Upstream spike.** Legitimate surge; workers healthy but insufficient.
+5. **Poison message.** A handler that cannot process message X and retries forever blocks
+   nothing behind it (workers are a pool, not a queue) but will show as a rising
+   `hermes_messaging_redeliveries` and eventually `HermesDeadLetterDetected`.
+6. **NATS broker issue.** `nats stream info <stream>` — storage full, no leader.
 
 ## Mitigations
 
-### If worker down
+### If the pool is saturated
 
-See `service-down.md` for that worker service.
+Raise worker count before adding replicas. Measured on the same hardware and storage:
 
-### If worker slow
+| change | result |
+|---|---|
+| 8 → 64 workers, one replica | 2,100 → **7,907** msg/s |
+| 1 → 4 replicas, 8 workers each | 1,242 → **2,006** msg/s |
 
-- Check the worker's `HighLatency` / `HighErrorRate` alerts.
-- Scale up replicas: `kubectl scale deployment hermes-worker-<kind> --replicas=<n>`.
-- HPA should handle this automatically — if it isn't, investigate metrics-server.
+Replicas buy Postgres connections faster than they buy throughput, and `max_connections`
+is the limit you hit. See [worker-pool-saturated.md](worker-pool-saturated.md).
 
-### If upstream spike
+### If a worker is down
 
-- Confirm it's legitimate (not a retry storm). Check the publishing service's RPS.
-- Temporary: increase worker replicas to the spike's shape.
-- Long-term: either the HPA target needs tuning, or add a rate-limit upstream.
+See [service-down.md](service-down.md).
 
-### If poison message
+### If it is an upstream spike
 
-1. Get the message:
-   ```bash
-   nats stream view <stream> --raw
-   ```
-2. If safe to drop: `nats consumer next <stream> <consumer> --ack` to advance past it.
-3. Open a bug — the worker needs to handle this input shape without getting stuck.
+Confirm it is real traffic and not a retry storm — check `hermes_messaging_redeliveries` and
+the publishing service's request rate. A queue absorbing a spike is the design working; watch
+`NATSConsumerBacklogUnbounded` rather than intervening on depth alone.
 
-### If NATS itself
+### If it is a poison message
 
-- Check `nats stream info <stream>` for `bytes` vs max.
-- If full, either GC old messages or increase the stream storage.
-- Escalate to infra on-call.
+```bash
+nats stream view <stream> --raw
+```
+
+Terminally failed messages land on the DLQ stream rather than blocking — see
+[dead-letter-queue.md](dead-letter-queue.md) for inspection and replay.
+
+### If it is NATS itself
+
+`nats stream info <stream>` for `bytes` vs max. If full, GC or raise stream storage.
+Escalate to infra on-call.
 
 ## Escalation
 
-- Worker owner teams for their own workers.
-- Infra for NATS-level issues (broker, storage).
+- Service owners for their own consumers.
+- Infra for NATS-level issues (broker, storage, leadership).
 
 ## Post-incident
 
+- If concurrency was the cause, the new value belongs in the chart values, not in a
+  `kubectl set env` that the next deploy reverts.
 - If a poison message caused it, add a test for that input shape.
-- If HPA didn't scale fast enough, tune target.
-- If the stream hit disk limits, reassess retention / sizing.
+- If the backlog was invisible until a customer noticed, that is an alerting gap — these
+  rules are derived from drain rate, so a consumer with no traffic at all emits no drain
+  rate and produces no ratio. Check whether the consumer should have a floor on throughput.
