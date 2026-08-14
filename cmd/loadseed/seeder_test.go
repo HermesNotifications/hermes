@@ -47,8 +47,20 @@ func TestSeeder_EndToEnd(t *testing.T) {
 	if len(m.Organizations) != 2 {
 		t.Fatalf("want 2 organizations, got %d", len(m.Organizations))
 	}
-	if len(m.Organizations[0].Users) != 50 {
-		t.Fatalf("want 50 users, got %d", len(m.Organizations[0].Users))
+	if m.Organizations[0].UserCount != 50 {
+		t.Fatalf("want 50 users, got %d", m.Organizations[0].UserCount)
+	}
+	// The regenerated ids must be the ones actually inserted, since nothing else ties the
+	// manifest's counts back to the rows in the database.
+	users := m.UsersOf(m.Organizations[0])
+	var count int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM users WHERE id = $1 AND external_id = $2`,
+		users[0].ID, users[0].ExternalID).Scan(&count); err != nil {
+		t.Fatalf("lookup regenerated user: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("regenerated user %+v does not exist in the database", users[0])
 	}
 	if m.APIKey == "" {
 		t.Fatalf("api key not set")

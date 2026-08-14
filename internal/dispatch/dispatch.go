@@ -43,10 +43,30 @@ type Dispatch struct {
 	templateResolver *TemplateResolver
 	channelResolver  *ChannelResolver
 	logger           *slog.Logger
+
+	// The two upserts that precede every notification insert, memoized per replica.
+	// Both may be nil, which disables them — see identity_cache.go for what is cached,
+	// what deliberately is not, and why this is in-process rather than in Redis.
+	organizationsSeen *lruCache[string, struct{}]
+	usersByExternalID *lruCache[userKey, cachedUser]
 }
 
-func NewDispatch(nats bus, store store.NotificationRepository, users store.UserRepository, organizations store.OrganizationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger) *Dispatch {
-	return &Dispatch{
+// Option adjusts a Dispatch at construction. Introduced so the identity caches could be
+// sized without growing the positional parameter list a sixth caller would have to thread
+// a value through.
+type Option func(*Dispatch)
+
+// WithIdentityCache sizes the per-replica organization and user caches. A size of zero or
+// less turns them off, which restores the pre-cache behaviour of one upsert per message.
+func WithIdentityCache(size int) Option {
+	return func(d *Dispatch) {
+		d.organizationsSeen = newLRUCache[string, struct{}](size)
+		d.usersByExternalID = newLRUCache[userKey, cachedUser](size)
+	}
+}
+
+func NewDispatch(nats bus, store store.NotificationRepository, users store.UserRepository, organizations store.OrganizationRepository, templateResolver *TemplateResolver, channelResolver *ChannelResolver, logger *slog.Logger, opts ...Option) *Dispatch {
+	d := &Dispatch{
 		nats:             nats,
 		store:            store,
 		users:            users,
@@ -55,6 +75,14 @@ func NewDispatch(nats bus, store store.NotificationRepository, users store.UserR
 		channelResolver:  channelResolver,
 		logger:           logger,
 	}
+	// Caching is the default rather than opt-in: it is a straight win for every caller,
+	// and the callers that do not read config (the e2e harness, cmd/dispatchbench) are
+	// exactly the ones whose measurements should reflect what production runs.
+	WithIdentityCache(DefaultIdentityCacheSize)(d)
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
 }
 
 // Start begins consuming notification.send with a pool of `workers` processing
@@ -102,7 +130,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 	// This guarantees a DB record exists for troubleshooting even if later steps fail.
 	// Failures here are transient (DB down) and retryable, but we give up on last attempt.
 
-	if _, err := d.organizations.EnsureOrganization(ctx, msg.OrganizationID); err != nil {
+	if err := d.ensureOrganization(ctx, msg.OrganizationID); err != nil {
 		log.Error("ensure organization", "error", err, "organization_id", msg.OrganizationID)
 		if isPermanentDBError(err) {
 			return permanent(fmt.Errorf("ensure organization: %w", err))
@@ -110,7 +138,7 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure organization: %w", err))
 	}
 
-	user, err := d.users.EnsureUser(ctx, msg.OrganizationID, msg.ExternalUserID)
+	user, err := d.ensureUser(ctx, msg.OrganizationID, msg.ExternalUserID)
 	if err != nil {
 		log.Error("ensure user", "error", err)
 		return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("ensure user: %w", err))

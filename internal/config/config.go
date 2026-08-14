@@ -138,6 +138,14 @@ type Config struct {
 	// pipeline stays full without hoarding the backlog. Tunable for load-test sweeps.
 	DispatchPrefetch int
 
+	// DispatchIdentityCacheSize bounds the in-process caches dispatch keeps in front
+	// of the organization and user upserts that precede every notification insert.
+	// The upserts write nothing after the first message for a given id, but they are
+	// still statements that reach the WAL — and WAL fsync, not CPU, is dispatch's
+	// measured ceiling. Per replica, not shared: the point is to make no round trip
+	// at all, so a shared cache would defeat it. Zero disables caching entirely.
+	DispatchIdentityCacheSize int
+
 	// NATSStreamMaxBytes bounds each JetStream work stream on disk. Only the
 	// provisioner Job's value takes effect — under ADR 0005 phase 4 it is the one
 	// identity permitted to create or update a stream. Zero keeps
@@ -240,9 +248,15 @@ func Load() Config {
 		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
 		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 8),
 		DispatchPrefetch:    envInt("HERMES_DISPATCH_PREFETCH", 64),
-		RateLimitEnabled:    envBool("HERMES_RATELIMIT_ENABLED", true),
-		RateLimitBurst:      envInt("HERMES_RATELIMIT_BURST", 0),
-		RateLimitPerSecond:  envInt("HERMES_RATELIMIT_PER_SECOND", 0),
+
+		// Kept in step with dispatch.DefaultIdentityCacheSize by hand rather than by
+		// import: config is imported by every service, and a service package importing
+		// back into it is the wrong direction of dependency.
+		DispatchIdentityCacheSize: envInt("HERMES_DISPATCH_IDENTITY_CACHE_SIZE", 10_000),
+
+		RateLimitEnabled:   envBool("HERMES_RATELIMIT_ENABLED", true),
+		RateLimitBurst:     envInt("HERMES_RATELIMIT_BURST", 0),
+		RateLimitPerSecond: envInt("HERMES_RATELIMIT_PER_SECOND", 0),
 
 		// Off by default, and this is the safe direction rather than the timid one.
 		// Behind an ingress controller every request carries the controller's pod IP

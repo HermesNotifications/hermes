@@ -17,9 +17,14 @@ server:
     requests: { cpu: 500m, memory: 2Gi }
     limits:   { cpu: 2,    memory: 4Gi }
 
+# Subchart toggles. The key must match the subchart's alias exactly -- Helm ignores an
+# unrecognised top-level key rather than rejecting it, so a near-miss disables nothing and
+# you only notice when the pod turns up. `pushgateway:` is such a near-miss; the alias is
+# `prometheus-pushgateway`, and with the wrong key the pushgateway deployed happily onto
+# whichever node the scheduler liked, including the one running the system under test.
 alertmanager:
   enabled: false
-pushgateway:
+prometheus-pushgateway:
   enabled: false
 prometheus-node-exporter:
   enabled: false

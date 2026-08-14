@@ -55,6 +55,9 @@ Dashboard: **Hermes infra** → "Postgres — Active connections".
   Deployment's `env`). Note the connection-string parameter `pool_max_conns` overrides it if
   present — `cmd/dispatchbench` relies on that, and a URL that carries it will ignore the
   variable.
+- On the Helm chart, dispatch is the one service with a value for this: `dispatch.concurrency`
+  sizes the worker pool and the connection pool follows it (`concurrency + 2`). Raising the pool
+  there without raising `concurrency` buys dispatch nothing — the clamp runs the other way.
 - Check the arithmetic first: `scripts/check_db_pool_budget.py` sums `maxReplicas × MAX_CONNS`
   across the render. Raising one service's pool without re-running it is how the cluster total
   finds Postgres' `max_connections` the hard way.

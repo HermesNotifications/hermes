@@ -329,6 +329,55 @@ dispatch:
     repository: hermes-dispatch
     tag: ""
   port: 8081
+  # -- Size of the dispatch worker pool (HERMES_DISPATCH_CONCURRENCY): how many
+  # notification.send messages are processed in parallel by one replica.
+  #
+  # This is the chart's single largest throughput lever, and it was not settable at all before
+  # -- neither this nor the pool below appeared anywhere in the chart, so every documented
+  # install ran at 8 whatever the hardware. cmd/dispatchbench, run inside a cluster against
+  # Longhorn-backed Postgres:
+  #
+  #     workers   msgs/s
+  #           8    2,100   <- this default
+  #          16    3,511
+  #          32    5,534
+  #          64    7,907
+  #
+  # 3.8x from configuration alone. Dispatch is I/O-bound, not CPU-bound: Postgres amortises
+  # concurrent commits into shared WAL flushes and the amortisation scales with how many are in
+  # flight, so 8 workers simply do not give it enough to work with. The ceiling is the
+  # database's appetite for concurrency, not this pod's cores.
+  #
+  # Raising it costs Postgres connections, one per worker plus the headroom below. Read
+  # `database.maxConns` before going past 16 -- on the bundled evaluation Postgres the chart
+  # will refuse an install whose fleet cannot fit in max_connections.
+  concurrency: 8
+  database:
+    # -- Postgres pool size for dispatch (HERMES_DATABASE_MAX_CONNS). Empty derives it from
+    # `concurrency`, which is the point: leave it empty.
+    #
+    # These two are one knob with two halves, and getting that wrong is silent. cmd/dispatch
+    # clamps the worker pool to the pool size at startup (dispatch.ClampWorkersToPool -- a
+    # worker holds a connection for as long as it is processing, so workers beyond the pool
+    # only add contention), which means raising `concurrency` against an unchanged pool
+    # changes throughput by exactly nothing and reports it in a single startup warning.
+    # Deriving the pool is what makes that trap unreachable; setting this below `concurrency`
+    # by hand is refused at render time rather than clamped at runtime.
+    #
+    # The derived value is `concurrency` + 2, not `concurrency`. /readyz pings this pool
+    # (bootstrap.PostgresCheck), so a pool sized exactly to the workers makes the probe queue
+    # behind them at precisely the load the tuning was for -- readinessProbe.failureThreshold
+    # is 1 here, so one queued ping takes the pod out of the Service endpoints. Two spare
+    # connections keep probes and pool housekeeping off the workers' path.
+    #
+    # At the default concurrency of 8 this is 10, which is database.DefaultPoolConfig.MaxConns
+    # to the connection: rendering defaults deploys what the chart has always deployed.
+    #
+    # Note that `pool_max_conns` in HERMES_DATABASE_URL wins over this (see
+    # database.NewPoolWithConfig, whose precedence exists for cmd/dispatchbench), and that URL
+    # is shared by every service. The chart refuses combinations where the URL would silently
+    # override what you set here.
+    maxConns: ""
   resources:
     # Non-empty on purpose. With no requests the scheduler packs blind and these pods are the
     # first evicted under node pressure -- precisely the churn this is meant to survive -- and
@@ -954,6 +1003,23 @@ postgresql:
     username: hermes
     password: hermes
     database: hermes
+  # -- `max_connections` for the bundled server. Empty keeps the postgres image default of 100.
+  #
+  # This is here because 100 is not a lot once you start tuning. Every Hermes service holds its
+  # own pgx pool of 10 (database.DefaultPoolConfig), nine services at one replica is 90, and
+  # that is before dispatch.concurrency asks for more -- a dispatch pool of 64 across two
+  # replicas is 128 on its own. Exhausting it does not fail where you caused it: Postgres
+  # answers "sorry, too many clients already" to whichever service connects next, so the
+  # symptom appears in inbox or admin while dispatch runs fine.
+  #
+  # templates/_validate.tpl does that arithmetic at render time whenever dispatch is tuned
+  # above the built-in pool size, and this is the value that makes its answer fixable without
+  # leaving the bundled path. Each slot costs the server a few hundred KB of shared memory plus
+  # a backend process if used, so raise postgresql.resources with it.
+  #
+  # It is still an evaluation datastore (ADR 0009): one replica, no backups, no replication.
+  # Real throughput work belongs on externalPostgresql.
+  maxConnections: ""
   tls:
     # -- Bring your own certificate instead of having the chart issue one. Needs tls.crt,
     # tls.key and ca.crt -- the shape cert-manager produces, and equally the shape
@@ -978,6 +1044,14 @@ postgresql:
     size: 8Gi
     # -- Empty uses the cluster default StorageClass.
     storageClass: ""
+  # -- Size of /dev/shm for the Postgres container.
+  #
+  # Kubernetes defaults a container's /dev/shm to 64Mi no matter how much memory the node
+  # has, and Postgres allocates parallel workers' shared memory out of it. Once a table is
+  # big enough for the planner to pick a parallel plan, queries fail rather than slow down:
+  # "could not resize shared memory segment ... No space left on device". Raise it with
+  # shared_buffers and work_mem if you tune those.
+  shmSize: 256Mi
   resources: {}
 
 # -- Bundled evaluation Redis. See templates/redis.yaml; no authentication by design.
@@ -1011,6 +1085,23 @@ redis:
     # -- Empty uses the cluster default StorageClass.
     storageClass: ""
   resources: {}
+  metrics:
+    # -- Run a redis_exporter sidecar exposing Prometheus metrics on port 9121, and add a
+    # `metrics` port to the Redis Service.
+    #
+    # Off by default to keep the evaluation install small, but worth turning on before this
+    # Redis carries anything you would miss. It is not only a cache: it holds the
+    # idempotency keys that stop a retried send being delivered twice, and when Centrifugo
+    # runs on the Redis engine it is also the realtime broker every websocket publication
+    # passes through -- so it becomes load-bearing for connection fan-out at exactly the
+    # point you scale the realtime tier out. Nothing else in the chart exposes its state.
+    enabled: false
+    image:
+      # -- The exporter the Prometheus community maintains for Redis.
+      repository: docker.io/oliver006/redis_exporter
+      tag: "v1.67.0"
+      pullPolicy: IfNotPresent
+    resources: {}
 
 # -- NATS sub-chart configuration
 nats:

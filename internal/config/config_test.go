@@ -32,6 +32,19 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.DispatchPrefetch != 64 {
 		t.Fatalf("expected default DispatchPrefetch 64, got %d", cfg.DispatchPrefetch)
 	}
+	// Non-zero by default: zero is the documented "no caching" value, so a default of
+	// zero would silently hand every deployment the uncached write path back.
+	if cfg.DispatchIdentityCacheSize != 10_000 {
+		t.Fatalf("expected default DispatchIdentityCacheSize 10000, got %d", cfg.DispatchIdentityCacheSize)
+	}
+}
+
+func TestLoad_DispatchIdentityCacheSizeOverride(t *testing.T) {
+	t.Setenv("HERMES_DISPATCH_IDENTITY_CACHE_SIZE", "0")
+
+	if got := config.Load().DispatchIdentityCacheSize; got != 0 {
+		t.Fatalf("expected DispatchIdentityCacheSize 0 to be honoured as the disable switch, got %d", got)
+	}
 }
 
 // ADR 0005 phase 2. The CA bundle defaults to empty on purpose: local NATS has no

@@ -40,6 +40,26 @@ spec:
           env:
             - name: HERMES_HTTP_PORT
               value: {{ .Values.dispatch.port | quote }}
+            {{- /*
+            The two halves of dispatch throughput, and they are rendered together on purpose.
+
+            Neither was settable through this chart at all, so every documented install ran 8
+            workers regardless of hardware -- worth 2,100 msg/s against Longhorn-backed
+            Postgres where 64 workers reach 7,907 (cmd/dispatchbench).
+
+            HERMES_DATABASE_MAX_CONNS is read by every service, not just this one, which is why
+            it is here rather than in the shared ConfigMap: sizing all nine pools from
+            dispatch's number is how you exhaust max_connections. It arrives after the envFrom
+            ConfigMap in precedence terms because explicit `env` entries win over `envFrom`.
+
+            See hermes.dispatchDatabaseMaxConns for why the pool is derived from the worker
+            count rather than set beside it, and hermes.validateDispatchPool for the
+            combinations that are refused instead of clamped.
+            */}}
+            - name: HERMES_DISPATCH_CONCURRENCY
+              value: {{ include "hermes.dispatchConcurrency" . | quote }}
+            - name: HERMES_DATABASE_MAX_CONNS
+              value: {{ include "hermes.dispatchDatabaseMaxConns" . | quote }}
             {{- include "hermes.otelServiceEnv" $svcCtx | nindent 12 }}
             {{- if .Values.hermes.jwt.existingSecret }}
             - name: HERMES_JWT_SECRET

@@ -266,6 +266,65 @@ admin:
 `replicas` is ignored when `autoscaling.enabled` is true — the template omits the field so
 the HPA owns it.
 
+`dispatch` takes two more, described next. They are rendered only for dispatch; setting them
+on another service is accepted by the schema and renders nothing.
+
+## Dispatch throughput
+
+```yaml
+dispatch:
+  concurrency: 8              # workers per replica; the chart's largest throughput lever
+  database:
+    maxConns: ""              # leave empty — derived as concurrency + 2
+```
+
+The default of 8 is worth about 2,100 msg/s against Longhorn-backed Postgres. 16 gives 3,511,
+32 gives 5,534 and 64 gives 7,907 — 3.8x from configuration alone, measured with
+`cmd/dispatchbench` in a real cluster. Dispatch is I/O-bound: Postgres amortises concurrent
+commits into shared WAL flushes and the amortisation scales with how many are in flight, so
+the ceiling is the database's appetite for concurrency rather than the pod's CPU. Neither knob
+was reachable through this chart before, so every documented install ran at 8 regardless of
+hardware.
+
+**Leave `database.maxConns` empty.** It exists mostly to be explained. Dispatch clamps its
+worker pool to its database pool at startup — a worker holds a connection while it processes —
+so a pool smaller than `concurrency` silently discards the extra workers and says so only in
+one startup warning. Deriving the pool from `concurrency` is what makes that unreachable; the
+chart refuses an install that sets the two in conflict rather than letting the binary clamp it.
+The derived value is `concurrency + 2` because `/readyz` pings the same pool and dispatch's
+readiness probe fails on a single miss.
+
+Two more things the chart will refuse, both because they end in a pool that is not what your
+values say:
+
+- a `pool_max_conns` parameter in `externalPostgresql.url` that is below `dispatch.concurrency`.
+  pgx gives URL `pool_*` parameters precedence over the pool size the chart renders, so the URL
+  wins and dispatch clamps to it. Note this applies to `externalPostgresql.url` only — the
+  contents of `externalPostgresql.existingSecret` are not visible at render time, so a
+  `pool_max_conns` hidden in there is caught by nothing and appears as the clamp warning in the
+  dispatch log;
+- a tuned `dispatch.concurrency` whose fleet-wide connection total exceeds what the **bundled**
+  Postgres can serve.
+
+That last one is the arithmetic worth internalising. Connections are a shared cluster-wide
+budget: every service holds its own pool of 10, nine services at one replica is 90, and the
+postgres image ships with `max_connections=100`. Running out does not fail where you caused it
+— Postgres refuses whichever service connects next, so raising dispatch typically surfaces as
+inbox or admin failing while dispatch runs fine. On the bundled server the chart does the sum
+for you and names the total in the error; on an external server it cannot see `max_connections`
+and the sum is yours to do.
+
+```yaml
+postgresql:
+  maxConnections: 300         # bundled server only; empty keeps the image default of 100
+  resources:                  # raise with it — each slot costs shared memory
+    requests: { cpu: 500m, memory: 1Gi }
+```
+
+The bundled Postgres remains a single unreplicated instance with no backups ([ADR
+0009](../adr/0009-bundled-datastores-as-plain-manifests-on-official-images.md)). It is enough to see the
+throughput change; it is not where throughput work belongs.
+
 ## Ingress
 
 ```yaml

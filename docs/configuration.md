@@ -14,7 +14,8 @@ configuration at all.
 | Variable | Default | Purpose |
 |---|---|---|
 | `HERMES_HTTP_PORT` | `8080` | Port the service's HTTP server binds. Each service sets its own default via deployment config (see [services.md](services.md)). |
-| `HERMES_DATABASE_URL` | `postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable` | Postgres DSN. |
+| `HERMES_DATABASE_URL` | `postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable` | Postgres DSN. pgx `pool_*` query parameters in this URL **win over** the `HERMES_DATABASE_*` variables below (`database.NewPoolWithConfig`) — that precedence exists so `cmd/dispatchbench` can sweep pool sizes, and it means a `pool_max_conns` left in a shared DSN silently overrides the per-service pool settings for **every** service reading that DSN. |
+| `HERMES_DATABASE_MAX_CONNS` | `10` | This service's pgx pool ceiling. Set **per service** — each Deployment is its own process with its own pool, so the cluster-wide total is the sum of `replicas × MAX_CONNS` over every service, against Postgres' `max_connections` (100 by default). A fixed number rather than a CPU-derived one on purpose: pgx defaults to `max(4, NumCPU)` read from the *node*, so the same image opened 4 connections on one node and 16 on another and the cluster total was decided by the scheduler. See [db-pool-saturated](observability/runbooks/db-pool-saturated.md). |
 | `HERMES_NATS_URL` | `nats://localhost:4222` | NATS JetStream server. Must be `tls://` outside development — see [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md). |
 | `HERMES_NATS_CA_BUNDLE` | _(empty)_ | PEM file of the roots that verify the NATS server certificate. cert-manager signs `nats.hermes.svc` with a private CA that is in no system trust store, so in a real deployment this is how the connection can be verified at all; the deployment mounts it at `/etc/nats-certs/ca.crt`. Empty means "use the system pool", which is the local setting — `make infra-up` runs NATS without TLS. A path that is set but missing **fails the connection** rather than downgrading it. |
 | `HERMES_NATS_NKEY_SEED` | _(empty)_ | File holding this service's NATS NKey seed. The seed selects the service's user in `deploy/k8s/base/infra/nats-accounts.conf`, and with it the subjects that service may publish and subscribe to (see [NATS authorization](#nats-authorization) below). The deployment mounts it at `/etc/nats-nkey/seed.nk`. Empty connects anonymously, which only works against a server with no accounts — the local overlay. It is not a silent downgrade: a server that defines accounts answers an unauthenticated connection with an authorization violation, so a deployment that forgets the seed fails to start. Re-read on every reconnect, so a rotated Secret needs no restart. |
@@ -25,10 +26,68 @@ configuration at all.
 | `HERMES_CENTRIFUGO_API_KEY` | `centrifugo-api-key` | Centrifugo HTTP API key. |
 | `HERMES_SMS_WEBHOOK_URL` | `http://localhost:9090/sms` | Webhook the SMS worker POSTs to. |
 | `HERMES_EVENT_RETENTION_DAYS` | `90` | Age threshold for `cmd/cleanup` to delete `notification_events`. |
-| `HERMES_DISPATCH_CONCURRENCY` | `8` | Size of the **dispatch** worker pool — how many `notification.send` messages are processed in parallel. Distinct notifications are independent (status rollup is monotonic downstream), so raising this lifts dispatch throughput. The default of 8 is from the June 2026 load-test sweep ([docs/loadtest/dispatch-tuning-2026-06.md](loadtest/dispatch-tuning-2026-06.md)): throughput scales to ~16 workers, but 8 is the balanced point that leaves DB-pool headroom. Dispatch is I/O-bound, so the useful ceiling is the database pool, not CPU cores: the value is **clamped to the Postgres pool size** (`pool_max_conns`, default `max(4, NumCPU)`) and a warning is logged if set higher — raise `pool_max_conns` in `HERMES_DATABASE_URL` (and this value, toward 16) to push throughput further. |
+| `HERMES_DISPATCH_CONCURRENCY` | `8` | Size of the **dispatch** worker pool — how many `notification.send` messages are processed in parallel. Distinct notifications are independent (status rollup is monotonic downstream), so raising this lifts dispatch throughput, and it is the single largest such lever Hermes has. Dispatch is I/O-bound, so the ceiling is the database pool, not CPU cores: this value is **clamped to `HERMES_DATABASE_MAX_CONNS`** at startup and the two must be raised together — see [dispatch throughput](#dispatch-throughput) below, which is the whole of what you need to know before touching this. |
 | `HERMES_DISPATCH_PREFETCH` | `64` | Dispatch fetcher's in-flight buffer (NATS `PullMaxMessages`) feeding the worker pool. Decouples fetching from processing so the pull pipeline stays full without one consumer hoarding the backlog. Auto-raised to at least `concurrency + 1`; the consumer's server-side `MaxAckPending` is raised to at least `prefetch + concurrency`. Tune against load tests. |
+| `HERMES_DISPATCH_IDENTITY_CACHE_SIZE` | `10000` | Entries kept in **dispatch**'s in-process organization and user caches (one cache each, this size). Every `notification.send` runs `EnsureOrganization` and `EnsureUser` before it inserts the notification; both are `INSERT ... ON CONFLICT DO NOTHING`, so after the first message for a given id they write nothing but still reach the WAL — and WAL fsync, not CPU, is dispatch's measured ceiling ([docs/loadtest/dispatch-tuning-2026-06.md](loadtest/dispatch-tuning-2026-06.md)). The caches are **per replica and not shared**: a Redis cache would swap a Postgres round trip for a Redis one, and the point is to make none. Bounded by an LRU because the user key space is unbounded; an entry is a couple of hundred bytes, so the default costs single-digit MB per replica. Raise it if your active user population exceeds it — the cost of being too small is a miss, i.e. today's behaviour. `0` disables caching. **User contact points are never cached** (they are mutable and are re-read on every send), so this cannot serve a stale address. |
 | `HERMES_NATS_CONSUMER_STALL_TIMEOUT` | `10m` | How long a NATS consumer may hold work while finishing none of it before `/healthz` fails and the kubelet **restarts the container**. Read by the five consuming services (dispatch, the three delivery workers, the event writer); the others have no consumer and ignore it. A consumer with an empty queue stays healthy indefinitely — only "work waiting **and** nothing settled" counts, where settled means acked, nak'd or terminated, not succeeded. An unreachable bus never fails the check, so a NATS blip cannot restart the fleet. **Raise it, never lower it:** a value below the 240 s retry-backoff ceiling can call a legitimately backing-off consumer stalled, and a liveness probe that restart-loops a Deployment is worse than the wedge it detects. `0` disables detection and restores a `/healthz` that always answers 200. See [`internal/messaging/stall.go`](../internal/messaging/stall.go) and the [`HermesConsumerStalled` runbook](observability/runbooks/consumer-stalled.md). |
 | `HERMES_NATS_STREAM_MAX_BYTES` | `536870912` (512 MiB) | Disk ceiling for **each** of the three JetStream work streams. At the ceiling, publishes are rejected rather than old messages dropped — see [ADR 0010](adr/0010-bounded-work-streams-reject-rather-than-drop.md); a rejected publish becomes a `503` with `Retry-After` from `/v1/send`. **Only the `natsprovision` Job's value has any effect** — under [ADR 0005](adr/0005-transport-security-for-infrastructure-connections.md) phase 4 it is the sole identity permitted to create or update a stream, so setting this on a service Deployment does nothing. Size it against the NATS volume: three work streams plus the 1 GiB DLQ must fit with headroom. At the 5Gi default that is 2.5 GiB used. Raising this without growing the volume re-creates the unbounded-growth failure it exists to prevent. |
+
+### Dispatch throughput
+
+`HERMES_DISPATCH_CONCURRENCY` and `HERMES_DATABASE_MAX_CONNS` are one setting with two halves,
+and they only work when moved together.
+
+`cmd/dispatch` clamps the worker pool to the database pool at startup
+(`dispatch.ClampWorkersToPool`) — a worker holds a Postgres connection for as long as it is
+processing, so workers beyond the pool add contention and nothing else. The consequence is
+that **raising concurrency alone does nothing at all.** It is not an error, it is not a
+degraded mode; the extra workers are discarded and the only evidence is one line at startup:
+
+```
+level=WARN msg="HERMES_DISPATCH_CONCURRENCY exceeds the database pool size; clamping to pool size"
+  requested=64 db_max_conns=10 effective=10
+```
+
+Measured with `cmd/dispatchbench` inside a cluster against Longhorn-backed Postgres, with the
+pool raised alongside the workers each time:
+
+| workers | msgs/s |
+|---:|---:|
+| 8 (the default) | 2,100 |
+| 16 | 3,511 |
+| 32 | 5,534 |
+| 64 | 7,907 |
+
+3.8x from configuration alone, and still climbing at 64. This is not a CPU effect — Postgres
+amortises concurrent commits into shared WAL flushes, and the amortisation scales with how many
+commits are in flight, so 8 workers simply do not give it enough to work with. The earlier local
+sweep ([dispatch-tuning-2026-06.md](loadtest/dispatch-tuning-2026-06.md)) saw the same shape and
+stopped at 16 only because it ran with `pool_max_conns=20`.
+
+Size the pool a little above the worker count, not equal to it: `/readyz` pings the same pool,
+and a pool with no spare connection makes the readiness probe queue behind the workers at
+exactly the load you tuned for.
+
+**Connections are a shared, cluster-wide budget.** Every service holds its own pool, so the
+worst case is the sum of `replicas × HERMES_DATABASE_MAX_CONNS` across all nine, and Postgres
+ships with `max_connections=100`. Nine services at the default of 10 already claim 90 of it.
+Running out does not fail where you caused it — Postgres refuses whichever service connects
+next, so a dispatch pool of 64 typically surfaces as inbox or admin failing while dispatch runs
+fine at the concurrency you asked for. Raise `max_connections` on the server (and its memory
+with it) before raising dispatch, and account for the migration Job, the cleanup CronJob and
+`superuser_reserved_connections`.
+
+**Via Helm**, this is `dispatch.concurrency`; the pool is derived from it automatically and the
+chart refuses combinations that would be clamped or that would overrun the bundled Postgres:
+
+```yaml
+dispatch:
+  concurrency: 32           # database.maxConns follows automatically (concurrency + 2)
+postgresql:
+  maxConnections: 300       # bundled Postgres only; external servers are yours to size
+```
+
+See [self-hosting/configuration.md](self-hosting/configuration.md#dispatch-throughput).
 
 ### HTTP rate limiting
 

@@ -324,6 +324,39 @@ verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it
 	  exit 1; \
 	fi
 	@echo "ok: admin portal on the unpublished default image is refused at render time"
+	@# The tuned dispatch posture, which is the whole point of dispatch.concurrency existing:
+	@# it must render, and must survive the same gates as the default one. Rendered against a
+	@# bundled Postgres with room made for it, because that is the combination _validate.tpl
+	@# does arithmetic on.
+	helm template hermes charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set dispatch.concurrency=32 --set postgresql.maxConnections=300 \
+	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	@# And the trap it exists to close. cmd/dispatch clamps its worker pool to the database
+	@# pool, so a pool below the worker count runs narrower than the values claim and reports
+	@# it in one startup log line. The chart must refuse it rather than let the binary clamp.
+	@if helm template hermes charts/hermes/ \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set global.domain=verify.example.com \
+	     --set dispatch.concurrency=32 --set dispatch.database.maxConns=16 >/dev/null 2>&1; then \
+	  echo "ERROR: dispatch.database.maxConns below dispatch.concurrency rendered cleanly."; \
+	  echo "  It must fail: cmd/dispatch would silently clamp the worker pool to the smaller"; \
+	  echo "  number, so the install runs narrower than the values say."; \
+	  exit 1; \
+	fi
+	@# Same trap from the other side: the bundled Postgres cannot serve a pool this size, and
+	@# the failure lands on whichever service connects next rather than on dispatch.
+	@if helm template hermes charts/hermes/ \
+	     --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	     --set global.domain=verify.example.com \
+	     --set dispatch.concurrency=64 >/dev/null 2>&1; then \
+	  echo "ERROR: a dispatch pool that overruns the bundled Postgres max_connections rendered"; \
+	  echo "  cleanly. It must fail: Postgres refuses whichever service connects next, so this"; \
+	  echo "  surfaces as inbox or admin failing while dispatch runs fine."; \
+	  exit 1; \
+	fi
+	@echo "ok: dispatch throughput values render, and pools that would be clamped or exhaust the bundled Postgres are refused"
 
 # --- Helm ---
 .PHONY: helm-lint

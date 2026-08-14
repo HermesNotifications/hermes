@@ -8,7 +8,6 @@ import { adminHeaders } from '../lib/auth.js';
 import { pickOrganization, pickUser, pickTemplate } from '../lib/seed.js';
 import { buildSendBody, idempotencyKey } from '../lib/payloads.js';
 import { sendAckLatency, sendErrors } from '../lib/metrics.js';
-import { recordSent } from '../lib/shared.js';
 export { handleSummary } from '../lib/summary.js';
 
 const TARGET_RPS = parseInt(__ENV.TARGET_RPS || '100', 10);
@@ -65,8 +64,4 @@ export default function () {
     return;
   }
 
-  try {
-    const parsed = JSON.parse(res.body);
-    if (parsed.notification_id) recordSent(parsed.notification_id);
-  } catch (e) { /* body not JSON — already failed above */ }
 }

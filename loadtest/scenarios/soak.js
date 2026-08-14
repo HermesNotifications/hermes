@@ -12,10 +12,12 @@ const SEND_RPS = parseInt(__ENV.SEND_RPS || '100', 10);
 const POLL_RPS = parseInt(__ENV.POLL_RPS || '20', 10);
 const DURATION = __ENV.DURATION || '4h';
 
-const instCount  = parseInt(__ENV.INSTANCE_COUNT || '1', 10);
-const perPodVUs  = Math.max(1, Math.floor(VUS / instCount));
-const perPodSend = Math.max(1, Math.floor(SEND_RPS / instCount));
-const perPodPoll = Math.max(1, Math.floor(POLL_RPS / instCount));
+// Not divided by an instance count: k6-operator shards a TestRun with --execution-segment
+// and k6 applies that to each scenario itself. See the same note in inbox-mixed.js, whose
+// exec functions this scenario re-exports.
+const perPodVUs  = VUS;
+const perPodSend = SEND_RPS;
+const perPodPoll = POLL_RPS;
 
 export const options = {
   scenarios: {
@@ -31,6 +33,8 @@ export const options = {
   },
   thresholds: {
     send_ack_latency: ['p(99)<200'],
+    // See inbox-mixed.js: a percentile over an empty trend passes, a count does not.
+    ws_push_received: ['count>0'],
     http_req_failed: ['rate<0.005'],
     ws_connection_drops: ['count<' + Math.max(10, Math.floor(VUS * 0.05))],
   },

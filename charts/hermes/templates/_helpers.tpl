@@ -207,6 +207,44 @@ So `require` renders no CA reference and is honestly what it says: encrypted, un
 {{- end }}
 
 {{/*
+Dispatch worker count -- HERMES_DISPATCH_CONCURRENCY, rendered onto the dispatch Deployment.
+
+Per-Deployment env rather than the shared ConfigMap because only dispatch reads it, and
+because its partner below (HERMES_DATABASE_MAX_CONNS) is read by *every* service: putting
+either in the ConfigMap would size all nine pools from a value tuned for one of them.
+*/}}
+{{- define "hermes.dispatchConcurrency" -}}
+{{- .Values.dispatch.concurrency | default 8 -}}
+{{- end }}
+
+{{/*
+Dispatch's Postgres pool -- HERMES_DATABASE_MAX_CONNS, derived from the worker count unless
+explicitly set.
+
+Derived rather than defaulted independently because cmd/dispatch clamps the worker pool to the
+pool size (dispatch.ClampWorkersToPool). Two numbers that must move together, one of which
+silently caps the other, is a trap; one number that implies the other is not. Deriving means
+the only way to hit the clamp is to set both by hand in conflict, and hermes.validateDispatchPool
+refuses that at render time.
+
++2 rather than exactly the worker count: /readyz pings this pool (bootstrap.PostgresCheck) and
+dispatch's readinessProbe.failureThreshold is 1, so a pool with no spare connection takes the
+pod out of the Service endpoints the first time every worker is busy -- which is the load the
+tuning was for. The spare pair also covers the pool's own housekeeping.
+
+At the default concurrency of 8 this yields 10, exactly database.DefaultPoolConfig.MaxConns, so
+a defaults render is behaviourally identical to the chart before these values existed.
+*/}}
+{{- define "hermes.dispatchDatabaseMaxConns" -}}
+{{- $explicit := get (.Values.dispatch.database | default dict) "maxConns" -}}
+{{- if $explicit -}}
+{{- $explicit -}}
+{{- else -}}
+{{- add (include "hermes.dispatchConcurrency" . | int) 2 -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Return the NATS URL.
 */}}
 {{- define "hermes.natsUrl" -}}
