@@ -46,6 +46,20 @@ type Client struct {
 	// inflight counts messages handed to a worker pool but not yet finished, so Drain can
 	// wait for them instead of the process exiting mid-handler.
 	inflight sync.WaitGroup
+
+	// drainMu closes the gap between "no new deliveries" and "no Add in progress".
+	//
+	// ConsumeContext.Stop() stops *future* invocations of the consume callback; it does not
+	// wait for one already running. So Drain could reach inflight.Wait() while a callback was
+	// still between entry and inflight.Add(1) -- and Add concurrent with Wait is a data race,
+	// not merely a lost count. The race detector finds it as soon as anything drains a client
+	// with a live consume loop, which nothing did until TestStall_DrainingClientIsNotStalled.
+	//
+	// Readers (the callback) take RLock to test draining and Add under it; Drain takes the
+	// write lock to set draining, which cannot be granted until every in-progress Add has
+	// released. After that no Add can begin, so Wait is safe.
+	drainMu  sync.RWMutex
+	draining bool
 }
 
 // DefaultStreamMaxBytes bounds each of the three work streams on disk.
@@ -474,9 +488,19 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 		// Counted here, in the fetcher, rather than in the worker that picks the message up.
 		// A worker cannot increment until it has been scheduled, which leaves a window where a
 		// message has left the fetcher but is not yet counted -- and Drain, waiting on the
-		// counter, would sail straight past it. Stop() guarantees this callback is no longer
-		// invoked, so counting here means the total can only fall once draining begins.
+		// counter, would sail straight past it. Counting here means the total can only fall
+		// once draining begins.
+		//
+		// Under drainMu because Stop() does not wait for a callback already in flight: see the
+		// field's comment. Once Drain has taken the write lock this returns without acking, and
+		// the message is redelivered -- the same outcome as the shutdown branch below.
+		c.drainMu.RLock()
+		if c.draining {
+			c.drainMu.RUnlock()
+			return
+		}
 		c.inflight.Add(1)
+		c.drainMu.RUnlock()
 		select {
 		case work <- msg:
 		case <-c.done:
@@ -618,6 +642,13 @@ func (c *Client) Drain(timeout time.Duration) error {
 		cc.Stop()
 	}
 	c.closeOnce.Do(c.stopConsuming)
+
+	// Barrier between Stop() and Wait(). Acquiring the write lock cannot succeed until every
+	// consume callback that had already begun has finished its Add, and once it is held no
+	// further Add can start -- which is what makes the Wait below free of a concurrent Add.
+	c.drainMu.Lock()
+	c.draining = true
+	c.drainMu.Unlock()
 
 	if !waitTimeout(&c.inflight, timeout) {
 		c.conn.Close()
