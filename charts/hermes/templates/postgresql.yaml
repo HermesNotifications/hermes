@@ -94,11 +94,13 @@ spec:
             capabilities:
               drop:
                 - ALL
-          {{- if include "hermes.storeTLS" (dict "root" . "store" "postgresql") }}
-          {{/*
+          {{- /*
           `args` replaces the image's CMD, so `postgres` must lead or the entrypoint script
           has no server to exec. The script still runs: it recognises `postgres` as the
-          command and does its usual initialisation first.
+          command and does its usual initialisation first. Two independent features append
+          settings here, so they are collected first and the key is emitted only if either
+          asked for something -- an `args` of just `postgres` would work, but leaving the key
+          off entirely keeps a defaults render byte-identical to what it was.
 
           The key file permissions are the fiddly part, and were verified on a real kubelet
           rather than reasoned about. Postgres refuses to start if its key is group- or
@@ -107,14 +109,25 @@ spec:
           defaultMode 0640 gives root:999 0640 -- which satisfies the root-owned rule while
           staying readable by the postgres user. Confirmed: `SHOW ssl` returns on.
           */}}
+          {{- $pgSettings := list }}
+          {{- if include "hermes.storeTLS" (dict "root" . "store" "postgresql") }}
+          {{- $pgSettings = concat $pgSettings (list "ssl=on" "ssl_cert_file=/etc/postgresql/certs/tls.crt" "ssl_key_file=/etc/postgresql/certs/tls.key") }}
+          {{- end }}
+          {{- if .Values.postgresql.maxConnections }}
+          {{- /*
+          Raised because a tuned dispatch does not fit in the image's 100 -- nine services at
+          the built-in pool of 10 already claim 90 of it. templates/_validate.tpl does that
+          arithmetic and names this value as the way out.
+          */}}
+          {{- $pgSettings = append $pgSettings (printf "max_connections=%v" .Values.postgresql.maxConnections) }}
+          {{- end }}
+          {{- if $pgSettings }}
           args:
             - postgres
+            {{- range $pgSettings }}
             - -c
-            - ssl=on
-            - -c
-            - ssl_cert_file=/etc/postgresql/certs/tls.crt
-            - -c
-            - ssl_key_file=/etc/postgresql/certs/tls.key
+            - {{ . }}
+            {{- end }}
           {{- end }}
           envFrom:
             - secretRef:

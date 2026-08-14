@@ -1,6 +1,7 @@
 {{- include "hermes.validateEnvironment" . -}}
 {{- include "hermes.validateAdminPortal" . -}}
 {{- include "hermes.validateCentrifugoSecrets" . -}}
+{{- include "hermes.validateDispatchPool" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:

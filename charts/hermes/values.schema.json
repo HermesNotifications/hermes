@@ -36,6 +36,24 @@
             "perSecond": { "type": ["integer", "string"], "minimum": 1 }
           }
         },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "$comment": "Dispatch only, on the shared service definition for the same reason rateLimit is: the alternative is a near-duplicate of this whole block, and a copy drifts. Setting it on another service renders nothing.",
+          "description": "Dispatch worker pool size (HERMES_DISPATCH_CONCURRENCY). The chart's largest throughput lever -- 8 workers reach 2,100 msg/s where 64 reach 7,907 (cmd/dispatchbench, Longhorn-backed Postgres). Costs one Postgres connection per worker; database.maxConns follows it automatically."
+        },
+        "database": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "Dispatch only, as with concurrency above. HERMES_DATABASE_MAX_CONNS is read by every service, but the chart renders it for dispatch alone -- putting it in the shared ConfigMap would size all nine pools from a number tuned for one.",
+          "properties": {
+            "maxConns": {
+              "type": ["integer", "string"],
+              "minimum": 1,
+              "description": "Postgres pool for dispatch (HERMES_DATABASE_MAX_CONNS). Empty derives concurrency + 2, which is the intended usage: cmd/dispatch clamps its worker pool to this value, so a pool set below concurrency silently discards the extra workers. The chart refuses that combination rather than clamping it."
+            }
+          }
+        },
         "podDisruptionBudget": {
           "type": "object",
           "additionalProperties": false,
@@ -498,6 +516,12 @@
             "database": { "type": "string", "minLength": 1 }
           },
           "required": ["username", "password", "database"]
+        },
+        "maxConnections": {
+          "type": ["integer", "string"],
+          "minimum": 20,
+          "$comment": "Accepts \"\" to mean 'keep the postgres image default of 100', which is why it is not a plain integer -- the same convention rateLimit.burst uses. Exists because 100 does not stretch: nine services at the built-in pgx pool of 10 already claim 90, so tuning dispatch.concurrency past the default needs room made for it. templates/_validate.tpl refuses the install when the fleet's worst case exceeds this less a small reserve.",
+          "description": "max_connections for the bundled Postgres. Empty keeps the image default of 100. Raise postgresql.resources alongside it."
         },
         "persistence": {
           "type": "object",
