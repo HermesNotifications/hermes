@@ -2,8 +2,8 @@ apiVersion: v2
 name: hermes
 description: An event-driven notification platform for delivering multi-channel notifications at scale
 type: application
-version: 0.1.2
-appVersion: "0.1.2"
+version: 0.1.3
+appVersion: "0.1.3"
 home: https://github.com/hermesnotifications/hermes
 sources:
   - https://github.com/hermesnotifications/hermes

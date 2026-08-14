@@ -11,6 +11,92 @@ simplification for 0.x; when it stops paying, the chart gets its own `chart-vX.Y
 `version` and its `appVersion` are all the same, and it builds the GitHub Release notes from
 the section below matching the version. A missing section fails the release.
 
+## 0.1.3
+
+### Telemetry works, and ships on
+
+`observability.enabled` now defaults to **true**. It defaulted to false, and not as a sizing
+decision: `resource.WithProcess()` includes a process-owner detector that calls
+`os/user.Current()`, which cannot work in a CGO-disabled distroless image, so every service
+crash-looped on
+
+```
+observability init failed: build resource: error detecting resource:
+user: Current requires cgo or $USER set in environment
+```
+
+`enabled: false` was the workaround, and it held long enough to become the default. What that
+cost is on the record: the entire 250,000-connection scaling exercise in
+[docs/loadtest/websocket-scale-2026-08.md](docs/loadtest/websocket-scale-2026-08.md) ran with
+Hermes telemetry off, so every figure in it was read by hand from kubeletstats and `curl`, with
+no Hermes spans or metrics for the window at all.
+
+`buildResource` now spells out `WithProcess()` minus `WithProcessOwner()`, and a detector error
+degrades rather than kills the process. **If you set `observability.enabled: false` to work
+around this, remove it.** Turning it on where no collector exists is a no-op rather than an
+error — `Init` returns early when `OTEL_EXPORTER_OTLP_ENDPOINT` is unset — so the new default is
+safe on an evaluation install.
+
+Two scrape targets that produced an endpoint and no time series are fixed: the Redis exporter
+sidecar and the Centrifugo metrics port both now ship with the ServiceMonitor they needed.
+Enabling the Redis sidecar previously gave you an endpoint nothing scraped.
+
+New, and optional: a **synthetic prober** (`prober.enabled`, default `false`) that sends through
+the real pipeline and waits for the socket, measuring end-to-end delivery continuously rather
+than the health of individual hops. It ships as a new `hermes-prober` image.
+
+### Dispatch throughput is settable, and it is the largest lever in the chart
+
+`dispatch.concurrency` and `dispatch.database.maxConns` did not appear anywhere in the chart
+before, so **every documented install ran at 8 workers whatever the hardware**. Measured by
+`cmd/dispatchbench` inside a cluster, against Longhorn-backed Postgres:
+
+| workers | msgs/s |
+|---:|---:|
+| 8 | 2,100 |
+| 16 | 3,511 |
+| 32 | 5,534 |
+| 64 | **7,907** |
+
+3.8x from configuration alone. Dispatch is I/O-bound: Postgres amortises concurrent commits into
+shared WAL flushes, and the amortisation scales with how many are in flight.
+
+The two are one knob with two halves, and getting it wrong used to be silent — the worker pool is
+clamped to the connection pool at startup, so raising concurrency alone changed throughput by
+exactly nothing and said so in a single log line. Leave `maxConns` empty and it is derived;
+setting it below `concurrency` is now refused at render time, and the chart will not install a
+fleet that cannot fit in `postgresql.maxConnections`.
+
+The default stays at 8. Raise it deliberately.
+
+### Liveness follows consumer progress
+
+`/healthz` now fails when a NATS consumer holds work and settles none of it for
+`HERMES_NATS_CONSUMER_STALL_TIMEOUT` (default 10m), and `HermesConsumerStalled` fires at half
+that window so an operator reaches a wedged pod before the kubelet destroys the evidence. See
+[ADR 0022](docs/adr/0022-liveness-follows-consumer-progress.md).
+
+Backlog alerting changed shape with it. A static depth threshold carries no information about
+severity — at 6,000/s offered, pending reached 764,173, and a healthy burst crosses any line you
+pick. `NATSConsumerLag` is replaced by rules on **time-to-drain** and **sustained growth**, which
+tell a queue absorbing a burst apart from a pipeline losing a race.
+
+### Correctness
+
+- Dispatch no longer re-upserts the same organization and user on every send.
+- Two races in consumer shutdown: `Drain` could read the in-flight count before its fetchers had
+  settled, and `Add`/`Wait` could interleave.
+- The bundled Postgres gets a `/dev/shm` it can plan against.
+
+### Upgrading
+
+Nothing here requires a migration. Two things to know:
+
+- **Telemetry is on unless you turn it off.** If your cluster has a collector at
+  `observability.otel.endpoint`, services begin exporting on upgrade.
+- **`hermes-prober` is a new package.** New GHCR packages are private on first push, so if you
+  set `prober.enabled: true` before that package is made public, you get `ImagePullBackOff`.
+
 ## 0.1.2
 
 ### Realtime delivery works
