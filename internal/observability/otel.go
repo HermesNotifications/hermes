@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -49,7 +50,19 @@ func Init(ctx context.Context, serviceName string) (ShutdownFunc, error) {
 
 	res, err := buildResource(ctx, serviceName)
 	if err != nil {
-		return nil, fmt.Errorf("observability: build resource: %w", err)
+		// A detector that cannot answer should degrade the resource, not stop the
+		// process. resource.New returns a usable resource alongside detector
+		// errors, so the only fatal case is having nothing at all.
+		//
+		// This was not theoretical: with observability enabled, every service
+		// crash-looped on "user: Current requires cgo or $USER set in
+		// environment" -- raised before any exporter was contacted, so telemetry
+		// setup failing closed took the entire service down with it.
+		if res == nil {
+			return nil, fmt.Errorf("observability: build resource: %w", err)
+		}
+		slog.WarnContext(ctx, "observability: partial resource, continuing",
+			"error", err, "service", serviceName)
 	}
 
 	traceShutdown, err := initTraces(ctx, res)
@@ -81,15 +94,27 @@ func Init(ctx context.Context, serviceName string) (ShutdownFunc, error) {
 }
 
 func buildResource(ctx context.Context, serviceName string) (*resource.Resource, error) {
-	// Collect SDK defaults and env overrides first, then only default the
-	// service name if neither OTEL_SERVICE_NAME nor service.name via
-	// OTEL_RESOURCE_ATTRIBUTES already set it.
+	// WithProcess() minus WithProcessOwner(), spelled out rather than used
+	// wholesale. The owner detector calls os/user.Current(), which in a
+	// CGO-disabled static binary falls back to reading $USER -- and the
+	// distroless images Hermes ships set neither. It can never succeed there, so
+	// asking for it only produces an error to swallow. Every other process
+	// attribute is kept.
 	opts := []resource.Option{
 		resource.WithFromEnv(),
 		resource.WithHost(),
-		resource.WithProcess(),
+		resource.WithProcessPID(),
+		resource.WithProcessExecutableName(),
+		resource.WithProcessExecutablePath(),
+		resource.WithProcessCommandArgs(),
+		resource.WithProcessRuntimeName(),
+		resource.WithProcessRuntimeVersion(),
+		resource.WithProcessRuntimeDescription(),
 		resource.WithTelemetrySDK(),
 	}
+	// Collect SDK defaults and env overrides first, then only default the
+	// service name if neither OTEL_SERVICE_NAME nor service.name via
+	// OTEL_RESOURCE_ATTRIBUTES already set it.
 	if os.Getenv("OTEL_SERVICE_NAME") == "" {
 		opts = append(opts, resource.WithAttributes(semconv.ServiceName(serviceName)))
 	}
