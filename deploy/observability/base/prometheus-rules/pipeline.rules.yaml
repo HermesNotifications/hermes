@@ -11,8 +11,8 @@ spec:
     #
     # One: prometheus-nats-exporter labels jsz consumer series `stream_name`/`consumer_name`,
     # while Hermes' own hermes_messaging_* metrics use `stream`/`consumer`. Nothing joined
-    # them, and the old NATSConsumerLag annotations below interpolated $labels.stream against
-    # the exporter's series — so the alert named the lagging consumer as the empty string.
+    # them, and the `NATSConsumerLag` rule these replace interpolated $labels.stream against the
+    # exporter's series — so the alert named the lagging consumer as the empty string.
     #
     # Two: backlog is only interpretable next to drain rate, and that needs one series from
     # each side. Normalising once here keeps the alert expressions readable.
@@ -117,8 +117,10 @@ spec:
         # detection was built for: the wedged dispatch pod's logs died with it.
         #
         # The metric is per pod, and a stalled consumer stops emitting nothing else, so this fires
-        # even while the pod reports itself Ready — the gap NATSConsumerLag above cannot close,
-        # because lag alone does not distinguish a wedged consumer from a busy one.
+        # even while the pod reports itself Ready — the gap the backlog alerts above cannot close,
+        # because backlog alone does not distinguish a wedged consumer from a busy one. Note the
+        # time-to-drain rule deliberately filters a zero drain rate out to this alert rather than
+        # reporting an infinite backlog, so the two do not double-fire on the same wedge.
         - alert: HermesConsumerStalled
           expr: hermes_messaging_consumer_progress_age_seconds > 300
           for: 2m

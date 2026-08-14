@@ -114,8 +114,12 @@ same restart would have dropped 100% of connections simultaneously with no peer 
 
 The cost of the change is that the single bundled Redis is now on the realtime critical path as
 well as being the template cache and idempotency store. It had no metrics endpoint at all, which
-is addressed by the new `redis.metrics.enabled` exporter sidecar in the chart — off by default,
-and worth turning on wherever the Redis engine is in use.
+is addressed by the `redis.metrics.enabled` exporter sidecar in the chart.
+
+> **Now on by default**, along with the ServiceMonitor that was missing — enabling the sidecar
+> previously produced an endpoint and no time series, because nothing scraped it. The argument
+> for the default is this run: Redis was measured at 0.15 cores and 3,000 ops/s while carrying
+> the fan-out for 100,000 connections, and that number had to be obtained by hand.
 
 ## Run C — 100,000 connections, and what the load generator was hiding
 
@@ -362,6 +366,18 @@ What is actionable regardless of trigger:
   reached from the other direction. It is the one signal that was screaming while every other
   one was green.
 
+> **Both done.** Liveness now follows consumer progress (ADR 0022): `/healthz` fails when a
+> consumer holds work and settles none of it for `HERMES_NATS_CONSUMER_STALL_TIMEOUT`, and
+> `HermesConsumerStalled` fires at half that window so an operator reaches the wedged pod
+> *before* the kubelet destroys the evidence — which is the specific mistake made here.
+>
+> Lag alerting exists but not as a depth threshold. `nats_jetstream_consumer_num_pending > 1000`
+> was tried and is wrong for exactly the reason this document demonstrates: at 6,000/s offered,
+> pending reached 764,173, so a static line carries no information about severity, and a healthy
+> burst crosses it too. The rules now alert on **time-to-drain** (backlog over drain rate) and
+> on **sustained growth**, which distinguish a queue absorbing a burst from a pipeline losing a
+> race. See `docs/observability/runbooks/nats-consumer-lag.md`.
+
 ## Limits worth knowing before trusting these numbers
 
 - The table above is the ceiling of **one Centrifugo pod on the memory engine**, which is how the
@@ -374,18 +390,32 @@ What is actionable regardless of trigger:
 
 ## Observability during this run
 
-Hermes app telemetry was off, so there are no Hermes spans or metrics in SigNoz for this window.
-`observability.enabled: false` is a deliberate workaround: with it on, every service crash-loops
-on
+**Hermes app telemetry was off for the entire exercise.** Every server-side figure above came
+from kubeletstats and Centrifugo's own `:9000` endpoint, read by hand — there are no Hermes
+spans or metrics in SigNoz for this window, and `centrifugo_node_num_clients` was confirmed
+with `curl` rather than from a time series.
+
+`observability.enabled: false` was a deliberate workaround: with it on, every service
+crash-looped on
 
 ```
 observability init failed: build resource: error detecting resource:
 user: Current requires cgo or $USER set in environment
 ```
 
-because `resource.WithProcess()` includes a process-owner detector that calls `os/user.Current()`,
-which cannot work in a CGO-disabled distroless image. A fix exists on an unmerged branch
-(`fix-observability-process-owner`); tag `v0.1.2` does not contain it.
+because `resource.WithProcess()` includes a process-owner detector that calls
+`os/user.Current()`, which cannot work in a CGO-disabled distroless image.
+
+> **Fixed since.** `internal/observability/otel.go:buildResource` now spells out
+> `WithProcess()` minus `WithProcessOwner()`, and a detector error degrades rather than kills
+> the process. `observability.enabled` defaults to **true**, the Redis exporter and a
+> Centrifugo scrape are on, and a synthetic prober measures send-to-socket continuously.
+>
+> **So none of the measurements in this document should be repeated as-is.** Re-running with
+> telemetry on is not a formality: it replaces hand-read node metrics with per-service spans,
+> and it makes the two findings at the top of this document — consumer lag as the real signal,
+> and the load generator as the recurring source of phantom latency — checkable from a
+> dashboard rather than by inference.
 
 The `loadtest` namespace was excluded from SigNoz log collection for the duration, to keep k6's
 output from becoming the dominant log source on a shared cluster.
