@@ -51,5 +51,17 @@ spec:
                   type: boolean
                   default: false
                   description: "Prevent accidental deletion. Should be true for production."
+                # Deliberately has no default. The render-instances template only emits
+                # `availabilityZone` when this is set, so staging and production keep
+                # letting Aurora place instances and stay spread across the subnet group.
+                # Only an environment that names an AZ gets pinned.
+                availabilityZone:
+                  type: string
+                  description: >-
+                    Pin cluster instances to one AZ, to avoid cross-AZ transfer charges
+                    between the EKS nodes and the database. Omit for normal environments,
+                    and never set it with instanceCount > 1 — replicas in the same AZ as
+                    the writer are not a failover story. When set it MUST match the AZ the
+                    nodes are in: Terraform's `workload_availability_zone` output.
               required:
                 - instanceClass

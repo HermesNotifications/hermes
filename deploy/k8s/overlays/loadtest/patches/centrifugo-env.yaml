@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: centrifugo
+spec:
+  template:
+    spec:
+      containers:
+        - name: centrifugo
+          env:
+            # Origins allowed to open a realtime websocket, space-separated (v5 env form),
+            # substituted at deploy time. See the production patch for the full reasoning:
+            # the widget is embedded in a customer application, so the browser's Origin is
+            # never this domain, and anything unlisted is refused with a 403 at the handshake
+            # while every non-browser client keeps working.
+            - name: CENTRIFUGO_ALLOWED_ORIGINS
+              value: "ALLOWED_ORIGINS_PLACEHOLDER"
+            - name: CENTRIFUGO_TOKEN_HMAC_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_TOKEN_SECRET
+            - name: CENTRIFUGO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_API_KEY
+            - name: CENTRIFUGO_REDIS_ADDRESS
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_REDIS_ADDRESS
+            - name: CENTRIFUGO_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_REDIS_PASSWORD
+            - name: CENTRIFUGO_REDIS_TLS
+              value: "true"
+            # DELIBERATELY ABSENT: CENTRIFUGO_REDIS_TLS_INSECURE_SKIP_VERIFY.
+            #
+            # This file started as a copy of the staging patch, which sets the flag to
+            # "true". That was a copy-paste error rather than a decision: this overlay
+            # follows ../../production in every other respect, and production omits the
+            # flag on purpose. Skipping verification keeps the encryption and discards the
+            # authentication, leaving the connection open to an undetectable MITM — a
+            # weaker property than this environment's own database and NATS settings
+            # enforce.
+            #
+            # It should not be needed. ElastiCache serves a certificate for its
+            # configuration endpoint signed by Amazon Trust Services, whose roots are in
+            # the standard bundle Centrifugo's image carries, and
+            # HERMES_CENTRIFUGO_REDIS_ADDRESS is that hostname. The loadtest cache claim
+            # sets transitEncryption, so TLS is genuinely on.
+            #
+            # Production records that reasoning as UNVERIFIED, and asks for one of the two
+            # overlays to be exercised against a real cluster before staging's flag is
+            # removed. THIS IS THAT CLUSTER: it holds nothing but synthetic data, it is
+            # rebuilt at will, and the failure mode is loud — Centrifugo cannot reach Redis
+            # at startup, before any run begins. Standing this environment up settles the
+            # question for production at no risk to it.
+            # ADR 0005 phase 4. The full bus URL including Centrifugo's password, which is
+            # why it comes from a Secret and not from centrifugo-config.json. It must keep
+            # the tls:// scheme and must match the `centrifugo` user in nats-accounts.conf.
+            #
+            # Note CENTRIFUGO_REDIS_TLS above is a plain bool while the NATS equivalent is a
+            # nested map (nats_tls) set in centrifugo-config.json. That asymmetry is
+            # Centrifugo's, not ours, and it is the reason the NATS half went unsolved in
+            # phase 3: `nats_tls: true` is rejected as "expected a map, got 'bool'".
+            - name: CENTRIFUGO_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-secrets
+                  key: HERMES_CENTRIFUGO_NATS_URL

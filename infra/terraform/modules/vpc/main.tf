@@ -124,6 +124,15 @@ resource "aws_nat_gateway" "main" {
     Name = "hermes-${var.environment}-nat-${count.index}"
   }
 
+  # Same reason the EKS preconditions live on the resource rather than in a `validation`
+  # block: cross-variable validation needs Terraform >= 1.9 and versions.tf declares >= 1.5.
+  lifecycle {
+    precondition {
+      condition     = !var.single_az_workloads || var.single_nat_gateway
+      error_message = "single_az_workloads is true but single_nat_gateway is false. Workloads run only in the first AZ, so the gateways in every other AZ would be provisioned, billed hourly, and never routed through. Set single_nat_gateway = true; the one gateway lands in the public subnet of the same AZ the nodes are in, which keeps egress same-AZ as well."
+    }
+  }
+
   depends_on = [aws_internet_gateway.main]
 }
 

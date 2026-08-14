@@ -18,7 +18,19 @@ variable "vpc_id" {
 }
 
 variable "private_subnet_ids" {
-  description = "IDs of the private subnets for the EKS cluster"
+  description = "IDs of the private subnets for the EKS cluster. Must span at least two AZs — the EKS API rejects anything less, regardless of where nodes end up."
+  type        = list(string)
+}
+
+# Split out from private_subnet_ids so that "where the control plane may put ENIs" and
+# "where pods actually run" can differ. They have to be able to differ: EKS requires two
+# AZs of subnets, and a single-AZ environment wants pods in exactly one of them.
+#
+# A subset, never a superset — the precondition on the node group enforces that, because
+# a subnet ID here that the cluster does not know about produces an opaque API error at
+# apply time rather than at plan time.
+variable "node_subnet_ids" {
+  description = "Subnets the node groups schedule into. Must be a non-empty subset of private_subnet_ids. Pass a single subnet to pin nodes to one AZ."
   type        = list(string)
 }
 
@@ -46,6 +58,21 @@ variable "ecr_repository_arns" {
   description = "List of ECR repository ARNs for Kargo read access"
   type        = list(string)
   default     = []
+}
+
+# Contract fixed by loadtest/k8s/node-pool.md: name loadtest-generators, taint
+# loadtest=true:NoSchedule, label pool=loadtest-generators. Every manifest under
+# loadtest/k8s/ already tolerates and node-selects on exactly those, so they are not
+# free parameters — changing one here means changing them there in the same commit.
+variable "loadtest_generator_node_pool" {
+  description = "Dedicated tainted node group for k6 load generators. Null creates none. See loadtest/k8s/node-pool.md for the taint/label contract."
+  type = object({
+    instance_types = list(string)
+    min_size       = number
+    max_size       = number
+    desired_size   = number
+  })
+  default = null
 }
 
 # Finding 5. This defaulted to ["0.0.0.0/0"] and the root module never overrode it, so

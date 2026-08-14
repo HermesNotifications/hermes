@@ -1,0 +1,106 @@
+# Hermes loadtest overlay — the system under test for ADR 0023's single-AZ environment.
+#
+# Shaped after ../production rather than ../staging, because the point of a load test is to
+# measure the topology production actually runs: a 3-peer JetStream cluster with replicated
+# streams, production's resource requests, multiple replicas per service. Staging is a
+# single NATS peer with no replication, and a throughput number from that shape would not
+# transfer.
+#
+# Where it deliberately differs from production:
+#
+#   * No hpa/. Fixed replicas are what make two runs comparable — with an HPA in the loop,
+#     throughput measures how fast the autoscaler reacted. Testing scale-out is a scenario
+#     of its own, not background noise under every scenario.
+#   * No pdb/. PodDisruptionBudgets protect against voluntary eviction during node drains
+#     and upgrades. Nothing drains this cluster mid-run, and a PDB that blocks a teardown
+#     is a nuisance rather than a control.
+#   * No zone spread in patches/anti-affinity.yaml. Every node is in one AZ by design.
+#   * images/ is not Kargo-managed. See the file.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  # ADR 0005 phase 4. Hermes' internal CA. A sibling of ../../base, not part of it: base sets
+  # `namespace: hermes` and the transformer would rewrite the CA Certificate's
+  # `namespace: cert-manager`, moving the CA private key back into the application namespace.
+  - ../../pki
+  - external-secrets.yaml
+  - secret-store.yaml
+  - parameter-store.yaml
+  - network-policies/
+  - storage-class.yaml
+
+patches:
+  - path: patches/replicas.yaml
+  - path: patches/resources.yaml
+  - path: patches/anti-affinity.yaml
+  - path: patches/centrifugo-env.yaml
+  - path: patches/nats.yaml
+  - path: patches/ingress-tls.yaml
+    target:
+      kind: Ingress
+      name: hermes-ingress
+  - path: patches/ingress-realtime-tls.yaml
+    target:
+      kind: Ingress
+      name: hermes-realtime-ingress
+
+# DATABASE_URL and REDIS_URL are provided by ExternalSecret (hermes-secrets)
+# No additional hermes-config needed — base config has NATS_URL and CENTRIFUGO_API_URL
+
+configMapGenerator:
+  - name: hermes-config
+    behavior: merge
+    literals:
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=loadtest
+      # ADR 0005. Anything other than the exact string "development" makes config.Validate
+      # enforce TLS on every datastore connection and reject the built-in placeholder
+      # secrets. "loadtest" is not a value config.go knows — it does not need to be, and
+      # that is the design: only "development" relaxes the checks, so a typo cannot
+      # silently disable them. The Aurora and ElastiCache claims for this environment set
+      # transitEncryption, so the strict path is satisfiable.
+      - HERMES_ENV=loadtest
+      # Matches the 3-replica NATS StatefulSet from ../../base. Without this every stream
+      # lives on one peer, which is both a single point of failure and — the reason it
+      # matters here — a materially different write path from production's quorum write.
+      - HERMES_NATS_STREAM_REPLICAS=3
+      # Roughly 60% of the 20Gi JetStream PVC in patches/nats.yaml. A file store that
+      # reaches the disk limit fails EVERY publish including the dead-letter publishes, so
+      # a sustained run that outpaces consumers must be rejected at the edge rather than
+      # taking the DLQ with it. Sized well above production's 3Gi because a soak
+      # deliberately drives the streams deeper than production ever should go.
+      - HERMES_NATS_STREAM_MAX_BYTES=12884901888
+    options:
+      disableNameSuffixHash: true
+  - name: hermes-domain
+    literals:
+      # The generators do NOT go through this domain — loadtest/scripts/run-k8s.sh targets
+      # cluster DNS directly. The Ingress and its certificate exist for a human wanting to
+      # poke at the environment between runs, so DNS for this name is optional: without it
+      # cert-manager will fail to issue and the Ingress will not serve, and every scenario
+      # still runs.
+      - DOMAIN=loadtest.hermes.dgr.io # ← Set your loadtest domain here
+    options:
+      disableNameSuffixHash: true
+  - name: centrifugo-config
+    behavior: replace
+    files:
+      - config.json=centrifugo-config.json
+    options:
+      disableNameSuffixHash: true
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: hermes-domain
+      fieldPath: data.DOMAIN
+    targets:
+      - select:
+          kind: Ingress
+        fieldPaths:
+          - spec.tls.0.hosts.0
+          - spec.rules.0.host
+
+components:
+  - images/

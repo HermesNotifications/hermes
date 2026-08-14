@@ -46,5 +46,17 @@ spec:
                   default: 1
                   minimum: 0
                   description: "Number of days to retain automatic snapshots. 0 disables."
+                # Deliberately has no default. An absent field makes the composition's
+                # patch a no-op (Crossplane skips an Optional fromFieldPath it cannot
+                # resolve), so staging and production keep letting ElastiCache choose
+                # and stay spread. Only an environment that names an AZ gets pinned.
+                availabilityZone:
+                  type: string
+                  description: >-
+                    Pin cache nodes to one AZ, to avoid cross-AZ transfer charges between
+                    the EKS nodes and the cache. Omit for normal environments. When set it
+                    MUST match the AZ the nodes are in — Terraform's
+                    `workload_availability_zone` output. Wrong value costs more than no
+                    value: the cache lands in an AZ nothing runs in and every read crosses.
               required:
                 - nodeType

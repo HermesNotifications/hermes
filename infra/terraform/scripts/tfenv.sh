@@ -13,6 +13,7 @@
 #   ./scripts/tfenv.sh staging apply
 #   ./scripts/tfenv.sh production plan -target=module.eks
 #   ./scripts/tfenv.sh staging destroy
+#   ./scripts/tfenv.sh loadtest output -raw workload_availability_zone
 #
 set -euo pipefail
 
@@ -21,7 +22,7 @@ TF_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 if [ $# -lt 2 ]; then
   echo "Usage: $0 <environment> <command> [extra args...]"
-  echo "  environment: staging | production"
+  echo "  environment: staging | production | loadtest"
   echo "  command:     init | plan | apply | destroy | ..."
   exit 1
 fi
@@ -30,10 +31,13 @@ ENVIRONMENT="$1"
 COMMAND="$2"
 shift 2
 
-if [[ "${ENVIRONMENT}" != "staging" && "${ENVIRONMENT}" != "production" ]]; then
-  echo "Error: environment must be 'staging' or 'production', got '${ENVIRONMENT}'"
+case "${ENVIRONMENT}" in
+staging | production | loadtest) ;;
+*)
+  echo "Error: environment must be 'staging', 'production' or 'loadtest', got '${ENVIRONMENT}'"
   exit 1
-fi
+  ;;
+esac
 
 TFVARS_FILE="${TF_DIR}/environments/${ENVIRONMENT}.tfvars"
 if [ ! -f "${TFVARS_FILE}" ]; then

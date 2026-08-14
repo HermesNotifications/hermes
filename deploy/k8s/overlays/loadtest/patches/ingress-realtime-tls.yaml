@@ -1,0 +1,17 @@
+# See patches/ingress-tls.yaml for why this is JSON6902 rather than a strategic merge.
+#
+# The realtime ingress needs its own TLS secret, but nothing else: use-regex,
+# rewrite-target, the proxy timeouts and proxy-buffering all live in ../../base and were
+# duplicated here for no reason. Duplication is what let the API ingress drift.
+- op: add
+  path: /metadata/annotations/cert-manager.io~1cluster-issuer
+  value: letsencrypt-prod
+- op: add
+  path: /spec/rules/0/host
+  value: DOMAIN_PLACEHOLDER
+- op: add
+  path: /spec/tls
+  value:
+    - hosts:
+        - DOMAIN_PLACEHOLDER
+      secretName: hermes-realtime-tls

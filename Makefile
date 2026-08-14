@@ -126,6 +126,7 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	kubectl kustomize deploy/k8s/overlays/local > /dev/null
 	kubectl kustomize deploy/k8s/overlays/staging > /dev/null
 	kubectl kustomize deploy/k8s/overlays/production > /dev/null
+	kubectl kustomize deploy/k8s/overlays/loadtest > /dev/null
 	$(PYTHON) -c "import yaml, glob; [list(yaml.safe_load_all(open(p))) for p in glob.glob('infra/crossplane/**/*.yaml', recursive=True) + glob.glob('deploy/kargo/**/*.yaml', recursive=True) + glob.glob('.github/workflows/*.yml')]"
 	@# Finding 47: a NetworkPolicy whose podSelector matches nothing is silently inert.
 	@# kustomize build and kubectl apply both accept it, so only this catches it.
@@ -139,8 +140,17 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# written, and nothing did. A runbook_url is followed by whoever is paged, at 3am, and a
 	@# 404 there costs exactly the minutes the annotation exists to save.
 	$(PYTHON) scripts/check_runbook_links.py
+	@# ADR 0023. The single-AZ pin lives in two places that cannot see each other: Terraform
+	@# pins the node groups, Crossplane claims pin Aurora and ElastiCache. A disagreement
+	@# breaks nothing -- every query succeeds, the datastore just sits in an AZ with no pods
+	@# in it and 100% of its traffic crosses a billed boundary instead of roughly half. The
+	@# pin makes it WORSE than not pinning, silently, until the bill arrives. This catches
+	@# the config-vs-config half with no credentials; infra/scripts/check-single-az.sh
+	@# checks placement against live AWS and runs as the load-test preflight.
+	$(PYTHON) scripts/check_single_az_placement.py --source-root=.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_networkpolicy_selectors.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	@# The route gate ran over the Helm chart only, and the overlays are what deploy staging
 	@# and production. They had drifted to 7 of base's 12 rules -- /v1/templates, /v1/apikeys,
 	@# /v1/organizations and /v1/subscriptions unreachable in both environments, and /v1/users
@@ -157,10 +167,12 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_helm_render.py - --source-root=. --only=routes,rewrites
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_helm_render.py - --source-root=.
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_helm_render.py - --source-root=.
 	@# ADR 0005 phase 4: the CA private key must not render into the application namespace.
 	@# One misplaced `namespace:` puts it back and nothing about the behaviour changes.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_ca_key_location.py - --namespace hermes
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_ca_key_location.py - --namespace hermes
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_ca_key_location.py - --namespace hermes
 	@# ADR 0006. A Job's spec.template is immutable and Kargo rewrites its image tag on every
 	@# promotion, so a Job that is not an ArgoCD hook applies once and fails the SECOND
 	@# promotion with `field is immutable` -- while the Application still reports Healthy.
@@ -168,6 +180,7 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# passes identically with that defect present and absent.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_job_hooks.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_job_hooks.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_job_hooks.py -
 	@# Finding 36. A one-character typo in a PDB selector (`hermes-sned`) took expectedPods
 	@# from 3 to 0 with no error from kustomize, kubectl or the API server.
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_pdb_selectors.py -
@@ -177,6 +190,9 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# The local overlay is deliberately exempt -- see the module docstring for why.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_workload_resources.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_workload_resources.py - --require-hpa
+	@# No --require-hpa: this overlay deliberately ships fixed replicas so runs are
+	@# comparable. See deploy/k8s/overlays/loadtest/kustomization.yaml.
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_workload_resources.py -
 	@# Finding 53. An EMPTY $$HERMES_CENTRIFUGO_NATS_PASSWORD is not a parse error: the server
 	@# starts and accepts a `centrifugo` client presenting no credential at all. The guard is
 	@# an initContainer, so its absence has no runtime signal -- the cluster looks healthy.
@@ -185,11 +201,13 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_nats_password_guard.py -
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_nats_password_guard.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_nats_password_guard.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_nats_password_guard.py -
 	@# ADR 0005 phase 4's named residual: a `ca` ClusterIssuer can be referenced from ANY
 	@# namespace, and a leaf it signs is trusted by every Hermes service. The policy that
 	@# closes it has two silent-inert shapes -- unbound, or bound with Warn instead of Deny.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_ca_issuer_policy.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_ca_issuer_policy.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_ca_issuer_policy.py -
 	@# Centrifugo 403s any websocket whose Origin is not listed, but permits connections with
 	@# no Origin at all -- so /health, curl and every server-side client succeed while no
 	@# browser can connect. The local overlay shipped with no allowed_origins and the first
@@ -198,6 +216,7 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_centrifugo_origins.py -
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_centrifugo_origins.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_centrifugo_origins.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_centrifugo_origins.py -
 	@# The memory engine gives each Centrifugo node its own subscription registry, so above one
 	@# replica a publication reaches only the clients on the node that received it -- silently,
 	@# with nothing in any log or health check to say so. production.md has said this in prose
@@ -205,6 +224,7 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_centrifugo_engine.py -
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_centrifugo_engine.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_centrifugo_engine.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_centrifugo_engine.py -
 	@# JetStream defaults to one replica when Replicas is unset, which is what every stream ran
 	@# with on a three-node cluster: `nats stream ls` looks healthy, every publish succeeds, and
 	@# the first evidence is a node going away and taking NOTIFICATIONS or DELIVERY with it.
@@ -212,12 +232,14 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	kubectl kustomize deploy/k8s/overlays/local | $(PYTHON) scripts/check_nats_stream_replicas.py -
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_nats_stream_replicas.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_nats_stream_replicas.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_nats_stream_replicas.py -
 	@# Every Hermes image is FROM scratch, so preStop.exec cannot run `sleep` and the drain
 	@# delay lives in-process instead. That splits one budget across a manifest and an env var,
 	@# which is precisely the pairing that drifts: exceed terminationGracePeriodSeconds and the
 	@# kubelet SIGKILLs mid-drain, which is strictly worse than not draining at all.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_shutdown_budget.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_shutdown_budget.py -
+	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_shutdown_budget.py -
 	@# infra/scripts/lib.sh derives the database and Redis URLs that config.Validate accepts
 	@# or rejects. It shipped with 17 passing tests that nothing ran.
 	./infra/scripts/test-lib.sh
@@ -868,9 +890,14 @@ dispatchbench:     ## Run the dispatch concurrency sweep (requires make infra-up
 	  --csv docs/loadtest/dispatch-tuning.csv \
 	  --md docs/loadtest/dispatch-tuning.md
 
-.PHONY: loadtest-k8s loadtest-k8s-clean loadtest-k8s-install
+.PHONY: loadtest-k8s loadtest-k8s-clean loadtest-k8s-install loadtest-check-az
 loadtest-k8s-install: ## One-time install of k6-operator + Prom + Grafana in loadtest namespace
 	loadtest/k8s/install.sh
+
+# ADR 0023. Uses the ambient kubectl context and AWS credentials, like every other
+# loadtest-* target -- these are meant to run against a real remote cluster.
+loadtest-check-az: ## Verify the loadtest env is really in one AZ (usage: make loadtest-check-az CLUSTER=hermes-loadtest)
+	infra/scripts/check-single-az.sh $(or $(CLUSTER),hermes-loadtest) $(or $(REGION),us-east-1)
 
 loadtest-k8s:      ## Run a cluster load test (SCENARIO=... PARALLELISM=... VUS=... DURATION=... LOADSEED_IMAGE=...)
 	SCENARIO=$(or $(SCENARIO),send) \

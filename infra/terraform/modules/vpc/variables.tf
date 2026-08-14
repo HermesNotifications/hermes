@@ -26,13 +26,24 @@ variable "cluster_name" {
 }
 
 variable "single_nat_gateway" {
-  description = "Use a single NAT gateway (true for staging, false for production)"
+  description = "Use a single NAT gateway (true for staging and loadtest, false for production)"
   type        = bool
   default     = true
 }
 
+# This module does not place workloads — the eks module does. It is told about the
+# decision anyway, because it owns the NAT gateways, and a single-AZ environment paired
+# with per-AZ NAT gateways would build (az_count - 1) gateways that nothing routes
+# through: about $32/month each in us-east-1 for an idle ENI. See the precondition on
+# aws_nat_gateway.main in main.tf.
+variable "single_az_workloads" {
+  description = "Whether the caller pins workloads to the first AZ. Used only to reject a NAT layout that would waste gateways; see main.tf."
+  type        = bool
+  default     = false
+}
+
 variable "az_count" {
-  description = "Number of availability zones to use (2 for staging, 3 for production). Capped at 6 by the subnet layout."
+  description = "Number of availability zones to use (2 for staging and loadtest, 3 for production). Capped at 6 by the subnet layout."
   type        = number
   default     = 3
 
@@ -42,6 +53,6 @@ variable "az_count" {
   # overlapping. Raise the cap deliberately, with the comment, or not at all.
   validation {
     condition     = var.az_count >= 2 && var.az_count <= 6
-    error_message = "az_count must be between 2 and 6. Two is the minimum for a highly available EKS control plane; above six, revisit the subnet layout in modules/vpc/main.tf first."
+    error_message = "az_count must be between 2 and 6. Two is EKS's hard minimum for the control plane — a single-AZ environment still needs two AZs of subnets and simply leaves the second one empty (see single_az_workloads). Above six, revisit the subnet layout in modules/vpc/main.tf first."
   }
 }

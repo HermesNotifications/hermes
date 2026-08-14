@@ -1,0 +1,41 @@
+# ArgoCD Application for the Hermes loadtest environment (ADR 0023).
+# Syncs the loadtest Kustomize overlay automatically.
+#
+# Unlike staging.yaml and production.yaml this Application carries NO
+# `kargo.akuity.io/authorized-stage` label or annotation, and there is no matching Stage in
+# deploy/kargo/stages/. That is deliberate: Kargo promotes on new Freight, and an
+# environment that rolled its Deployments partway through a four-hour soak would split the
+# run across two builds and produce a number attributable to neither. Image tags here are
+# set deliberately in deploy/k8s/overlays/loadtest/images/ — see that file for the recipe.
+#
+# selfHeal is on, so a `kubectl edit` during a run is reverted rather than quietly changing
+# what is being measured.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hermes-loadtest
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:HermesNotifications/hermes.git
+    targetRevision: main
+    path: deploy/k8s/overlays/loadtest
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hermes
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,21 @@
+{
+  "engine": "redis",
+  "redis_address": "overridden-by-env",
+  "broker": "nats",
+  "nats_url": "tls://nats:4222",
+  "nats_tls": {
+    "enabled": true,
+    "server_ca_pem_file": "/etc/nats-certs/ca.crt"
+  },
+  "token_hmac_secret_key": "overridden-by-env",
+  "api_key": "overridden-by-env",
+  "admin": false,
+  "http_stream": true,
+  "sse": true,
+  "presence": true,
+  "history_size": 50,
+  "history_ttl": "1h",
+  "user_subscribe_to_personal": true,
+  "allow_user_limited_channels": true,
+  "health": true
+}

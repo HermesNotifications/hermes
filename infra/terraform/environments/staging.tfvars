@@ -12,6 +12,10 @@ vpc_cidr = "10.20.0.0/16"
 # pass it. Setting it to [] does not block access; it means 0.0.0.0/0.
 eks_cluster_log_retention_days = 30
 
+# Previously derived from the environment name in main.tf. Same values, stated rather
+# than computed — see the note on vpc_az_count in infra/terraform/variables.tf.
+vpc_az_count           = 2
+vpc_single_nat_gateway = true
 
 eks_node_instance_types = ["t4g.large"]
 eks_node_min_size       = 2

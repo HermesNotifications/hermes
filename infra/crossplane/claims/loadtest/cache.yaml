@@ -1,0 +1,26 @@
+# Loadtest Valkey cache — single node, pinned to one AZ, snapshots off.
+#
+# availabilityZone MUST equal the AZ the EKS nodes are in, and must match the value in
+# database.yaml beside this file. See the longer note there for how to obtain it and what
+# a mismatch silently costs.
+#
+# snapshotRetentionDays 0: nothing in this cache survives a run and nothing wants to.
+apiVersion: hermes.io/v1alpha1
+kind: HermesCacheClaim
+metadata:
+  name: hermes-cache
+  namespace: hermes
+spec:
+  engineVersion: "7.2"
+  # The cache is on the hot path for template lookups, idempotency keys, rate limiting and
+  # the unread count, so it takes a multiple of the request rate. cache.t4g.micro (staging's
+  # size) has a network allowance that a 50k RPS run exhausts on its own.
+  nodeType: cache.r7g.large
+  nodeCount: 1
+  availabilityZone: us-east-1a
+  transitEncryption: true
+  snapshotRetentionDays: 0
+  compositionRef:
+    name: hermescache-aws
+  writeConnectionSecretToRef:
+    name: hermes-cache-conn

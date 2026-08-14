@@ -1,0 +1,40 @@
+# Loadtest Aurora PostgreSQL — single instance, pinned to one AZ, no deletion protection.
+#
+# availabilityZone MUST equal the AZ the EKS nodes are in. Terraform pins those with
+# single_az_workloads and reports the AZ it chose:
+#
+#   ./infra/terraform/scripts/tfenv.sh loadtest output -raw workload_availability_zone
+#
+# Nothing validates the two against each other. Getting it wrong does not fail — it
+# quietly puts the database in an AZ with no pods in it, so every query pays cross-AZ
+# transfer in both directions, which is the exact cost this environment exists to avoid.
+# Re-check it after any change to vpc_az_count or the region: `local.azs` is a slice of
+# aws_availability_zones.available, and AWS does not guarantee that list is stable.
+#
+# Changing this value later REPLACES the cluster instance — availability_zone is
+# "Optional, Computed, Forces new resource" on aws_rds_cluster_instance, which is what the
+# upjet provider is generated from. Fixing a wrong AZ therefore costs a rebuild, not an
+# edit. Cheap here, where the data is disposable; the same field would not be cheap
+# elsewhere, which is another reason it is set per-claim rather than per-environment.
+#
+# instanceCount stays 1. A replica pinned to the writer's AZ is spend without redundancy.
+apiVersion: hermes.io/v1alpha1
+kind: HermesDatabaseClaim
+metadata:
+  name: hermes-database
+  namespace: hermes
+spec:
+  engineVersion: "16.4"
+  # Sized to be the thing under test rather than the bottleneck: the send path writes a
+  # notification row per request and Event Writer batch-inserts behind it, so db.t4g.medium
+  # (staging's size) saturates well before Hermes does and the run measures Aurora.
+  instanceClass: db.r7g.xlarge
+  instanceCount: 1
+  availabilityZone: us-east-1a
+  backupRetentionDays: 1
+  storageEncrypted: true
+  deletionProtection: false
+  compositionRef:
+    name: hermesdatabase-aws
+  writeConnectionSecretToRef:
+    name: hermes-database-conn

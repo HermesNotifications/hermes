@@ -223,6 +223,17 @@ spec:
                 clusterIdentifierSelector:
                   matchControllerRef: true
                 performanceInsightsEnabled: true
+            {{- /*
+                Emitted only when the claim asks for it. The DB subnet group still spans
+                two AZs — RDS requires that and rejects a one-AZ group — so without this
+                line Aurora is free to put the writer in the AZ the EKS nodes are NOT in,
+                and every query in a single-AZ environment crosses a billed boundary.
+                The claim is responsible for matching Terraform's
+                `workload_availability_zone` output; nothing here can check it.
+            */}}
+            {{- if $spec.availabilityZone }}
+                availabilityZone: "{{ $spec.availabilityZone }}"
+            {{- end }}
                 region: {{ $env.region }}
                 tags:
                   managed-by: crossplane

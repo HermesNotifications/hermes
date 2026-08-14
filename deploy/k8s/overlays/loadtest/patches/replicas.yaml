@@ -1,0 +1,82 @@
+# Fixed replica counts, matching production's shape so that a run measures the topology
+# production actually has.
+#
+# There is deliberately no HPA in this overlay (see kustomization.yaml). Fixed replicas are
+# what make a run comparable to the previous run: with autoscaling on, throughput is a
+# function of how fast the HPA reacted, and two runs of the same build produce two numbers.
+# Scale-out behaviour is worth testing on purpose, as its own scenario, not as background
+# noise under every scenario.
+#
+# These counts assume the 3 × m7g.xlarge floor from loadtest.tfvars (12 vCPU total, minus
+# NATS, Centrifugo and system pods). For a run that needs more, raise eks_node_desired_size
+# and these together — replicas above what the nodes can hold just sit Pending, and the
+# soft hostname spread in anti-affinity.yaml will not tell you.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-admin
+spec:
+  replicas: 2
+---
+# The write path, and the point of the send scenario. Highest replica count here for the
+# same reason it has the highest CPU request in resources.yaml: the rate limiter admits
+# 2000 req/s per replica, so the cluster ceiling is this number times that.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-send
+spec:
+  replicas: 4
+---
+# Dispatch does the work Send deliberately does not — the notification record, template
+# resolution, channel fan-out — so it saturates before Send does at equal replica counts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-dispatch
+spec:
+  replicas: 4
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-inbox
+spec:
+  replicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-user
+spec:
+  replicas: 2
+---
+# Event Writer. Batch-inserts every event the pipeline emits and updates notification
+# status, so it sees more messages than any single worker.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-events
+spec:
+  replicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-email
+spec:
+  replicas: 2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-sms
+spec:
+  replicas: 2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-worker-inbox
+spec:
+  replicas: 2

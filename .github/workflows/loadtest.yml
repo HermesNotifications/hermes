@@ -36,7 +36,12 @@ env:
 jobs:
   run:
     runs-on: ubuntu-latest
-    environment: staging
+    # Was `staging`. Load tests now run against the dedicated single-AZ loadtest cluster
+    # (infra/terraform/environments/loadtest.tfvars) so that a 4h nightly soak neither
+    # degrades staging as a rehearsal environment nor bills cross-AZ transfer on every
+    # request. REQUIRES a `loadtest` GitHub environment holding LOADTEST_CLUSTER and its
+    # own AWS_LOADTEST_ROLE_ARN and ECR_REGISTRY.
+    environment: loadtest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -46,7 +51,20 @@ jobs:
           aws-region: us-east-1
 
       - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name ${{ secrets.STAGING_CLUSTER }} --region us-east-1
+        run: aws eks update-kubeconfig --name ${{ secrets.LOADTEST_CLUSTER }} --region us-east-1
+
+      # ADR 0023. The environment is pinned to one AZ so a run does not pay cross-AZ
+      # transfer on every hop, but the pin spans Terraform (node groups) and Crossplane
+      # (Aurora, ElastiCache) with nothing enforcing that the two agree. A drift breaks
+      # nothing and reports nothing — it just makes the run more expensive than not
+      # pinning at all. Seconds of preflight against a run that takes hours.
+      #
+      # Not `continue-on-error`: a soak that costs several times what it should is worth
+      # stopping for, and the failure names the exact claim file to fix.
+      - name: Verify single-AZ placement
+        env:
+          CLUSTER: ${{ secrets.LOADTEST_CLUSTER }}
+        run: infra/scripts/check-single-az.sh "$CLUSTER" us-east-1
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:

@@ -1,0 +1,68 @@
+# Let the k6 generators in the `loadtest` namespace reach the services they are testing.
+#
+# This policy exists only in this overlay and has no staging or production counterpart,
+# because it is the one thing about this environment's network posture that genuinely
+# differs: traffic originates INSIDE the cluster, from another namespace.
+#
+# Without it the environment deploys clean and every scenario fails at connect. The chain:
+# default-deny.yaml denies all ingress to the hermes namespace, allow-ingress.yaml re-opens
+# the API ports to the `ingress-nginx` namespace only — and the generators do not go
+# through the ingress. loadtest/scripts/run-k8s.sh points them straight at cluster DNS:
+#
+#   ADMIN_URL  http://hermes-admin.hermes.svc.cluster.local:8080
+#   SEND_URL   http://hermes-send.hermes.svc.cluster.local:8088
+#   INBOX_URL  http://hermes-inbox.hermes.svc.cluster.local:8086
+#
+# That is deliberate on the load-test side — measuring Hermes rather than ingress-nginx —
+# and it means the namespaceSelector below is what makes the whole rig work.
+#
+# The selector matches the label on loadtest/k8s/namespace.yaml. `kubernetes.io/metadata.name`
+# is used rather than that file's `purpose: load-testing` because the kubelet sets the
+# metadata.name label on every namespace automatically, so it cannot be dropped by someone
+# editing the namespace manifest.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-loadtest-generators
+  namespace: hermes
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - hermes-admin
+          - hermes-send
+          - hermes-inbox
+          - hermes-user
+          - centrifugo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loadtest
+      ports:
+        - protocol: TCP
+          port: 8080 # hermes-admin — seeding, template and key setup
+        - protocol: TCP
+          port: 8086 # hermes-inbox — the inbox-mixed read path
+        - protocol: TCP
+          port: 8087 # hermes-user
+        - protocol: TCP
+          port: 8088 # hermes-send — the send scenario
+        - protocol: TCP
+          port: 8000 # centrifugo — the WebSocket half of inbox-mixed
+#
+# Nothing is needed here for the loadseed Job's direct Postgres writes, and it is worth
+# saying so explicitly because the absence looks like an oversight. NetworkPolicy is
+# deny-by-default only within a namespace that has a policy selecting the pod;
+# default-deny.yaml applies to `hermes`, and the `loadtest` namespace has no policies at
+# all, so pods there already have unrestricted egress to Aurora.
+#
+# A policy for the loadseed pod also could not live in this file even if it were needed:
+# ../../base sets `namespace: hermes` as a transformer, which rewrites the namespace of
+# every resource this overlay renders. A manifest here declaring `namespace: loadtest`
+# would be silently moved into `hermes`, where its podSelector matches nothing — the same
+# trap ../../pki avoids by being a sibling of base rather than part of it.
