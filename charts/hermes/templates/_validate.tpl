@@ -90,6 +90,81 @@ install can, which is how it reached CI rather than a local check.
 {{- end }}
 
 {{/*
+The memory engine is correct at one Centrifugo replica and silently wrong at more.
+
+Each node on the memory engine keeps its own subscription registry. Hermes publishes over the
+HTTP API to whichever node the Service routes it to, and that node delivers only to clients
+connected to itself. At two replicas roughly half of every user's notifications are dropped --
+no error, no log line, no failed probe, and `centrifugo_node_num_clients` looks healthy on both
+pods. The notification is still stored, so the inbox is right on refresh and only the live push
+is missing, which is about the hardest shape of bug to notice.
+
+scripts/check_centrifugo_engine.py has caught this for the kustomize overlays since it was
+written. It never ran against the chart, and the chart is what most people install -- the same
+gap that let the chart ship without the natsprovision Job. This is the render-time half; the
+Makefile now runs the script over the Helm output too.
+
+Deliberately not solved by defaulting the engine to redis. At one replica memory is correct,
+self-contained, and survives Redis being down; making every evaluation install depend on Redis
+for realtime to work at all is a worse default than refusing the one combination that breaks.
+The Redis engine is a two-line switch documented in values.yaml for anyone who needs to scale.
+*/}}
+{{- define "hermes.validateCentrifugoEngine" -}}
+{{- if .Values.centrifugo.enabled -}}
+{{-   $cfg := .Values.centrifugo.config | default dict -}}
+{{-   $engine := get $cfg "engine" | default dict -}}
+{{-   $type := get $engine "type" | default "memory" -}}
+{{-   $replicas := .Values.centrifugo.replicaCount | default 1 | int -}}
+{{-   if and (eq $type "memory") (gt $replicas 1) -}}
+{{-     fail (printf "centrifugo.replicaCount is %d on the in-memory engine. Each replica keeps its own subscription registry, so a publication reaches only the clients connected to the pod that received it -- roughly %d%% of live notifications are dropped, silently, while every health check and connection-count metric stays green. Either set centrifugo.replicaCount to 1, or switch to the Redis engine:\n\n  centrifugo:\n    config:\n      engine:\n        type: redis\n        redis:\n          address: redis://%s-redis:6379/0\n\nMeasured cross-replica: 208 pushes/s over three pods against 210/s on one, and a rolling restart with zero failed requests." $replicas (div (mul (sub $replicas 1) 100) $replicas) (include "hermes.fullname" .)) -}}
+{{-   end -}}
+{{/*
+The Redis engine's address is a literal in values.yaml because a parent chart cannot template a
+sub-chart's values -- the same constraint that makes centrifugo.envSecret name its Secret in
+full. So the two can disagree, and the way they disagree is bad: Centrifugo dials plaintext
+against a TLS-only Redis, fails to connect, and CrashLoopBackOffs on a config the chart rendered
+without complaint.
+*/}}
+{{-   if eq $type "redis" -}}
+{{-     $redis := get $engine "redis" | default dict -}}
+{{-     $addr := get $redis "address" | default "" -}}
+{{-     if and (include "hermes.storeTLS" (dict "root" . "store" "redis")) (hasPrefix "redis://" $addr) -}}
+{{-       fail (printf "centrifugo's Redis engine points at %q, but the bundled Redis is TLS-only (tls.enabled). Centrifugo would fail to connect and crash-loop. Use a rediss:// address and give it the CA under centrifugo.config.engine.redis.tls -- the bundled certificate is signed by a private cert-manager CA that is in no system trust store, so rediss:// alone is not enough." $addr) -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The prober cannot start without a key, and the way it fails is the wrong way.
+
+An unresolvable secretKeyRef does not fail the render -- it fails when the kubelet builds the
+container, as CreateContainerConfigError, which `helm template` cannot see. So a prober enabled
+without a key installs cleanly, never runs, and emits no probe results at all. Since the alert
+for this service is "probe results stopped arriving", the symptom of a misconfigured prober is
+identical to the symptom of a totally broken pipeline, on an install where the pipeline is fine.
+
+Same class as the hermes.jwt.existingSecret case in validateCentrifugoSecrets, and caught here
+for the same reason: render time is the only place it is cheap to find.
+*/}}
+{{- define "hermes.validateProber" -}}
+{{- if .Values.prober.enabled -}}
+{{-   if not .Values.prober.apiKey.existingSecret -}}
+{{-     fail "prober.enabled is true but prober.apiKey.existingSecret is empty. The prober authenticates to /v1/auth/token and /v1/send with an API key, and without one the pod sits in CreateContainerConfigError -- which looks exactly like the outage this service is supposed to detect. Create a Secret holding a key with notifications:send and organizations:manage, then set prober.apiKey.existingSecret to its name." -}}
+{{-   end -}}
+{{- /*
+externalCentrifugo carries apiUrl, not a websocket URL -- the chart has never needed the
+connection endpoint before, because only browsers used it and they reach it through the
+Ingress. The prober is the first in-cluster client to open a socket, so when the bundled
+Centrifugo is off it has to be told where to dial.
+*/ -}}
+{{-   if and (not .Values.centrifugo.enabled) (not .Values.prober.centrifugoURL) -}}
+{{-     fail "prober.enabled is true with the bundled Centrifugo disabled, but prober.centrifugoURL is empty, so there is no websocket endpoint to dial. Set it to your Centrifugo connection endpoint (e.g. wss://realtime.example.com/connection/websocket) -- note externalCentrifugo.apiUrl is the HTTP API and cannot be used for this. Left unset, the probe reports 100% loss regardless of pipeline health." -}}
+{{-   end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 dispatch.concurrency and dispatch.database.maxConns describe one thing, and every way of
 getting them out of step fails quietly.
 

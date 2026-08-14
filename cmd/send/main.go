@@ -54,6 +54,9 @@ func main() {
 	)
 	srv.SetReadiness(readiness)
 
+	// pprof on its own port when HERMES_DEBUG_PORT is set; a no-op otherwise.
+	bootstrap.StartDebugServer(cfg.DebugPort, cfg.BlockProfileRate, cfg.MutexProfileFraction, logger)
+
 	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), srv.Handler(), logger,
 		bootstrap.ServeOptions{
 			Readiness:       readiness,

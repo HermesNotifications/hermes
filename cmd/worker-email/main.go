@@ -73,6 +73,9 @@ func main() {
 	mux.HandleFunc("GET /healthz", httputil.HealthzHandler(bootstrap.ConsumerProgressCheck(natsClient)))
 	mux.HandleFunc("GET /readyz", readiness.Handler())
 
+	// pprof on its own port when HERMES_DEBUG_PORT is set; a no-op otherwise.
+	bootstrap.StartDebugServer(cfg.DebugPort, cfg.BlockProfileRate, cfg.MutexProfileFraction, logger)
+
 	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
 		bootstrap.ServeOptions{
 			Readiness:       readiness,

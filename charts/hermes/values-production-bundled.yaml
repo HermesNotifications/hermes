@@ -30,10 +30,23 @@
 # Encryption moves the attacker from "anything on the network" to "anything in this
 # namespace"; if that is not the boundary you need, use external datastores.
 #
-# Centrifugo is not here. The bundled one runs the memory engine, so a publication reaches
-# only the users connected to the pod that received it -- invisible at one replica, silently
-# half-delivered at two. No transport setting changes that, so production requires an external
-# Centrifugo on the Redis engine.
+# Centrifugo is not here, and the reason has narrowed. The claim used to be that the bundled
+# Centrifugo *cannot* serve this posture because the memory engine half-delivers at more than
+# one replica. That part is still true of the memory engine, and templates/_validate.tpl now
+# refuses the combination outright rather than describing it -- but the bundled Centrifugo can
+# run the Redis engine against the bundled Redis, and it has been measured doing so: 208
+# pushes/s across three replicas against 210/s on one, surviving a rolling restart with zero
+# failed requests.
+#
+# What still blocks it here is TLS, not fan-out. This file sets tls.enabled, so the bundled
+# Redis is rediss:// with a certificate from a private cert-manager CA that no system trust
+# store knows, and Centrifugo needs that CA under engine.redis.tls to connect at all. Wiring a
+# CA into a sub-chart whose values a parent cannot template is a change that has to be verified
+# against a live cluster rather than a render, and it has not been.
+#
+# So: external Centrifugo remains the documented production path. If you want the bundled one,
+# the combination to test is engine.type=redis with a rediss:// address and the CA mounted via
+# centrifugo.volumes -- and test it, do not assume it from this comment.
 
 hermes:
   env: production

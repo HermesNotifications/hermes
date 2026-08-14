@@ -7,18 +7,110 @@ metadata:
     role: alert-rules
 spec:
   groups:
+    # Recording rules first, for two reasons.
+    #
+    # One: prometheus-nats-exporter labels jsz consumer series `stream_name`/`consumer_name`,
+    # while Hermes' own hermes_messaging_* metrics use `stream`/`consumer`. Nothing joined
+    # them, and the old NATSConsumerLag annotations below interpolated $labels.stream against
+    # the exporter's series — so the alert named the lagging consumer as the empty string.
+    #
+    # Two: backlog is only interpretable next to drain rate, and that needs one series from
+    # each side. Normalising once here keeps the alert expressions readable.
+    - name: hermes.pipeline.recording
+      rules:
+        - record: hermes:consumer_pending
+          expr: |
+            label_replace(
+              label_replace(
+                nats_jetstream_consumer_num_pending,
+                "stream", "$1", "stream_name", "(.*)"
+              ),
+              "consumer", "$1", "consumer_name", "(.*)"
+            )
+        # Messages a consumer actually finishes per second. The handler duration histogram's
+        # _count is the drain rate -- it was already being emitted, and nothing read it.
+        - record: hermes:consumer_drain_rate
+          expr: |
+            sum by (stream, consumer) (
+              rate(hermes_messaging_handler_duration_seconds_count{result="ok"}[5m])
+            )
+        # Seconds of backlog at the current drain rate. This is the number that separates a
+        # queue absorbing a burst from a pipeline falling behind, and the two are
+        # indistinguishable by depth alone.
+        #
+        # `> 0` on the denominator is not cosmetic: a consumer draining at exactly zero with
+        # work pending is the wedged case, and dividing by it yields +Inf, which compares
+        # true against any threshold. That is the correct outcome here -- infinite
+        # time-to-drain is precisely the alert -- but HermesConsumerStalled catches it first
+        # and more specifically, so the filter keeps this rule reporting finite backlogs and
+        # leaves wedges to the alert built for them.
+        - record: hermes:consumer_seconds_to_drain
+          expr: |
+            hermes:consumer_pending
+              / on (stream, consumer)
+            (hermes:consumer_drain_rate > 0)
+
     - name: hermes.pipeline
       rules:
-        - alert: NATSConsumerLag
-          expr: nats_jetstream_consumer_num_pending > 1000
-          for: 5m
+        # Replaces a static `num_pending > 1000`, which the 250k exercise falsified in both
+        # directions. At 6,000/s offered, pending reached 764,173 -- it crosses 1000 in about
+        # a fifth of a second, so the threshold carried no information about severity. And a
+        # legitimate burst absorbed by the queue, which is the queue working, crosses it too.
+        # An alert that fires identically for "healthy" and "irrecoverable" is one people
+        # learn to close.
+        #
+        # Time-to-drain is scale-invariant: 5,000 messages draining at 1,242/s is four
+        # seconds and fine; the same 5,000 draining at 5/s is sixteen minutes and a page.
+        - alert: NATSConsumerBacklogGrowing
+          expr: hermes:consumer_seconds_to_drain > 300
+          for: 10m
           labels:
             severity: warn
             component: pipeline
           annotations:
-            summary: "NATS consumer lag on {{ $labels.stream }}/{{ $labels.consumer }}"
-            description: "{{ $labels.consumer }} on {{ $labels.stream }} has {{ $value }} pending messages for 5 minutes."
+            summary: "{{ $labels.consumer }} on {{ $labels.stream }} is {{ $value | humanizeDuration }} behind"
+            description: "At the current drain rate this consumer needs {{ $value | humanizeDuration }} to clear its backlog. Check whether the pool is saturated (hermes_messaging_inflight / hermes_messaging_workers_limit) before adding replicas -- four dispatch replicas measured 1.6x the throughput of one, while raising worker count on a single replica measured 3.8x."
             runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/nats-consumer-lag.md"
+        # The signal send_ack_latency structurally cannot produce. Send publishes to JetStream
+        # and returns in ~2ms whether or not anything downstream keeps up, so a 12,000/s run
+        # left 1,010,571 messages queued while every HTTP response looked healthy. Sustained
+        # positive growth is the statement "offered exceeds drain", and it is the only one
+        # that distinguishes a deep-but-draining queue from an unbounded one.
+        #
+        # deriv() over 15m rather than a shorter window because JetStream pending is sawtoothed
+        # by prefetch; a 5m window fits the teeth rather than the trend.
+        - alert: NATSConsumerBacklogUnbounded
+          expr: |
+            deriv(hermes:consumer_pending[15m]) > 0
+              and
+            hermes:consumer_pending > 1000
+          for: 15m
+          labels:
+            severity: critical
+            component: pipeline
+          annotations:
+            summary: "{{ $labels.consumer }} on {{ $labels.stream }} is falling behind, not catching up"
+            description: "Backlog has grown continuously for 15 minutes -- the offered rate exceeds what this consumer drains, so the queue grows without bound. Ingestion latency will look healthy throughout; do not use it to judge recovery."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/nats-consumer-lag.md"
+        # Names its own fix. Fires only alongside a backlog, because a saturated pool with an
+        # empty queue is a pool doing its job at exactly the right size.
+        - alert: HermesWorkerPoolSaturated
+          expr: |
+            (
+              sum by (stream, consumer) (hermes_messaging_inflight)
+                / on (stream, consumer)
+              sum by (stream, consumer) (hermes_messaging_workers_limit)
+            ) >= 0.95
+              and on (stream, consumer)
+            hermes:consumer_pending > 1000
+          for: 10m
+          labels:
+            severity: warn
+            component: pipeline
+          annotations:
+            summary: "{{ $labels.consumer }} worker pool is saturated with work queued"
+            description: "Every worker on {{ $labels.consumer }} has been busy for 10 minutes while messages wait. This is a concurrency limit, not a capacity one: raise the pool (dispatch.concurrency for dispatch) and postgresql.maxConnections with it, before adding replicas."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/worker-pool-saturated.md"
         # Fires at half the default liveness window (HERMES_NATS_CONSUMER_STALL_TIMEOUT, 10m), so
         # an operator gets the chance to look at a live wedged pod. Past 10m the container is
         # restarted and the evidence is gone — which is exactly what happened to the incident this
@@ -37,6 +129,57 @@ spec:
             summary: "Consumer {{ $labels.consumer }} on {{ $labels.stream }} has taken no work for {{ $value }}s"
             description: "The consumer has work waiting and has finished none of it. Liveness fails at the configured stall timeout (10m by default) and the kubelet will restart the container; investigate now if you want the wedged process."
             runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/consumer-stalled.md"
+        # The synthetic prober's verdict, and the only alert here that fires on "notifications
+        # are not arriving" rather than on a proxy for it. Every other signal in this file can
+        # be green while realtime is broken: a Centrifugo on the memory engine behind two
+        # replicas, an origin rule refusing every browser, a publish to a channel nobody is
+        # subscribed to. All of those answer 200 and enqueue nothing.
+        #
+        # 10% rather than any loss, because delivery is at-least-once over a websocket and a
+        # single dropped frame across a reconnect is normal.
+        - alert: HermesProbeLoss
+          expr: |
+            sum(rate(hermes_probe_results_total{result="lost"}[10m]))
+              /
+            sum(rate(hermes_probe_results_total[10m]))
+              > 0.1
+          for: 10m
+          labels:
+            severity: critical
+            component: pipeline
+          annotations:
+            summary: "{{ $value | humanizePercentage }} of synthetic probes are not arriving"
+            description: "Notifications sent by the prober are not reaching its websocket. This is end-to-end: send, dispatch, worker-inbox and Centrifugo are all in scope. Check hermes_probe_connected first -- a prober that lost its own subscription reports total loss on a healthy pipeline."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/probe-failing.md"
+        # Absence, not rate. A prober that has stopped sending produces no samples at all, and
+        # every ratio above it becomes 0/0 -- so silence would otherwise read as perfect health.
+        # This is the alert that catches the alerting being broken.
+        - alert: HermesProbeAbsent
+          expr: absent(hermes_probe_results_total)
+          for: 15m
+          labels:
+            severity: warn
+            component: pipeline
+          annotations:
+            summary: "No synthetic probe results are being reported"
+            description: "The prober has produced no results for 15 minutes. Either it is not running, cannot reach Hermes, or its telemetry is not being scraped. Until this clears, HermesProbeLoss cannot fire and the end-to-end path is unmonitored."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/probe-failing.md"
+        # Latency, separately from loss. Measured at 11ms p95 while holding 250,000
+        # connections, so 2s is not a tight threshold -- it is the point where something is
+        # clearly wrong and has not yet crossed into "never arrived".
+        - alert: HermesProbeLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(hermes_probe_e2e_duration_seconds_bucket[10m]))
+            ) > 2
+          for: 15m
+          labels:
+            severity: warn
+            component: pipeline
+          annotations:
+            summary: "End-to-end notification latency p95 is {{ $value }}s"
+            description: "Send-to-websocket p95 is above 2s. Compare hermes_probe_send_duration_seconds: if that is flat, the delay is downstream of ingestion and consumer backlog is the place to look."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/probe-failing.md"
         - alert: HermesDeadLetterDetected
           expr: increase(hermes_messaging_dead_letters_total[15m]) > 0
           for: 1m

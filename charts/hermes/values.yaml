@@ -851,8 +851,25 @@ ingress:
 
 # -- Observability / telemetry configuration
 observability:
-  # -- Enable OpenTelemetry export environment for Hermes services
-  enabled: false
+  # -- Enable OpenTelemetry export environment for Hermes services.
+  #
+  # On by default. It was off, and not as a sizing decision: `resource.WithProcess()` includes
+  # a process-owner detector that calls `os/user.Current()`, which cannot work in a
+  # CGO-disabled distroless image, so every service crash-looped on
+  #
+  #   observability init failed: build resource: error detecting resource:
+  #   user: Current requires cgo or $USER set in environment
+  #
+  # The workaround was `enabled: false`, and it held long enough to become the default. The
+  # cost of that shows up in docs/loadtest/websocket-scale-2026-08.md: the entire 250,000
+  # connection exercise ran with Hermes telemetry off, so every figure in it came from
+  # kubeletstats and hand-run curl, with no Hermes spans or metrics for the window at all.
+  #
+  # internal/observability/otel.go:buildResource now spells out WithProcess() minus
+  # WithProcessOwner(), so the crash is gone and there is no longer a reason to ship dark.
+  # Exporting to an endpoint that does not exist is a no-op, not an error — Init returns
+  # early when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+  enabled: true
   otel:
     # -- OTLP endpoint for the OpenTelemetry Collector
     endpoint: "http://otel-collector-opentelemetry-collector.observability.svc:4317"
@@ -864,6 +881,101 @@ observability:
     # -- Emit Prometheus Operator ServiceMonitor resources for Hermes services.
     # Defaults to true to preserve the old observability.enabled=true behavior.
     enabled: true
+    # -- Render ServiceMonitors even when the renderer cannot see the CRD.
+    #
+    # templates/servicemonitor.yaml normally checks `.Capabilities.APIVersions` so an
+    # evaluation install on a cluster with no Prometheus Operator does not fail with
+    # `no matches for kind "ServiceMonitor"`. That check needs cluster access: plain
+    # `helm template`, and GitOps renderers that do not pass --api-versions, report no
+    # capabilities at all and the guard silently drops every ServiceMonitor. No error, no
+    # scrape, an empty dashboard.
+    #
+    # Set true where the chart is rendered without a cluster and you know the CRDs exist.
+    force: false
+  # -- net/http/pprof on a dedicated port, for every Hermes service.
+  #
+  # Off by default for two reasons, both real. The endpoint is unauthenticated and exposes the
+  # process command line and every goroutine stack; and the block/mutex profiles below perturb
+  # what they measure, so a run with them on is not a run whose latency numbers you should
+  # quote. Turn it on to investigate, not to leave on.
+  #
+  # The port is deliberately absent from every Service, so reaching it takes
+  # `kubectl port-forward deploy/hermes-<service> 6060:6060`. Images are FROM scratch with no
+  # shell, so analyse locally: `go tool pprof bin/<service>/service http://localhost:6060/...`.
+  #
+  # See docs/observability/runbooks/high-latency.md for which profile to pull, and why the CPU
+  # one is usually not it.
+  profiling:
+    enabled: false
+    port: 6060
+    # -- Sample one blocking event per this many nanoseconds spent blocked. 0 disables.
+    # 10000 (10µs) is a reasonable on; 1 records every event and is genuinely expensive.
+    #
+    # This is the profile worth having here. Dispatch caps out waiting on Postgres commit
+    # rather than on CPU, and a CPU profile of a process parked in pgx shows an idle process.
+    blockProfileRate: 10000
+    # -- Sample 1 in N mutex contention events. 0 disables; 5 is a reasonable on.
+    mutexProfileFraction: 5
+
+# ---------------------------------------------------------------------------
+# Synthetic prober
+# ---------------------------------------------------------------------------
+
+# -- Continuously measures the pipeline the way a user experiences it: from POST /v1/send
+# returning to the notification frame arriving on a websocket.
+#
+# Every latency Hermes emits today is per-hop, and none of them -- alone or summed -- answers
+# "did it arrive, and how long did it take". That number has existed only inside k6, during
+# load tests, and it took four defect fixes to make real; three of those had it evaluating zero
+# samples while reporting a green threshold. This runs the same measurement continuously.
+#
+# It is the only signal here that fails when realtime is broken in the ways that are otherwise
+# silent: a Centrifugo on the memory engine behind two replicas, an origin rule refusing every
+# browser, a channel nobody is subscribed to, a wedged consumer. Every one of those leaves the
+# HTTP API answering 200.
+#
+# Off by default. It needs an API key you create, and each probe writes a real notification row
+# (30s = 2,880/day), so it is opt-in rather than something an evaluation install starts doing.
+prober:
+  enabled: false
+  image:
+    repository: hermes-prober
+    tag: ""
+  port: 8089
+  # -- Organization and user the probe addresses. Both are auto-created on the first token
+  # exchange, so no seeding step is needed -- but pick names that are obviously synthetic,
+  # because these rows appear in the same tables as real ones.
+  organizationID: "hermes-synthetic"
+  userID: "hermes-probe"
+  # -- Time between probes. Also the write rate: every probe is a real notification.
+  interval: 30s
+  # -- How long a probe waits before it is counted lost. Generous on purpose -- end-to-end p95
+  # measured 11ms while holding 250,000 connections, so this is not a latency threshold, it is
+  # the line between "slow" and "never arrived". Alert on latency separately.
+  timeout: 30s
+  # -- Websocket connection endpoint. Empty derives `ws://<release>-centrifugo:8000/connection/websocket`.
+  #
+  # Note this is the CONNECTION endpoint on the external port, not the HTTP API on the internal
+  # one. Pointing it at the API URL produces a socket that never connects and a probe that
+  # reports 100% loss against a perfectly healthy pipeline.
+  centrifugoURL: ""
+  # -- API key for the probe, from a Secret you create. Required when enabled.
+  #
+  # Give it `notifications:send` and `organizations:manage` and nothing else. Reusing the
+  # bootstrap key works and means a pod runs forever holding rights it never exercises.
+  apiKey:
+    existingSecret: ""
+    existingSecretKey: "api-key"
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  podAnnotations: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
 
 # ---------------------------------------------------------------------------
 # Network Policy
@@ -1036,6 +1148,29 @@ postgresql:
     # sslrootcert -- deliberately, since pgx silently promotes the mode to verify-ca when
     # both are present, making the setting and the behaviour disagree.
     sslmode: verify-full
+  # -- Extra `-c key=value` settings passed to the bundled server.
+  #
+  # `track_wal_io_timing=on` is the default because without it `pg_stat_wal.wal_sync_time`
+  # and `wal_write_time` stay at exactly zero, and the postgres-exporter query that reads
+  # them (deploy/observability/base/exporters/postgres-exporter.yaml) then publishes a mean
+  # fsync latency of 0/0. A metric that is always zero is worse than an absent one: it reads
+  # as "the disk is instant" rather than as "this is not being measured".
+  #
+  # It costs a clock read per WAL write. Postgres warns this can be significant on platforms
+  # with slow timing; `pg_test_timing` in the container tells you which you have, and on
+  # anything with a usable TSC it is in the tens of nanoseconds. Drop it from this list if
+  # you measure otherwise.
+  #
+  # This is also the general escape hatch for write-path tuning -- commit_delay,
+  # shared_buffers, max_wal_size -- none of which was reachable from the documented install
+  # path before. Values are passed through verbatim and not validated:
+  #
+  #   extraSettings:
+  #     - track_wal_io_timing=on
+  #     - commit_delay=250
+  #     - shared_buffers=1GB      # raise postgresql.shmSize with it
+  extraSettings:
+    - track_wal_io_timing=on
   persistence:
     # -- With persistence off the database is an emptyDir and every pod restart starts empty.
     enabled: true
@@ -1089,13 +1224,21 @@ redis:
     # -- Run a redis_exporter sidecar exposing Prometheus metrics on port 9121, and add a
     # `metrics` port to the Redis Service.
     #
-    # Off by default to keep the evaluation install small, but worth turning on before this
-    # Redis carries anything you would miss. It is not only a cache: it holds the
-    # idempotency keys that stop a retried send being delivered twice, and when Centrifugo
-    # runs on the Redis engine it is also the realtime broker every websocket publication
-    # passes through -- so it becomes load-bearing for connection fan-out at exactly the
-    # point you scale the realtime tier out. Nothing else in the chart exposes its state.
-    enabled: false
+    # On by default. This Redis is not only a cache: it holds the idempotency keys that stop
+    # a retried send being delivered twice, and when Centrifugo runs on the Redis engine it
+    # is also the realtime broker every websocket publication passes through -- so it becomes
+    # load-bearing for connection fan-out at exactly the point you scale the realtime tier
+    # out. Nothing else in the chart exposes its state.
+    #
+    # It shipped off, and the 250k load test is what argued it back on: Redis was measured at
+    # 0.15 cores and 3,000 ops/s while carrying the fan-out for 100,000 connections, and that
+    # number had to be obtained by hand because the pod had no metrics endpoint at all. A
+    # component on the realtime critical path with no time series is one you can only
+    # characterise after the incident.
+    #
+    # The sidecar is ~10Mi and one scrape target. Set false if you are running an evaluation
+    # install where that still matters.
+    enabled: true
     image:
       # -- The exporter the Prometheus community maintains for Redis.
       repository: docker.io/oliver006/redis_exporter
@@ -1164,12 +1307,108 @@ centrifugo:
       secretKeyRef:
         name: hermes-secrets
         key: HERMES_JWT_SECRET
+  # -- OpenTelemetry traces from Centrifugo, joined to the Hermes trace.
+  #
+  # Centrifugo traces its **server API** only — the publish calls Hermes makes to it. It does
+  # not trace websocket client sessions, so this closes the `send -> dispatch -> worker-inbox
+  # -> Centrifugo publish` leg and stops there. The socket-delivery leg is still measured only
+  # by the load generator, which is what `ws_push_e2e_latency` is for.
+  #
+  # That is worth having anyway: worker-inbox publishing to Centrifugo was the one hop with no
+  # server-side timing at all, and a publish that is slow or failing currently shows up as an
+  # inbox notification that silently never arrives.
+  #
+  # The endpoint has to be repeated here rather than inherited: Helm merges `global` into a
+  # sub-chart but observability.otel.* is not under `global`, and a parent chart cannot
+  # template a sub-chart's values. Keep both in step, or point them at the same collector by
+  # setting global.otelEndpoint if you introduce one.
+  #
+  # OTEL_EXPORTER_OTLP_PROTOCOL is set explicitly because Centrifugo defaults to http/protobuf
+  # while Hermes' collector endpoint below is the gRPC port (4317). Left at the default, every
+  # span is posted as HTTP to a gRPC listener and silently dropped.
+  env:
+    CENTRIFUGO_OPENTELEMETRY: "1"
+    CENTRIFUGO_OPENTELEMETRY_API: "1"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.observability.svc:4317"
+    OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+    OTEL_SERVICE_NAME: "hermes-centrifugo"
+  # -- Scrape Centrifugo's Prometheus endpoint (always served on the internal port, 9000).
+  #
+  # `centrifugo_node_num_clients` is the connection count for the whole realtime tier and it
+  # was previously read by hand: it "confirmed the connection count exactly at every step" of
+  # the 250k exercise, from a curl, because nothing scraped it. The ServiceMonitor discovers
+  # every replica individually, which matters here — connections are per-node and a per-Service
+  # scrape would have shown one replica's share of them.
+  metrics:
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  # -- The sub-chart ships `resources: {}`, which schedules Centrifugo as BestEffort -- the
+  # first QoS class the kubelet evicts under node pressure, for the one pod that holds every
+  # live websocket in the deployment. Evicting it drops every connection at once.
+  #
+  # Sized from measurement rather than guessed. Centrifugo costs roughly 60 KiB and 5m CPU per
+  # 1,000 connections per replica, so 512Mi carries ~8,000 connections with room, and 1Gi is
+  # the point where a single replica has been observed holding ~16,000. Raise the limit
+  # proportionally before scaling connections: at 250,000 across six replicas each pod sat at
+  # 1.5-2.1Gi against a 4Gi limit, and three replicas would have needed ~5Gi and been
+  # OOM-killed.
+  #
+  # The CPU request is deliberately small. At 25,000 connections Centrifugo used 0.23 of one
+  # core; it is a memory-bound workload and a large CPU request only makes it harder to
+  # schedule.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
   config:
     # -- The admin UI. Off: it is served on the same internal port as the API and, with no
     # admin password configured, enabling it is an unauthenticated console onto every channel
     # for anything that can reach the Service.
     admin:
       enabled: false
+    # -- Instrument Centrifugo's own HTTP handlers, so the publish API gets latency and status
+    # histograms rather than only node-level gauges. The /metrics endpoint itself is always on
+    # (internal port 9000); this adds the per-handler series.
+    #
+    # `channel_namespace_resolution` is deliberately not set: it labels metrics by channel
+    # namespace, and Hermes runs everything through `channel.without_namespace` on
+    # `user#<id>`, so it would add a label whose only value is empty.
+    prometheus:
+      enabled: true
+      instrument_http_handlers: true
+    # -- Where Centrifugo keeps its subscription registry.
+    #
+    # `memory` is correct at ONE replica and silently wrong at more: each node knows only its
+    # own subscribers, so a publication reaches only the clients on the pod that happened to
+    # receive it. templates/_validate.tpl refuses replicaCount > 1 on this engine rather than
+    # letting it render, because the failure has no symptom -- the notification is still
+    # stored, so the inbox is correct on refresh and only the live push is missing.
+    #
+    # To scale the realtime tier out, switch to Redis and raise centrifugo.replicaCount:
+    #
+    #   centrifugo:
+    #     replicaCount: 3
+    #     config:
+    #       engine:
+    #         type: redis
+    #         redis:
+    #           address: redis://hermes-redis:6379/0
+    #
+    # Measured on three replicas: 208 pushes/s against 210/s for a single pod -- cross-replica
+    # fan-out costs nothing detectable -- and a `kubectl rollout restart` completed mid-run with
+    # 0.00% failed requests and push latency indistinguishable from steady state. On one replica
+    # that same restart drops every connection at once, which is the real argument for doing it.
+    #
+    # The address is a literal because a parent chart cannot template a sub-chart's values, so
+    # adjust it if you install under a release name other than `hermes`, and use rediss:// with
+    # engine.redis.tls if you enable tls.enabled -- the bundled Redis certificate comes from a
+    # private cert-manager CA that no system trust store knows. _validate.tpl catches the
+    # plaintext-against-TLS case; it cannot catch a wrong hostname.
+    engine:
+      type: memory
     channel:
       without_namespace:
         # -- REQUIRED for any client to subscribe. Do not turn this off.
@@ -1188,8 +1427,6 @@ centrifugo:
         # overlays use. An unrecognised key is ignored rather than rejected, so the v5 spelling
         # here would look correct and change nothing.
         allow_user_limited_channels: true
-    engine:
-      type: memory
     # -- Fallback transports for the inbox widget's connection ladder
     # (websocket -> http_stream -> sse). Leave both on.
     #

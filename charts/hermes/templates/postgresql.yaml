@@ -121,6 +121,16 @@ spec:
           */}}
           {{- $pgSettings = append $pgSettings (printf "max_connections=%v" .Values.postgresql.maxConnections) }}
           {{- end }}
+          {{- /*
+          Arbitrary `-c key=value` server settings. The third feature to append here, and the
+          general case of the two above -- added because the write path's tuning levers
+          (track_wal_io_timing, commit_delay, shared_buffers, max_wal_size) were all
+          unreachable from the documented install path, so the only way to change them was to
+          stop using the chart.
+          */}}
+          {{- range .Values.postgresql.extraSettings }}
+          {{- $pgSettings = append $pgSettings . }}
+          {{- end }}
           {{- if $pgSettings }}
           args:
             - postgres

@@ -1,0 +1,149 @@
+{{- if .Values.prober.enabled }}
+{{- $svcName := printf "%s-prober" (include "hermes.fullname" .) -}}
+{{- $svcCtx := dict "root" . "service" "prober" -}}
+{{- /*
+Exactly one replica, and not a value. Each replica sends its own probes on its own interval,
+so N replicas multiply the write rate and the metric becomes an average over pods rather than
+a measurement of the pipeline. There is also nothing to make highly available: this service
+takes no traffic, and a gap in the probe series while a pod restarts is visible as a gap.
+*/ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.prober.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 8 }}
+    spec:
+      {{- include "hermes.terminationGracePeriod" (dict "root" . "service" "prober") | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      {{- include "hermes.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: prober
+          image: {{ include "hermes.image" (dict "root" . "service" .Values.prober) }}
+          imagePullPolicy: {{ include "hermes.imagePullPolicy" (dict "root" . "service" .Values.prober) }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.prober.port }}
+              protocol: TCP
+          env:
+            - name: HERMES_HTTP_PORT
+              value: {{ .Values.prober.port | quote }}
+            {{- include "hermes.otelServiceEnv" $svcCtx | nindent 12 }}
+            - name: HERMES_PROBER_ADMIN_URL
+              value: {{ printf "http://%s-admin:%v" (include "hermes.fullname" .) .Values.admin.port | quote }}
+            - name: HERMES_PROBER_SEND_URL
+              value: {{ printf "http://%s-send:%v" (include "hermes.fullname" .) .Values.send.port | quote }}
+            {{- /*
+            The connection endpoint, not the API one. Centrifugo serves the websocket on its
+            external port at /connection/websocket while the HTTP API lives on the internal
+            port -- pointing this at the API URL yields a socket that never connects.
+            */}}
+            - name: HERMES_PROBER_CENTRIFUGO_URL
+              value: {{ .Values.prober.centrifugoURL | default (printf "ws://%s-centrifugo:8000/connection/websocket" .Release.Name) | quote }}
+            - name: HERMES_PROBER_ORGANIZATION_ID
+              value: {{ .Values.prober.organizationID | quote }}
+            - name: HERMES_PROBER_USER_ID
+              value: {{ .Values.prober.userID | quote }}
+            - name: HERMES_PROBER_INTERVAL
+              value: {{ .Values.prober.interval | quote }}
+            - name: HERMES_PROBER_TIMEOUT
+              value: {{ .Values.prober.timeout | quote }}
+            {{- /*
+            Its own API key, from a Secret you create. Not the bootstrap key: this one only
+            needs notifications:send and organizations:manage, and a probe that runs forever
+            with a key that can do everything is a standing privilege it never uses.
+            */}}
+            - name: HERMES_PROBER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.prober.apiKey.existingSecret | quote }}
+                  key: {{ .Values.prober.apiKey.existingSecretKey | quote }}
+            {{- if .Values.hermes.jwt.existingSecret }}
+            - name: HERMES_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hermes.jwt.existingSecret }}
+                  key: {{ .Values.hermes.jwt.existingSecretKey }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "hermes.configMapName" . }}
+            - secretRef:
+                name: {{ include "hermes.secretName" . }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 1
+          resources:
+            {{- toYaml .Values.prober.resources | nindent 12 }}
+          {{- include "hermes.preStop" . | nindent 10 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- include "hermes.datastoreCAMounts" . | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 10Mi
+        {{- include "hermes.datastoreCAVolumes" . | nindent 8 }}
+      {{- with .Values.prober.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.prober.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.prober.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  labels:
+    {{- include "hermes.serviceLabels" $svcCtx | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.prober.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "hermes.serviceSelectorLabels" $svcCtx | nindent 4 }}
+{{- end }}

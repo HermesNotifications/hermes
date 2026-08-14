@@ -1,6 +1,8 @@
 {{- include "hermes.validateEnvironment" . -}}
 {{- include "hermes.validateAdminPortal" . -}}
 {{- include "hermes.validateCentrifugoSecrets" . -}}
+{{- include "hermes.validateCentrifugoEngine" . -}}
+{{- include "hermes.validateProber" . -}}
 {{- include "hermes.validateDispatchPool" . -}}
 apiVersion: v1
 kind: ConfigMap
@@ -21,6 +23,23 @@ data:
   and Validate() applies to them identically.
   */}}
   HERMES_ENV: {{ .Values.hermes.env | quote }}
+  {{- if .Values.observability.profiling.enabled }}
+  {{/*
+  pprof, on its own port, for every service at once. Shared ConfigMap rather than
+  per-Deployment env because the point of turning this on is usually that you do not yet know
+  which service is the problem -- and internal/bootstrap.StartDebugServer is a no-op wherever
+  the port is unset, so the blast radius of enabling it broadly is one extra listener per pod
+  on a port no Service carries.
+
+  Block and mutex rates are separate values because they are the two profiles that matter for
+  this system and both cost something. Everything measured at scale says Hermes waits rather
+  than computes -- 11-24% node CPU while holding 250,000 connections -- so a CPU profile alone
+  shows an idle process, while these two record what it is waiting on.
+  */}}
+  HERMES_DEBUG_PORT: {{ .Values.observability.profiling.port | quote }}
+  HERMES_BLOCK_PROFILE_RATE: {{ .Values.observability.profiling.blockProfileRate | quote }}
+  HERMES_MUTEX_PROFILE_FRACTION: {{ .Values.observability.profiling.mutexProfileFraction | quote }}
+  {{- end }}
   {{- $natsUrl := include "hermes.natsUrl" . }}
   {{- if $natsUrl }}
   HERMES_NATS_URL: {{ $natsUrl | quote }}

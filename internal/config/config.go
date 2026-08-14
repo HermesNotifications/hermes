@@ -26,9 +26,23 @@ type EmailConfig struct {
 }
 
 type Config struct {
-	HTTPPort    int
-	DatabaseURL string
-	NATSUrl     string
+	HTTPPort int
+	// DebugPort serves net/http/pprof, when non-zero. Zero (the default) starts nothing.
+	//
+	// Separate from HTTPPort because send, inbox and user answer public traffic there, and
+	// /debug/pprof exposes the full command line and every goroutine stack. No Service in
+	// deploy/ or charts/ carries this port, so it needs a port-forward to reach.
+	DebugPort int
+	// BlockProfileRate samples one blocking event per this many nanoseconds spent blocked;
+	// 0 disables. 10000 (10µs) is a reasonable on. This is the profile that matters here:
+	// at 250,000 connections the fleet sat at 11-24% node CPU, so the time is spent waiting,
+	// and a CPU profile of a process waiting on Postgres shows an idle process.
+	BlockProfileRate int
+	// MutexProfileFraction samples 1 in N mutex contention events; 0 disables. 5 is a
+	// reasonable on.
+	MutexProfileFraction int
+	DatabaseURL          string
+	NATSUrl              string
 	// NATSCABundlePath is a PEM file of the roots that verify the NATS server
 	// certificate. cert-manager signs nats.hermes.svc with a private CA (ADR 0005
 	// phase 2) that is in no system trust store, so this is how the connection can be
@@ -128,6 +142,24 @@ type Config struct {
 	APIKeyHMACSecret   string
 	EventRetentionDays int
 
+	// Prober settings, read only by cmd/prober. It exercises the pipeline the way a user
+	// experiences it — POST /v1/send through to the frame on a websocket — which is the one
+	// latency no per-hop metric produces.
+	ProberAdminURL       string
+	ProberSendURL        string
+	ProberCentrifugoURL  string
+	ProberAPIKey         string
+	ProberOrganizationID string
+	ProberUserID         string
+	// ProberInterval is also a write-rate decision: every probe creates a real notification
+	// row, so 30s is 2,880 rows a day that hermes-cleanup has to remove.
+	ProberInterval time.Duration
+	// ProberTimeout bounds how long a probe waits before being counted lost. It must exceed
+	// the worst end-to-end latency still considered healthy — measured at 11ms p95 while
+	// holding 250,000 connections, so the default is orders of magnitude of headroom and
+	// still catches a pipeline that has actually stopped.
+	ProberTimeout time.Duration
+
 	// DispatchConcurrency is the size of the dispatch worker pool — how many
 	// notification.send messages are processed in parallel. Distinct notifications
 	// are independent (per-notification status rollup is monotonic downstream), so
@@ -201,11 +233,15 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		HTTPPort:         envInt("HERMES_HTTP_PORT", 8080),
-		DatabaseURL:      envStr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"),
-		NATSUrl:          envStr("HERMES_NATS_URL", "nats://localhost:4222"),
-		NATSCABundlePath: envStr("HERMES_NATS_CA_BUNDLE", ""),
-		NATSNKeySeedPath: envStr("HERMES_NATS_NKEY_SEED", ""),
+		HTTPPort: envInt("HERMES_HTTP_PORT", 8080),
+		// Off by default. Profiling perturbs what it measures, and this port is unauthenticated.
+		DebugPort:            envInt("HERMES_DEBUG_PORT", 0),
+		BlockProfileRate:     envInt("HERMES_BLOCK_PROFILE_RATE", 0),
+		MutexProfileFraction: envInt("HERMES_MUTEX_PROFILE_FRACTION", 0),
+		DatabaseURL:          envStr("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:5432/hermes?sslmode=disable"),
+		NATSUrl:              envStr("HERMES_NATS_URL", "nats://localhost:4222"),
+		NATSCABundlePath:     envStr("HERMES_NATS_CA_BUNDLE", ""),
+		NATSNKeySeedPath:     envStr("HERMES_NATS_NKEY_SEED", ""),
 
 		NATSStreamReplicas:            envInt("HERMES_NATS_STREAM_REPLICAS", 1),
 		NATSStreamMaxBytes:            envInt64("HERMES_NATS_STREAM_MAX_BYTES", 0),
@@ -226,13 +262,13 @@ func Load() Config {
 		DatabaseMaxConnLifetime: envDuration("HERMES_DATABASE_MAX_CONN_LIFETIME", 30*time.Minute),
 		DatabaseMaxConnIdleTime: envDuration("HERMES_DATABASE_MAX_CONN_IDLE_TIME", 5*time.Minute),
 
-		RedisPoolSize:    envInt("HERMES_REDIS_POOL_SIZE", 16),
-		RedisTimeout:     envDuration("HERMES_REDIS_TIMEOUT", 500*time.Millisecond),
+		RedisPoolSize:     envInt("HERMES_REDIS_POOL_SIZE", 16),
+		RedisTimeout:      envDuration("HERMES_REDIS_TIMEOUT", 500*time.Millisecond),
 		RedisURL:          envStr("HERMES_REDIS_URL", "redis://localhost:6379/0"),
 		RedisCABundlePath: envStr("HERMES_REDIS_CA_BUNDLE", ""),
-		JWTSecret:        envStr("HERMES_JWT_SECRET", "hermes-jwt-secret"),
-		CentrifugoAPIURL: envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000"),
-		CentrifugoAPIKey: envStr("HERMES_CENTRIFUGO_API_KEY", "centrifugo-api-key"),
+		JWTSecret:         envStr("HERMES_JWT_SECRET", "hermes-jwt-secret"),
+		CentrifugoAPIURL:  envStr("HERMES_CENTRIFUGO_API_URL", "http://localhost:8000"),
+		CentrifugoAPIKey:  envStr("HERMES_CENTRIFUGO_API_KEY", "centrifugo-api-key"),
 		Email: EmailConfig{
 			Provider:     envStr("HERMES_EMAIL_PROVIDER", "smtp"),
 			From:         envStr("HERMES_EMAIL_FROM", "noreply@example.com"),
@@ -243,9 +279,18 @@ func Load() Config {
 			SESRegion:    envStr("HERMES_EMAIL_SES_REGION", "us-east-1"),
 			LayoutPath:   envStr("HERMES_EMAIL_LAYOUT_PATH", ""),
 		},
-		SMSWebhookURL:       envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
-		APIKeyHMACSecret:    envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
-		EventRetentionDays:  envInt("HERMES_EVENT_RETENTION_DAYS", 90),
+		SMSWebhookURL:        envStr("HERMES_SMS_WEBHOOK_URL", "http://localhost:9090/sms"),
+		APIKeyHMACSecret:     envStr("HERMES_API_KEY_HMAC_SECRET", "hermes-dev-hmac-secret"),
+		EventRetentionDays:   envInt("HERMES_EVENT_RETENTION_DAYS", 90),
+		ProberAdminURL:       envStr("HERMES_PROBER_ADMIN_URL", "http://localhost:8080"),
+		ProberSendURL:        envStr("HERMES_PROBER_SEND_URL", "http://localhost:8088"),
+		ProberCentrifugoURL:  envStr("HERMES_PROBER_CENTRIFUGO_URL", "ws://localhost:8000/connection/websocket"),
+		ProberAPIKey:         envStr("HERMES_PROBER_API_KEY", ""),
+		ProberOrganizationID: envStr("HERMES_PROBER_ORGANIZATION_ID", "hermes-synthetic"),
+		ProberUserID:         envStr("HERMES_PROBER_USER_ID", "hermes-probe"),
+		ProberInterval:       envDuration("HERMES_PROBER_INTERVAL", 30*time.Second),
+		ProberTimeout:        envDuration("HERMES_PROBER_TIMEOUT", 30*time.Second),
+
 		DispatchConcurrency: envInt("HERMES_DISPATCH_CONCURRENCY", 8),
 		DispatchPrefetch:    envInt("HERMES_DISPATCH_PREFETCH", 64),
 

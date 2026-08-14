@@ -1,7 +1,7 @@
 # --- Variables ---
 # natsprovision is a Job like migrate, not a long-running service: ADR 0005 phase 4 made it
 # the only identity that may declare JetStream streams.
-SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate natsprovision seed cleanup
+SERVICES := admin send dispatch worker-events worker-email worker-sms worker-inbox inbox user migrate natsprovision seed cleanup prober
 
 # Where migrate/seed/cleanup point.
 #
@@ -268,6 +268,57 @@ verify-chart: $(VENV)  ## Check the rendered Helm chart against the Go source it
 	  --set hermes.cleanup.enabled=true --set networkPolicy.enabled=true \
 	  --set observability.enabled=true \
 	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	@# The synthetic prober, which the default install does not render at all -- the same reason
+	@# hermes-cleanup needed its own pass. This is also what proves cmd/prober is in the release
+	@# publish matrix: check_helm_render.py reads that matrix to decide whether an image under
+	@# the Hermes registry can actually be pulled.
+	helm template hermes charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set prober.enabled=true --set prober.apiKey.existingSecret=probe-key \
+	  | $(PYTHON) scripts/check_helm_render.py - --source-root=.
+	@# A prober with no API key fails as CreateContainerConfigError, which `helm template`
+	@# cannot see -- and its symptom (no probe results) is identical to the outage it exists to
+	@# detect. Refused at render time instead.
+	@if helm template hermes charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set prober.enabled=true >/dev/null 2>&1; then \
+	  echo "FAIL: prober.enabled with no apiKey.existingSecret rendered; it must be refused"; \
+	  exit 1; \
+	else \
+	  echo "ok: prober without an API key is refused at render time"; \
+	fi
+	@# The realtime correctness gate the chart never had. check_centrifugo_engine.py has run
+	@# over the kustomize overlays since it was written and never over the chart, which is the
+	@# artifact most people install -- the same asymmetry that let the chart ship without the
+	@# natsprovision Job. templates/_validate.tpl refuses memory+multi-replica at render time;
+	@# this checks the rendered output, so a future values change that routes around the
+	@# validation still gets caught.
+	helm template hermes charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  | $(PYTHON) scripts/check_centrifugo_engine.py -
+	@# And with the Redis engine and three replicas -- the supported way to scale realtime, and
+	@# the combination the guard must NOT refuse.
+	helm template hermes charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set centrifugo.replicaCount=3 \
+	  --set centrifugo.config.engine.type=redis \
+	  --set centrifugo.config.engine.redis.address=redis://hermes-redis:6379/0 \
+	  | $(PYTHON) scripts/check_centrifugo_engine.py -
+	@# The inverse: three replicas on the memory engine is silent half-delivery and must be
+	@# refused at render time, not merely warned about.
+	@if helm template hermes charts/hermes/ \
+	  --set hermes.jwt.secret=verify --set hermes.apiKey.hmacSecret=verify \
+	  --set global.domain=verify.example.com \
+	  --set centrifugo.replicaCount=3 >/dev/null 2>&1; then \
+	  echo "FAIL: centrifugo.replicaCount=3 on the memory engine rendered; it must be refused"; \
+	  exit 1; \
+	else \
+	  echo "ok: centrifugo multi-replica on the memory engine is refused at render time"; \
+	fi
 	@# Traefik renders a different realtime route entirely -- a stripPrefix Middleware and a
 	@# plain prefix, because Traefik v3 removed regex from Ingress paths and the nginx form
 	@# matches nothing there. Checking only the nginx render would leave half the

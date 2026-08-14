@@ -41,4 +41,23 @@ var (
 		metric.WithDescription("Messages handed to a worker pool and not yet finished."),
 		metric.WithUnit("1"),
 	)
+
+	// workersLimit is the denominator inflight was missing. On its own inflight says "6
+	// messages in flight", which means nothing without the pool size next to it; together
+	// they are pool saturation, and saturation is the signal that names its own fix.
+	//
+	// Worth the extra series because pool size is the largest throughput lever in the
+	// system and it is invisible from the outside. cmd/dispatchbench measured 2,100 msg/s
+	// at the default 8 workers and 7,907 at 64, against the same storage — and the way that
+	// was found was a benchmark, because production emitted nothing that said "every worker
+	// is busy and the queue is growing". inflight/limit at 1.0 with lag rising is that
+	// statement, and it points at HERMES_DISPATCH_CONCURRENCY rather than at the disk.
+	//
+	// Set once per subscription rather than observed: the pool is fixed at Subscribe and
+	// only ever leaves by the process exiting.
+	workersLimit, _ = meter.Int64UpDownCounter(
+		"hermes.messaging.workers.limit",
+		metric.WithDescription("Size of the worker pool processing a subscription."),
+		metric.WithUnit("1"),
+	)
 )

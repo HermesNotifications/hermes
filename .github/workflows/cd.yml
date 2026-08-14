@@ -51,6 +51,9 @@ jobs:
           # image under the Hermes registry actually exists.
           - cleanup
           - bootstrap
+          # Same reasoning as cleanup above: optional at install time, but the image must exist
+          # before prober.enabled can be turned on.
+          - prober
     env:
       # The exact commit CI validated. github.sha is the branch tip, which can race ahead of
       # the run that passed, so pin to the run's head_sha.

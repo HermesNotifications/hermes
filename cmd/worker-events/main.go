@@ -74,6 +74,9 @@ func main() {
 	// Order is load-bearing: drain the consumers first so every in-flight handler has finished
 	// adding to the batch, and only then flush it. Flushing first would write a batch that the
 	// still-running handlers are appending to, and those late events would be lost.
+	// pprof on its own port when HERMES_DEBUG_PORT is set; a no-op otherwise.
+	bootstrap.StartDebugServer(cfg.DebugPort, cfg.BlockProfileRate, cfg.MutexProfileFraction, logger)
+
 	bootstrap.ListenAndServeWithOptions(fmt.Sprintf(":%d", cfg.HTTPPort), mux, logger,
 		bootstrap.ServeOptions{
 			Readiness:       readiness,

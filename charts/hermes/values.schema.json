@@ -290,6 +290,39 @@
     "workerInbox": { "$ref": "#/definitions/service" },
     "workerEvents": { "$ref": "#/definitions/service" },
 
+    "prober": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "Synthetic end-to-end prober. Not a $ref to #/definitions/service: it has no replicas (one, structurally -- N replicas multiply the write rate and turn the metric into an average over pods), no autoscaling, and no PDB, and it carries settings no other service has.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/serviceImage" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "organizationID": { "type": "string", "minLength": 1 },
+        "userID": { "type": "string", "minLength": 1 },
+        "interval": { "type": "string", "pattern": "^[0-9]+(ns|us|ms|s|m|h)$" },
+        "timeout": { "type": "string", "pattern": "^[0-9]+(ns|us|ms|s|m|h)$" },
+        "centrifugoURL": {
+          "type": "string",
+          "$comment": "The websocket CONNECTION endpoint (external port, /connection/websocket), not the HTTP API on the internal port. Pointing it at the API yields a socket that never connects and 100% reported loss against a healthy pipeline.",
+          "description": "Websocket connection endpoint. Empty derives ws://<release>-centrifugo:8000/connection/websocket."
+        },
+        "apiKey": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "existingSecret": { "type": "string" },
+            "existingSecretKey": { "type": "string" }
+          }
+        },
+        "resources": { "type": "object" },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "affinity": { "type": "object" },
+        "tolerations": { "type": "array" }
+      }
+    },
+
     "adminPortal": {
       "type": "object",
       "additionalProperties": false,
@@ -415,7 +448,31 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean" },
+            "force": {
+              "type": "boolean",
+              "$comment": "Bypasses the .Capabilities.APIVersions check in templates/servicemonitor.yaml. That check keeps an evaluation install on a cluster without the Prometheus Operator from failing on an unknown kind, but it needs cluster access -- plain `helm template` and some GitOps renderers report no capabilities and drop every ServiceMonitor silently. Set true where the chart renders without a cluster and the CRDs are known present.",
+              "description": "Render ServiceMonitors even when the renderer cannot see the monitoring.coreos.com/v1 CRD."
+            }
+          }
+        },
+        "profiling": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "net/http/pprof on a dedicated port for every service, via HERMES_DEBUG_PORT in the shared ConfigMap. Off by default: the endpoint is unauthenticated and exposes the process command line and every goroutine stack, and the block/mutex profiles perturb what they measure. internal/bootstrap.StartDebugServer starts nothing when the port is 0.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "blockProfileRate": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Sample one blocking event per this many nanoseconds spent blocked. 0 disables; 1 records everything and is expensive."
+            },
+            "mutexProfileFraction": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Sample 1 in N mutex contention events. 0 disables."
+            }
           }
         }
       }
@@ -522,6 +579,12 @@
           "minimum": 20,
           "$comment": "Accepts \"\" to mean 'keep the postgres image default of 100', which is why it is not a plain integer -- the same convention rateLimit.burst uses. Exists because 100 does not stretch: nine services at the built-in pgx pool of 10 already claim 90, so tuning dispatch.concurrency past the default needs room made for it. templates/_validate.tpl refuses the install when the fleet's worst case exceeds this less a small reserve.",
           "description": "max_connections for the bundled Postgres. Empty keeps the image default of 100. Raise postgresql.resources alongside it."
+        },
+        "extraSettings": {
+          "type": "array",
+          "items": { "type": "string" },
+          "$comment": "Passed through verbatim as `-c key=value` server arguments by templates/postgresql.yaml, joining the ssl and max_connections settings collected there. Deliberately unvalidated: the point is to reach settings the chart does not model, and enumerating them would defeat that. Defaults to track_wal_io_timing=on, without which the postgres-exporter WAL query publishes a mean fsync latency of 0/0 -- a metric that always reads zero is worse than an absent one.",
+          "description": "Extra `-c key=value` settings for the bundled Postgres, e.g. commit_delay=250 or shared_buffers=1GB."
         },
         "persistence": {
           "type": "object",

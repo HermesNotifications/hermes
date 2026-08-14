@@ -99,6 +99,9 @@ jobs:
           # Creates the first API key. Without it a fresh install cannot be authenticated
           # against at all, so it is as load-bearing as migrate.
           - bootstrap
+          # Optional at install time (prober.enabled defaults false) but the image still has
+          # to exist, or turning it on yields ImagePullBackOff rather than a probe.
+          - prober
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
