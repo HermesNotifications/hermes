@@ -70,6 +70,10 @@ spec:
             httpGet:
               path: /healthz
               port: http
+            # /healthz fails when this pod's JetStream consumer has work waiting and has settled
+            # none of it for HERMES_NATS_CONSUMER_STALL_TIMEOUT (10m). A worker takes no inbound
+            # traffic, so readiness cannot express "this pod is not doing its job" — only a
+            # restart can act on it, and unacked messages are redelivered.
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:

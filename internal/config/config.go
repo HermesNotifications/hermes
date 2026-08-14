@@ -71,6 +71,16 @@ type Config struct {
 	// that hold no NATS client, so the shutdown budget reflects what actually runs.
 	NATSDrainTimeout time.Duration
 
+	// NATSConsumerStallTimeout is how long a consumer may hold work while finishing none of it
+	// before /healthz fails and the kubelet restarts the container.
+	//
+	// Raise it, do not lower it, if anything goes wrong: a value under the 240s retry-backoff
+	// ceiling can call a legitimately backing-off consumer stalled, and the failure mode of a
+	// too-eager liveness probe is a restart loop across the whole Deployment — worse than the
+	// wedge it detects. Zero switches detection off, which is the escape hatch if that ever
+	// happens in an environment we cannot debug live. See internal/messaging/stall.go.
+	NATSConsumerStallTimeout time.Duration
+
 	// DatabaseMaxConns bounds this service's Postgres pool.
 	//
 	// docs/observability/runbooks/db-pool-saturated.md told operators to set
@@ -204,6 +214,12 @@ func Load() Config {
 		ShutdownDrainDelay: envDuration("HERMES_SHUTDOWN_DRAIN_DELAY", 5*time.Second),
 		ShutdownTimeout:    envDuration("HERMES_SHUTDOWN_TIMEOUT", 15*time.Second),
 		NATSDrainTimeout:   envDuration("HERMES_NATS_DRAIN_TIMEOUT", 30*time.Second),
+
+		// The literal matches messaging.DefaultConsumerStallTimeout, duplicated the way
+		// HERMES_NATS_DRAIN_TIMEOUT duplicates bootstrap.DefaultNATSDrainTimeout: this package
+		// deliberately imports nothing of ours, so a wrong default here is caught by a test in
+		// internal/config rather than by a dependency edge.
+		NATSConsumerStallTimeout: envDuration("HERMES_NATS_CONSUMER_STALL_TIMEOUT", 10*time.Minute),
 
 		DatabaseMaxConns:        envInt("HERMES_DATABASE_MAX_CONNS", 10),
 		DatabaseMinConns:        envInt("HERMES_DATABASE_MIN_CONNS", 2),

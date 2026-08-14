@@ -59,6 +59,13 @@ per-subscription opt-in preferences. Spec: `api/user/openapi.yaml`.
 
 All services expose unauthenticated `GET /healthz` and `GET /readyz` probes.
 
+`/readyz` reports on the dependencies a service cannot serve without; `/healthz` reports on state
+only a restart can fix. For the five services that consume from NATS — dispatch, the three
+delivery workers, the event writer — `/healthz` is therefore **not** a constant 200: it fails when
+that pod's consumer has had work waiting and settled none of it for
+`HERMES_NATS_CONSUMER_STALL_TIMEOUT` (10m), which restarts the container. See
+[ADR 0022](adr/0022-liveness-follows-consumer-progress.md).
+
 ## One-shot / CLI tools
 
 | Tool | Path | Purpose | Typical invocation |

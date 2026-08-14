@@ -341,6 +341,40 @@ func TestAccounts_PipelineRunsUnderPerServiceCredentials(t *testing.T) {
 	}
 }
 
+// The stall monitor polls CONSUMER.INFO on its own consumer, and a poll the server refuses is
+// invisible by design — it counts as "no evidence", so the liveness check goes on passing while
+// detection is quietly off. That makes this grant exactly the kind that rots unnoticed, so it is
+// asserted on the wire rather than by reading the file.
+func TestAccounts_EveryConsumerMayInspectItsOwnConsumer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	provisioner := connectAs(t, messaging.ProvisionerService)
+	if err := provisioner.SetupStreams(ctx, messaging.StreamOptions{}); err != nil {
+		t.Fatalf("the provisioner could not declare the streams: %v", err)
+	}
+
+	for _, c := range []struct{ service, subject, consumer string }{
+		{"hermes-dispatch", "notification.send", "dispatch"},
+		{"hermes-worker-email", "delivery.email", "worker-email"},
+		{"hermes-worker-sms", "delivery.sms", "worker-sms"},
+		{"hermes-worker-inbox", "delivery.inbox", "worker-inbox"},
+		{"hermes-worker-events", "notification.events", "event-writer"},
+	} {
+		t.Run(c.service, func(t *testing.T) {
+			client := connectAs(t, c.service)
+			subscribeOne(t, client, c.subject, c.consumer)
+
+			polled := client.PollConsumersForTest()
+			if !polled[c.consumer] {
+				t.Errorf("%s cannot inspect its own consumer %q, so stall detection is silently "+
+					"disabled for it; $JS.API.CONSUMER.INFO.<stream>.%s is missing from %s",
+					c.service, c.consumer, c.consumer, accountsConfPath)
+			}
+		})
+	}
+}
+
 func subscribeOne(t *testing.T, c *messaging.Client, subject, consumer string) <-chan []byte {
 	t.Helper()
 	out := make(chan []byte, 8)
@@ -405,6 +439,14 @@ func TestAccounts_DeniedPublishes(t *testing.T) {
 		// Dispatch must not be able to consume what it fanned out.
 		{"dispatch cannot create a DELIVERY consumer", "hermes-dispatch", "$JS.API.CONSUMER.CREATE.DELIVERY.spy.delivery.email"},
 		{"dispatch cannot fetch from the email worker's consumer", "hermes-dispatch", "$JS.API.CONSUMER.MSG.NEXT.DELIVERY.worker-email"},
+
+		// The stall monitor's poll is scoped to a service's own consumer. CONSUMER.INFO
+		// discloses another consumer's backlog and delivery state, which is not a secret worth
+		// much on its own — but the grant is one subject wide for the same reason every other
+		// one here is, and a wildcard would have been the easy version.
+		{"dispatch cannot inspect the email worker's consumer", "hermes-dispatch", "$JS.API.CONSUMER.INFO.DELIVERY.worker-email"},
+		{"email worker cannot inspect the sms worker's consumer", "hermes-worker-email", "$JS.API.CONSUMER.INFO.DELIVERY.worker-sms"},
+		{"send cannot inspect the dispatch consumer", "hermes-send", "$JS.API.CONSUMER.INFO.NOTIFICATIONS.dispatch"},
 
 		// One channel's worker must not read another channel's recipients.
 		{"email worker cannot create an sms consumer", "hermes-worker-email", "$JS.API.CONSUMER.CREATE.DELIVERY.worker-sms.delivery.sms"},
