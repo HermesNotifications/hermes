@@ -148,6 +148,11 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# the config-vs-config half with no credentials; infra/scripts/check-single-az.sh
 	@# checks placement against live AWS and runs as the load-test preflight.
 	$(PYTHON) scripts/check_single_az_placement.py --source-root=.
+	@# envsubst has no strict mode: a variable run-k8s.sh does not export renders as the empty
+	@# string, and the result is valid YAML meaning something else. CONNECTIONS="" makes a run
+	@# commissioned for 100,000 connections measure 100 and report success. Nine variables were
+	@# referenced by testrun.yaml and set nowhere before this check existed.
+	$(PYTHON) scripts/check_loadtest_envsubst.py --source-root=.
 	kubectl kustomize deploy/k8s/overlays/staging | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	kubectl kustomize deploy/k8s/overlays/production | $(PYTHON) scripts/check_networkpolicy_selectors.py -
 	kubectl kustomize deploy/k8s/overlays/loadtest | $(PYTHON) scripts/check_networkpolicy_selectors.py -
