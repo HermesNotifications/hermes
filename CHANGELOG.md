@@ -11,6 +11,137 @@ simplification for 0.x; when it stops paying, the chart gets its own `chart-vX.Y
 `version` and its `appVersion` are all the same, and it builds the GitHub Release notes from
 the section below matching the version. A missing section fails the release.
 
+## 0.2.0
+
+An observability release. 0.1.3 turned telemetry on; this is the release that makes it
+answer the question you actually have during an incident, which is whether notifications
+are arriving.
+
+Minor rather than patch because three things change what your existing queries return.
+Nothing to do on upgrade, no configuration is required, and no chart values changed —
+but if you run your own dashboards or alerts against Hermes, read
+[What changes for existing queries](#what-changes-for-existing-queries) below.
+
+### The pipeline could look healthy while nothing was delivered
+
+Backlog, drain rate, pool saturation and dead letters were all instrumented. Whether
+anything arrived was not. A provider rejecting every send keeps every one of those
+signals green — messages are consumed promptly, the queue stays shallow, no dead letters
+appear until retries are exhausted — so the pipeline reads healthy while nothing reaches
+anyone. `HermesProbeLoss` covered this end to end, but only for the inbox channel the
+prober subscribes to. Email and SMS had nothing.
+
+Three of the four panels on the pipeline dashboard had, since it was written, queried
+metric names no Go file has ever emitted. A panel with no series renders exactly like a
+healthy service with no traffic.
+
+New instruments: `hermes.notifications.accepted{result}`,
+`hermes.notifications.dispatched{channel}`, `hermes.dispatch.failures{channel,reason}`,
+`hermes.delivery.provider.duration`, `hermes.eventwriter.{flush.duration,batch.size,events,dropped}`,
+`hermes.auth.result{scheme,reason}`, `hermes.cache.result{op=template}`, plus
+`hermes.delivery.result` and `hermes.routing.drop`. `hermes.delivery.result` gains a
+`provider` label, because "email is failing" is a different incident depending on whether
+one provider is failing or all of them are.
+
+New alerts, each with a runbook: `HermesDeliveryFailureRate`, `HermesDeliveryAbsent` (the
+0/0 case a ratio alert structurally cannot see), `HermesRoutingDropRate`,
+`HermesEventWriterDropping`, `HermesAuthFailureRate`.
+
+`scripts/check_metric_references.py` now fails the build when a dashboard or alert queries
+a `hermes_*` metric nothing emits.
+
+### Log volume tracks incidents rather than traffic
+
+Steady-state logging scaled with throughput: two notifications through the E2E pipeline
+produced ten INFO records, every one per-request, per-notification or per-message. There
+was no lever to turn it down, either — `bootstrap.NewLogger` passed nil handler options,
+so the level was hardwired to Info and nothing logged at Debug at all.
+
+**`HERMES_LOG_LEVEL` is new** (`debug` / `info` / `warn` / `error`). It defaults to `debug`
+when `HERMES_ENV=development` and `info` otherwise, so local output is unchanged. An
+unrecognised value falls back to the default rather than failing startup.
+
+Records were demoted only where the same fact is already recorded more durably elsewhere:
+"delivery succeeded" sits one line above the event that persists `<channel>.sent` with
+strictly more detail; "published to delivery" duplicates `routing.dispatched`; "flushed
+events" duplicates the flush span's `batch.size`.
+
+Two levels were wrong rather than merely loud. Dispatch raised **Warn** for routine
+routing outcomes — a recipient with no phone number, a category the user opted out of.
+Those are the rules working, and a warning nobody can act on trains people to ignore
+warnings. Delivery logged **every retry attempt at Error**, so one flaky provider call
+raised up to `maxDeliveries` errors and any error-rate alert read a recovered notification
+as a burst of failures; it is now Warn while retrying and Error on exhaustion.
+
+The access log is levelled by outcome: 5xx Error, 4xx Warn, over 1s Warn, otherwise Debug.
+
+`observability.LogThrottle` covers the inverse failure. The rate limiter and the inbox
+unread-count cache raised Warn per request when Redis was sick, so an outage became a log
+flood at the worst possible moment. They now emit once per 30s carrying `suppressed=N`.
+
+### Two span trees never joined the trace they belonged to
+
+Trace context has crossed NATS correctly since 0.1.3 — verified here against production
+rather than assumed: a sampled trace runs unbroken from `POST /v1/send` through both NATS
+hops to the event writer, and over an hour of traffic not one consumer span was orphaned
+across ~450,000 messages. Two *other* span trees were detached, and had been all along.
+
+**Event writes.** The event writer batches, so a flush cannot be a child of any single
+notification; it recorded its inputs as span links, which is correct OpenTelemetry and
+relies on the backend walking links to relate the traces. Not every backend does. The
+result was 121 orphan traces an hour: every Postgres write recording a notification's
+final status sat in a trace of its own, so "did this notification's status get written?"
+could not be answered from the notification's trace. The flush keeps its links and stays a
+root, and each event now also gets a `notification.event.persist` span on its own
+originating trace.
+
+**API key validation.** `hermes-send` emitted one orphan root trace per request — exactly
+1:1 with `POST /v1/send` — because the API-key validator took no context and fell back to
+a background one, putting every Redis lookup for the key cache outside the request span.
+
+Also: outbound HTTP (webhook delivery, Centrifugo, the prober) now propagates trace
+context, so a trace no longer stops at the last hop; `template.resolve`, `channel.resolve`
+and `delivery.send` spans cover steps that were previously invisible; and the propagator is
+installed even when no OTLP endpoint is configured, so a service that exports nothing still
+forwards an inbound `traceparent` instead of severing its neighbours' traces.
+
+**Note for webhook users:** deliveries now carry a W3C `traceparent` header to your
+endpoint. It contains a random trace identifier and nothing else.
+
+### Trace sampling can be turned down
+
+`OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` are now honoured. They were silently
+ignored: the SDK was given a hardcoded always-on sampler in code, which overrides the
+environment, so there was no way to reduce trace volume short of a code change. The default
+is unchanged (`parentbased_always_on`). Dispatch has been measured at ~7,900 msg/s, so if
+the added spans above cost more than you want:
+
+```
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+Use `parentbased_*`. A plain `traceidratio` samples each service independently and shreds
+cross-service traces into fragments.
+
+### What changes for existing queries
+
+Only if you run your own dashboards or alerts:
+
+- **`http_route` is now populated** on the chi-routed services. It was empty, so every HTTP
+  series collapsed into one and per-route panels drew a single line. Existing series will
+  split.
+- **Span names no longer contain URL paths.** The old formatter used `r.URL.Path`, which
+  put notification IDs into span names — unbounded cardinality, and against this repo's own
+  conventions. Queries matching on those names need updating.
+- **Several INFO log records are now DEBUG**, as described above. If you alerted or counted
+  on `delivery succeeded`, `published to delivery` or `flushed events`, use
+  `hermes.delivery.result` and the `<channel>.sent` event instead — both carry more, and
+  neither is a restatement.
+
+The dashboards and alert rules shipped in `deploy/observability/` were updated in the same
+changes.
+
 ## 0.1.4
 
 Two fixes, both found by running 0.1.3 at scale rather than by reading it.
