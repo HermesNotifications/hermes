@@ -24,7 +24,11 @@ spec:
           args:
             - --organizations=${LT_ORGANIZATIONS}
             - --users-per-organization=${LT_USERS}
-            - --output=/manifest/seed-manifest.json
+            # stdout, not a file. The image is distroless/static, so there is no way to get a
+            # file back out of it: `kubectl cp` needs tar in the container, `kubectl exec`
+            # needs a shell, and an ephemeral debug container cannot mount this volume.
+            # run-k8s.sh reads the manifest from this Job's logs.
+            - --output=/dev/stdout
           env:
             - name: HERMES_DATABASE_URL
               valueFrom:
@@ -36,8 +40,3 @@ spec:
                 secretKeyRef:
                   name: hermes-loadtest-bootstrap
                   key: hmac_secret
-          volumeMounts:
-            - { name: manifest, mountPath: /manifest }
-      volumes:
-        - name: manifest
-          emptyDir: {}

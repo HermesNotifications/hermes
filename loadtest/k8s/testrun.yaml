@@ -9,7 +9,12 @@ spec:
     configMap:
       name: loadtest-scenarios
       file: ${SCENARIO}.js
-  arguments: --out experimental-prometheus-rw=http://loadtest-prometheus-server/api/v1/write --tag run_id=${RUN_ID}
+  # NOT `--out experimental-prometheus-rw=<url>`. That output takes no inline URL: it reads
+  # K6_PROMETHEUS_RW_SERVER_URL from the environment and otherwise defaults to
+  # http://localhost:9090/api/v1/write. The `=<url>` form is accepted and ignored, so every
+  # runner spent the whole run logging `connection refused` against its own localhost while
+  # the TestRun reached `finished` and the Grafana dashboard stayed empty. See the env below.
+  arguments: --out experimental-prometheus-rw --tag run_id=${RUN_ID}
   runner:
     tolerations:
       - key: loadtest
@@ -26,6 +31,13 @@ spec:
       requests: { cpu: "${RUNNER_CPU_REQ}",  memory: "${RUNNER_MEM_REQ}" }
       limits:   { cpu: "${RUNNER_CPU_LIM}",  memory: "${RUNNER_MEM_LIM}" }
     env:
+      # Where the experimental-prometheus-rw output actually writes. Service-qualified rather
+      # than bare, so the TestRun keeps working if it is ever run from another namespace.
+      - { name: K6_PROMETHEUS_RW_SERVER_URL,
+          value: "http://loadtest-prometheus-server.loadtest.svc.cluster.local/api/v1/write" }
+      # Without this the trends arrive as a bare average, and every percentile threshold in
+      # the scenarios becomes unverifiable from the time series.
+      - { name: K6_PROMETHEUS_RW_TREND_STATS, value: "p(95),p(99),min,max,avg" }
       - { name: RUN_ID,         value: "${RUN_ID}" }
       - { name: TARGET_RPS,     value: "${TARGET_RPS}" }
       - { name: VUS,            value: "${VUS}" }

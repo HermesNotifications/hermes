@@ -22,9 +22,48 @@ LOADSEED_IMAGE="${LOADSEED_IMAGE:?LOADSEED_IMAGE required (e.g., ghcr.io/…/loa
 : "${INBOX_URL:=http://hermes-inbox.hermes.svc.cluster.local:8086}"
 : "${CENTRIFUGO_URL:=ws://hermes-centrifugo.hermes.svc.cluster.local:8000/connection/websocket}"
 
+# Everything below this line is referenced by k8s/testrun.yaml and was NOT set here, so
+# `envsubst` substituted the empty string for all nine. The failure is not loud: an empty
+# `resources.requests.cpu` is a schema error the API server rejects, but an empty CONNECTIONS
+# just means the scenario falls back to its own default, so a run asked for 100,000
+# connections quietly measured 100 and reported success.
+: "${CONNECTIONS:=${VUS}}"
+: "${WS_SOCKETS_PER_VU:=25}"
+: "${WS_RAMP_SECONDS:=0}"
+# Must be >= DURATION or every socket closes and reopens mid-run, which measures reconnect
+# churn rather than the ceiling of concurrently held connections. The lib default of 60s is
+# wrong for every cluster run, so derive it from DURATION and pad. The soak scenario passes
+# hours, so a minutes-only parse would produce a shell arithmetic error on the one run long
+# enough for the difference to matter.
+if [ -z "${WS_HOLD_SECONDS:-}" ]; then
+  case "$DURATION" in
+    *h) WS_HOLD_SECONDS=$(( ${DURATION%h} * 3600 + 300 )) ;;
+    *m) WS_HOLD_SECONDS=$(( ${DURATION%m} * 60 + 300 )) ;;
+    *s) WS_HOLD_SECONDS=$(( ${DURATION%s} + 300 )) ;;
+    *)  WS_HOLD_SECONDS=1200 ;;
+  esac
+fi
+: "${CHANNEL_WEIGHTS:=inbox:100}"
+# Generator sizing. Holding sockets is cheap on CPU, so these are deliberately smaller than
+# the k6-operator default of 2 cores -- that default caps how many runners fit on a node and
+# so caps the connection count long before Hermes is stressed.
+: "${RUNNER_CPU_REQ:=1}"
+: "${RUNNER_MEM_REQ:=1Gi}"
+: "${RUNNER_CPU_LIM:=3}"
+: "${RUNNER_MEM_LIM:=3Gi}"
+
 export SCENARIO PARALLELISM RUN_ID RUN_NAME LOADSEED_IMAGE \
   TARGET_RPS VUS SEND_RPS POLL_RPS DURATION LT_ORGANIZATIONS LT_USERS \
-  ADMIN_URL SEND_URL INBOX_URL CENTRIFUGO_URL
+  ADMIN_URL SEND_URL INBOX_URL CENTRIFUGO_URL \
+  CONNECTIONS WS_SOCKETS_PER_VU WS_RAMP_SECONDS WS_HOLD_SECONDS CHANNEL_WEIGHTS \
+  RUNNER_CPU_REQ RUNNER_MEM_REQ RUNNER_CPU_LIM RUNNER_MEM_LIM
+
+# Fail rather than render a TestRun with holes in it. envsubst has no strict mode, and every
+# one of these has a failure mode that looks like a result instead of an error.
+for v in CONNECTIONS WS_SOCKETS_PER_VU WS_RAMP_SECONDS WS_HOLD_SECONDS CHANNEL_WEIGHTS \
+         RUNNER_CPU_REQ RUNNER_MEM_REQ RUNNER_CPU_LIM RUNNER_MEM_LIM; do
+  [ -n "${!v}" ] || { echo "$v is empty; testrun.yaml would render a hole" >&2; exit 1; }
+done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 K8S_DIR="$SCRIPT_DIR/../k8s"
@@ -41,12 +80,22 @@ kubectl -n loadtest delete job loadseed --ignore-not-found
 envsubst < "$K8S_DIR/loadseed-job.yaml" | kubectl apply -f -
 kubectl -n loadtest wait --for=condition=complete job/loadseed --timeout=30m
 
-# Find the completed pod and copy the manifest out while ttlSecondsAfterFinished keeps it around.
+# Read the manifest out of the Job's logs, not off its filesystem.
+#
+# `kubectl cp` cannot work here and never could: it shells out to `tar` *inside* the
+# container, and cmd/loadseed/Dockerfile builds FROM distroless/static, which has no tar, no
+# shell, and no cat. `kubectl exec` fails for the same reason, and an ephemeral debug
+# container cannot mount the target's volumes. So the Job writes the manifest to stdout
+# (see k8s/loadseed-job.yaml) and we take it from there.
+#
+# Go's `log` goes to stderr with a timestamp prefix, and MarshalIndent puts `{` and `}` alone
+# on their own lines, so the range match cannot pick up a log line.
 POD=$(kubectl -n loadtest get pods -l app=loadseed -o jsonpath='{.items[0].metadata.name}')
 [ -n "$POD" ] || { echo "no loadseed pod found"; exit 1; }
 TMP_MANIFEST=$(mktemp)
-kubectl -n loadtest cp "${POD}:/manifest/seed-manifest.json" "$TMP_MANIFEST" -c loadseed
+kubectl -n loadtest logs "$POD" -c loadseed | sed -n '/^{$/,/^}$/p' > "$TMP_MANIFEST"
 [ -s "$TMP_MANIFEST" ] || { echo "manifest extraction failed (empty file)"; exit 1; }
+grep -q '"organizations"' "$TMP_MANIFEST" || { echo "manifest extraction produced no organizations"; exit 1; }
 kubectl -n loadtest create secret generic loadtest-manifest \
   --from-file=seed-manifest.json="$TMP_MANIFEST" \
   --dry-run=client -o yaml | kubectl apply -f -
