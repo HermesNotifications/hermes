@@ -19,6 +19,7 @@ import (
 	"github.com/hermesnotifications/hermes/internal/httputil"
 	"github.com/hermesnotifications/hermes/internal/middleware"
 	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/observability"
 )
 
 const (
@@ -96,7 +97,17 @@ type Server struct {
 	limiter        *middleware.RateLimiter
 	ipLimiter      *middleware.RateLimiter
 	readiness      *httputil.Readiness
+
+	// cacheDegradedLog throttles the Redis-unhealthy warnings below. They are
+	// raised from the per-request read path, so an unhealthy Redis would otherwise
+	// emit one record per request for the whole outage — and by design that outage
+	// does not gate readiness, so it can run long. cacheResults carries the rate.
+	cacheDegradedLog *observability.LogThrottle
 }
+
+// CacheDegradedLogInterval bounds how often one replica reports that the unread-count
+// cache is unhealthy. See Server.cacheDegradedLog.
+const CacheDegradedLogInterval = 30 * time.Second
 
 // SetReadiness installs the readiness probe /readyz answers with. Without one the endpoint
 // reports ready unconditionally, which is what it did before dependencies were checked at all.
@@ -153,11 +164,12 @@ func (s *Server) SetUnreadCache(c UnreadCache) {
 
 func NewServer(store InboxStore, cent *centrifugo.Client, cacheClient *cache.Client, keyProvider auth.JWTKeyProvider, logger *slog.Logger) *Server {
 	s := &Server{
-		store:          store,
-		centrifugo:     cent,
-		jwtKeyProvider: keyProvider,
-		logger:         logger,
-		router:         chi.NewRouter(),
+		store:            store,
+		centrifugo:       cent,
+		jwtKeyProvider:   keyProvider,
+		logger:           logger,
+		router:           chi.NewRouter(),
+		cacheDegradedLog: observability.NewLogThrottle(CacheDegradedLogInterval),
 	}
 	s.ConfigureRateLimit(true, 0, 0)
 	s.ConfigureIPRateLimit(true, 0, 0, nil)
@@ -238,7 +250,7 @@ func (s *Server) unreadCount(ctx context.Context, userID string) int {
 		// pulling every replica out of the Service over a dependency they can work without
 		// would turn a degradation into an outage. So the metric has to carry it instead.
 		recordCacheResult(ctx, "unread_count", "error")
-		s.logger.Warn("unread count cache read failed", "error", err)
+		s.cacheDegradedLog.Log(ctx, s.logger, slog.LevelWarn, "unread count cache read failed", "error", err)
 		return s.recountUnread(ctx, userID)
 	case !found:
 		recordCacheResult(ctx, "unread_count", "miss")
@@ -266,7 +278,10 @@ func (s *Server) fillUnreadCount(ctx context.Context, userID string) int {
 		return -1
 	}
 	if _, err := s.cache.FillUnreadCount(ctx, userID, count, watermark, unreadCountTTL); err != nil {
-		s.logger.Error("failed to cache unread count", "error", err)
+		// Same Redis fault as the read path, same per-request exposure, so the same
+		// throttle — and Warn rather than Error, because failing to populate a cache
+		// costs a store read, which is what the caller already got.
+		s.cacheDegradedLog.Log(ctx, s.logger, slog.LevelWarn, "failed to cache unread count", "error", err)
 	}
 	return count
 }
@@ -277,7 +292,7 @@ func (s *Server) fillUnreadCount(ctx context.Context, userID string) int {
 func (s *Server) refreshUnreadCount(ctx context.Context, userID string, cached int) int {
 	won, err := s.cache.TryUnreadRefreshLease(ctx, userID, unreadRefreshLeaseTTL)
 	if err != nil {
-		s.logger.Warn("unread count refresh lease failed", "error", err)
+		s.cacheDegradedLog.Log(ctx, s.logger, slog.LevelWarn, "unread count refresh lease failed", "error", err)
 		return cached
 	}
 	if !won {

@@ -13,6 +13,8 @@ import (
 
 	"github.com/hermesnotifications/hermes/internal/messaging"
 	hermenats "github.com/hermesnotifications/hermes/internal/nats"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // permanentError marks a failure that retrying cannot fix. It implements
@@ -95,15 +97,32 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte, info messaging.
 
 	result, err := w.provider.Send(ctx, req)
 	if err != nil {
-		w.logger.Error("delivery failed",
+		// Error only once the retries are spent, Warn before that — the same
+		// reasoning that already keeps the ".failed" event off the intermediate
+		// attempts below. A delivery that fails and then succeeds on retry is the
+		// backoff working, not an incident, and emitting it at Error meant one
+		// flaky provider call raised up to maxDeliveries error records and any
+		// error-rate alert read a recovered notification as a burst of failures.
+		level := slog.LevelWarn
+		if info.LastAttempt {
+			level = slog.LevelError
+		}
+		w.logger.Log(ctx, level, "delivery failed",
 			"notification_id", msg.NotificationID, "channel", w.channel,
 			"attempt", info.Attempt, "last_attempt", info.LastAttempt, "error", err)
 
 		// Report the failure once, on the final attempt. Publishing on every attempt
 		// would put up to maxDeliveries ".failed" events on the stream for one
 		// notification — the status rollup would see repeats and any alert counting
-		// them would read a single flaky delivery as a cluster of failures.
+		// them would read a single flaky delivery as a cluster of failures. The
+		// counter is bumped here for the same reason: counted per attempt, one
+		// eventually-successful delivery would register several failures and a
+		// success, and the ratio would not mean anything.
 		if info.LastAttempt {
+			deliveryResults.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("channel", w.channel),
+				attribute.String("outcome", "failed"),
+			))
 			w.emitEvent(ctx, msg.NotificationID, w.channel+".failed", "error", map[string]any{
 				"error": err.Error(), "attempts": info.Attempt,
 			})
@@ -117,7 +136,17 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte, info messaging.
 		return fmt.Errorf("deliver via %s: %w", w.provider.Name(), err)
 	}
 
-	w.logger.Info("delivery succeeded", "notification_id", msg.NotificationID, "channel", w.channel)
+	// Debug, not Info: this is the success path of the highest-volume operation in
+	// the system — one record per notification per channel — and it is the least
+	// load-bearing log in it. The line below emits <channel>.sent, a durable event
+	// carrying strictly more (provider, provider_id) and queryable per notification
+	// long after any log has aged out. deliveryResults gives the aggregate. What
+	// remained was a per-delivery restatement of a fact recorded twice elsewhere.
+	w.logger.Debug("delivery succeeded", "notification_id", msg.NotificationID, "channel", w.channel)
+	deliveryResults.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("channel", w.channel),
+		attribute.String("outcome", "success"),
+	))
 	w.emitEvent(ctx, msg.NotificationID, w.channel+".sent", "info", map[string]any{
 		"provider": result.ProviderName, "provider_id": result.ProviderID,
 	})

@@ -242,6 +242,20 @@ Two timing properties worth knowing:
   lifetime (30 minutes idle). A change therefore applies to the next new bucket rather than
   retuning one in use — it does not discard tokens a caller has already accrued.
 
+### Logging
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_LOG_LEVEL` | `debug` when `HERMES_ENV=development`, else `info` | Minimum severity written to stdout: `debug`, `info`, `warn`, `error`. Read straight from the environment by `bootstrap.NewLogger`, not through `config.Config`, because every service builds its logger before `config.MustLoad` — a config failure has to be reportable, at the level you asked for. An unrecognised value falls back to the default rather than failing startup, for the same reason. |
+
+The default is `info` outside development because per-request and per-notification records
+live at `debug` — see [Log levels](observability/semantic-conventions.md#log-levels). At `info`
+a healthy service is close to silent no matter how much traffic it serves: what remains is
+startup, shutdown, and things that went wrong. That is the property to preserve when adding a
+log line. Setting `debug` restores the full firehose, which is the right move on one service
+during an investigation and the wrong one fleet-wide — volume there scales with traffic, so
+the cost of leaving it on grows exactly when you can least afford it.
+
 ### Store backend
 
 | Variable | Default | Purpose |

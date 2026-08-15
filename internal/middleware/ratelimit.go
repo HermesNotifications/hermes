@@ -137,6 +137,10 @@ type RateLimiter struct {
 	shared SharedLimiter
 	logger *slog.Logger
 
+	// sharedFailureLog throttles the backend-unavailable warning, which is raised
+	// from the per-request path. See its use in allowShared.
+	sharedFailureLog *observability.LogThrottle
+
 	limit rate.Limit
 	burst int
 
@@ -157,6 +161,12 @@ type RateLimiter struct {
 	now func() time.Time
 }
 
+// SharedFailureLogInterval bounds how often one limiter reports that its shared
+// backend is unavailable. Long enough that a sustained outage costs a handful of
+// records a minute rather than one per request, short enough that the log still
+// shows the outage is ongoing rather than a single blip at the start.
+const SharedFailureLogInterval = 30 * time.Second
+
 // NewRateLimiter returns a limiter allowing burst requests immediately and
 // perSecond requests per second sustained.
 // A perSecond of zero or less disables limiting entirely, which is how
@@ -167,11 +177,12 @@ func NewRateLimiter(keyFunc func(*http.Request) string, burst, perSecond int) *R
 		limit = rate.Inf
 	}
 	rl := &RateLimiter{
-		keyFunc:    keyFunc,
-		limit:      limit,
-		burst:      burst,
-		maxEntries: DefaultMaxEntries,
-		now:        time.Now,
+		keyFunc:          keyFunc,
+		limit:            limit,
+		burst:            burst,
+		maxEntries:       DefaultMaxEntries,
+		now:              time.Now,
+		sharedFailureLog: observability.NewLogThrottle(SharedFailureLogInterval),
 	}
 	rl.WithScope(ScopeCredential)
 	rl.lastSweep.Store(time.Now().UnixNano())
@@ -333,10 +344,12 @@ func (rl *RateLimiter) allowShared(
 		// of these requests are then admitted by the local bucket. Labelling them
 		// decision=limited made any dashboard splitting on it read the opposite.
 		sharedFailures.Add(r.Context(), 1, rl.attrScope)
-		if rl.logger != nil {
-			rl.logger.Warn("shared rate limiter unavailable; falling back to the local bucket",
-				"scope", rl.scope, "error", err)
-		}
+		// Throttled: this runs per request, so an unreachable Redis used to emit a
+		// warning per request for the duration of the outage. sharedFailures carries
+		// the rate; the log only needs to carry the fact and an example error.
+		rl.sharedFailureLog.Log(r.Context(), rl.logger, slog.LevelWarn,
+			"shared rate limiter unavailable; falling back to the local bucket",
+			"scope", rl.scope, "error", err)
 		return false
 	}
 
