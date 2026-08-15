@@ -96,3 +96,60 @@ slog.InfoContext(ctx, "notification accepted",
 - Auth tokens / API keys of any kind
 - Full request bodies unless explicitly flagged as safe
 - Stack traces at info or warn level — only at error
+
+## Log levels
+
+The rule, and the only one that matters at production volume:
+
+> **If it fires once per request, per notification, or per message, it is `debug`.**
+
+Not because those events are uninteresting, but because a log line is the most expensive
+way to record something that happens N times a second, and the two cheaper records are
+already there: a **span** carries the per-occurrence detail with sampling built in, and a
+**counter** carries the rate for free. A log record is for the thing you would want to read
+a sentence about — which, in steady state, is nothing.
+
+The consequence to design for: **at `info`, a healthy service is nearly silent regardless of
+traffic.** Volume should track incidents, not throughput. If turning traffic up turns your
+log volume up proportionally, something is misleveled.
+
+| Level | For | Fires |
+|---|---|---|
+| `error` | The service failed at something it is responsible for, and someone should look. Retries exhausted, not retries attempted. | Per incident |
+| `warn` | Running degraded, or a caller was refused. A dependency is sick but the fallback held; a request got a 4xx. | Per incident, or per request but **throttled** |
+| `info` | Lifecycle. Startup, configuration resolved, shutdown, leader elected, stream provisioned. | Per process, or per operator action |
+| `debug` | Everything per-request, per-notification, per-message — including the success paths. | Per unit of work |
+
+### Rules
+
+- **Success paths on hot code are `debug`.** "delivery succeeded", "published to delivery",
+  "flushed events", a 2xx access log. All of these were `info` and all of them scaled with
+  traffic.
+- **Expected outcomes are not `warn`.** A user with no phone number, a category the user
+  opted out of, an idempotency hit on a redelivery — these are the rules working. `warn`
+  means *someone might need to act*, and a warning nobody can act on trains people to
+  ignore warnings. Count them instead.
+- **Retries are `warn`; exhaustion is `error`.** Logging every attempt at `error` turns one
+  flaky provider call into a burst on every error-rate dashboard.
+- **A per-request log about a sick dependency must be throttled.** Otherwise the outage
+  itself becomes the log flood, at the worst possible moment. Use
+  `observability.LogThrottle`, which emits once per interval and reports `suppressed=N`.
+  Pair it with a counter — the counter carries the rate, the log carries the fact.
+- **`msg` is a constant.** Never `fmt.Sprintf` into it: the specifics go in attributes, or
+  grouping by `msg` in Loki stops working. (Restating the `msg` rule above, because this is
+  where it gets broken.)
+- **Before adding an `info` line, ask what multiplies it.** If the answer is request rate or
+  notification volume, it is `debug`.
+
+### Removing a log line safely
+
+Demoting a hot-path record to `debug` is only safe if the signal it carried survives
+somewhere queryable. Check, in order:
+
+1. Is there a **durable event** for it? Much of the pipeline already emits one — `publishEvent`
+   in dispatch, `emitEvent` in delivery — and those outlive any log retention.
+2. Is there a **span**? If the operation is traced, the detail is in Tempo.
+3. Is there a **counter**? If not, add one. Aggregate visibility is what makes the
+   demotion safe, and it is usually the thing that was missing.
+
+If none of the three holds, you are not quieting a log — you are deleting the only signal.

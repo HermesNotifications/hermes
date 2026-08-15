@@ -134,7 +134,11 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 		}
 	}
 
-	w.logger.InfoContext(ctx, "flushed events", "count", len(items))
+	// Debug: the batcher flushes on 100 items or 500ms, so this fired up to twice a
+	// second per replica in steady state — roughly 170k records a day to report that
+	// a batch insert did not fail. The eventwriter.flush span above already carries
+	// batch.size, and the errors above are still Error.
+	w.logger.DebugContext(ctx, "flushed events", "count", len(items))
 }
 
 // eventToStatus maps event names to notification statuses.

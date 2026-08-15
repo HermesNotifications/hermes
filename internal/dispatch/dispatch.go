@@ -169,7 +169,10 @@ func (d *Dispatch) handleSend(ctx context.Context, data []byte, info messaging.D
 
 	if _, err := d.store.CreateNotification(ctx, n); err != nil {
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already exists") {
-			log.Info("notification already exists (retry), continuing")
+			// Debug: this is the idempotency guard doing its job on a redelivery.
+			// It is expected traffic on any NATS retry, and on a retry storm it was
+			// one Info per redelivered message on top of everything else.
+			log.Debug("notification already exists (retry), continuing")
 		} else {
 			log.Error("create notification", "error", err)
 			return d.transientOrGiveUp(ctx, log, msg.NotificationID, info, fmt.Errorf("create notification: %w", err))
@@ -318,7 +321,13 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	channels = FilterChannelsForTemplate(channels, nt)
 
 	if len(channels) == 0 {
-		log.Warn("no channels after filtering")
+		// Debug, not Warn. Resolving to no channels is a routine outcome of the
+		// rules working — a category the user opted out of, or a template with no
+		// content for any channel they can receive — not a fault anyone can act on
+		// per occurrence. It stays visible in aggregate through routingDrops, and
+		// per notification through the durable routing.no_channels event below.
+		log.Debug("no channels after template filtering")
+		recordRoutingDrop(ctx, "", "no_channels_for_template")
 		d.publishEvent(ctx, msg.NotificationID, "", "routing.no_channels", "warn", nil)
 		return nil
 	}
@@ -336,7 +345,14 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	// Filter channels that require contact info (per the channel registry).
 	filteredChannels, skipped := filterChannelsByContact(channels, recipient)
 	for _, s := range skipped {
-		log.Warn(fmt.Sprintf("skipping %s channel: user has no %s", s.Channel, s.AddressKey), "user_id", user.ID)
+		// The message was interpolated per channel, which made "msg" a variable
+		// string and defeated grouping on it in Loki — semantic-conventions.md asks
+		// for a short constant msg with the specifics as attributes. Level follows
+		// the same reasoning as the drop above: a user without a phone number is
+		// the expected state for most users, not a warning.
+		log.Debug("skipping channel: recipient has no contact point",
+			"channel", s.Channel, "address_key", s.AddressKey, "user_id", user.ID)
+		recordRoutingDrop(ctx, s.Channel, "no_contact")
 		d.publishEvent(ctx, msg.NotificationID, s.Channel, "routing.no_contact", "warn", map[string]any{
 			"reason": "user has no " + s.AddressLabel,
 		})
@@ -344,7 +360,8 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	channels = filteredChannels
 
 	if len(channels) == 0 {
-		log.Warn("no channels after contact filtering")
+		log.Debug("no channels after contact filtering")
+		recordRoutingDrop(ctx, "", "no_contact_for_any_channel")
 		d.publishEvent(ctx, msg.NotificationID, "", "routing.no_channels", "warn", nil)
 		return nil
 	}
@@ -386,7 +403,12 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 			continue
 		}
 
-		log.Info("published to delivery", "channel", ch)
+		// Debug: one record per channel per notification, restating what the
+		// routing.dispatched event on the next line already records durably and what
+		// the delivery.* subject depth shows in aggregate. The failure paths above
+		// stay at Error, which is the asymmetry worth keeping — a publish that works
+		// is not news, a publish that does not is.
+		log.Debug("published to delivery", "channel", ch)
 		dispatched = append(dispatched, ch)
 		d.publishEvent(ctx, msg.NotificationID, ch, "routing.dispatched", "info", nil)
 	}

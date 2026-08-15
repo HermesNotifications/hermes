@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/hermesnotifications/hermes/internal/cache"
 	"github.com/hermesnotifications/hermes/internal/config"
@@ -21,8 +22,43 @@ import (
 // NewLogger creates a structured JSON logger writing to stdout.
 // The handler is wrapped with observability.TraceHandler so every record
 // picks up trace_id/span_id when the context carries an active span.
+//
+// The level comes from HERMES_LOG_LEVEL (debug/info/warn/error), read from the
+// environment rather than from config.Config because every service builds its
+// logger before config.MustLoad — a config failure has to be reportable, and it
+// should be reportable at the level the operator asked for.
+//
+// The default is level-dependent on HERMES_ENV for a reason. Per-request and
+// per-notification records live at Debug (see docs/observability/semantic-conventions.md
+// "Log levels"), which is what keeps steady-state volume proportional to
+// incidents rather than to traffic. In development that trade is wrong — the
+// firehose is the point — so development defaults to Debug and everything else
+// to Info.
 func NewLogger() *slog.Logger {
-	return slog.New(observability.WrapJSONHandler(slog.NewJSONHandler(os.Stdout, nil)))
+	return slog.New(observability.WrapJSONHandler(
+		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel()}),
+	))
+}
+
+// logLevel resolves HERMES_LOG_LEVEL, falling back to Debug in development and
+// Info elsewhere. An unrecognised value falls back too rather than exiting:
+// this runs before config validation, and a typo here should not be the thing
+// that stops a service from starting.
+func logLevel() slog.Level {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HERMES_LOG_LEVEL"))) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("HERMES_ENV")), config.EnvDevelopment) {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
 }
 
 // MustConnectDB connects to Postgres with bounds taken from cfg, or exits the process.
