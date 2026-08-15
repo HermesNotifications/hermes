@@ -943,9 +943,18 @@ prober:
     tag: ""
   port: 8089
   # -- Organization and user the probe addresses. Both are auto-created on the first token
-  # exchange, so no seeding step is needed -- but pick names that are obviously synthetic,
-  # because these rows appear in the same tables as real ones.
-  organizationID: "hermes-synthetic"
+  # exchange, so no seeding step is needed.
+  #
+  # organizationID MUST BE A UUID. Organizations are the one entity that did not move to the
+  # base62 scheme -- `organizations.id` is `UUID PRIMARY KEY` (migrations/000001) -- so a
+  # readable name cannot be stored. This shipped as "hermes-synthetic", which meant
+  # `prober.enabled: true` could never work at all: EnsureOrganization fails on the insert,
+  # /v1/auth/token answers 500, and the pod crash-loops with `mint token: auth/token
+  # returned 500` while the rest of the release looks healthy. Rejected at render time below.
+  #
+  # userID is a caller-facing external id and is free text; keep it obviously synthetic,
+  # because both rows land in the same tables as real ones.
+  organizationID: "deadbeef-0000-4000-8000-000000000001"
   userID: "hermes-probe"
   # -- Time between probes. Also the write rate: every probe is a real notification.
   interval: 30s

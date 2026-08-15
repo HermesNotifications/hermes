@@ -161,6 +161,17 @@ Centrifugo is off it has to be told where to dial.
 {{-   if and (not .Values.centrifugo.enabled) (not .Values.prober.centrifugoURL) -}}
 {{-     fail "prober.enabled is true with the bundled Centrifugo disabled, but prober.centrifugoURL is empty, so there is no websocket endpoint to dial. Set it to your Centrifugo connection endpoint (e.g. wss://realtime.example.com/connection/websocket) -- note externalCentrifugo.apiUrl is the HTTP API and cannot be used for this. Left unset, the probe reports 100% loss regardless of pipeline health." -}}
 {{-   end -}}
+{{- /*
+Organizations are the one entity still keyed by UUID (`organizations.id UUID PRIMARY KEY`,
+migrations/000001), so a readable organizationID cannot be stored. The chart shipped
+"hermes-synthetic" as the default, which made prober.enabled=true impossible to use: the
+insert in EnsureOrganization fails, /v1/auth/token answers 500, and the pod crash-loops on
+`mint token: auth/token returned 500` -- a failure that reads as a broken admin service rather
+than a bad value. Caught here because the runtime error names neither the field nor the rule.
+*/ -}}
+{{-   if not (regexMatch "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" .Values.prober.organizationID) -}}
+{{-     fail (printf "prober.organizationID must be a UUID, got %q. Organizations are keyed by `organizations.id UUID PRIMARY KEY`, so a readable name cannot be inserted: EnsureOrganization fails, /v1/auth/token returns 500, and the prober crash-loops with `mint token: auth/token returned 500` while every other service looks healthy. Use any UUID that is obviously synthetic -- the chart default is deadbeef-0000-4000-8000-000000000001." .Values.prober.organizationID) -}}
+{{-   end -}}
 {{- end -}}
 {{- end }}
 
