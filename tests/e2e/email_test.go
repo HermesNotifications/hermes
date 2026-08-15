@@ -96,9 +96,13 @@ func TestPipeline_EmailDeliveryToMailpit(t *testing.T) {
 	// environment that cannot reach published ports on loopback (a sandbox, or Docker
 	// without host networking) needs to address the container directly. Hardcoding one
 	// half of the pair while parameterising the other made this test unrunnable outside CI.
+	//
+	// The port was the remaining hardcoded half, and in a worktree it does not merely fail
+	// to connect: host port 1025 belongs to the main checkout's Mailpit, so the mail was
+	// accepted by another checkout's stack while the assertion below queried this one's.
 	emailProvider := email.NewSMTPProvider(email.Config{
 		SMTPHost: envOr("MAILPIT_SMTP_HOST", "localhost"),
-		SMTPPort: 1025,
+		SMTPPort: envIntOr("HERMES_EMAIL_SMTP_PORT", 1025),
 	})
 	layout := template.Must(template.New("layout").Parse(`{{.Content}}`))
 	adapter := email.NewDeliveryAdapter(emailProvider, "noreply@hermes-test.com", layout)

@@ -12,13 +12,19 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 )
 
 func TestSMTPProvider_SendToMailpit(t *testing.T) {
 	smtpHost := envOr("HERMES_EMAIL_SMTP_HOST", "localhost")
-	smtpPort := 1025
+	// Read from the environment for the same reason MAILPIT_API_URL is. Hardcoded, this
+	// was not merely wrong in a worktree -- it pointed at whichever container holds host
+	// port 1025, which is the main checkout's Mailpit. The send landed there and the
+	// assertion below queried this stack's Mailpit, so the test failed by talking to
+	// another checkout rather than by failing to connect.
+	smtpPort := envIntOr("HERMES_EMAIL_SMTP_PORT", 1025)
 	mailpitAPI := envOr("MAILPIT_API_URL", "http://localhost:8025")
 
 	// Skip if Mailpit is not running (not available in CI)
@@ -122,4 +128,12 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envIntOr(key string, fallback int) int {
+	v, err := strconv.Atoi(os.Getenv(key))
+	if err != nil {
+		return fallback
+	}
+	return v
 }
