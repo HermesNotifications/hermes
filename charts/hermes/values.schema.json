@@ -298,7 +298,11 @@
         "enabled": { "type": "boolean" },
         "image": { "$ref": "#/definitions/serviceImage" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "organizationID": { "type": "string", "minLength": 1 },
+        "organizationID": {
+          "type": "string",
+          "$comment": "UUID, not free text: organizations.id is UUID PRIMARY KEY, so a readable name cannot be inserted. The chart shipped 'hermes-synthetic' here, which made prober.enabled=true crash-loop on a 500 from /v1/auth/token.",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
         "userID": { "type": "string", "minLength": 1 },
         "interval": { "type": "string", "pattern": "^[0-9]+(ns|us|ms|s|m|h)$" },
         "timeout": { "type": "string", "pattern": "^[0-9]+(ns|us|ms|s|m|h)$" },
