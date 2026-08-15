@@ -5,6 +5,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -12,7 +13,13 @@ import (
 )
 
 // APIKeyValidator validates a raw API key and returns the validated key on success.
-type APIKeyValidator func(rawKey string) *ValidatedKey
+//
+// The context is the request's, and carries its trace. Without it the
+// implementations had nothing to pass to ResolveAPIKey and fell back to
+// context.Background(), which put every API-key cache lookup in a trace of its
+// own -- one orphan root span per request, none of them attached to the request
+// that caused them.
+type APIKeyValidator func(ctx context.Context, rawKey string) *ValidatedKey
 
 // SkipAuthMiddleware injects a synthetic key holding every permission, for servers
 // constructed with SetSkipAuth(true). Intended for tests only.
@@ -51,7 +58,7 @@ func APIKeyMiddleware(validate APIKeyValidator) func(http.Handler) http.Handler 
 			}
 			key = strings.TrimPrefix(key, "Bearer ")
 
-			validated := validate(key)
+			validated := validate(r.Context(), key)
 			if validated == nil {
 				recordAuthResult(r.Context(), schemeAPIKey, reasonInvalidKey)
 				httputil.ClientError(w, http.StatusUnauthorized, "invalid api key")

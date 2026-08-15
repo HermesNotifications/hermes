@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
 )
 
 type WebhookProvider struct {
@@ -25,6 +28,18 @@ func NewWebhookProvider(name, url string) *WebhookProvider {
 		url:  url,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			// Carries the delivery's trace context to the endpoint and records the
+			// call as a client span, so a trace no longer stops at the worker.
+			//
+			// Metrics are deliberately suppressed. otelhttp labels its client
+			// metrics with server.address, and this client dials whatever URL a
+			// customer configured -- an unbounded label, which
+			// docs/observability/semantic-conventions.md forbids outright. Spans
+			// carry the same information and Tempo is built for that cardinality;
+			// a Prometheus series per customer host is not.
+			Transport: otelhttp.NewTransport(http.DefaultTransport,
+				otelhttp.WithMeterProvider(noopmetric.NewMeterProvider()),
+			),
 		},
 	}
 }

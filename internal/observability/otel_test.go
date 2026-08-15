@@ -8,6 +8,8 @@ import (
 	"context"
 	"testing"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
@@ -62,5 +64,35 @@ func TestInitNoopWithoutEndpoint(t *testing.T) {
 	}
 	if err := shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+// ...but "no-op" covers export only, never propagation.
+//
+// The propagator used to be installed at the very end of Init, below the
+// endpoint check, so a service with no OTLP endpoint kept OTel's no-op
+// propagator: it would drop an inbound traceparent instead of forwarding it,
+// severing a trace that its neighbours were recording perfectly well. Every test
+// binary was in that state too, which is why the NATS carrier could not be
+// meaningfully tested before this.
+func TestInitInstallsPropagatorWithoutEndpoint(t *testing.T) {
+	prev := otel.GetTextMapPropagator()
+	t.Cleanup(func() { otel.SetTextMapPropagator(prev) })
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator())
+
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	if _, err := Init(context.Background(), "test-service"); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	fields := otel.GetTextMapPropagator().Fields()
+	var haveTraceparent bool
+	for _, f := range fields {
+		if f == "traceparent" {
+			haveTraceparent = true
+		}
+	}
+	if !haveTraceparent {
+		t.Errorf("propagator fields = %v, want traceparent among them", fields)
 	}
 }

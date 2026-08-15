@@ -13,9 +13,13 @@ import (
 
 	"github.com/hermesnotifications/hermes/internal/messaging"
 	hermenats "github.com/hermesnotifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
+
+var tracer = observability.Tracer("github.com/hermesnotifications/hermes/internal/delivery")
 
 // permanentError marks a failure that retrying cannot fix. It implements
 // messaging.PermanentError, so internal/messaging terminates the message straight to the
@@ -95,17 +99,35 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte, info messaging.
 		req.ActionLabel = *msg.Content.ActionLabel
 	}
 
+	// The provider call is the point of the whole pipeline and the slowest thing
+	// in it -- an SMTP conversation or a customer's webhook -- but it was the one
+	// step with no span of its own, so a trace showed the consume and then a gap.
+	// The attempt number is on the span because a retry and a first try look
+	// otherwise identical here.
+	//
+	// The span and providerDuration below are deliberately both here and answer
+	// different questions: the histogram gives the distribution across all
+	// deliveries, the span gives this one, next to the work either side of it.
+	sendCtx, span := tracer.Start(ctx, "delivery.send", trace.WithAttributes(
+		attribute.String("channel", w.channel),
+		attribute.String("provider", w.provider.Name()),
+		attribute.String("notification.id", msg.NotificationID),
+		attribute.String("user.id", msg.UserID),
+		attribute.Int64("messaging.attempt", int64(info.Attempt)),
+	))
 	// Timed per attempt, unlike deliveryResults below, which is counted once at the
 	// terminal outcome. Latency is a property of the call, so every call belongs in the
 	// histogram — including the failed attempts a retry later rescues, which are exactly
 	// the ones that tell you a provider is timing out rather than refusing.
 	started := time.Now()
-	result, err := w.provider.Send(ctx, req)
+	result, err := w.provider.Send(sendCtx, req)
 	providerDuration.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(
 		attribute.String("channel", w.channel),
 		attribute.String("provider", w.provider.Name()),
 		attribute.String("outcome", outcomeOf(err)),
 	))
+	observability.RecordError(span, err)
+	span.End()
 	if err != nil {
 		// Error only once the retries are spent, Warn before that — the same
 		// reasoning that already keeps the ".failed" event off the intermediate

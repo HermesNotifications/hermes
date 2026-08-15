@@ -1,7 +1,7 @@
 # ADR-004: Accepting the loss of Datadog Data Streams Monitoring
 
 **Date:** 2026-04-19
-**Status:** Accepted
+**Status:** Accepted (amended 2026-08-15 — see [Amendment](#amendment-2026-08-15-links-alone-did-not-deliver-this))
 
 ## Context
 
@@ -43,3 +43,40 @@ If, post-migration, we find ourselves frequently asking "what's the end-to-end p
 2. A **TraceQL metrics generator rule** in Tempo that extracts stage timings into Prometheus metrics automatically.
 
 Start without, add only when the need is measured.
+
+## Amendment 2026-08-15: links alone did not deliver this
+
+The decision stands — DSM stays gone, and traces remain the replacement. One
+assumption in it was wrong, and this records the correction rather than reversing
+anything.
+
+**What was assumed.** "Every notification carries an OTel trace context across NATS
+subjects. Tempo's service graph and trace view shows `publish → consume → process`
+spans with timing."
+
+**What was true.** The first sentence holds and was verified: a sampled production
+trace runs unbroken from `POST /v1/send` through both NATS hops to
+`hermes-worker-events`, and over an hour of traffic not one `nats.consume` span was
+orphaned across ~450k dispatch messages. The NATS propagation in
+`internal/observability/nats.go` does its job.
+
+The second sentence did not. The event writer batches, so one flush serves many
+notifications and cannot be a child of any of them; it recorded its inputs as
+**span links** and started from `context.Background()`. That is correct OTel
+semantics, and it relies on the backend walking links to relate the traces. Tempo
+does. The backend actually holding this telemetry is SigNoz, which does not — so
+every Postgres write recording a notification's final status sat in a trace of its
+own, 121 orphan roots per hour. "Did this notification's status get written?" could
+not be answered from the notification's trace, which is exactly the class of
+question this ADR promised traces would answer.
+
+**Correction.** `eventwriter.flush` keeps its links and stays a root: batch timing
+is a batch property and reparenting it onto one arbitrary member would misrepresent
+it. Each item additionally gets a short `notification.event.persist` span started
+from *its own* originating context and linked back to the flush. The batch keeps one
+span; each notification gains the one fact it was missing. Cost is roughly one extra
+span per event on the highest-call service in the fleet.
+
+**Carried forward.** Do not assume a backend traverses span links. Where a fan-in
+must remain queryable from an individual input's trace, emit a span on that input's
+trace as well; treat the link as the batch-level relationship, not as the only one.

@@ -12,6 +12,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type Client struct {
@@ -36,7 +38,12 @@ type apiResponse struct {
 }
 
 func NewClient(apiURL, apiKey string) *Client {
-	return &Client{apiURL: apiURL, apiKey: apiKey, httpClient: &http.Client{Timeout: 5 * time.Second}}
+	return &Client{apiURL: apiURL, apiKey: apiKey, httpClient: &http.Client{
+		Timeout: 5 * time.Second,
+		// Unlike the webhook client, this one dials a fixed in-cluster Service, so
+		// the default client metrics are bounded and stay on.
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}}
 }
 
 func (c *Client) Publish(ctx context.Context, channel string, data any) error {
