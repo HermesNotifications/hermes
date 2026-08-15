@@ -74,7 +74,7 @@ func TestExtractNATS_JoinsTheProducerTrace(t *testing.T) {
 	_, producer := observability.InjectNATS(context.Background(), msg)
 	producer.End()
 
-	_, consumer := observability.ExtractNATS(context.Background(), msg.Header, msg.Subject)
+	_, consumer := observability.ExtractNATS(context.Background(), msg.Header, msg.Subject, 1)
 	consumer.End()
 
 	psc, csc := producer.SpanContext(), consumer.SpanContext()
@@ -96,13 +96,117 @@ func TestExtractNATS_JoinsTheProducerTrace(t *testing.T) {
 	}
 }
 
+// A redelivery is a new unit of work, minutes after the publish it came from. Parenting
+// it there would claim the original span was still open — with retryDelay capped at 240s
+// and maxDeliveries at 10, by a quarter of an hour. It gets its own trace and a link.
+func TestExtractNATS_RedeliveryStartsANewTraceLinkedToTheProducer(t *testing.T) {
+	withRecorder(t)
+
+	msg := &nats.Msg{Subject: "delivery.email"}
+	_, producer := observability.InjectNATS(context.Background(), msg)
+	producer.End()
+
+	_, retry := observability.ExtractNATS(context.Background(), msg.Header, msg.Subject, 3)
+	retry.End()
+
+	psc, rsc := producer.SpanContext(), retry.SpanContext()
+	if psc.TraceID() == rsc.TraceID() {
+		t.Error("redelivery joined the producer's trace; it should start its own")
+	}
+
+	ro, ok := retry.(sdktrace.ReadOnlySpan)
+	if !ok {
+		t.Fatal("retry span is not a ReadOnlySpan")
+	}
+	if ro.Parent().IsValid() {
+		t.Errorf("redelivery has parent %s, want a root span", ro.Parent().SpanID())
+	}
+
+	links := ro.Links()
+	if len(links) != 1 {
+		t.Fatalf("redelivery has %d links, want 1 back to the producer", len(links))
+	}
+	if links[0].SpanContext.SpanID() != psc.SpanID() {
+		t.Errorf("link points at %s, want the producer span %s",
+			links[0].SpanContext.SpanID(), psc.SpanID())
+	}
+}
+
+// The first delivery must keep its parent. That is the ordinary messaging shape and the
+// thing that makes the pipeline read as one trace end to end.
+func TestExtractNATS_FirstDeliveryIsNotLinked(t *testing.T) {
+	withRecorder(t)
+
+	msg := &nats.Msg{Subject: "delivery.email"}
+	_, producer := observability.InjectNATS(context.Background(), msg)
+	producer.End()
+
+	_, consumer := observability.ExtractNATS(context.Background(), msg.Header, msg.Subject, 1)
+	consumer.End()
+
+	ro, ok := consumer.(sdktrace.ReadOnlySpan)
+	if !ok {
+		t.Fatal("consumer span is not a ReadOnlySpan")
+	}
+	if n := len(ro.Links()); n != 0 {
+		t.Errorf("first delivery carries %d links, want 0 — it has a real parent", n)
+	}
+	if ro.Parent().SpanID() != producer.SpanContext().SpanID() {
+		t.Errorf("first delivery parent = %s, want the producer %s",
+			ro.Parent().SpanID(), producer.SpanContext().SpanID())
+	}
+}
+
+// A message published before this instrumentation existed carries no producer context,
+// so there is nothing to link to and nothing to detach from.
+func TestExtractNATS_RedeliveryWithoutAProducerContextIsJustARoot(t *testing.T) {
+	withRecorder(t)
+
+	_, span := observability.ExtractNATS(context.Background(), nil, "delivery.email", 4)
+	span.End()
+
+	ro, ok := span.(sdktrace.ReadOnlySpan)
+	if !ok {
+		t.Fatal("span is not a ReadOnlySpan")
+	}
+	if n := len(ro.Links()); n != 0 {
+		t.Errorf("got %d links with no producer context, want 0", n)
+	}
+	if !span.SpanContext().IsValid() {
+		t.Error("span context is invalid")
+	}
+}
+
+// The attempt is on the span either way, so "which try was this" is answerable without
+// inferring it from the trace shape.
+func TestExtractNATS_RecordsTheAttempt(t *testing.T) {
+	withRecorder(t)
+
+	_, span := observability.ExtractNATS(context.Background(), nil, "delivery.email", 7)
+	span.End()
+
+	ro, ok := span.(sdktrace.ReadOnlySpan)
+	if !ok {
+		t.Fatal("span is not a ReadOnlySpan")
+	}
+	var got int64
+	for _, attr := range ro.Attributes() {
+		if attr.Key == "messaging.attempt" {
+			got = attr.Value.AsInt64()
+		}
+	}
+	if got != 7 {
+		t.Errorf("messaging.attempt = %d, want 7", got)
+	}
+}
+
 func TestExtractNATS_WithoutHeadersStartsARootSpan(t *testing.T) {
 	withRecorder(t)
 
 	// A message published before this instrumentation existed, or by a producer
 	// that does not inject. It must yield a usable root span, not an error and
 	// not an invalid context.
-	_, span := observability.ExtractNATS(context.Background(), nil, "notification.send")
+	_, span := observability.ExtractNATS(context.Background(), nil, "notification.send", 1)
 	span.End()
 
 	if !span.SpanContext().IsValid() {

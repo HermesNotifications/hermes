@@ -11,6 +11,66 @@ simplification for 0.x; when it stops paying, the chart gets its own `chart-vX.Y
 `version` and its `appVersion` are all the same, and it builds the GitHub Release notes from
 the section below matching the version. A missing section fails the release.
 
+## 0.2.1
+
+Three fixes to 0.2.0's own telemetry, each found by reading what it actually produced in
+production rather than what its tests said. Nothing to do on upgrade.
+
+### Span names carry the route again
+
+0.2.0 stopped naming spans from the request path — right, because that put notification
+IDs in span names — but its replacement never ran on the chi-routed services (send, inbox,
+admin). Every span was named for its method alone, so all endpoints collapsed under `POST`.
+
+otelhttp names a span when it starts it, before routing, and re-invokes the name formatter
+afterwards only when `Request.Pattern` is set. chi never sets it, so the second call never
+came and the pre-routing name was the one that stuck. The route is now applied directly
+once the router has matched, which also puts **`http.route` on the span as an attribute**
+— it was never there, so traces could not be filtered by endpoint at all.
+
+```
+before:  POST                  http.route absent
+after:   POST /v1/send         http.route = /v1/send
+```
+
+The ServeMux services (dispatch, the workers, the prober) were unaffected throughout.
+
+### Centrifugo's tracing was never on
+
+The chart has set `CENTRIFUGO_OPENTELEMETRY` since telemetry was introduced. Centrifugo v6
+nests that option, so the variable it wants is **`CENTRIFUGO_OPENTELEMETRY_ENABLED`** — and
+the old spelling is not an error, just a `unknown var in environment` warning at startup
+and tracing quietly off. If you saw no Centrifugo spans, that log line was the tell.
+
+Fixed, along with a render-time check that now refuses to install when
+`centrifugo.env.OTEL_EXPORTER_OTLP_ENDPOINT` disagrees with `observability.otel.endpoint`
+(or their protocols do). That combination also fails as silence: Centrifugo exports every
+span to an address that may not resolve, reports success, and is simply absent from the
+trace list — indistinguishable from tracing being switched off.
+
+**If you set `observability.otel.endpoint`, set `centrifugo.env.OTEL_EXPORTER_OTLP_ENDPOINT`
+to match**, or the install will now stop and tell you to. It cannot be inherited: a parent
+chart cannot template a sub-chart's values.
+
+Centrifugo traces its server API only — the publish calls Hermes makes to it — not
+websocket client sessions.
+
+### A redelivered message no longer joins a stale trace
+
+JetStream hands back the original headers on a redelivery, so a retry became a child of the
+publish span that produced it — one that had ended long before. With retry backoff capped
+at 240s and ten delivery attempts, a trace could show a root finishing in milliseconds and
+a child starting a quarter of an hour later.
+
+A redelivery now starts its own trace with a **link** back to the publish, and carries
+`messaging.attempt`. First deliveries are unchanged and still parent normally, which is
+what keeps the pipeline reading as one trace.
+
+The tradeoff, stated because it is real: a linked retry is harder to reach from the
+original trace than a child would be, since not every backend follows links. To find the
+retries for a message, search on its notification ID rather than expecting them nested
+inside the first attempt.
+
 ## 0.2.0
 
 An observability release. 0.1.3 turned telemetry on; this is the release that makes it
