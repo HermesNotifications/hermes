@@ -1,24 +1,29 @@
 {
   "annotations": {"list": []},
-  "description": "End-to-end notification pipeline: send → dispatch → workers → event-writer.",
+  "description": "End-to-end notification pipeline: send → dispatch → workers → event-writer. Every panel here is backed by an instrument that exists; see docs/observability/metrics-reference.md.",
   "editable": false,
   "graphTooltip": 1,
   "panels": [
     {
-      "title": "Notifications per minute",
+      "title": "Pipeline throughput per minute",
+      "description": "The four stages of one notification's life. accepted counts requests, the rest count per notification per channel, so dispatched >= accepted whenever fan-out is working. A gap opening between dispatched and delivered is the pipeline falling behind or failing.",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
       "targets": [
-        {"expr": "sum(rate(hermes_notifications_sent_total[1m])) * 60", "legendFormat": "sent", "refId": "A"},
-        {"expr": "sum(rate(hermes_notifications_delivered_total[1m])) * 60", "legendFormat": "delivered", "refId": "B"}
+        {"expr": "sum(rate(hermes_notifications_accepted_total{result=\"new\"}[5m])) * 60", "legendFormat": "accepted", "refId": "A"},
+        {"expr": "sum(rate(hermes_notifications_dispatched_total[5m])) * 60", "legendFormat": "dispatched", "refId": "B"},
+        {"expr": "sum(rate(hermes_delivery_result_total{outcome=\"success\"}[5m])) * 60", "legendFormat": "delivered", "refId": "C"},
+        {"expr": "sum(rate(hermes_eventwriter_events_total[5m])) * 60", "legendFormat": "events written", "refId": "D"}
       ]
     },
     {
-      "title": "Per-channel error rate",
+      "title": "Per-channel delivery failure ratio",
+      "description": "Failed terminal outcomes as a share of all terminal outcomes, by channel. Terminal means retries are already spent, so a flaky provider that eventually succeeds does not appear here. This is what HermesDeliveryFailureRate alerts on.",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
       "targets": [
-        {"expr": "sum by (channel) (rate(hermes_deliveries_failed_total[5m]))", "legendFormat": "{{channel}}", "refId": "A"}
+        {"expr": "sum by (channel) (rate(hermes_delivery_result_total{outcome=\"failed\"}[5m]))\n  /\nsum by (channel) (rate(hermes_delivery_result_total[5m]))", "legendFormat": "{{channel}}", "refId": "A"}
       ]
     },
     {
@@ -30,11 +35,56 @@
       ]
     },
     {
-      "title": "Dispatch template resolution hit rate",
+      "title": "Dispatch template cache hit rate",
+      "description": "Hits as a share of all template cache consultations. A ratio near zero means dispatch is doing a template SELECT per notification — correct, but not what the cache is for. Check the result=error series if this drops suddenly.",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
       "targets": [
-        {"expr": "sum(rate(hermes_template_cache_hits_total[5m])) / sum(rate(hermes_template_cache_lookups_total[5m]))", "legendFormat": "hit ratio", "refId": "A"}
+        {"expr": "sum(rate(hermes_cache_result_total{op=\"template\",result=\"hit\"}[5m]))\n  /\nsum(rate(hermes_cache_result_total{op=\"template\"}[5m]))", "legendFormat": "hit ratio", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Provider call latency p95",
+      "description": "Time in the provider call alone, split by channel and provider — the part of a delivery Hermes does not control. Compare against the consumer's AckWait: a p95 approaching it means JetStream is redelivering messages whose handlers are still running.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.95,\n  sum by (channel, provider, le) (rate(hermes_delivery_provider_duration_seconds_bucket[5m]))\n)", "legendFormat": "{{channel}}/{{provider}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Where notifications are lost",
+      "description": "Everything left of a delivery attempt. Drops are the routing rules declining to deliver — a steady background of no_contact is normal, a step change is a template or preference regression. Dispatch failures and publish rejections are the opposite: nothing declined, the notification was lost anyway, so any nonzero rate is a defect.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "sum by (reason) (rate(hermes_routing_drop_total[5m]))", "legendFormat": "drop: {{reason}}", "refId": "A"},
+        {"expr": "sum by (reason) (rate(hermes_dispatch_failures_total[5m]))", "legendFormat": "fail: {{reason}}", "refId": "B"},
+        {"expr": "sum(rate(hermes_send_publish_rejections_total[5m]))", "legendFormat": "send: publish rejected", "refId": "C"}
+      ]
+    },
+    {
+      "title": "Event writer batches",
+      "description": "The end of the pipeline. Flush rate pinned near 2/s per replica means every flush is a timer flush and the batcher is idle; batch size hugging 100 means size is the trigger, which is the healthy shape under load. Dropped events are unrecoverable — the messages were acked before batching.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [
+        {"expr": "sum(rate(hermes_eventwriter_flush_duration_seconds_count[5m]))", "legendFormat": "flushes/s", "refId": "A"},
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(hermes_eventwriter_batch_size_bucket[5m])))", "legendFormat": "batch size p50", "refId": "B"},
+        {"expr": "sum by (stage) (rate(hermes_eventwriter_dropped_total[5m]))", "legendFormat": "dropped: {{stage}}", "refId": "C"}
+      ]
+    },
+    {
+      "title": "Synthetic probe end-to-end latency",
+      "description": "The prober's own verdict on send → websocket. The only panel here that measures notifications arriving rather than a proxy for it.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(hermes_probe_e2e_duration_seconds_bucket[10m])))", "legendFormat": "p95", "refId": "A"},
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(hermes_probe_e2e_duration_seconds_bucket[10m])))", "legendFormat": "p50", "refId": "B"}
       ]
     }
   ],
@@ -45,5 +95,5 @@
   "time": {"from": "now-3h", "to": "now"},
   "title": "Hermes pipeline — overview",
   "uid": "hermes-pipeline-overview",
-  "version": 1
+  "version": 2
 }

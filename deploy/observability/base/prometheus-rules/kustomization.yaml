@@ -4,5 +4,6 @@ kind: Kustomization
 resources:
   - service.rules.yaml
   - pipeline.rules.yaml
+  - delivery.rules.yaml
   - infra.rules.yaml
   - lifecycle.rules.yaml

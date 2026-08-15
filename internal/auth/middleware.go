@@ -45,6 +45,7 @@ func APIKeyMiddleware(validate APIKeyValidator) func(http.Handler) http.Handler 
 
 			key := r.Header.Get("Authorization")
 			if key == "" {
+				recordAuthResult(r.Context(), schemeAPIKey, reasonMissing)
 				httputil.ClientError(w, http.StatusUnauthorized, "missing api key")
 				return
 			}
@@ -52,10 +53,12 @@ func APIKeyMiddleware(validate APIKeyValidator) func(http.Handler) http.Handler 
 
 			validated := validate(key)
 			if validated == nil {
+				recordAuthResult(r.Context(), schemeAPIKey, reasonInvalidKey)
 				httputil.ClientError(w, http.StatusUnauthorized, "invalid api key")
 				return
 			}
 
+			recordAuthResult(r.Context(), schemeAPIKey, reasonOK)
 			ctx := WithValidatedKey(r.Context(), validated)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

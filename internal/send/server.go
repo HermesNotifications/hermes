@@ -18,6 +18,7 @@ import (
 	"github.com/hermesnotifications/hermes/internal/httputil"
 	"github.com/hermesnotifications/hermes/internal/middleware"
 	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -149,7 +150,11 @@ func (s *Server) API() huma.API {
 }
 
 func (s *Server) Handler() http.Handler {
-	var h http.Handler = s.router
+	// Directly outside the router, so the matched pattern can be read the moment
+	// routing is done. This is what gives send's spans and HTTP metrics an
+	// http.route label — chi, unlike ServeMux, sets no Request.Pattern for
+	// otelhttp to find.
+	h := observability.ChiRoute(s.router)
 	// The limiter is built once in NewServer. Constructing it here would give
 	// every Handler() call a fresh, empty bucket map — which is what made the
 	// limiter silently inert under test, since the suites call Handler() per

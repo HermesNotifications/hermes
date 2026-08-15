@@ -10,6 +10,7 @@ Phase 1 runs the OSS stack **alongside** Datadog — everything is dual-emitted 
 |---|---|
 | **Understand the stack** | [architecture.md](architecture.md) |
 | **Add a metric, trace, or log to a service** | [instrumentation-guide.md](instrumentation-guide.md) |
+| **Look up what a metric means** | [metrics-reference.md](metrics-reference.md) |
 | **Check naming / label conventions** | [semantic-conventions.md](semantic-conventions.md) |
 | **Find a dashboard** | [dashboards.md](dashboards.md) |
 | **Handle a firing alert** | [runbooks/](runbooks/) |

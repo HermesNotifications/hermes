@@ -391,12 +391,14 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 		dmBytes, err := dm.Marshal()
 		if err != nil {
 			log.Error("marshal delivery message", "error", err, "channel", ch)
+			recordDispatchFailure(ctx, ch, "marshal")
 			continue
 		}
 
 		subject := "delivery." + ch
 		if err := d.nats.Publish(ctx, subject, dmBytes); err != nil {
 			log.Error("publish delivery", "error", err, "channel", ch)
+			recordDispatchFailure(ctx, ch, "publish")
 			d.publishEvent(ctx, msg.NotificationID, ch, "delivery.publish_failed", "error", map[string]any{
 				"error": err.Error(),
 			})
@@ -409,6 +411,7 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 		// stay at Error, which is the asymmetry worth keeping — a publish that works
 		// is not news, a publish that does not is.
 		log.Debug("published to delivery", "channel", ch)
+		recordDispatched(ctx, ch)
 		dispatched = append(dispatched, ch)
 		d.publishEvent(ctx, msg.NotificationID, ch, "routing.dispatched", "info", nil)
 	}

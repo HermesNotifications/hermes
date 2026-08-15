@@ -362,6 +362,14 @@ jobs:
       - name: Every alert must have a runbook that exists
         run: python3 scripts/check_runbook_links.py
 
+      # The other half of the same defect class. pipeline-overview.json shipped with three
+      # of its four panels querying metric names no Go file emits, and nothing noticed for
+      # the life of the dashboard: a panel with no series renders exactly like a healthy
+      # service with no traffic, and an alert over a metric that does not exist evaluates
+      # as not firing.
+      - name: Every queried metric must be emitted
+        run: python3 scripts/check_metric_references.py
+
       # The route gate ran over the Helm chart only. The overlays are what actually deploy
       # staging and production, and they had drifted to 7 of base's 12 rules: /v1/templates,
       # /v1/apikeys, /v1/organizations and /v1/subscriptions unreachable in both

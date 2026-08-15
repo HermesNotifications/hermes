@@ -1,0 +1,152 @@
+# Business-outcome alerts: is the pipeline actually delivering, and is the record of what
+# it delivered intact.
+#
+# Every alert MUST have a matching runbook at docs/observability/runbooks/<slug>.md
+# (scripts/check_runbook_links.py enforces this pairing).
+#
+# The gap this file closes: pipeline.rules.yaml alerts thoroughly on the *mechanism* —
+# backlog, drain rate, pool saturation, dead letters — and hermes_delivery_result_total,
+# the one metric that says whether notifications reached anyone, was read by nothing. A
+# provider failing every send is invisible to all of it: messages are consumed promptly,
+# the queue stays shallow, no dead letters accumulate until retries are exhausted, and
+# every consumer looks healthy while nothing is delivered.
+#
+# HermesProbeLoss covers this end-to-end, but only for the inbox channel the prober
+# subscribes to. Email and SMS had no equivalent.
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hermes-delivery
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: hermes.delivery
+      rules:
+        # A ratio, not a count. Absolute failures scale with traffic, so any threshold
+        # that is right at one volume pages spuriously at another -- the same defect the
+        # static `num_pending > 1000` had before pipeline.rules.yaml replaced it.
+        #
+        # Terminal outcomes only: the counter is incremented once per notification per
+        # channel, after retries are spent. A provider blipping and recovering does not
+        # appear here at all, which is what makes 5% a meaningful threshold rather than a
+        # noise floor -- these are notifications that will never arrive.
+        - alert: HermesDeliveryFailureRate
+          expr: |
+            sum by (channel, provider) (rate(hermes_delivery_result_total{outcome="failed"}[10m]))
+              /
+            sum by (channel, provider) (rate(hermes_delivery_result_total[10m]))
+              > 0.05
+          for: 10m
+          labels:
+            severity: page
+            component: delivery
+          annotations:
+            summary: "{{ $value | humanizePercentage }} of {{ $labels.channel }} deliveries via {{ $labels.provider }} are failing"
+            description: "Terminal delivery failures on {{ $labels.channel }} ({{ $labels.provider }}) are {{ $value | humanizePercentage }} of all terminal outcomes. These notifications have exhausted their retries and will not arrive. Split by provider: if a sibling provider on the same channel is healthy, this is the provider, not Hermes."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/delivery-failures.md"
+
+        # Absence, for the same reason HermesProbeAbsent exists. The ratio above is 0/0
+        # when nothing is being delivered at all, which reads as healthy -- and "delivered
+        # nothing" is the more serious outage of the two.
+        #
+        # Guarded on ingestion so it stays quiet on an idle deployment: accepted traffic
+        # with no delivery outcomes is a stuck pipeline, no traffic at all is a weekend.
+        - alert: HermesDeliveryAbsent
+          expr: |
+            sum(rate(hermes_notifications_accepted_total{result="new"}[15m])) > 0
+              and
+            absent(sum(rate(hermes_delivery_result_total[15m])) > 0)
+          for: 15m
+          labels:
+            severity: critical
+            component: delivery
+          annotations:
+            summary: "Notifications are being accepted but none are being delivered"
+            description: "Send has accepted work for 15 minutes and no channel has produced a single terminal delivery outcome. Everything downstream of ingestion is suspect; HermesDeliveryFailureRate cannot fire while this is true, because its denominator is zero."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/delivery-failures.md"
+
+        # Routing declining every channel is not an error path -- no code fails, the send
+        # returns 202, and the notification simply never becomes a delivery. It is the
+        # quietest way for this system to break, and it is what a bad template or
+        # preference migration looks like.
+        #
+        # Against dispatches rather than as a raw rate, because a steady background of
+        # no_contact is normal and its absolute size depends entirely on traffic.
+        #
+        # `or vector(0)` on each term of the denominator, because a missing series and a
+        # zero rate are different things in PromQL and only one of them is safe here. On
+        # a deployment where dispatch has never published -- which is precisely the total
+        # failure this should catch -- hermes_notifications_dispatched_total does not
+        # exist, the addition finds nothing to match against, and the whole expression
+        # evaluates to empty. The alert would go quiet exactly when everything is being
+        # dropped.
+        - alert: HermesRoutingDropRate
+          expr: |
+            sum(rate(hermes_routing_drop_total[15m]))
+              /
+            (
+              (sum(rate(hermes_notifications_dispatched_total[15m])) or vector(0))
+                +
+              (sum(rate(hermes_routing_drop_total[15m])) or vector(0))
+            )
+              > 0.5
+          for: 30m
+          labels:
+            severity: warn
+            component: delivery
+          annotations:
+            summary: "{{ $value | humanizePercentage }} of routing decisions are dropping the notification"
+            description: "More than half of routing decisions in the last 15 minutes selected no channel. A steady background of drops is normal -- users without a contact point, opted-out categories -- but a step change is usually a template that stopped defining channel content, or a preferences migration. Break down by reason: hermes_routing_drop_total."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/routing-drops.md"
+
+        # Unrecoverable by construction, which is why this pages rather than warns. The
+        # event writer batches in memory and the NATS messages are acked on entry to the
+        # batcher, not on the database write -- so a failed flush has nothing left to
+        # redeliver. The events are gone.
+        - alert: HermesEventWriterDropping
+          expr: increase(hermes_eventwriter_dropped_total[10m]) > 0
+          for: 1m
+          labels:
+            severity: page
+            component: eventwriter
+          annotations:
+            summary: "Event writer dropped {{ $value }} events ({{ $labels.stage }})"
+            description: "A batch write failed and its events were discarded. This is permanent: messages are acked when they enter the in-memory batcher, so nothing redelivers them. stage=insert lost the event rows outright; stage=status kept the rows but left notifications on a stale status, which users see as a notification that never turns delivered. Check Postgres health first."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/event-writer-dropping.md"
+
+        # Deliberately generous. This is not a rate limiter -- middleware/ratelimit.go
+        # already sheds volume -- it is the alert for a credential that stopped working,
+        # which from inside a pod is indistinguishable from an outage and from outside is
+        # indistinguishable from an attack.
+        #
+        # As a ratio against all decisions, so a service with ten legitimate requests a
+        # minute and two typos does not page.
+        #
+        # `reason!=""` alongside the negative matcher, per the guard rule in
+        # semantic-conventions.md: != also matches a series missing the label entirely.
+        #
+        # The volume floor is what keeps this from being a nuisance. A ratio over three
+        # requests is not a signal, and an internal service with a handful of callers can
+        # cross 50% on one client's typo -- 0.1/s is roughly six attempts a minute, below
+        # which the percentage means nothing.
+        - alert: HermesAuthFailureRate
+          expr: |
+            (
+              sum by (service, scheme) (rate(hermes_auth_result_total{reason!="ok",reason!=""}[10m]))
+                /
+              sum by (service, scheme) (rate(hermes_auth_result_total[10m]))
+                > 0.5
+            )
+              and
+            sum by (service, scheme) (rate(hermes_auth_result_total[10m])) > 0.1
+          for: 15m
+          labels:
+            severity: warn
+            component: auth
+          annotations:
+            summary: "{{ $value | humanizePercentage }} of {{ $labels.scheme }} authentications on {{ $labels.service }} are failing"
+            description: "Most authentication attempts are being rejected. Break down by reason: a wall of invalid_key or invalid_token right after a deploy is a rotated credential a caller did not pick up -- which looks like a total outage to them while every Hermes health check stays green. The same shape with no deploy behind it, against a flat ok rate, is someone working through guesses."
+            runbook_url: "https://github.com/HermesNotifications/hermes/blob/main/docs/observability/runbooks/auth-failures.md"

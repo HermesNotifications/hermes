@@ -47,18 +47,28 @@ import (
 
 var meter = otel.Meter("hermes.send")
 
-var sentCounter, _ = meter.Int64Counter(
-    "hermes.notifications.sent",
+var acceptedCounter, _ = meter.Int64Counter(
+    "hermes.notifications.accepted",
     metric.WithDescription("Total notifications accepted for delivery."),
     metric.WithUnit("1"),
 )
 
 func handleSend(ctx context.Context, n *Notification) {
-    sentCounter.Add(ctx, 1, metric.WithAttributes(
-        attribute.String("channel", n.Channel),
+    acceptedCounter.Add(ctx, 1, metric.WithAttributes(
+        attribute.String("result", "new"),
     ))
 }
 ```
+
+**Then wire it to something.** A metric nothing queries is a cost with no benefit, and
+this codebase has shipped several: `hermes.delivery.result` — the one metric that says
+whether notifications reach anyone — went unread by any alert or dashboard for its whole
+life. In the same change, add the metric to
+[metrics-reference.md](metrics-reference.md) and put it on a dashboard panel or in an
+alert rule.
+
+Check both directions. The pipeline dashboard spent just as long querying four metric
+names that were never emitted, which looks identical to a healthy system with no traffic.
 
 **Do NOT** put `user_id`, `notification_id`, `organization_id`, or any other unbounded-cardinality value on metric attributes. See [semantic-conventions.md](semantic-conventions.md#forbidden-high-cardinality-labels).
 

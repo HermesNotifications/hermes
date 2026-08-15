@@ -72,4 +72,11 @@ echo "export HERMES_REDIS_URL='redis://localhost:${redis}'"
 echo "export HERMES_NATS_URL='nats://localhost:${nats}'"
 echo "export HERMES_DYNAMO_ENDPOINT='http://localhost:${dynamo}'"
 echo "export HERMES_EMAIL_SMTP_HOST=localhost"
+# The port matters as much as the host, and its absence here was worse than a missing
+# variable: the Mailpit tests fell back to 1025, which in a worktree is not this stack's
+# Mailpit but the *main checkout's*. The send was accepted by the wrong container while the
+# assertion queried MAILPIT_API_URL, which was correctly offset -- so both Mailpit tests
+# failed in every worktree, and did so by cross-talking into another checkout's stack
+# rather than by failing to connect.
+echo "export HERMES_EMAIL_SMTP_PORT=${smtp}"
 echo "export MAILPIT_API_URL='http://localhost:${mailpit_ui}'"

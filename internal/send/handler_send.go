@@ -17,6 +17,7 @@ import (
 	"github.com/hermesnotifications/hermes/internal/models"
 	hermenats "github.com/hermesnotifications/hermes/internal/nats"
 	"github.com/hermesnotifications/hermes/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -29,6 +30,25 @@ var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/
 var publishRejectionCounter, _ = meter.Int64Counter(
 	"hermes.send.publish_rejections",
 	metric.WithDescription("Send requests refused because the notification could not be published to NATS."),
+	metric.WithUnit("1"),
+)
+
+// acceptedCounter is the denominator the write path did not have.
+//
+// Every other metric on this path counted a way of failing — publish rejections here,
+// routing drops in dispatch, failed outcomes in delivery — and none of them counted the
+// work itself. A failure count with no total behind it cannot answer the only question
+// worth asking of a notification pipeline: of everything we took in, how much came out
+// the far end. Delivery results give the far end; this is the near one.
+//
+// result separates the two things a 202 can mean, which the response body cannot: "new"
+// is work that entered the pipeline, "duplicate" is an idempotency key replaying an ID
+// already issued. Both are successes and neither is an error, but only the first is
+// throughput, and a client whose retry logic has gone wrong shows up here as a
+// duplicate rate climbing under a flat accepted rate.
+var acceptedCounter, _ = meter.Int64Counter(
+	"hermes.notifications.accepted",
+	metric.WithDescription("Notifications accepted by the send API, by whether the request was new or an idempotent replay."),
 	metric.WithUnit("1"),
 )
 
@@ -127,6 +147,9 @@ func (s *Server) registerSendRoutes() {
 		if idemKey != "" && s.cache != nil {
 			existing, err := s.cache.SetIdempotencyKey(ctx, req.To.OrganizationID+":"+idemKey, notifID, time.Hour)
 			if err == nil && existing != "" {
+				acceptedCounter.Add(ctx, 1, metric.WithAttributes(
+					attribute.String("result", "duplicate"),
+				))
 				resp := &sendOutput{}
 				resp.Body.NotificationID = existing
 				return resp, nil
@@ -192,6 +215,13 @@ func (s *Server) registerSendRoutes() {
 				http.Header{"Retry-After": []string{"5"}},
 			)
 		}
+
+		// After the publish, not before: accepted means the pipeline has it, and a
+		// notification counted at the top of the handler would be counted again as a
+		// rejection on the path below.
+		acceptedCounter.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("result", "new"),
+		))
 
 		resp := &sendOutput{}
 		resp.Body.NotificationID = notifID

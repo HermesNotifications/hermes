@@ -55,6 +55,25 @@
       "targets": [
         {"expr": "go_memstats_heap_inuse_bytes{service=\"$service\"}", "legendFormat": "{{pod}}", "refId": "A"}
       ]
+    },
+    {
+      "title": "Latency p95 by route",
+      "description": "The service-wide p95 above hides which endpoint moved. Note the route label is the templated pattern, never the raw path.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.95,\n  sum by (http_route, le) (rate(http_server_request_duration_seconds_bucket{service=\"$service\"}[5m]))\n)", "legendFormat": "{{http_route}}", "refId": "A"}
+      ]
+    },
+    {
+      "title": "Authentication outcomes",
+      "description": "Both gates, by reason. A wall of invalid_key after a deploy is a stale credential and looks like an outage to the caller while every health check stays green; the same series climbing against a flat ok rate is someone guessing.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "sum by (scheme, reason) (rate(hermes_auth_result_total{service=\"$service\"}[5m]))", "legendFormat": "{{scheme}}: {{reason}}", "refId": "A"}
+      ]
     }
   ],
   "refresh": "30s",
@@ -77,5 +96,5 @@
   "time": {"from": "now-1h", "to": "now"},
   "title": "Hermes service — overview",
   "uid": "hermes-service-overview",
-  "version": 1
+  "version": 2
 }

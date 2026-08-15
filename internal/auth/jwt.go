@@ -60,6 +60,7 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
+				recordAuthResult(r.Context(), schemeJWT, reasonMissing)
 				httputil.ClientError(w, http.StatusUnauthorized, "missing authorization")
 				return
 			}
@@ -67,6 +68,11 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 
 			configs := keyProvider()
 			if len(configs) == 0 {
+				// Counted with the rejections although it is a 500 and the caller's
+				// credential may be perfectly good: it is a misconfiguration that
+				// refuses every request, and the point of this counter is that such a
+				// thing is visible as itself rather than as generic 5xx.
+				recordAuthResult(r.Context(), schemeJWT, reasonNoSigningKeys)
 				httputil.ClientError(w, http.StatusInternalServerError, "no signing keys configured")
 				return
 			}
@@ -103,6 +109,7 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 			}
 
 			if validClaims == nil || matchedCfg == nil {
+				recordAuthResult(r.Context(), schemeJWT, reasonInvalidToken)
 				httputil.ClientError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
@@ -124,10 +131,12 @@ func JWTMiddleware(keyProvider JWTKeyProvider) func(http.Handler) http.Handler {
 			organizationID, organizationOK := claimToString(organizationIDRaw)
 
 			if userID == "" || !organizationOK {
+				recordAuthResult(r.Context(), schemeJWT, reasonMissingClaims)
 				httputil.ClientError(w, http.StatusUnauthorized, "missing claims")
 				return
 			}
 
+			recordAuthResult(r.Context(), schemeJWT, reasonOK)
 			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)
 			ctx = context.WithValue(ctx, ContextKeyOrganizationID, organizationID)
 			next.ServeHTTP(w, r.WithContext(ctx))
