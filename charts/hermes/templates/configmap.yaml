@@ -2,6 +2,7 @@
 {{- include "hermes.validateAdminPortal" . -}}
 {{- include "hermes.validateCentrifugoSecrets" . -}}
 {{- include "hermes.validateCentrifugoEngine" . -}}
+{{- include "hermes.validateCentrifugoTracing" . -}}
 {{- include "hermes.validateProber" . -}}
 {{- include "hermes.validateDispatchPool" . -}}
 apiVersion: v1

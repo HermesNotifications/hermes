@@ -12,9 +12,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
-// The http.route problem, and why it needs a holder rather than a middleware.
+// The http.route problem for chi-routed services.
 //
 // otelhttp labels server spans and metrics with the *templated* route
 // ("/v1/notifications/{id}"), never the raw path — that is the whole point of the
@@ -24,45 +26,23 @@ import (
 // (dispatch, the workers, prober) get the label for free.
 //
 // chi does not set Pattern, and the obvious fix — a middleware that reads
-// chi.RouteContext and writes the answer somewhere — does not work, because every
-// layer in a net/http stack holds its own *http.Request. otelhttp is outermost; it
-// records metrics and renames the span after the inner handler returns, using the
-// request *it* was given. Anything an inner layer writes to its own request or
-// context is invisible from out there.
+// chi.RouteContext and writes the answer somewhere — does not work on its own,
+// because every layer in a net/http stack holds its own *http.Request. otelhttp is
+// outermost; it records after the inner handler returns, using the request *it* was
+// given. Anything an inner layer writes to its own request is invisible out there.
 //
-// What does cross the boundary is a pointer placed in the context on the way in, and
-// there are two of them here for two different consumers:
+// The first attempt at this passed the route back up in a context-held pointer for a
+// WithSpanNameFormatter to read. That could not work, and the reason is worth keeping:
+// otelhttp names the span when it *starts* it, before routing has happened, and
+// re-invokes the formatter afterwards only `if r.Pattern != ""` (handler.go:187 in
+// contrib v0.69.0). For a chi service Pattern is always empty, so the second call never
+// came and every span kept the name computed before there was a route to use — "POST",
+// with no route anywhere on it. Verified in production on 0.2.0 before this fix.
 //
-//   - Metrics use otelhttp's own Labeler, which it installs in the context before
-//     calling the next handler and reads back when it records. ChiRoute adds the route
-//     to it; nothing else is needed.
-//   - The span name has no equivalent, because otelhttp renames the span from a
-//     formatter that receives only its own request. WithHTTPRoute installs a holder
-//     outside otelhttp for that, and HTTPRouteSpanName reads it.
-//
-// So ChiRoute writes the same route to both. If that seems redundant, the alternative is
-// spans named "GET" with no route on them at all.
-
-// routeKey is the context key for the per-request route holder.
-type routeKey struct{}
-
-// routeHolder carries the matched route back up the middleware stack.
-//
-// No mutex: the write in ChiRoute happens-before the reads in HTTPRouteSpanName and
-// HTTPRouteMetricAttributes, because all three run in the same goroutine and the
-// write is sequenced by ServeHTTP returning.
-type routeHolder struct{ pattern string }
-
-// WithHTTPRoute installs the route holder. It must wrap the otelhttp handler, not
-// sit inside it, so that the context otelhttp derives its own request from already
-// carries the pointer.
-func WithHTTPRoute(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		holder := &routeHolder{}
-		ctx := context.WithValue(r.Context(), routeKey{}, holder)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
+// So ChiRoute does not ask otelhttp to name the span. It names it directly, along with
+// the http.route attribute, at the one moment both the span and the pattern are in
+// hand: inside otelhttp's span, immediately after the router has matched. Metrics still
+// go through otelhttp's Labeler, which is read back on the way out and does work.
 
 // ChiRoute records the route pattern chi matched, for services that route with chi
 // instead of ServeMux. Wrap the chi router with it: it must be the layer directly
@@ -94,21 +74,19 @@ func ChiRoute(next http.Handler) http.Handler {
 			labeler.Add(attribute.String("http.route", pattern))
 		}
 
-		// Span name, via the holder — see the note at the top of this file.
-		if holder, _ := r.Context().Value(routeKey{}).(*routeHolder); holder != nil {
-			holder.pattern = pattern
+		// Span name and route attribute, set directly rather than handed to otelhttp's
+		// formatter — see the note at the top of this file for why the formatter never
+		// gets a second chance on a chi route.
+		//
+		// The span here is otelhttp's own: it put it in the context on the way in, and
+		// nothing between there and the router starts another. A no-op span (no
+		// otelhttp in the chain, as in most handler tests) is not recording, so this
+		// costs nothing and asserts nothing.
+		if span := trace.SpanFromContext(r.Context()); span.IsRecording() {
+			span.SetName(spanName(r.Method, pattern))
+			span.SetAttributes(semconv.HTTPRoute(pattern))
 		}
 	})
-}
-
-// routeFromContext returns the matched route, or "" if nothing matched or the
-// holder was never installed.
-func routeFromContext(ctx context.Context) string {
-	holder, _ := ctx.Value(routeKey{}).(*routeHolder)
-	if holder == nil {
-		return ""
-	}
-	return holder.pattern
 }
 
 // trimPattern mirrors otelhttp's own handling of ServeMux patterns, which may be
@@ -120,35 +98,23 @@ func trimPattern(pattern string) string {
 	return ""
 }
 
-// HTTPRouteSpanName names server spans "<METHOD> <route>", falling back to the bare
-// method when nothing matched.
-//
-// Pass it to otelhttp.WithSpanNameFormatter. It replaces a formatter that used
-// r.URL.Path, which put notification IDs into span names — unbounded cardinality in
-// Tempo, and against semantic-conventions.md. otelhttp's default would be correct
-// for the ServeMux services on its own; this adds the chi ones.
-func HTTPRouteSpanName(_ string, r *http.Request) string {
-	route := routeFromContext(r.Context())
-	if route == "" {
-		route = trimPattern(r.Pattern)
-	}
-	method := strings.ToUpper(r.Method)
+// spanName is the "<METHOD> <route>" convention, with the bare method when there is
+// no route to add.
+func spanName(method, route string) string {
+	method = strings.ToUpper(method)
 	if route == "" {
 		return method
 	}
 	return method + " " + route
 }
 
-// routeForMetrics reports the http.route a recorded metric would carry, for tests. The
-// production path adds it through otelhttp's Labeler in ChiRoute, and for ServeMux
-// services otelhttp derives it from Request.Pattern with no help from us.
-func routeForMetrics(r *http.Request) string {
-	if labeler, ok := otelhttp.LabelerFromContext(r.Context()); ok {
-		for _, kv := range labeler.Get() {
-			if kv.Key == "http.route" {
-				return kv.Value.AsString()
-			}
-		}
-	}
-	return trimPattern(r.Pattern)
+// HTTPRouteSpanName names server spans "<METHOD> <route>" for the ServeMux services,
+// where otelhttp does re-invoke the formatter once Request.Pattern is set.
+//
+// Pass it to otelhttp.WithSpanNameFormatter. It replaces a formatter that used
+// r.URL.Path, which put notification IDs into span names — unbounded cardinality in
+// Tempo, and against semantic-conventions.md. Chi services do not come through here
+// for their final name; ChiRoute sets it directly.
+func HTTPRouteSpanName(_ string, r *http.Request) string {
+	return spanName(r.Method, trimPattern(r.Pattern))
 }

@@ -1346,8 +1346,10 @@ centrifugo:
   #
   # The endpoint has to be repeated here rather than inherited: Helm merges `global` into a
   # sub-chart but observability.otel.* is not under `global`, and a parent chart cannot
-  # template a sub-chart's values. Keep both in step, or point them at the same collector by
-  # setting global.otelEndpoint if you introduce one.
+  # template a sub-chart's values. **If you change observability.otel.endpoint, change this
+  # one too** — templates/_validate.tpl now refuses to render when they disagree, because
+  # they silently did on a real install and the only symptom was Centrifugo never appearing
+  # in the trace service list.
   #
   # OTEL_EXPORTER_OTLP_PROTOCOL is set explicitly because Centrifugo defaults to http/protobuf
   # while Hermes' collector endpoint below is the gRPC port (4317). Left at the default, every

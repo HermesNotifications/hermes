@@ -136,6 +136,44 @@ without complaint.
 {{- end }}
 
 {{/*
+Centrifugo's OTLP endpoint is a literal in values.yaml, for the same reason the Redis engine
+address above is: a parent chart cannot template a sub-chart's values. So it can disagree with
+observability.otel.endpoint, and when it does, nothing anywhere says so.
+
+That is not hypothetical. It shipped: an install pointing Hermes at its own collector left
+Centrifugo still exporting to the chart's default address, which did not resolve on that
+cluster. Centrifugo started, traced its API, posted every span into the void, and reported
+success at every level -- no error, no crash, no log. The only symptom was that Centrifugo was
+absent from the service list, which looks exactly like tracing simply not being enabled.
+
+Checked only when the two are both set and differ. An empty endpoint on either side means
+someone has deliberately turned that half off.
+*/}}
+{{- define "hermes.validateCentrifugoTracing" -}}
+{{- if and .Values.centrifugo.enabled .Values.observability.enabled -}}
+{{-   $env := .Values.centrifugo.env | default dict -}}
+{{-   $tracingOn := or (eq (toString (get $env "CENTRIFUGO_OPENTELEMETRY")) "1") (eq (toString (get $env "CENTRIFUGO_OPENTELEMETRY")) "true") -}}
+{{-   if $tracingOn -}}
+{{-     $centEndpoint := get $env "OTEL_EXPORTER_OTLP_ENDPOINT" | default "" -}}
+{{-     $hermesEndpoint := .Values.observability.otel.endpoint | default "" -}}
+{{-     if and $centEndpoint $hermesEndpoint (ne $centEndpoint $hermesEndpoint) -}}
+{{-       fail (printf "centrifugo.env.OTEL_EXPORTER_OTLP_ENDPOINT is %q but observability.otel.endpoint is %q. Centrifugo would export its spans somewhere Hermes does not, and if that address does not resolve it drops every span without an error -- the publish leg simply never appears in a trace, and Centrifugo never appears in the service list, which is indistinguishable from tracing being switched off. Set them to the same collector:\n\n  centrifugo:\n    env:\n      OTEL_EXPORTER_OTLP_ENDPOINT: %s\n\nOr clear centrifugo.env.OTEL_EXPORTER_OTLP_ENDPOINT if Centrifugo really should export elsewhere." $centEndpoint $hermesEndpoint $hermesEndpoint) -}}
+{{-     end -}}
+{{/*
+Protocol has the same failure shape and is cheaper to get wrong: Centrifugo defaults to
+http/protobuf, and posting protobuf-over-HTTP at a gRPC listener is accepted by the socket and
+discarded, so it also fails as silence rather than as an error.
+*/}}
+{{-     $centProto := get $env "OTEL_EXPORTER_OTLP_PROTOCOL" | default "http/protobuf" -}}
+{{-     $hermesProto := .Values.observability.otel.protocol | default "" -}}
+{{-     if and $hermesProto (ne $centProto $hermesProto) -}}
+{{-       fail (printf "centrifugo.env.OTEL_EXPORTER_OTLP_PROTOCOL is %q but observability.otel.protocol is %q, against the same collector. The mismatched half is dropped silently at the listener. Set centrifugo.env.OTEL_EXPORTER_OTLP_PROTOCOL to %s." $centProto $hermesProto $hermesProto) -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 The prober cannot start without a key, and the way it fails is the wrong way.
 
 An unresolvable secretKeyRef does not fail the render -- it fails when the kubelet builds the
