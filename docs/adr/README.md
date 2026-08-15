@@ -33,6 +33,7 @@ This directory follows the [MADR](https://adr.github.io/madr/) / Michael Nygard 
 | [0021](0021-bootstrap-the-first-api-key-into-a-secret.md) | Create the first API key at install time and put it in a Secret | Accepted | 2026-08-12 |
 | [0022](0022-liveness-follows-consumer-progress.md) | Fail liveness when a NATS consumer holds work and settles none of it | Accepted | 2026-08-13 |
 | [0023](0023-loadtest-environment-runs-in-a-single-availability-zone.md) | Give load testing its own environment and pin its workloads to one AZ | Accepted | 2026-08-13 |
+| [0024](0024-a-full-rate-limiter-fails-open-for-credentials.md) | Fail open for credentials when the rate limiter's entry map is full | Accepted | 2026-08-14 |
 
 > Keep this table in sync whenever you add or change an ADR's status.
 

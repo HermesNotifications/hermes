@@ -158,6 +158,29 @@ whole office as one person.
 The forwarded chain is walked from the **right**, taking the first address that is not itself a
 trusted proxy — the leftmost entry is whatever the client chose to send.
 
+### How many callers the limiter can hold
+
+Each service keeps one token bucket per caller in memory, and the map is bounded.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HERMES_RATELIMIT_MAX_ENTRIES` | `50000` | Per-credential buckets held per replica. |
+
+The number that matters is **distinct callers active within any 30-minute window**, not requests
+per second. For Send and Admin that is API keys, which number in the hundreds. For Inbox and User
+it is *users*, so a deployment with more than 50,000 people opening their inbox in half an hour
+exceeds it — quietly, because nothing about the request rate changes.
+
+Callers who do not fit are **admitted without a bucket**, not refused: past the cap the limit
+stops being enforced for them rather than being enforced jointly ([ADR 0024](adr/0024-a-full-rate-limiter-fails-open-for-credentials.md)).
+Watch `hermes_http_rate_limit_decisions_total{decision="overflow_admitted"}`; if it is non-zero and you
+want the per-user limit actually applied to everyone, raise this value or enable distributed rate
+limiting below, which keeps no local map at all.
+
+Raising it costs memory in proportion — a bucket is a few dozen bytes plus map overhead — and the
+map is per replica, so the effective ceiling is this value times your replica count only if the
+load balancer spreads users evenly.
+
 ### Distributed rate limiting
 
 With this enabled the per-credential admission check runs **in Redis**, so the configured rate is

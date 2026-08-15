@@ -271,9 +271,14 @@ func TestRateLimit_SharedKeyIsNamespacedByService(t *testing.T) {
 }
 
 // Per-IP keying is unbounded by an attacker's choice, so the map needs a cap.
+//
+// Explicitly ScopeIP: this asserts the shared-bucket behaviour, which is now the
+// per-IP answer alone. It read as a credential limiter only because that is
+// NewRateLimiter's default, which is exactly the drift that let the credential
+// scopes inherit a mitigation designed for a key space they do not have.
 func TestRateLimit_EntryCapDivertsToASharedBucket(t *testing.T) {
 	c := &clock{t: time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)}
-	rl := NewRateLimiter(headerKey, 1, 1).WithMaxEntries(3)
+	rl := NewRateLimiter(headerKey, 1, 1).WithMaxEntries(3).WithScope(ScopeIP)
 	rl.now = c.now
 	rl.lastSweep.Store(c.t.UnixNano())
 	h := rl.Middleware(okHandler())
@@ -304,10 +309,73 @@ func TestRateLimit_EntryCapDivertsToASharedBucket(t *testing.T) {
 	}
 }
 
+// A credential key space larger than the cap must not make callers limit each other.
+//
+// This is the defect the 100,000-connection run of 2026-08-14 found. The inbox
+// limiter buckets per user at 20/s; polling 100 rps across 100,000 users put every
+// user three orders of magnitude below their own limit, and 6,705 requests were
+// still refused 429 -- because past 50,000 distinct users every further user shared
+// one bucket. The limiter exists to stop one caller affecting others and was doing
+// the reverse. See ADR 0024.
+func TestRateLimit_CredentialScopeAdmitsPastTheCapRatherThanSharing(t *testing.T) {
+	c := &clock{t: time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)}
+	// burst 1, rate 1: any two callers sharing a bucket refuse the second.
+	rl := NewRateLimiter(headerKey, 1, 1).WithMaxEntries(3).WithScope(ScopeCredential)
+	rl.now = c.now
+	rl.lastSweep.Store(c.t.UnixNano())
+	h := rl.Middleware(okHandler())
+
+	for i := range 3 {
+		if code := doAs(h, "user-"+strconv.Itoa(i)).Code; code != http.StatusOK {
+			t.Fatalf("user-%d should be admitted, got %d", i, code)
+		}
+	}
+
+	// Every user past the cap is admitted. Under the shared bucket the second of
+	// these was a 429, and the user had done nothing to earn it.
+	for i := 3; i < 10; i++ {
+		if code := doAs(h, "user-"+strconv.Itoa(i)).Code; code != http.StatusOK {
+			t.Errorf("user-%d is past the cap and should be admitted, got %d", i, code)
+		}
+	}
+
+	// Failing open must not quietly grow the map either.
+	if n := rl.entryCount.Load(); n != 3 {
+		t.Errorf("expected the cap to hold at 3 entries, got %d", n)
+	}
+	if _, ok := rl.entries.Load(overflowKey); ok {
+		t.Error("a credential limiter must never allocate the shared overflow bucket")
+	}
+}
+
+// Callers already holding a bucket keep being limited normally once the map is full.
+// Failing open is for the keys that cannot be admitted to the map, not an amnesty.
+func TestRateLimit_CredentialScopeStillLimitsResidentCallers(t *testing.T) {
+	c := &clock{t: time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)}
+	rl := NewRateLimiter(headerKey, 1, 1).WithMaxEntries(2).WithScope(ScopeCredential)
+	rl.now = c.now
+	rl.lastSweep.Store(c.t.UnixNano())
+	h := rl.Middleware(okHandler())
+
+	doAs(h, "resident-a")
+	doAs(h, "resident-b") // map now full
+
+	// A stranger is admitted...
+	if code := doAs(h, "stranger").Code; code != http.StatusOK {
+		t.Errorf("stranger should be admitted past the cap, got %d", code)
+	}
+	// ...while a resident spending its own burst is still refused.
+	if code := doAs(h, "resident-a").Code; code != http.StatusTooManyRequests {
+		t.Errorf("a resident over its own limit should still be refused, got %d", code)
+	}
+}
+
 // Reclaiming idle entries must take precedence over diverting live ones.
 func TestRateLimit_CapForcesASweepBeforeOverflowing(t *testing.T) {
 	c := &clock{t: time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)}
-	rl := NewRateLimiter(headerKey, 5, 5).WithMaxEntries(2)
+	// ScopeIP, because the overflow bucket this asserts against is now reachable
+	// only from the caller-chosen key spaces.
+	rl := NewRateLimiter(headerKey, 5, 5).WithMaxEntries(2).WithScope(ScopeIP)
 	rl.now = c.now
 	rl.lastSweep.Store(c.t.UnixNano())
 	h := rl.Middleware(okHandler())

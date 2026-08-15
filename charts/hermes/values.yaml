@@ -790,6 +790,23 @@ rateLimit:
   # choose their own bucket and escape the limit entirely.
   trustedProxyCIDRs: []
   #  - 10.42.0.0/16
+  # -- Per-credential token buckets held in memory per replica. Empty keeps the
+  # built-in 50,000.
+  #
+  # The number to size against is DISTINCT CALLERS ACTIVE IN ANY 30-MINUTE WINDOW,
+  # which has nothing to do with requests per second. For send and admin that is API
+  # keys, in the hundreds. For inbox and user it is *users*, so an install where more
+  # than 50,000 people open their inbox in half an hour exceeds it.
+  #
+  # Exceeding it is not an outage: callers who do not fit are admitted without a
+  # bucket rather than refused, so the limit simply stops being enforced for them
+  # (ADR 0024). Before that ADR they shared one bucket and were refused 429 for each
+  # other's traffic -- a 100k-connection run produced 6,705 of those in four minutes.
+  #
+  # Watch hermes_http_rate_limit_decisions_total{decision="overflow_admitted"}. Raise
+  # this if it is non-zero and you want the limit applied to everyone; each bucket is
+  # a few dozen bytes.
+  maxEntries: ""
   # -- Cluster-wide per-credential limiting. With this off, each replica enforces
   # the configured rate independently and the cluster-wide ceiling is that rate
   # times the replica count. With it on, the admission check runs in Redis

@@ -370,6 +370,10 @@ the service's compiled-in default.
 - name: HERMES_TRUSTED_PROXY_CIDRS
   value: {{ join "," .trustedProxyCIDRs | quote }}
 {{- end }}
+{{- if .maxEntries }}
+- name: HERMES_RATELIMIT_MAX_ENTRIES
+  value: {{ .maxEntries | quote }}
+{{- end }}
 {{- with .distributed }}
 {{- if hasKey . "enabled" }}
 - name: HERMES_RATELIMIT_DISTRIBUTED_ENABLED
