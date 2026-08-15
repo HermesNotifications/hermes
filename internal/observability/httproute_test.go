@@ -5,45 +5,79 @@
 package observability
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-// These tests exist because the failure mode is silence. A broken route holder does not
-// error or panic — it produces an empty http.route label, every series collapses into
-// one, and the dashboards keep drawing a line. That is exactly how the label came to be
-// missing in the first place.
+// These tests exist because the failure mode is silence. A broken route hook does not
+// error or panic — it produces spans named "GET" and an empty http.route label, every
+// series collapses into one, and the dashboards keep drawing a line.
+//
+// They run against the REAL otelhttp handler, and that is the point rather than a
+// detail. The previous version of this file used a stand-in that called the span-name
+// formatter unconditionally on the way out. Real otelhttp calls it a second time only
+// `if r.Pattern != ""` (handler.go:187 in contrib v0.69.0), which is never true for a
+// chi route. So the stand-in was more forgiving than the thing it stood in for, the
+// suite passed, and every chi service shipped spans named after nothing but the method.
+// A fake that is kinder than production tests only itself.
 
-// serveThrough builds the production arrangement: the holder outermost, then a stand-in
-// for otelhttp, then the router. It returns the span name otelhttp would apply and the
-// http.route it would record.
+// serveThrough builds the production arrangement — otelhttp outermost, then ChiRoute
+// for the chi services, then the router — and reports the span name that was actually
+// recorded plus the http.route the metrics would carry.
 func serveThrough(t *testing.T, router http.Handler, chiRouted bool, target string) (spanName, metricRoute string) {
 	t.Helper()
 
-	inner := router
-	if chiRouted {
-		inner = ChiRoute(router)
-	}
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 
-	// Stands in for otelhttp: it installs a Labeler, holds its own *http.Request, and
-	// evaluates both on the way out — which is the whole reason this plumbing exists.
-	otelStandIn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(otelhttp.ContextWithLabeler(r.Context(), &otelhttp.Labeler{}))
-		inner.ServeHTTP(w, r)
-		spanName = HTTPRouteSpanName("http.server", r)
-		metricRoute = routeForMetrics(r)
+	// The Labeler otelhttp installs is a pointer in the context, so a context captured
+	// anywhere below it can be read after the request finishes — which is what makes the
+	// attribute ChiRoute adds on the way out visible from here.
+	var inner context.Context
+	capture := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		inner = r.Context()
+		router.ServeHTTP(w, r)
 	})
 
+	var h http.Handler = capture
+	if chiRouted {
+		h = ChiRoute(capture)
+	}
+	instrumented := otelhttp.NewHandler(h, "http.server",
+		otelhttp.WithSpanNameFormatter(HTTPRouteSpanName),
+	)
+
 	req := httptest.NewRequest(http.MethodGet, target, nil)
-	WithHTTPRoute(otelStandIn).ServeHTTP(httptest.NewRecorder(), req)
+	instrumented.ServeHTTP(httptest.NewRecorder(), req)
+
+	spans := sr.Ended()
+	if len(spans) == 0 {
+		t.Fatal("no server span recorded")
+	}
+	spanName = spans[len(spans)-1].Name()
+
+	if labeler, ok := otelhttp.LabelerFromContext(inner); ok {
+		for _, kv := range labeler.Get() {
+			if kv.Key == "http.route" {
+				metricRoute = kv.Value.AsString()
+			}
+		}
+	}
 	return spanName, metricRoute
 }
 
-func TestChiRouteReachesOuterMiddleware(t *testing.T) {
+func TestChiRouteNamesTheSpanAndLabelsMetrics(t *testing.T) {
 	router := chi.NewRouter()
 	router.Get("/v1/notifications/{id}", func(w http.ResponseWriter, r *http.Request) {})
 
@@ -56,6 +90,38 @@ func TestChiRouteReachesOuterMiddleware(t *testing.T) {
 	}
 	if want := "/v1/notifications/{id}"; metricRoute != want {
 		t.Errorf("http.route = %q, want %q", metricRoute, want)
+	}
+}
+
+// The route also has to land on the span as an attribute, not only in its name, or
+// traces cannot be filtered by endpoint.
+func TestChiRouteSetsTheRouteAttribute(t *testing.T) {
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+
+	router := chi.NewRouter()
+	router.Get("/v1/notifications/{id}", func(w http.ResponseWriter, r *http.Request) {})
+	instrumented := otelhttp.NewHandler(ChiRoute(router), "http.server",
+		otelhttp.WithSpanNameFormatter(HTTPRouteSpanName),
+	)
+	instrumented.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/v1/notifications/abc123", nil))
+
+	spans := sr.Ended()
+	if len(spans) == 0 {
+		t.Fatal("no server span recorded")
+	}
+	var got string
+	for _, attr := range spans[len(spans)-1].Attributes() {
+		if attr.Key == "http.route" {
+			got = attr.Value.AsString()
+		}
+	}
+	if want := "/v1/notifications/{id}"; got != want {
+		t.Errorf("http.route span attribute = %q, want %q", got, want)
 	}
 }
 
@@ -79,31 +145,33 @@ func TestServeMuxRouteComesFromPattern(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/things/{id}", func(w http.ResponseWriter, r *http.Request) {})
 
-	spanName, metricRoute := serveThrough(t, mux, false, "/v1/things/abc123")
+	// No ChiRoute: ServeMux assigns Request.Pattern on the request it routes, which is
+	// the one condition under which otelhttp re-invokes the formatter — so these
+	// services need nothing from us, and otelhttp derives http.route for metrics itself
+	// rather than through the Labeler.
+	spanName, _ := serveThrough(t, mux, false, "/v1/things/abc123")
 
-	// ServeMux assigns Request.Pattern on the request it routes, and that is the same
-	// pointer the outer layer holds — so both work with no help from us. Nothing is
-	// added to the Labeler here; otelhttp derives http.route from Pattern itself, and
-	// adding it again would put the key in the attribute set twice.
 	if want := "GET /v1/things/{id}"; spanName != want {
 		t.Errorf("span name = %q, want %q", spanName, want)
 	}
-	if want := "/v1/things/{id}"; metricRoute != want {
-		t.Errorf("http.route = %q, want %q", metricRoute, want)
-	}
 }
 
-func TestRouteHooksTolerateAMissingHolder(t *testing.T) {
-	// Any server that wires otelhttp without WithHTTPRoute — a test harness, a service
-	// that builds its own stack — must degrade to no label rather than panic.
+func TestHTTPRouteSpanNameFallsBackToTheMethod(t *testing.T) {
+	// A request that never reached a router — otelhttp names the span from this at
+	// creation, before routing has happened, so it must degrade rather than panic.
 	req := httptest.NewRequest(http.MethodGet, "/v1/x", nil)
-
 	if got := HTTPRouteSpanName("http.server", req); got != "GET" {
 		t.Errorf("span name = %q, want %q", got, "GET")
 	}
-	if got := routeForMetrics(req); got != "" {
-		t.Errorf("http.route = %q, want empty", got)
-	}
+}
+
+func TestChiRouteWithoutOtelDoesNotPanic(t *testing.T) {
+	// Most handler tests wire the router with no otelhttp above it, so the span in
+	// context is a non-recording no-op and the Labeler is absent.
+	router := chi.NewRouter()
+	router.Get("/v1/x", func(w http.ResponseWriter, r *http.Request) {})
+	ChiRoute(router).ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/v1/x", nil))
 }
 
 func TestTrimPattern(t *testing.T) {
