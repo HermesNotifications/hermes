@@ -416,6 +416,13 @@ because `resource.WithProcess()` includes a process-owner detector that calls
 > and it makes the two findings at the top of this document — consumer lag as the real signal,
 > and the load generator as the recurring source of phantom latency — checkable from a
 > dashboard rather than by inference.
+>
+> **Done, for the 100,000 case:**
+> [realtime-scale-2026-08-14.md](realtime-scale-2026-08-14.md). Telemetry on, the generator on
+> its own node this time, 100,000 connections held and 404,881 pushes delivered with
+> `ws_push_e2e_latency` at a median of 8 ms. It also turned up the thing neither run was looking
+> for: the per-credential rate limiter shares one bucket across every caller past 50,000 entries,
+> so an inbox with more than 50,000 active users starts returning 429s to users who did nothing.
 
 The `loadtest` namespace was excluded from SigNoz log collection for the duration, to keep k6's
 output from becoming the dominant log source on a shared cluster.
