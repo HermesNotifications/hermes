@@ -69,7 +69,7 @@ func (w *Writer) Stop() {
 
 func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 	// Collect span links back to each originating trace so the batch flush
-	// span connects to every input trace in Tempo's service graph.
+	// span connects to every input trace.
 	// (Replaces the DSM-context merge from the dd-trace-go version —
 	// DSM is DD-proprietary; see docs/observability/adr/004-accepting-dsm-loss.md.)
 	var links []trace.Link
@@ -91,11 +91,50 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 
 	started := time.Now()
 	batchSize.Record(ctx, int64(len(items)))
+
+	// The links above are the correct OTel shape for a fan-in, but they are only
+	// half the picture, and in practice the less useful half: a flush is a new
+	// root trace, so every status write landed in a trace of its own. Asking "did
+	// this notification's status actually get written?" meant leaving the
+	// notification's trace and searching by ID. ADR 0004 assumed a backend that
+	// walks links to stitch that back together; the one we deploy does not.
+	//
+	// So each item also gets a short span on *its own* trace, linked back to the
+	// batch. The flush keeps the batch-level timing; each notification gains the
+	// one fact it was missing.
+	//
+	// Cost: worker-events is the highest-call service in the fleet, and this is
+	// roughly one extra span per event. Only items carrying a live trace context
+	// get one -- starting from a context without one would mint a fresh root and
+	// recreate the very orphans this removes.
+	itemSpans := make([]trace.Span, 0, len(items))
+	for _, item := range items {
+		if !trace.SpanContextFromContext(item.Ctx).IsValid() {
+			continue
+		}
+		_, itemSpan := tracer.Start(item.Ctx, "notification.event.persist",
+			trace.WithLinks(trace.Link{SpanContext: span.SpanContext()}),
+			trace.WithAttributes(
+				attribute.String("event", item.Msg.Event),
+				attribute.String("notification.id", item.Msg.NotificationID),
+				attribute.String("channel", item.Msg.Channel),
+			),
+		)
+		itemSpans = append(itemSpans, itemSpan)
+	}
+	// The batch succeeds or fails as a unit, so every item carries the same outcome.
+	var flushErr error
+
 	// Deferred so the failure paths below, which return early, are timed too — a flush
 	// that fails slowly is the interesting one, and timing only the success path would
-	// leave the histogram looking healthiest exactly when the database is not.
+	// leave the histogram looking healthiest exactly when the database is not. The item
+	// spans are ended here for the same reason: an early return must not strand them.
 	defer func() {
 		flushDuration.Record(ctx, time.Since(started).Seconds())
+		for _, itemSpan := range itemSpans {
+			observability.RecordError(itemSpan, flushErr)
+			itemSpan.End()
+		}
 	}()
 
 	// Convert to models for DB insert.
@@ -117,6 +156,7 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 
 	// Batch insert events.
 	if err := w.store.InsertEvents(ctx, dbEvents); err != nil {
+		flushErr = err
 		observability.RecordError(span, err)
 		w.logger.ErrorContext(ctx, "batch insert events", "error", err, "count", len(items))
 		eventsDropped.Add(ctx, int64(len(items)), metric.WithAttributes(
@@ -144,6 +184,10 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 	// Batch update notification statuses.
 	if len(updates) > 0 {
 		if err := w.store.BatchUpdateNotificationStatuses(ctx, updates); err != nil {
+			// Not assigned to flushErr: the events themselves are durable at this
+			// point, and the status rollup only ever advances, so the next event
+			// for this notification recovers it. Recorded, not failed.
+			observability.RecordError(span, err)
 			w.logger.ErrorContext(ctx, "batch update statuses", "error", err, "count", len(updates))
 			eventsDropped.Add(ctx, int64(len(updates)), metric.WithAttributes(
 				attribute.String("stage", "status"),

@@ -31,6 +31,7 @@ import (
 
 	"github.com/centrifugal/centrifuge-go"
 	"github.com/golang-jwt/jwt/v5"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -125,8 +126,14 @@ type Prober struct {
 
 func New(cfg Config, logger *slog.Logger) *Prober {
 	return &Prober{
-		cfg:      cfg,
-		http:     &http.Client{Timeout: 30 * time.Second},
+		cfg: cfg,
+		// Instrumented so a failing probe produces a trace reaching into the
+		// service it probed, rather than a bare latency number. The prober targets
+		// fixed internal Services, so the default client metrics stay bounded.
+		http: &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 		logger:   logger,
 		inFlight: make(map[string]time.Time),
 	}

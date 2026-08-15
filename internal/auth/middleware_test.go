@@ -5,6 +5,7 @@
 package auth_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -33,11 +34,41 @@ func serveWith(mw func(http.Handler) http.Handler, path, authHeader string) (int
 
 // validatorFor accepts exactly one raw key and rejects everything else.
 func validatorFor(rawKey string, perms ...string) auth.APIKeyValidator {
-	return func(got string) *auth.ValidatedKey {
+	return func(_ context.Context, got string) *auth.ValidatedKey {
 		if got != rawKey {
 			return nil
 		}
 		return &auth.ValidatedKey{ID: "key_test", Permissions: perms}
+	}
+}
+
+// The validator must receive the request's own context, not a background one.
+//
+// It used to take only the raw key, so both implementations had no choice but to
+// call ResolveAPIKey with context.Background(). That put the API-key cache lookup
+// outside the request span: hermes-send was emitting one orphan root trace per
+// request, 1:1 with POST /v1/send, for every Redis get it did.
+func TestAPIKeyMiddleware_PassesTheRequestContextToTheValidator(t *testing.T) {
+	type ctxKey struct{}
+
+	var got context.Context
+	mw := auth.APIKeyMiddleware(func(ctx context.Context, _ string) *auth.ValidatedKey {
+		got = ctx
+		return &auth.ValidatedKey{ID: "key_test"}
+	})
+	handler := mw(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/send", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	req = req.WithContext(context.WithValue(req.Context(), ctxKey{}, "carried"))
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if got == nil {
+		t.Fatal("validator never ran")
+	}
+	if v, _ := got.Value(ctxKey{}).(string); v != "carried" {
+		t.Error("validator got a context detached from the request; the cache lookup " +
+			"will start its own trace instead of joining the request's")
 	}
 }
 

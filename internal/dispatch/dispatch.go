@@ -18,9 +18,16 @@ import (
 
 	"github.com/hermesnotifications/hermes/internal/messaging"
 	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"github.com/hermesnotifications/hermes/internal/provider"
 	"github.com/hermesnotifications/hermes/internal/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// tracer names spans after this package's import path, per
+// docs/observability/instrumentation-guide.md.
+var tracer = observability.Tracer("github.com/hermesnotifications/hermes/internal/dispatch")
 
 // eventNotificationSent is published once per notification, after the fan-out, and is the
 // only event that advances a notification to StatusSent. The string is a cross-package
@@ -256,8 +263,16 @@ func (d *Dispatch) routeAndDeliver(ctx context.Context, log *slog.Logger, msg *h
 	var templateID *string
 
 	if msg.Metadata.Template != "" {
+		// Worth its own span: the resolver is Redis-backed, so a cache hit is
+		// invisible in the trace -- the DB query span only appears on a miss, which
+		// made "slow because the cache is cold" and "slow for some other reason"
+		// look identical.
+		resolveCtx, resolveSpan := tracer.Start(ctx, "template.resolve",
+			trace.WithAttributes(attribute.String("template.slug", msg.Metadata.Template)))
 		var err error
-		nt, err = d.templateResolver.Resolve(ctx, msg.Metadata.Template)
+		nt, err = d.templateResolver.Resolve(resolveCtx, msg.Metadata.Template)
+		observability.RecordError(resolveSpan, err)
+		resolveSpan.End()
 		if err != nil {
 			log.Error("resolve template", "error", err, "template", msg.Metadata.Template)
 			return fmt.Errorf("resolve template: %w", err)

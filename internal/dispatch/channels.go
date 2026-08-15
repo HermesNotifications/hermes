@@ -13,8 +13,11 @@ import (
 	"github.com/hermesnotifications/hermes/internal/cache"
 	"github.com/hermesnotifications/hermes/internal/models"
 	hermenats "github.com/hermesnotifications/hermes/internal/nats"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"github.com/hermesnotifications/hermes/internal/provider"
 	"github.com/hermesnotifications/hermes/internal/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // channelStore composes the repository interfaces needed for channel resolution.
@@ -92,7 +95,26 @@ func (cr *ChannelResolver) resolveCategory(ctx context.Context, id string) (*mod
 //
 // FilterChannelsForTemplate and filterChannelsByContact narrow the result afterwards; they are
 // separate passes, not part of resolution. See docs/architecture.md#channel-resolution.
+// ResolveChannels wraps resolveChannels in a span. The rules below have several
+// exit points and are pure computation over cached lookups, so without this the
+// single most misunderstood step in the pipeline -- which channels a
+// notification went to, and why -- left no trace at all. The resolved set is on
+// the span so a trace answers "why these channels" without a re-read of the
+// precedence table above.
 func (cr *ChannelResolver) ResolveChannels(ctx context.Context, explicitChannels []string, userID string, template *models.NotificationTemplate) ([]string, error) {
+	ctx, span := tracer.Start(ctx, "channel.resolve", trace.WithAttributes(
+		attribute.String("user.id", userID),
+		attribute.StringSlice("channels.explicit", explicitChannels),
+	))
+	defer span.End()
+
+	channels, err := cr.resolveChannels(ctx, explicitChannels, userID, template)
+	observability.RecordError(span, err)
+	span.SetAttributes(attribute.StringSlice("channels.resolved", channels))
+	return channels, err
+}
+
+func (cr *ChannelResolver) resolveChannels(ctx context.Context, explicitChannels []string, userID string, template *models.NotificationTemplate) ([]string, error) {
 	// Standalone template (no subscription)
 	if template.SubscriptionID == nil {
 		if len(explicitChannels) > 0 {

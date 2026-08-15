@@ -231,12 +231,12 @@ func (s *Server) Handler() http.Handler {
 	return h
 }
 
-func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
+func (s *Server) validateAPIKey(ctx context.Context, rawKey string) *auth.ValidatedKey {
 	// See the note in internal/send/server.go: a typed nil in an interface is
 	// not nil, so the conversion has to be guarded.
 	var keyCache auth.APIKeyCache
 	if s.cache != nil {
 		keyCache = s.cache
 	}
-	return auth.ResolveAPIKey(context.Background(), rawKey, s.store, keyCache, s.hmacSecret, s.logger)
+	return auth.ResolveAPIKey(ctx, rawKey, s.store, keyCache, s.hmacSecret, s.logger)
 }

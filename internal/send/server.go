@@ -194,7 +194,7 @@ func requirePermission(ctx context.Context, perm string) error {
 	}
 }
 
-func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
+func (s *Server) validateAPIKey(ctx context.Context, rawKey string) *auth.ValidatedKey {
 	// s.cache is a concrete pointer, so it has to be converted deliberately: a
 	// nil *cache.Client assigned straight to the interface would be non-nil and
 	// every lookup would panic on a cacheless server.
@@ -202,5 +202,5 @@ func (s *Server) validateAPIKey(rawKey string) *auth.ValidatedKey {
 	if s.cache != nil {
 		keyCache = s.cache
 	}
-	return auth.ResolveAPIKey(context.Background(), rawKey, s.store, keyCache, s.hmacSecret, s.logger)
+	return auth.ResolveAPIKey(ctx, rawKey, s.store, keyCache, s.hmacSecret, s.logger)
 }

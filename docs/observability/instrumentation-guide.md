@@ -36,6 +36,29 @@ func main() {
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector address, e.g. `otel-collector-opentelemetry-collector.observability.svc:4317` |
 | `OTEL_SERVICE_NAME` | Overrides the service name passed to `Init` |
 | `OTEL_RESOURCE_ATTRIBUTES` | Comma-separated extras, e.g. `deployment.environment=staging,service.version=abc123` |
+| `OTEL_TRACES_SAMPLER` | Sampler. Default `parentbased_always_on` — every trace is kept |
+| `OTEL_TRACES_SAMPLER_ARG` | Sampler argument, e.g. `0.1` with `parentbased_traceidratio` |
+
+Two things about `Init` are easy to get wrong:
+
+**Without `OTEL_EXPORTER_OTLP_ENDPOINT` it exports nothing, but it still installs
+the propagator.** That is deliberate: a service shipping no telemetry of its own
+must still forward an inbound `traceparent`, or it severs a trace that the services
+either side of it are recording.
+
+**Sampling is env-driven, so do not pass a sampler in code.** `Init` deliberately
+omits `sdktrace.WithSampler`, because passing one silently overrides
+`OTEL_TRACES_SAMPLER` and takes the dial away. Dispatch has been measured at
+~7,900 msg/s, so head sampling is the lever that exists today if trace volume
+needs to come down:
+
+```
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+`parentbased_*` matters — a plain `traceidratio` samples each service
+independently, which shreds cross-service traces into fragments.
 
 ## Adding a counter
 
@@ -119,33 +142,39 @@ Span name convention: `<noun>.<verb>`, lowercase, dots as separators. E.g. `noti
 
 ## Propagating trace context over NATS
 
-Use the carrier from `internal/observability/nats.go`:
+**You do not need to do anything.** `messaging.Client` handles both ends, and every
+publish and consume in Hermes goes through it:
+
+- `Client.Publish` calls `observability.InjectNATS`, which starts a producer span
+  and writes `traceparent` into the message headers.
+- `Client.Subscribe`'s internal `processMessage` calls `observability.ExtractNATS`
+  and hands your handler a `ctx` already parented to the publisher's span.
+
+So the only rule is the general one: **use the `ctx` your handler is given**, and
+pass it down. Anything you start from `context.Background()` instead becomes a
+detached root trace.
 
 ```go
-import (
-    "go.opentelemetry.io/otel"
-    "go.opentelemetry.io/otel/propagation"
-    obsnats "github.com/hermesnotifications/hermes/internal/observability"
-)
-
-// Publisher
-msg := &nats.Msg{Subject: subj, Data: payload, Header: nats.Header{}}
-otel.GetTextMapPropagator().Inject(ctx, obsnats.NATSHeaderCarrier(msg.Header))
-nc.PublishMsg(msg)
-
-// Consumer
-func handle(msg *nats.Msg) {
-    ctx := otel.GetTextMapPropagator().Extract(
-        context.Background(),
-        obsnats.NATSHeaderCarrier(msg.Header),
-    )
-    ctx, span := tracer.Start(ctx, "notification.consume",
-        trace.WithSpanKind(trace.SpanKindConsumer),
-    )
-    defer span.End()
-    // process
-}
+err := client.Subscribe(cfg, func(ctx context.Context, data []byte, info messaging.DeliveryInfo) error {
+    // ctx is already inside the publisher's trace -- just use it.
+    return doWork(ctx, data)
+})
 ```
+
+`NATSHeaderCarrier`, `InjectNATS` and `ExtractNATS` in
+`internal/observability/nats.go` are the mechanism behind this. Call them directly
+only if you are writing a new transport that does not go through
+`messaging.Client`.
+
+### Batching breaks the parent relationship — link *and* span
+
+When one operation serves many messages, it cannot be a child of any single one.
+Record links to the inputs, but do not stop there: also emit a span on each input's
+own trace. A link expresses the batch relationship; it does not make the work
+visible from an individual message's trace, and not every backend traverses links.
+`internal/eventwriter/writer.go` is the worked example, and
+[ADR-004](adr/004-accepting-dsm-loss.md#amendment-2026-08-15-links-alone-did-not-deliver-this)
+records what went wrong when only the links were there.
 
 ## Correlating logs with traces
 

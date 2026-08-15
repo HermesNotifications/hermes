@@ -41,9 +41,20 @@ type ShutdownFunc func(context.Context) error
 // and releases exporters.
 //
 // If OTEL_EXPORTER_OTLP_ENDPOINT is unset, returns a no-op shutdown and
-// leaves the global providers unchanged — safe for local runs without the
-// observability stack.
+// leaves the global *providers* unchanged — safe for local runs without the
+// observability stack. The propagator is installed either way; see below.
 func Init(ctx context.Context, serviceName string) (ShutdownFunc, error) {
+	// Before the endpoint check, deliberately. Propagation is independent of
+	// export: a service that ships no telemetry of its own must still forward an
+	// inbound traceparent, or it severs a trace its neighbours are recording.
+	// Leaving this below the early return also left the no-op propagator
+	// installed in every test binary, so Inject/Extract silently did nothing and
+	// any test of the NATS carrier would have passed while proving nothing.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
 	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") == "" {
 		return noopShutdown, nil
 	}
@@ -82,11 +93,6 @@ func Init(ctx context.Context, serviceName string) (ShutdownFunc, error) {
 		_ = traceShutdown(ctx)
 		return nil, fmt.Errorf("observability: start runtime instrumentation: %w", err)
 	}
-
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 
 	return func(ctx context.Context) error {
 		return errors.Join(traceShutdown(ctx), metricShutdown(ctx))
@@ -132,13 +138,18 @@ func initTraces(ctx context.Context, res *resource.Resource) (ShutdownFunc, erro
 		return nil, err
 	}
 
+	// No WithSampler, on purpose. Passing one overrides OTEL_TRACES_SAMPLER, so
+	// the hardcoded AlwaysSample() left no way to turn volume down short of a
+	// code change and a redeploy -- and dispatch has been measured at ~7,900
+	// msg/s. Omitting it lets the SDK read OTEL_TRACES_SAMPLER /
+	// OTEL_TRACES_SAMPLER_ARG, whose default is parentbased_always_on: identical
+	// behaviour to before, but now there is a dial.
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp,
 			sdktrace.WithBatchTimeout(5*time.Second),
 			sdktrace.WithMaxExportBatchSize(2048),
 		),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	)
 	otel.SetTracerProvider(tp)
 
