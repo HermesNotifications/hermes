@@ -11,6 +11,47 @@ simplification for 0.x; when it stops paying, the chart gets its own `chart-vX.Y
 `version` and its `appVersion` are all the same, and it builds the GitHub Release notes from
 the section below matching the version. A missing section fails the release.
 
+## 0.1.4
+
+Two fixes, both found by running 0.1.3 at scale rather than by reading it.
+
+### A full rate limiter no longer makes users refuse each other
+
+Each service keeps one token bucket per caller, and the map is bounded at 50,000. Past the cap
+every further caller shared **one** bucket — so on a deployment with more than 50,000 active
+users, people started receiving 429s for traffic that was not theirs.
+
+Measured on a 100,000-connection run: polling the inbox at 100 rps across 100,000 users puts
+every user near 0.001 rps against a 20/s limit, and **6,705 requests were still refused in four
+minutes**. The response carried `RateLimit-*` headers describing a per-user limit the user never
+approached, and nothing logged an overflow.
+
+The shared bucket is the right answer for the pre-authentication per-IP limiter, whose key space
+a caller chooses — a `/16` scan mints 65,000 keys on demand and joint throttling is what stops
+it. It is the wrong answer once a request is authenticated, where a key past the cap means the
+cap is smaller than your user base. Those callers are now **admitted without a bucket** instead,
+reported as `hermes_http_rate_limit_decisions_total{decision="overflow_admitted"}`.
+
+**This is a deliberate loss of enforcement, not a silent one.** If that counter is non-zero, the
+per-user limit is not being applied to part of your traffic. Raise
+`rateLimit.maxEntries` (`HERMES_RATELIMIT_MAX_ENTRIES`, new in this release) past your active
+user count, or enable distributed rate limiting, which keeps no local map at all. See
+[ADR 0024](docs/adr/0024-a-full-rate-limiter-fails-open-for-credentials.md) for the alternatives
+that were rejected, including simply refusing.
+
+Callers already holding a bucket are limited exactly as before. Nothing changes below the cap.
+
+### The synthetic prober can start
+
+`prober.enabled: true` could not work in 0.1.3. The chart shipped
+`prober.organizationID: "hermes-synthetic"`, and organizations are keyed by
+`organizations.id UUID PRIMARY KEY`, so the row could never be inserted: `/v1/auth/token`
+answered 500 and the pod crash-looped on `mint token: auth/token returned 500`, which reads as a
+broken admin service rather than a bad value. The default is now a UUID, and a non-UUID is
+refused at render time by both the values schema and a chart guard.
+
+If you set your own `prober.organizationID`, it must be a UUID.
+
 ## 0.1.3
 
 ### Telemetry works, and ships on
