@@ -125,6 +125,14 @@ Note this is a *fleet* property, not a load property: it is triggered by how man
 are active within `entryTTL`, not by requests per second. A quiet deployment with 60,000 daily
 users reaches it too.
 
+> **Fixed in 0.1.4 and verified.** Option 2 below was taken, together with a configurable cap:
+> credential scopes now fail open rather than sharing a bucket ([ADR 0024](../adr/0024-a-full-rate-limiter-fails-open-for-credentials.md)).
+> The re-run at the same 100,000 connections produced **zero 429s** where this one produced
+> 6,705, and checks went from 91.74% to 100% — see
+> [limiter-fix-verification-2026-08-15.md](limiter-fix-verification-2026-08-15.md). That run
+> also found something this one could not: at 100k the load generator is idle and the node
+> running Postgres is saturated, which inverts the conclusion at the top of this document.
+
 ### Options
 
 1. **Move the credential check to the distributed limiter.** `RateLimitDistributedEnabled`
