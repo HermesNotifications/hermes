@@ -221,6 +221,18 @@ type Config struct {
 	// enforcement rather than failing requests or dropping the limit entirely.
 	RateLimitDistributedEnabled bool
 
+	// RateLimitMaxEntries bounds the per-credential bucket map. Zero keeps the
+	// built-in default of 50,000.
+	//
+	// It needs to be at least as large as the number of distinct callers active
+	// within a 30-minute window, which for the user-facing services is the active
+	// user base rather than anything about request rate. Past the cap those callers
+	// are admitted without a bucket rather than limited (ADR 0024), so a cap set too
+	// low does not refuse anyone — it just stops enforcing the limit for whoever does
+	// not fit, reported as rate_limit decision=overflow_admitted. Raise it if that
+	// counter is non-zero and you want the limit actually applied.
+	RateLimitMaxEntries int
+
 	// DynamoDB / ExtendDB — set DynamoEndpoint to an ExtendDB URL for local dev and
 	// multi-cloud environments; leave empty to use native DynamoDB on AWS.
 	DynamoEndpoint string
@@ -319,6 +331,7 @@ func Load() Config {
 		// count, which is the point but is also a reduction in the throughput a
 		// multi-replica deployment was getting.
 		RateLimitDistributedEnabled: envBool("HERMES_RATELIMIT_DISTRIBUTED_ENABLED", false),
+		RateLimitMaxEntries:         envInt("HERMES_RATELIMIT_MAX_ENTRIES", 0),
 
 		DynamoEndpoint: envStr("HERMES_DYNAMO_ENDPOINT", ""),
 		DynamoRegion:   envStr("HERMES_DYNAMO_REGION", "us-east-1"),

@@ -31,7 +31,7 @@ var meter = observability.Meter("github.com/hermesnotifications/hermes/internal/
 // metric comes from the OTel resource's service.name, so it needs no label.
 var rateLimitCounter, _ = meter.Int64Counter(
 	"hermes.http.rate_limit_decisions",
-	metric.WithDescription("HTTP requests seen by the rate limiter, by whether they were allowed or limited."),
+	metric.WithDescription("HTTP requests seen by the rate limiter, by whether they were allowed, limited, or admitted unlimited because the entry map was full."),
 	metric.WithUnit("1"),
 )
 
@@ -48,6 +48,11 @@ var sharedFailures, _ = meter.Int64Counter(
 var (
 	decisionAllowed = attribute.String("decision", "allowed")
 	decisionLimited = attribute.String("decision", "limited")
+	// decisionOverflow marks a request admitted without a bucket because the entry
+	// map was full. Only the credential scope can produce it, and it is the signal
+	// that maxEntries is below the size of the population being limited -- which is
+	// otherwise invisible, since each admitted request looks like any other.
+	decisionOverflow = attribute.String("decision", "overflow_admitted")
 )
 
 const (
@@ -143,9 +148,10 @@ type RateLimiter struct {
 
 	// Precomputed so the hot path adds a counter without building an attribute
 	// set per request.
-	attrAllowed metric.MeasurementOption
-	attrLimited metric.MeasurementOption
-	attrScope   metric.MeasurementOption
+	attrAllowed  metric.MeasurementOption
+	attrLimited  metric.MeasurementOption
+	attrOverflow metric.MeasurementOption
+	attrScope    metric.MeasurementOption
 
 	// now is overridable so tests can advance time without sleeping.
 	now func() time.Time
@@ -206,6 +212,7 @@ func (rl *RateLimiter) WithScope(scope string) *RateLimiter {
 	scopeAttr := attribute.String("scope", scope)
 	rl.attrAllowed = metric.WithAttributes(decisionAllowed, scopeAttr)
 	rl.attrLimited = metric.WithAttributes(decisionLimited, scopeAttr)
+	rl.attrOverflow = metric.WithAttributes(decisionOverflow, scopeAttr)
 	rl.attrScope = metric.WithAttributes(scopeAttr)
 	return rl
 }
@@ -269,6 +276,17 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 
 		key := rl.keyFunc(r)
 		entry := rl.entryFor(key, r)
+
+		// nil means the map is full and this scope fails open rather than sharing a
+		// bucket with strangers -- see atCapacity. Admit, and count it, so a cap set
+		// below the size of the population shows up as a rising
+		// decision=overflow_admitted rather than as nothing at all.
+		if entry == nil {
+			rateLimitCounter.Add(r.Context(), 1, rl.attrOverflow)
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		entry.lastSeen.Store(now.UnixNano())
 
 		// An entry whose entitlement is Inf is not limited at all. Skipping the
@@ -391,11 +409,11 @@ func (rl *RateLimiter) entryFor(key string, r *http.Request) *rateLimitEntry {
 		last := rl.lastForcedSweep.Load()
 		if now.UnixNano()-last < int64(forcedSweepInterval) ||
 			!rl.lastForcedSweep.CompareAndSwap(last, now.UnixNano()) {
-			return rl.overflowEntry()
+			return rl.atCapacity()
 		}
 		rl.forceSweep(now)
 		if rl.entryCount.Load() >= int64(rl.maxEntries) {
-			return rl.overflowEntry()
+			return rl.atCapacity()
 		}
 	}
 
@@ -435,12 +453,40 @@ func (rl *RateLimiter) entryFor(key string, r *http.Request) *rateLimitEntry {
 	return actual.(*rateLimitEntry)
 }
 
-// overflowEntry returns the shared bucket used once the map is full.
+// atCapacity decides what a key gets when the map is full, and the answer depends
+// on who chose the key.
 //
-// Collapsing the overflow into one bucket rather than refusing outright means a
-// cardinality attack throttles itself: every unknown key contends for the same
-// tokens. Legitimate callers caught alongside it are still served at the
-// configured rate rather than blocked, and only for as long as the flood lasts.
+// The per-IP limiter runs before authentication over a key space the caller picks,
+// so a /16 scan can mint 65,000 keys on demand. Collapsing those into one bucket is
+// the whole mitigation: the flood throttles itself, and callers caught alongside it
+// are still served at the configured rate for as long as it lasts.
+//
+// The credential scopes are the opposite. Their key space is ours -- an API key id
+// or a user id that exists because we issued it -- so a key beyond the cap is not
+// evidence of an attack, it is evidence that the cap is smaller than the user base.
+// Sharing a bucket there inverts the limiter's purpose: it exists to stop one caller
+// affecting others, and instead makes every caller past the cap limit each other.
+//
+// Measured, not hypothesised. A 100,000-connection run polling the inbox at 100 rps
+// crossed 50,000 distinct users after N*ln2 requests -- 693 seconds -- and from that
+// moment roughly half of all requests fell into one 20/s bucket: 6,705 429s in four
+// minutes, to users three orders of magnitude below their own limit. See
+// docs/loadtest/realtime-scale-2026-08-14.md and ADR 0024.
+//
+// So credential scopes fail open, returning nil for "admit without a bucket". The
+// alternative -- refusing -- would turn a capacity shortfall into an outage for
+// everyone the cap could not fit, which is strictly worse than not limiting them.
+// A nil return is counted as decision=overflow_admitted so it is visible rather than
+// silent.
+func (rl *RateLimiter) atCapacity() *rateLimitEntry {
+	if rl.scope == ScopeCredential {
+		return nil
+	}
+	return rl.overflowEntry()
+}
+
+// overflowEntry returns the shared bucket used once the map is full. See atCapacity
+// for why only the caller-chosen key spaces reach it.
 func (rl *RateLimiter) overflowEntry() *rateLimitEntry {
 	if v, ok := rl.entries.Load(overflowKey); ok {
 		return v.(*rateLimitEntry)

@@ -387,6 +387,11 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "maxEntries": {
+          "$comment": "Per-credential buckets held per replica; \"\" keeps the built-in 50,000. Size against distinct callers active in a 30-minute window, which for inbox and user is the active user base rather than any request rate. Callers past the cap are admitted unlimited rather than refused (ADR 0024).",
+          "type": ["integer", "string"],
+          "minimum": 1
+        },
         "distributed": {
           "$comment": "Runs the per-credential admission check in Redis so the configured rate is the cluster-wide ceiling. Requires Redis; degrades to per-replica enforcement if it is unavailable.",
           "type": "object",

@@ -48,6 +48,15 @@ func SetupRateLimiting(
 	srv.ConfigureRateLimit(cfg.RateLimitEnabled, cfg.RateLimitBurst, cfg.RateLimitPerSecond)
 	srv.ConfigureIPRateLimit(cfg.RateLimitIPEnabled, cfg.RateLimitIPBurst, cfg.RateLimitIPPerSecond, proxies)
 
+	// The credential map has to hold every caller active within entryTTL, which for the
+	// user-facing services is the active user base and has nothing to do with request
+	// rate. Past the cap those callers are admitted unlimited rather than refused
+	// (ADR 0024), so this is the knob for "actually enforce the limit for all of them".
+	// Zero keeps the built-in default; WithMaxEntries treats it that way.
+	if cfg.RateLimitMaxEntries > 0 {
+		srv.CredentialLimiter().WithMaxEntries(cfg.RateLimitMaxEntries)
+	}
+
 	// Enabled with nothing trusted is the one combination that silently misbehaves rather
 	// than failing: behind any proxy every request presents that proxy's address, so all
 	// callers share one bucket and the limit applies to the fleet instead of to each
