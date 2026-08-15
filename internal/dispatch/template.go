@@ -31,11 +31,25 @@ func NewTemplateResolver(store store.TemplateRepository, cache *cache.Client) *T
 func (tr *TemplateResolver) Resolve(ctx context.Context, slug string) (*models.NotificationTemplate, error) {
 	if tr.cache != nil {
 		data, err := tr.cache.GetTemplateConfig(ctx, slug)
-		if err == nil && data != nil {
+		switch {
+		case err != nil:
+			// Counted apart from a miss because the two need different responses. A
+			// miss is the cache working on a cold key; an error is Redis failing, and
+			// because the store fallback below is correct it is otherwise invisible —
+			// dispatch keeps answering, just with a template SELECT per notification.
+			recordCacheResult(ctx, "template", "error")
+		case data == nil:
+			recordCacheResult(ctx, "template", "miss")
+		default:
 			var nt models.NotificationTemplate
 			if err := json.Unmarshal(data, &nt); err == nil {
+				recordCacheResult(ctx, "template", "hit")
 				return &nt, nil
 			}
+			// Cached bytes that will not unmarshal are a hit that bought nothing —
+			// a stale encoding after a model change, most likely. Counted as its own
+			// outcome so it cannot inflate the hit rate it actively undermines.
+			recordCacheResult(ctx, "template", "corrupt")
 		}
 	}
 	nt, err := tr.store.GetTemplateBySlug(ctx, slug)

@@ -95,7 +95,17 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte, info messaging.
 		req.ActionLabel = *msg.Content.ActionLabel
 	}
 
+	// Timed per attempt, unlike deliveryResults below, which is counted once at the
+	// terminal outcome. Latency is a property of the call, so every call belongs in the
+	// histogram — including the failed attempts a retry later rescues, which are exactly
+	// the ones that tell you a provider is timing out rather than refusing.
+	started := time.Now()
 	result, err := w.provider.Send(ctx, req)
+	providerDuration.Record(ctx, time.Since(started).Seconds(), metric.WithAttributes(
+		attribute.String("channel", w.channel),
+		attribute.String("provider", w.provider.Name()),
+		attribute.String("outcome", outcomeOf(err)),
+	))
 	if err != nil {
 		// Error only once the retries are spent, Warn before that — the same
 		// reasoning that already keeps the ".failed" event off the intermediate
@@ -121,6 +131,7 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte, info messaging.
 		if info.LastAttempt {
 			deliveryResults.Add(ctx, 1, metric.WithAttributes(
 				attribute.String("channel", w.channel),
+				attribute.String("provider", w.provider.Name()),
 				attribute.String("outcome", "failed"),
 			))
 			w.emitEvent(ctx, msg.NotificationID, w.channel+".failed", "error", map[string]any{
@@ -145,6 +156,7 @@ func (w *Worker) handleMessage(ctx context.Context, data []byte, info messaging.
 	w.logger.Debug("delivery succeeded", "notification_id", msg.NotificationID, "channel", w.channel)
 	deliveryResults.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("channel", w.channel),
+		attribute.String("provider", w.provider.Name()),
 		attribute.String("outcome", "success"),
 	))
 	w.emitEvent(ctx, msg.NotificationID, w.channel+".sent", "info", map[string]any{

@@ -99,14 +99,24 @@ func serve(addr string, handler http.Handler, logger *slog.Logger, opts ServeOpt
 	// Wrap the final handler with otelhttp so every request becomes a server
 	// span named by http.route. Health checks get filtered so they don't
 	// dominate the trace store.
+	//
+	// The formatter this replaces named spans by r.URL.Path, so every span name
+	// carried the notification ID out of the path — unbounded cardinality, and
+	// exactly the raw path the http.route label exists to avoid.
+	//
+	// Metrics need no hook here: chi-routed services add http.route through
+	// otelhttp's Labeler in observability.ChiRoute, and ServeMux services get it
+	// from Request.Pattern for free.
 	instrumented := otelhttp.NewHandler(handler, "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			return r.URL.Path != "/healthz" && r.URL.Path != "/readyz"
 		}),
-		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
-			return r.Method + " " + r.URL.Path
-		}),
+		otelhttp.WithSpanNameFormatter(observability.HTTPRouteSpanName),
 	)
+	// Outside otelhttp on purpose: otelhttp renames the span after the inner
+	// handler returns, using the request it is holding, so the route holder has to
+	// be reachable from there.
+	instrumented = observability.WithHTTPRoute(instrumented)
 
 	server := &http.Server{
 		Addr:    addr,

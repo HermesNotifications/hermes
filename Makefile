@@ -140,6 +140,10 @@ verify-manifests: $(VENV)  ## Static validation of k8s overlays, Crossplane and 
 	@# written, and nothing did. A runbook_url is followed by whoever is paged, at 3am, and a
 	@# 404 there costs exactly the minutes the annotation exists to save.
 	$(PYTHON) scripts/check_runbook_links.py
+	@# The same defect class pointed the other way. Three of the pipeline dashboard's four
+	@# panels queried metric names nothing emits, for the life of the dashboard, because an
+	@# empty panel and an idle service render identically.
+	$(PYTHON) scripts/check_metric_references.py
 	@# ADR 0023. The single-AZ pin lives in two places that cannot see each other: Terraform
 	@# pins the node groups, Crossplane claims pin Aurora and ElastiCache. A disagreement
 	@# breaks nothing -- every query succeeds, the datastore just sits in an AZ with no pods

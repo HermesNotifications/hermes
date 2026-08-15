@@ -14,11 +14,17 @@ Naming rules enforced at code review. If a metric/span/log violates these, the P
 | OK | Why |
 |---|---|
 | `channel` (email/sms/inbox) | Bounded set, small |
-| `http_route` | Bounded to your routes |
+| `provider` | Bounded, fixed at configuration time |
+| `outcome` / `result` / `reason` | Closed sets fixed by the call sites, never derived from input |
+| `http_route` | Bounded to your routes — the **pattern**, never the path |
 | `http_method` | GET/POST/PUT/DELETE/PATCH |
 | `http_response_status_code` | Small integer range |
 | `service` | Bounded, one value per service |
 | `stream` / `consumer` (NATS) | Bounded, operator-owned |
+
+A closed set means the values are enumerated in code. `reason` on
+`hermes.routing.drop` is fine because `internal/dispatch` fixes the four possible
+strings; the same label name populated from an error message would not be.
 
 ### Forbidden high-cardinality labels
 
@@ -30,7 +36,12 @@ These kill Prometheus. **Never** put them on metrics. They belong on spans (as a
 - `trace_id`, `span_id` (these are separate, carried as exemplars)
 - `request_id`
 - `template_id` (unless we're sure set size stays <100)
-- Full URL paths with IDs (use `http_route` pattern instead)
+- Full URL paths with IDs (use `http_route` pattern instead — and note this applies to
+  **span names** too; a span-name formatter built from `r.URL.Path` is the same defect
+  wearing a different hat)
+- Anything an unauthenticated caller chooses. An API key or organization taken from a
+  *failing* auth request is attacker-controlled, so labelling by it hands anyone on the
+  internet a cardinality bomb. See `internal/auth/metrics.go`.
 - IP addresses, hostnames (unless a fixed small set like infra nodes)
 - Free-form user input of any kind
 

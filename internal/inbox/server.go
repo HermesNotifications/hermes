@@ -213,7 +213,8 @@ func (s *Server) API() huma.API {
 }
 
 func (s *Server) Handler() http.Handler {
-	var h http.Handler = s.router
+	// Directly outside the router — see the note in internal/send/server.go.
+	h := observability.ChiRoute(s.router)
 	// The limiter is built once in NewServer. Constructing it here would give
 	// every Handler() call a fresh, empty bucket map — which is what made the
 	// limiter silently inert under test, since the suites call Handler() per

@@ -17,6 +17,7 @@ import (
 	"github.com/hermesnotifications/hermes/internal/store"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -88,6 +89,15 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 	)
 	defer span.End()
 
+	started := time.Now()
+	batchSize.Record(ctx, int64(len(items)))
+	// Deferred so the failure paths below, which return early, are timed too — a flush
+	// that fails slowly is the interesting one, and timing only the success path would
+	// leave the histogram looking healthiest exactly when the database is not.
+	defer func() {
+		flushDuration.Record(ctx, time.Since(started).Seconds())
+	}()
+
 	// Convert to models for DB insert.
 	dbEvents := make([]models.NotificationEvent, len(items))
 	for i, item := range items {
@@ -109,8 +119,12 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 	if err := w.store.InsertEvents(ctx, dbEvents); err != nil {
 		observability.RecordError(span, err)
 		w.logger.ErrorContext(ctx, "batch insert events", "error", err, "count", len(items))
+		eventsDropped.Add(ctx, int64(len(items)), metric.WithAttributes(
+			attribute.String("stage", "insert"),
+		))
 		return
 	}
+	eventsWritten.Add(ctx, int64(len(items)))
 
 	// Collect status updates from events.
 	var updates []store.StatusUpdate
@@ -131,6 +145,9 @@ func (w *Writer) flush(items []BatchItem[*hermenats.EventMessage]) {
 	if len(updates) > 0 {
 		if err := w.store.BatchUpdateNotificationStatuses(ctx, updates); err != nil {
 			w.logger.ErrorContext(ctx, "batch update statuses", "error", err, "count", len(updates))
+			eventsDropped.Add(ctx, int64(len(updates)), metric.WithAttributes(
+				attribute.String("stage", "status"),
+			))
 		}
 	}
 
