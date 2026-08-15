@@ -1354,9 +1354,16 @@ centrifugo:
   # OTEL_EXPORTER_OTLP_PROTOCOL is set explicitly because Centrifugo defaults to http/protobuf
   # while Hermes' collector endpoint below is the gRPC port (4317). Left at the default, every
   # span is posted as HTTP to a gRPC listener and silently dropped.
+  #
+  # CENTRIFUGO_OPENTELEMETRY_ENABLED, not CENTRIFUGO_OPENTELEMETRY. Centrifugo v6 nests the
+  # option (`opentelemetry.enabled`) and maps nested keys to env vars by joining the path with
+  # underscores, so the v5 spelling this chart shipped was simply not a setting any more.
+  # Centrifugo does not fail on it — it logs `unknown var in environment` at warn, once per
+  # start, and runs with tracing off. So the symptom was no Centrifugo spans, which looks
+  # exactly like a collector problem. If you are debugging this, that log line is the tell.
   env:
-    CENTRIFUGO_OPENTELEMETRY: "1"
-    CENTRIFUGO_OPENTELEMETRY_API: "1"
+    CENTRIFUGO_OPENTELEMETRY_ENABLED: "true"
+    CENTRIFUGO_OPENTELEMETRY_API: "true"
     OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.observability.svc:4317"
     OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
     OTEL_SERVICE_NAME: "hermes-centrifugo"

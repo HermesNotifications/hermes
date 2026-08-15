@@ -538,7 +538,19 @@ func (c *Client) Subscribe(cfg SubscribeConfig, handler func(ctx context.Context
 func (c *Client) processMessage(prog *consumerProgress, subject string, msg jetstream.Msg, handler func(ctx context.Context, data []byte, info DeliveryInfo) error, handlerTimeout time.Duration) {
 	streamName, consumer := prog.stream, prog.consumer
 
-	ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject())
+	// Read before the span starts: how the consume span relates to the publish that
+	// produced it depends on whether this is the first delivery. See ExtractNATS.
+	meta, _ := msg.Metadata()
+	attempt := uint64(1)
+	if meta != nil {
+		attempt = meta.NumDelivered
+	}
+	info := DeliveryInfo{
+		Attempt:     attempt,
+		LastAttempt: attempt >= uint64(maxDeliveries),
+	}
+
+	ctx, span := observability.ExtractNATS(context.Background(), msg.Headers(), msg.Subject(), attempt)
 	defer span.End()
 
 	// Every exit from this function has settled the message — acked, nak'd or terminated — so
@@ -552,16 +564,6 @@ func (c *Client) processMessage(prog *consumerProgress, subject string, msg jets
 	// it. A handler that respects its context turns a hang into an ordinary retryable error.
 	ctx, cancel := context.WithTimeout(ctx, handlerTimeout)
 	defer cancel()
-
-	meta, _ := msg.Metadata()
-	attempt := uint64(1)
-	if meta != nil {
-		attempt = meta.NumDelivered
-	}
-	info := DeliveryInfo{
-		Attempt:     attempt,
-		LastAttempt: attempt >= uint64(maxDeliveries),
-	}
 
 	consumerAttrs := metric.WithAttributes(
 		attribute.String("stream", streamName),

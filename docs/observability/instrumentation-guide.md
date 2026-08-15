@@ -166,6 +166,22 @@ err := client.Subscribe(cfg, func(ctx context.Context, data []byte, info messagi
 only if you are writing a new transport that does not go through
 `messaging.Client`.
 
+### A redelivery is a new trace, linked back
+
+Worth knowing before you go looking for one. On the **first** delivery the consumer span
+is a child of the publish, so the pipeline reads as a single trace. On a **redelivery**
+it is a new root with a link back to the publish, and `messaging.attempt` on the span.
+
+The reason is that JetStream hands back the original headers, so a retry would otherwise
+graft onto a span that ended long ago — with `retryDelay` capped at 240s and
+`maxDeliveries` at 10, a trace could show a root that finished in milliseconds with a
+child starting a quarter of an hour later. That is a false claim about time, not a
+display quirk.
+
+The cost is that a retry is harder to find from the original trace, since not every
+backend walks links. To find the retries for a message, search on the notification ID
+rather than expecting them inside its first trace.
+
 ### Batching breaks the parent relationship — link *and* span
 
 When one operation serves many messages, it cannot be a child of any single one.

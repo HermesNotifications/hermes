@@ -152,7 +152,16 @@ someone has deliberately turned that half off.
 {{- define "hermes.validateCentrifugoTracing" -}}
 {{- if and .Values.centrifugo.enabled .Values.observability.enabled -}}
 {{-   $env := .Values.centrifugo.env | default dict -}}
-{{-   $tracingOn := or (eq (toString (get $env "CENTRIFUGO_OPENTELEMETRY")) "1") (eq (toString (get $env "CENTRIFUGO_OPENTELEMETRY")) "true") -}}
+{{/*
+CENTRIFUGO_OPENTELEMETRY_ENABLED is the v6 spelling. The v5 name (CENTRIFUGO_OPENTELEMETRY) is
+matched too, but only to keep this guard alive for anyone who still has it set: Centrifugo v6
+ignores that variable, so tracing is off and the endpoint below cannot matter. Checking only the
+new name would make this whole guard quietly inert on exactly the configuration it was written
+for, which is the same class of silent no-op it exists to catch.
+*/}}
+{{-   $enabled := toString (get $env "CENTRIFUGO_OPENTELEMETRY_ENABLED") -}}
+{{-   $legacy := toString (get $env "CENTRIFUGO_OPENTELEMETRY") -}}
+{{-   $tracingOn := or (eq $enabled "1") (eq $enabled "true") (eq $legacy "1") (eq $legacy "true") -}}
 {{-   if $tracingOn -}}
 {{-     $centEndpoint := get $env "OTEL_EXPORTER_OTLP_ENDPOINT" | default "" -}}
 {{-     $hermesEndpoint := .Values.observability.otel.endpoint | default "" -}}
