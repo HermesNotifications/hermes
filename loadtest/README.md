@@ -38,11 +38,19 @@ make loadtest-k8s-install
 Per run:
 
 ```bash
-LOADSEED_IMAGE=ghcr.io/hermes-notifications/loadseed:latest \
+LOADSEED_IMAGE=ghcr.io/hermesnotifications/loadseed:<tag> \
 make loadtest-k8s SCENARIO=inbox-mixed PARALLELISM=10 VUS=50000 DURATION=30m
 ```
 
-Linear scale-out: double `PARALLELISM` to double the load. The scenario code sees `INSTANCE_COUNT` and divides its per-pod rate accordingly.
+The org is `hermesnotifications`, no hyphen, and CI publishes commit-SHA tags rather than
+`latest` — check the package listing for a current tag. A wrong image here fails late and
+unhelpfully: the seed Job sits in `CreateContainerConfigError` behind a 30-minute wait.
+
+Linear scale-out: double `PARALLELISM` to double the load. k6-operator shards the run across
+pods with `--execution-segment` and k6 applies that to every scenario itself, so the scenario
+code must **not** divide its own rates — doing so would halve the load twice. `INSTANCE_ID` and
+`INSTANCE_COUNT` arrive as k6 *tags*, not environment variables, so a scenario that reads them
+from `__ENV` is reading unset values.
 
 ## Metrics
 

@@ -88,14 +88,43 @@ kubectl -n loadtest wait --for=condition=complete job/loadseed --timeout=30m
 # container cannot mount the target's volumes. So the Job writes the manifest to stdout
 # (see k8s/loadseed-job.yaml) and we take it from there.
 #
-# Go's `log` goes to stderr with a timestamp prefix, and MarshalIndent puts `{` and `}` alone
-# on their own lines, so the range match cannot pick up a log line.
-POD=$(kubectl -n loadtest get pods -l app=loadseed -o jsonpath='{.items[0].metadata.name}')
+# Parse the JSON rather than pattern-match it. The previous `sed -n '/^{$/,/^}$/p'` assumed
+# MarshalIndent's closing `}` sits alone on its own line, but loadseed writes the manifest
+# without a trailing newline, so its own completion log lands on that same line:
+#
+#     }load-test seed complete: 10 organizations, 100000 users, run_seed_id=638a6c6e
+#
+# The range therefore never terminates, sed prints to EOF, and the summary lines end up
+# inside the manifest. Both of the old guards -- non-empty, and contains "organizations" --
+# pass on that output, so the failure surfaced four steps later as a k6 SyntaxError in the
+# initializer rather than here. raw_decode stops at the end of the first complete object and
+# ignores whatever follows it, so interleaved stdout/stderr cannot corrupt the result.
+#
+# Newest pod, not items[0]: an aborted earlier run can leave a completed loadseed pod behind,
+# and jsonpath does not order its results.
+#
+# `|| POD=""` because jsonpath does not degrade gracefully on an empty list: `items[-1:]` on
+# zero items exits 1 with a multi-line template dump, and under `set -e` that aborts the
+# script before the readable message below can be printed.
+POD=$(kubectl -n loadtest get pods -l app=loadseed \
+  --sort-by=.metadata.creationTimestamp \
+  -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null) || POD=""
 [ -n "$POD" ] || { echo "no loadseed pod found"; exit 1; }
 TMP_MANIFEST=$(mktemp)
-kubectl -n loadtest logs "$POD" -c loadseed | sed -n '/^{$/,/^}$/p' > "$TMP_MANIFEST"
-[ -s "$TMP_MANIFEST" ] || { echo "manifest extraction failed (empty file)"; exit 1; }
-grep -q '"organizations"' "$TMP_MANIFEST" || { echo "manifest extraction produced no organizations"; exit 1; }
+kubectl -n loadtest logs "$POD" -c loadseed | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+start = raw.find("{")
+if start < 0:
+    sys.exit("manifest extraction failed: no JSON object in loadseed logs")
+try:
+    obj, _ = json.JSONDecoder().raw_decode(raw[start:])
+except ValueError as e:
+    sys.exit(f"manifest extraction failed: {e}")
+if not obj.get("organizations"):
+    sys.exit("manifest extraction produced no organizations")
+json.dump(obj, sys.stdout, indent=2)
+' > "$TMP_MANIFEST"
 kubectl -n loadtest create secret generic loadtest-manifest \
   --from-file=seed-manifest.json="$TMP_MANIFEST" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -105,7 +134,11 @@ rm -f "$TMP_MANIFEST"
 envsubst < "$K8S_DIR/testrun.yaml" | kubectl apply -f -
 
 # 4) Wait for completion (k6-operator sets .status.stage to "finished").
-echo "Waiting for test run $RUN_NAME…"
+# Braces are load-bearing. Bare `$RUN_NAME…` makes bash read the following multi-byte
+# ellipsis as part of the identifier when the locale is not UTF-8, and `set -u` then aborts
+# the script with `RUN_NAME…: unbound variable` -- after the TestRun has been applied, so the
+# run is left going while the wait, log collection and summary never happen.
+echo "Waiting for test run ${RUN_NAME}..."
 until kubectl -n loadtest get testrun "$RUN_NAME" -o jsonpath='{.status.stage}' 2>/dev/null | grep -qE 'finished|error'; do
   sleep 10
 done
