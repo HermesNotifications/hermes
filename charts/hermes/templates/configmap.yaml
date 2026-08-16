@@ -24,6 +24,17 @@ data:
   and Validate() applies to them identically.
   */}}
   HERMES_ENV: {{ .Values.hermes.env | quote }}
+  {{- if .Values.hermes.logLevel }}
+  {{/*
+  Only rendered when set, so an unset value keeps bootstrap.logLevel()'s own default rather
+  than this chart hardcoding one: Debug in development, Info everywhere else.
+
+  Same ConfigMap as HERMES_ENV, and for the same reason -- the migration Job, the cleanup
+  CronJob and the stream provisioning Job build their loggers through bootstrap.NewLogger
+  too, and an operator turning logging down means all of them.
+  */}}
+  HERMES_LOG_LEVEL: {{ .Values.hermes.logLevel | quote }}
+  {{- end }}
   {{- if .Values.observability.profiling.enabled }}
   {{/*
   pprof, on its own port, for every service at once. Shared ConfigMap rather than

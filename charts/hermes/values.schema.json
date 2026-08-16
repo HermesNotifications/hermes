@@ -141,6 +141,12 @@
           "enum": ["development", "production"],
           "description": "Deployment environment, published as HERMES_ENV. internal/config/config.go treats ONLY the literal \"development\" as relaxed, so any other value — including a typo like \"prod\" or \"staging\" — takes the strict path in Config.Validate() and every workload exits unless all three datastores use TLS and all three secrets are real. The enum exists to turn such a typo into a clear install-time rejection rather than nine pods in CrashLoopBackOff with a validation error in their logs. If you genuinely need a third environment name, widen this enum and remember it will behave exactly like \"production\"."
         },
+        "logLevel": {
+          "type": "string",
+          "enum": ["", "debug", "info", "warn", "error"],
+          "$comment": "Empty means 'keep the built-in default' — Debug in development, Info elsewhere — so the chart does not hardcode one. The enum catches a typo here rather than letting it fall through: bootstrap.logLevel() deliberately ignores an unrecognised value rather than exiting, so a mistyped level would silently leave the default in place with nothing to indicate it.",
+          "description": "Log level for every Hermes service (HERMES_LOG_LEVEL). Empty keeps the default, which is debug when hermes.env is development and info otherwise. Worth setting to info on any bundled install taking real traffic: per-request records live at debug, and a bundled install cannot leave development because Config.Validate() demands TLS on all three datastores outside it."
+        },
         "existingSecret": { "type": "string" },
         "shutdown": {
           "type": "object",
