@@ -57,6 +57,24 @@ hermes:
   # crash-loop; see NOTES.txt.
   env: "development"
 
+  # -- Log level for every Hermes service: debug, info, warn or error. Empty keeps the
+  # built-in default, which is Debug when `env` is development and Info otherwise.
+  #
+  # Worth setting explicitly on any evaluation install that takes real traffic, because
+  # those two defaults are coupled in a way that is easy to miss. Per-request and
+  # per-notification records live at Debug on purpose -- that is what keeps steady-state
+  # volume proportional to incidents rather than to traffic (docs/observability/semantic-conventions.md).
+  # But `env: development` is not optional on the bundled datastores: Config.Validate()
+  # demands TLS on Postgres, Redis and NATS outside development, so a bundled install
+  # cannot leave development, and therefore could not leave Debug either. Every request
+  # wrote a log line, with no way to turn it off short of editing the chart.
+  #
+  # Measured: a 100,000-connection load test against the bundled stack put the log pipeline
+  # under more pressure than the notification pipeline, one line per request per service.
+  # `logLevel: info` drops the per-request records and keeps warnings, errors and the slow
+  # -request records, which are the ones worth having during a run.
+  logLevel: ""
+
   # -- Name of an existing Kubernetes Secret containing all sensitive values.
   # When set, the chart will not create its own Secret.
   existingSecret: ""
