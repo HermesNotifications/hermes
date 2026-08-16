@@ -959,13 +959,27 @@ loadtest-k8s-install: ## One-time install of k6-operator + Prom + Grafana in loa
 loadtest-check-az: ## Verify the loadtest env is really in one AZ (usage: make loadtest-check-az CLUSTER=hermes-loadtest)
 	infra/scripts/check-single-az.sh $(or $(CLUSTER),hermes-loadtest) $(or $(REGION),us-east-1)
 
-loadtest-k8s:      ## Run a cluster load test (SCENARIO=... PARALLELISM=... VUS=... DURATION=... LOADSEED_IMAGE=...)
+# Make variables are not environment variables, so anything a caller might set has to be listed
+# here explicitly. Omitting the connection knobs meant `make loadtest-k8s CONNECTIONS=100000`
+# silently ran at the scenario default -- the same class of failure as the envsubst holes: it
+# reports success while measuring something other than what was asked for. run-k8s.sh supplies
+# the defaults, so these pass through empty and are filled in there rather than duplicated.
+loadtest-k8s:      ## Run a cluster load test (SCENARIO=... PARALLELISM=... CONNECTIONS=... DURATION=... LOADSEED_IMAGE=...)
 	SCENARIO=$(or $(SCENARIO),send) \
 	PARALLELISM=$(or $(PARALLELISM),2) \
 	TARGET_RPS=$(or $(TARGET_RPS),500) \
 	VUS=$(or $(VUS),1000) \
 	DURATION=$(or $(DURATION),10m) \
-	LOADSEED_IMAGE=$(or $(LOADSEED_IMAGE),ghcr.io/hermes-notifications/loadseed:latest) \
+	CONNECTIONS=$(CONNECTIONS) \
+	WS_SOCKETS_PER_VU=$(WS_SOCKETS_PER_VU) \
+	WS_RAMP_SECONDS=$(WS_RAMP_SECONDS) \
+	WS_HOLD_SECONDS=$(WS_HOLD_SECONDS) \
+	CHANNEL_WEIGHTS=$(CHANNEL_WEIGHTS) \
+	SEND_RPS=$(or $(SEND_RPS),100) \
+	POLL_RPS=$(or $(POLL_RPS),20) \
+	LT_ORGANIZATIONS=$(or $(LT_ORGANIZATIONS),10) \
+	LT_USERS=$(or $(LT_USERS),10000) \
+	LOADSEED_IMAGE=$(LOADSEED_IMAGE) \
 	loadtest/scripts/run-k8s.sh
 
 loadtest-k8s-clean: ## Delete the last TestRun and the seed Job

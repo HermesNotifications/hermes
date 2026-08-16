@@ -112,6 +112,26 @@ func TestUnreadCount_UsesPartialIndex(t *testing.T) {
 	}
 	userID := seedUnread(t, s, pool, 40)
 
+	// Most notifications end up read, and that is the entire reason idx_notifications_unread is
+	// worth having: it is sparse, so it shrinks as users read while the table grows.
+	//
+	// Seeding every row unread -- which this test used to do -- erases that difference and makes
+	// the assertion depend on a coin toss. Once migration 000021 added the non-partial
+	// (user_id, id DESC) index for the watermark, both indexes offered the same selectivity on an
+	// all-unread table, the planner picked the new one, and the test failed against behaviour that
+	// was not actually wrong. Leaving 10% unread restores the asymmetry the index exists to
+	// exploit, so the assertion now tests something true of production rather than of the fixture.
+	// hashtext rather than random(): deterministic per row, so the fixture is identical on every
+	// run. random() would leave the read/unread ratio -- and therefore the plan -- very slightly
+	// different each time, which is how a planner assertion becomes a flaky test. It also cannot
+	// be pinned with setseed here, because pgxpool may run the two statements on different
+	// connections.
+	if _, err := pool.Exec(ctx,
+		`UPDATE notifications SET read_at = now() WHERE user_id <> $1 AND hashtext(id) % 10 <> 0`,
+		userID); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+
 	// The planner has no statistics for a freshly seeded table and would guess from defaults.
 	if _, err := pool.Exec(ctx, "ANALYZE notifications"); err != nil {
 		t.Fatalf("ANALYZE: %v", err)
