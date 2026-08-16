@@ -1,0 +1,51 @@
+-- Index the unread-count watermark, and the user-deletion FK check with it.
+--
+-- GetUnreadCount (internal/store/postgres/inbox.go) pairs a capped count with a watermark:
+--
+--   coalesce((SELECT max(id) FROM notifications WHERE user_id = $1), '')
+--
+-- The capped count has been covered since 000018. The watermark never was. Every user_id index
+-- on this table is partial -- idx_notifications_inbox and idx_notifications_unread both carry
+-- `WHERE archived_at IS NULL AND deleted_at IS NULL` -- and the planner cannot use a partial
+-- index for a query whose predicate it does not imply. max(id) is over *all* of the user's rows,
+-- archived and deleted included, so none of them qualify and the only remaining option is the
+-- primary key:
+--
+--   Index Scan Backward using notifications_pkey  (cost=0.42..7592.08 rows=819)
+--         Index Cond: (id IS NOT NULL)
+--         Filter: (user_id = '...')
+--
+-- Ids are time-sortable (internal/id/v2), so that walks the table newest-first across every
+-- user and stops at the first row belonging to this one. The cost is therefore proportional to
+-- how much the whole system has produced since that user's last notification -- cheap for an
+-- active user, unbounded for a dormant one. Uniform-random load tests cannot see it, because
+-- every user they pick is maximally recent; the 2026-08-16 100k run measured 212ms p95 for this
+-- subquery out of 242ms for the whole endpoint, and it was the largest single contributor to the
+-- database node reaching 92% CPU. See issue #170 and
+-- docs/loadtest/clean-dataset-100k-2026-08-16.md.
+--
+-- Keyed (user_id, id) so the watermark is the last entry in the user's run -- an index-only
+-- scan reading one tuple rather than an open-ended walk. DESC is written for intent; Postgres
+-- scans either direction at the same cost.
+--
+-- Deliberately NOT partial. That is what makes it also serve notifications_user_id_fkey: the
+-- FK is ON DELETE NO ACTION, so deleting a user has Postgres look for referencing rows, and a
+-- partial index cannot answer that question either. Without this, every user deletion
+-- sequentially scans notifications -- which is why clearing 200,000 orphaned seed users took
+-- ~90 minutes and wedged on lock contention. GDPR erasure and account closure run the same
+-- path, so this index is justified independently of the read path.
+--
+-- CONCURRENTLY, and ONE STATEMENT IN THIS FILE, for the reasons set out at length in
+-- 000018_notifications_unread_index.up.sql: golang-migrate sends the file as a single
+-- un-transacted simple query, Postgres wraps multi-statement simple queries in an implicit
+-- transaction, and CREATE INDEX CONCURRENTLY is rejected inside one. Adding a second statement
+-- here, even a COMMENT, breaks this migration.
+--
+-- If a build fails partway, Postgres leaves an INVALID index behind and IF NOT EXISTS then
+-- skips it silently forever. Check with:
+--
+--   SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
+--
+-- and DROP INDEX CONCURRENTLY the invalid one before re-running.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_notifications_user_id
+    ON notifications (user_id, id DESC);

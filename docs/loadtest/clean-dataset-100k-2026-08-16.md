@@ -1,128 +1,142 @@
-# 100,000 connections against a clean dataset
+# 100,000 connections: a clean dataset, and the index that fixed it
 
-Third 100,000-connection run on the OVH cluster, 2026-08-16, 01:16–01:33 UTC. This is step 2 of
+Two 100,000-connection runs on the OVH cluster, 2026-08-16. Run 3 (01:16–01:33 UTC) is step 2 of
 the plan in [limiter-fix-verification-2026-08-15.md](limiter-fix-verification-2026-08-15.md):
-reset the dataset and re-run, so that latency can be attributed to the code rather than to table
-growth.
+reset the dataset and re-run, so latency can be attributed to the code rather than to table
+growth. Run 4 (01:56–02:13 UTC) repeats it with one change — the index from
+[issue #170](https://github.com/HermesNotifications/hermes/issues/170).
 
-**The dataset hypothesis was right, and it was not the whole story.** Cleaning the data recovered
-most of the previous run's regression. What remains is a read path that saturates the database
-node on its own, and it did so while every stage of the delivery pipeline stayed fast.
+**Run 3 found the bottleneck. Run 4 removed it.** The read path was saturating the database node
+on its own, while every stage of the delivery pipeline stayed fast. A single non-partial index
+took `inbox_list_latency` p95 from 238 ms to **4 ms** and the database node from 92% CPU to 41%.
 
-## The comparison is sound this time
+## The four runs
 
-Run 1 and run 3 both started against an empty `notifications` table and both ended near 450,000
-notifications under the same offered load. That is the controlled pair; run 2 is included for
-context but started with ~450,000 rows already present.
+Runs 1, 3 and 4 all started against an empty `notifications` table and ended near 450,000 under
+the same offered load, so they are directly comparable. Run 2 started with ~450,000 rows already
+present and is included only for context.
 
-| | Run 1 · 0.1.3 | Run 2 · 0.1.4 | **Run 3 · 0.2.2** |
-|---|---:|---:|---:|
-| `notifications` at start | empty | ~450k | **empty** |
-| `notifications` at end | ~450k | 916,581 | **450,024** |
-| WS sessions | 100,000 | 100,000 | **100,000** |
-| `http_req_failed` | 1.54% | 0.00% | **0.00%** |
-| 429s on `/v1/inbox` | 6,705 | 0 | **0** |
-| checks passed | 91.74% | 100.00% | **100.00%** |
-| pushes received | 404,881 | 414,455 | **434,975** |
-| `inbox_list_latency` p95 | 83 ms | 731 ms | **232 ms** |
-| `ws_push_e2e_latency` p95 | 176 ms | 3m49s | **1m22s** |
-| `send_ack_latency` p95 | 2 ms | 9 ms | **10 ms** |
-| `ws_connect_latency` p95 | 31 ms | 29 ms | **34 ms** |
+| | Run 1 · 0.1.3 | Run 2 · 0.1.4 | Run 3 · 0.2.2 | **Run 4 · 0.2.2 + index** |
+|---|---:|---:|---:|---:|
+| `notifications` at start | empty | ~450k | empty | **empty** |
+| `notifications` at end | ~450k | 916,581 | 450,024 | **450,037** |
+| `http_req_failed` | 1.54% | 0.00% | 0.00% | **0.00%** |
+| 429s on `/v1/inbox` | 6,705 | 0 | 0 | **0** |
+| iterations | — | — | 534,879 | **539,962** |
+| dropped iterations | — | — | 5,122 | **40** |
+| pushes received | 404,881 | 414,455 | 434,975 | **435,123** |
+| `inbox_list_latency` p95 | 83 ms | 731 ms | 238 ms | **4 ms** ✓ |
+| `ws_push_e2e_latency` med | 8 ms | 2m36s | 806 ms | **6 ms** |
+| `ws_push_e2e_latency` p95 | 176 ms | 3m49s | 1m22s | **1.06 s** ✗ |
+| `send_ack_latency` p95 | 2 ms | 9 ms | 10 ms | **2 ms** |
+| `ws_connect_latency` p95 | 31 ms | 29 ms | 33 ms | **33 ms** |
+| probes lost | — | 31 | 9 | **0** |
 
-Cleaning the dataset took `inbox_list_latency` p95 from 731 ms back to 232 ms, which confirms the
-leading hypothesis of the previous write-up. But 232 ms is still **2.8x run 1's 83 ms under
-identical dataset conditions**, so table size is not a complete explanation.
+Run 3 established that cleaning the dataset recovers most of run 2's regression — 731 ms to
+238 ms — confirming the previous write-up's hypothesis. It also showed 238 ms was still 2.9x
+run 1's 83 ms under identical conditions, which looked like a code regression. It was not. It was
+a query whose cost grows with the table, and run 4 shows what happens once that cost is removed:
+**4 ms, twenty times better than run 1 ever was.**
 
-The limiter fix ([ADR 0024](../adr/0024-a-full-rate-limiter-fails-open-for-credentials.md)) holds
-at 100,000 connections: zero refusals in 534,879 requests.
+## What run 3 found
 
-## Delivery is fast and complete; the read path is not
+Delivery was never the problem. Measured from the database rather than from a client:
 
-Measured from the database rather than from a client, so it depends on neither k6 nor the prober:
+| `created_at` → `delivered_at` | Run 3 | Run 4 |
+|---|---:|---:|
+| p50 | 53 ms | 41 ms |
+| p95 | 218 ms | 186 ms |
+| p99 | 403 ms | 307 ms |
+| max | 1.60 s | 1.25 s |
+| delivered | 417,463 / 417,463 | **450,037 / 450,037** |
 
-| `created_at` → `delivered_at` | |
-|---|---:|
-| p50 | 53 ms |
-| p95 | 218 ms |
-| p99 | 403 ms |
-| max | 1.60 s |
-| delivered | **417,463 / 417,463 — 100%** |
+Both runs delivered 100% of notifications, flat minute by minute. The spans agreed:
+`delivery.send` p95 4.6 ms, `POST /v1/send` p95 9.3 ms.
 
-Flat minute by minute across the whole run, with no degradation. The spans agree: `delivery.send`
-p95 4.6 ms, `POST /v1/send` p95 9.3 ms, `worker-inbox nats.consume` p95 4.8 ms. Nothing in the
-write path or the delivery path is slow.
+The read path was the problem. In run 3, `GET /v1/inbox` p95 was 242 ms and **212 ms of it was
+the unread-count query** — specifically its watermark subquery,
+`coalesce((SELECT max(id) FROM notifications WHERE user_id = $1), '')`.
 
-The read path is a different story. `GET /v1/inbox` p95 is 242 ms, and **212 ms of that is the
-unread-count query** — the watermark subquery from
-[issue #170](https://github.com/HermesNotifications/hermes/issues/170), reproducing at scale
-exactly as predicted. Its cost rises with how much newer data exists than the queried user's last
-notification, so it gets worse as the table fills *during the run*.
+Every `user_id` index on `notifications` was partial (`WHERE archived_at IS NULL AND deleted_at
+IS NULL`), and the planner cannot use a partial index for a predicate it does not imply. `max(id)`
+is over *all* the user's rows, so the only option left was the primary key — and because ids are
+time-sortable, that walks the table newest-first across every user:
 
-## What actually failed: argon saturated, progressively
+```
+Index Scan Backward using notifications_pkey
+      Index Cond: (id IS NOT NULL)
+      Filter: (user_id = '...')
+```
 
-CPU by node through steady state (cores; argon and neon have 12, helium ~24):
+The cost is proportional to how much the whole system has produced since that user's last
+notification. Measured on the live 450,024-row table:
 
-| Node | Start | Peak | Runs |
-|---|---:|---:|---|
-| **argon** | 6.86 | **11.05 (92%)** | Postgres, Redis, inbox, send, dispatch, prober, worker-events |
-| helium | 4.25 | 4.88 (20%) | all 8 k6 runners, plus SigNoz |
-| neon | 1.53 | 1.53 (13%) | Centrifugo, NATS, worker-inbox, worker-email |
+| `SELECT max(id) WHERE user_id = $1` | before index | after index |
+|---|---:|---:|
+| active user (prober) | 0.217 ms / 4 buffers | 0.087 ms / 5 buffers |
+| **user with an empty inbox** | **133 ms / 378,799 buffers** | **0.169 ms / 3 buffers** |
+| rows removed by filter | **450,053 — the whole table** | 0 (`Index Only Scan`, `Heap Fetches: 0`) |
 
-argon climbs monotonically rather than plateauing, which is the signature of a cost that grows
-with the data rather than with the load. The driver is visible in one metric: **17,429 DB pool
-acquire waits on `hermes-inbox`**, against ~0 for every other service.
+A brand-new user with an empty inbox paid a full index walk on every inbox load, growing forever.
+Uniform-random load tests cannot see this, because every user they pick is maximally recent — the
+600x spread between those two rows is invisible to the scenario and entirely real in production.
 
-`hermes-inbox` runs **1 replica with a 10-connection pool** (the `HERMES_DATABASE_MAX_CONNS`
-default) against a Postgres configured for `max_connections=100`. The headroom is unused.
+## The fix, and what it moved
 
-The consequence was measurable in the offered load itself:
+[Migration 000021](../../migrations/000021_notifications_user_id_index.up.sql) adds one
+non-partial index, `(user_id, id DESC)`, 29 MB on a 450k-row table.
 
-| Window | notifications/min | rate |
-|---|---:|---|
-| 01:17–01:24 | ~30,000 | 500/s (target) |
-| 01:25–01:26 | 28,139 → 25,469 | falling |
-| 01:27–01:31 | ~22,000 | **~370/s** |
+| | Run 3 | Run 4 |
+|---|---:|---:|
+| unread-count query p50 / p95 | 33.6 ms / 212.3 ms | **0.169 ms / 0.474 ms** |
+| `GET /v1/inbox` span p50 / p95 | 35.0 ms / 241.9 ms | **0.89 ms / 2.75 ms** |
+| `hermes-inbox` DB pool acquire waits | **17,429** | **33** |
+| argon CPU peak | **11.05 / 12 cores (92%)** | **4.96 / 12 cores (41%)** |
+| argon CPU shape | climbs monotonically | **flat** |
+| offered throughput | collapsed 500/s → ~370/s | **held 500/s** |
 
-A 26% collapse in throughput with 5,122 dropped iterations. The synthetic prober began losing
-probes at 01:28:27 and lost nine consecutively to the end of the run, having been clean for the
-first ten minutes. Its socket never dropped — there is no re-subscribe in its logs — so this is
-delivery degradation, not a reconnect artefact.
+448x at p95 on the query, 528x fewer pool waits, and the database node stopped being the
+constraint. In run 3 argon climbed steadily and throughput collapsed 26% with 5,122 dropped
+iterations; in run 4 argon was flat and 40 iterations dropped.
 
-## Nothing crashed
+The synthetic prober is the independent confirmation: it lost nine consecutive probes in run 3
+from 01:28:27 onward, and **zero** in run 4.
 
-Worth recording, because the failure mode is silent. All 8 k6 runners exited **99**, which is
-k6's dedicated "thresholds crossed" code, with `restarts=0` — none was killed and retried
-mid-run. The `BackoffLimitExceeded` warnings on their Jobs are Kubernetes reading that non-zero
-exit as a failed Job, not an independent fault. All 24 Hermes containers ran continuously across
-the entire run with zero restarts during it. No OOM kills, no evictions, nothing scheduled away
-from argon at 92% CPU.
+## Deliberately not partial
+
+The index is also what makes user deletion viable. `notifications_user_id_fkey` is `ON DELETE NO
+ACTION`, so deleting a user makes Postgres look for referencing rows — and a partial index cannot
+answer that either. Without this index every user deletion sequentially scans `notifications`,
+which is why clearing 200,000 orphaned seed users took ~90 minutes and wedged on lock contention.
+GDPR erasure and account closure run the same path, so the index is justified independently of
+the read path.
+
+## Nothing crashed, in either run
+
+Worth recording, because the failure mode is silent. Runners exit **99** — k6's "thresholds
+crossed" code — with `restarts=0`, so the `BackoffLimitExceeded` on their Jobs is Kubernetes
+reading that exit, not an independent fault. All 24 Hermes containers ran continuously across
+both runs with zero restarts. No OOM kills, no evictions, nothing scheduled away from argon even
+at 92% CPU.
 
 At 100,000 connections this system degrades by getting slower, not by falling over.
 
-## What this run does not establish
+## What is still open
 
-- **Why run 3 is 2.8x run 1 on the read path.** The dataset is controlled for; the code is not.
-  0.2.2 also runs full OpenTelemetry tracing, which run 1 may not have had, and that is a cheap
-  A/B to settle.
-- **Where `ws_push_e2e_latency`'s 1m22s p95 comes from.** It is not corroborated server-side
-  (218 ms p95, 100% delivered) and Centrifugo's own counters show 435,050 publications sent
-  against 434,975 received by k6. But that counter increments when a publication is written to
-  the transport, not when the client reads it, so it cannot rule out socket-level backpressure at
-  100,000 connections. Two client-side measurements disagree with two server-side ones. This
-  needs its own investigation rather than a guess.
+- **`ws_push_e2e_latency` p95 is 1.06 s against a 1000 ms threshold.** Down from 1m22s, and the
+  median is now 6 ms, but it still fails — narrowly. It remains uncorroborated server-side
+  (186 ms p95, 100% delivered) and Centrifugo's counters show publications sent matching pushes
+  received. That counter increments when a publication is written to the transport, not when the
+  client reads it, so socket-level backpressure at 100,000 connections is not ruled out. This is
+  now the only failing threshold and deserves its own investigation.
+- **Why run 1 measured 83 ms where run 3 measured 238 ms** is unexplained. Run 1 shed 6,705
+  requests as 429s, which would flatter its percentiles, but that is an argument rather than a
+  measurement. The index makes the question academic — run 4 beats both by an order of magnitude.
+- **`hermes-inbox` is still 1 replica with a 10-connection pool** (the `HERMES_DATABASE_MAX_CONNS`
+  default) against `max_connections=100`. With 33 waits it is no longer urgent, but the headroom
+  is still unused.
 
-## What to do next
-
-1. **Index for [#170](https://github.com/HermesNotifications/hermes/issues/170).** A non-partial
-   `(user_id, id DESC)` index removes the watermark scan, which is the largest single component
-   of the read path and the thing driving argon's climb. It independently fixes the FK-check scan
-   on user deletion.
-2. **Raise `hermes-inbox`'s pool and replica count.** 17,429 acquire waits against a 10-connection
-   pool and 100 available server-side connections is the cheapest available win.
-3. **Re-run with tracing off** to separate instrumentation overhead from the 2.8x.
-4. **Investigate the push tail** as its own exercise, instrumenting the Centrifugo-to-client hop.
-
-## Reproducing this run
+## Reproducing these runs
 
 ```bash
 SCENARIO=inbox-mixed RUN_ID=<id> PARALLELISM=8 \
@@ -132,6 +146,14 @@ CONNECTIONS=100000 WS_SOCKETS_PER_VU=25 WS_RAMP_SECONDS=60 \
 SEND_RPS=500 POLL_RPS=100 TARGET_RPS=500 DURATION=15m \
 CHANNEL_WEIGHTS=inbox:100 \
 loadtest/scripts/run-k8s.sh
+```
+
+To re-run against an existing seeded population without re-seeding — which is how run 4 kept run
+3's exact 100,000 users, so the index was the only variable — truncate the history and apply the
+rendered TestRun directly rather than invoking the script:
+
+```sql
+TRUNCATE notification_events, notifications;
 ```
 
 Two preconditions that are not in the script and cost a run each time they are missed:

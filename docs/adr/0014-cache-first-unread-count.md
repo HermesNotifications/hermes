@@ -1,6 +1,6 @@
 # ADR 0014: Serve the unread count from cache, and keep it off the websocket's critical path
 
-**Status:** Accepted (amended 2026-08-12)
+**Status:** Accepted (amended 2026-08-12, 2026-08-16)
 **Date:** 2026-08-10
 **Author:** Daryl Robbins
 
@@ -147,6 +147,18 @@ reads and mutations stay on HTTP. The websocket channel remains strictly server�
   overcount compounds with every retry.
 - New migration `000018` adds `idx_notifications_unread`, built `CONCURRENTLY`. It is a sparse
   partial index containing only unread rows, so it *shrinks as users read*.
+- **Amended 2026-08-16 — the watermark needed an index of its own.** `000018` covers the capped
+  count but not the `max(id)` watermark this ADR introduces alongside it, and *every* `user_id`
+  index on `notifications` was partial. A partial index cannot serve a predicate it does not
+  imply, and the watermark is over all of a user's rows, so the planner fell back to a backward
+  scan of the primary key — which, because ids are time-sortable, walks the table newest-first
+  across every user. Cost is therefore proportional to how long since that user's last
+  notification: 0.2 ms for an active user, **133 ms and the entire 450k-row table** for one with
+  an empty inbox. Migration `000021` adds a non-partial `(user_id, id DESC)` index, taking the
+  whole query from 212 ms to 0.47 ms at p95 under 100,000 connections. See
+  [issue #170](https://github.com/HermesNotifications/hermes/issues/170) and
+  [the load-test write-up](../loadtest/clean-dataset-100k-2026-08-16.md). The decision in this
+  ADR is unchanged; this records that it was incompletely indexed.
 - **Follow-up, not done here:** DynamoDB still answers the count with a filtered `Query`, now
   page-bounded. The real fix is a sparse GSI (`unread_uid`, KEYS_ONLY) maintained by the
   mutation methods, which makes scanned equal counted. It needs a backfill job.
