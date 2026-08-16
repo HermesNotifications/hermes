@@ -11,6 +11,35 @@ simplification for 0.x; when it stops paying, the chart gets its own `chart-vX.Y
 `version` and its `appVersion` are all the same, and it builds the GitHub Release notes from
 the section below matching the version. A missing section fails the release.
 
+## 0.2.2
+
+One chart addition, and nothing to do on upgrade unless you want it.
+
+### An evaluation install can now turn its logging down
+
+`hermes.logLevel` sets `HERMES_LOG_LEVEL` for every service, and for the migration Job, the
+cleanup CronJob and the stream provisioner alongside them. Empty stays the default.
+
+It exists because a bundled install could not stop logging every request, and neither half of
+that was wrong on its own. Per-request and per-notification records live at Debug on purpose —
+that is what keeps steady-state volume proportional to incidents rather than to traffic. And
+the level defaults to Debug when `hermes.env` is `development`, which is right for a laptop.
+
+But `development` is not a choice on the bundled datastores: `Config.Validate()` requires TLS on
+Postgres, Redis and NATS outside it, and the chart refuses that combination rather than letting
+nine services crash-loop. So a bundled install was pinned to `development`, therefore pinned to
+Debug, with no value to escape through.
+
+**If you run the bundled stack under real traffic, set `hermes.logLevel: info`.** A
+100,000-connection load test had every service writing a line per request, which put more
+pressure on the log pipeline than on the notification pipeline. At `info` the per-request records
+go away and warnings, errors and the slow-request records remain — which are the ones worth
+having during a run.
+
+A mistyped level is refused at install time. `bootstrap.logLevel()` deliberately ignores an
+unrecognised value rather than exiting, so without the schema check `logLevel: verbose` would
+have quietly left Debug in place.
+
 ## 0.2.1
 
 Three fixes to 0.2.0's own telemetry, each found by reading what it actually produced in
