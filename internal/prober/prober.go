@@ -122,7 +122,19 @@ type Prober struct {
 
 	mu       sync.Mutex
 	inFlight map[string]time.Time // probe id -> send completed at
+	// lostStreak counts probes lost since the last successful delivery. A prober whose
+	// subscription has died reports every probe lost, forever, at WARN -- which is
+	// indistinguishable in a log from a pipeline that is genuinely down, and easy to scroll
+	// past. Escalating once at the threshold turns a uniform drip into a single searchable
+	// event that names the prober itself as the suspect.
+	lostStreak      int
+	streakEscalated bool
 }
+
+// lostStreakThreshold is how many consecutive lost probes mean "this is not a blip". At the
+// default 30s interval that is 90 seconds of total delivery failure, which no healthy state
+// produces.
+const lostStreakThreshold = 3
 
 func New(cfg Config, logger *slog.Logger) *Prober {
 	return &Prober{
@@ -139,6 +151,29 @@ func New(cfg Config, logger *slog.Logger) *Prober {
 	}
 }
 
+// clientConfig builds the SDK config. Separate from Run so the token-refresh callback can be
+// asserted without standing up a Centrifugo server -- its absence is what broke the prober for
+// 41 hours, and a regression would be just as silent as the original.
+func (p *Prober) clientConfig(ctx context.Context, token string) centrifuge.Config {
+	return centrifuge.Config{
+		Token: token,
+		GetToken: func(centrifuge.ConnectionTokenEvent) (string, error) {
+			// ctx, not context.Background(): a refresh in flight when the service is shutting
+			// down should be cancelled with everything else rather than outliving it.
+			refreshed, _, err := p.mintToken(ctx)
+			if err != nil {
+				// Returning the error lets the SDK back off and retry rather than treating
+				// this as fatal, so a transient admin blip does not permanently kill the
+				// prober -- the exact class of failure this whole change is about.
+				p.logger.Error("probe token refresh failed", "error", err)
+				return "", err
+			}
+			p.logger.Info("probe token refreshed")
+			return refreshed, nil
+		},
+	}
+}
+
 // Run holds a subscription and probes until ctx is cancelled.
 func (p *Prober) Run(ctx context.Context) error {
 	token, internalUserID, err := p.mintToken(ctx)
@@ -146,9 +181,28 @@ func (p *Prober) Run(ctx context.Context) error {
 		return fmt.Errorf("mint token: %w", err)
 	}
 
-	client := centrifuge.NewJsonClient(p.cfg.CentrifugoURL, centrifuge.Config{})
+	// GetToken, not SetToken. A connection token issued by POST /v1/auth/token lives 4h ± 10%
+	// (internal/admin/handler_auth.go), and a prober is a process that runs for weeks. With a
+	// single static token the SDK has nothing to present when Centrifugo expires the
+	// connection: client.go:1471 raises ConfigurationError{"GetToken must be set to handle
+	// expired token"} and then retries forever with the dead credential.
+	//
+	// The failure is invisible from outside. The websocket is up, no publication ever arrives,
+	// every probe expires into the `lost` counter, and the pod stays Running and Ready. It ran
+	// for exactly one token lifetime and then reported 100% loss for 41 hours -- which reads as
+	// a total pipeline outage, not as a broken prober. See issue #173.
+	client := centrifuge.NewJsonClient(p.cfg.CentrifugoURL, p.clientConfig(ctx, token))
 	defer client.Close()
-	client.SetToken(token)
+
+	// Without this the SDK's own diagnosis goes nowhere. The expired-token ConfigurationError
+	// above was raised on every reconnect attempt for 41 hours and never appeared in a log,
+	// because no handler was registered to receive it.
+	client.OnError(func(e centrifuge.ErrorEvent) {
+		p.logger.Error("centrifugo client error", "error", e.Error)
+	})
+	client.OnDisconnected(func(e centrifuge.DisconnectedEvent) {
+		p.logger.Warn("probe disconnected", "code", e.Code, "reason", e.Reason)
+	})
 
 	// `user#<internal id>` is Centrifugo's user-limited channel convention and the same
 	// channel the inbox widget subscribes to — deliberately, so the prober fails when real
@@ -235,6 +289,11 @@ func (p *Prober) onPublication(ctx context.Context, e centrifuge.PublicationEven
 	p.mu.Lock()
 	started, ok := p.inFlight[probeID]
 	delete(p.inFlight, probeID)
+	if ok {
+		// One delivery proves the subscription is alive, so the streak starts over.
+		p.lostStreak = 0
+		p.streakEscalated = false
+	}
 	p.mu.Unlock()
 	if !ok {
 		// Already expired, or a duplicate. Delivery is at-least-once, so a redelivered
@@ -258,11 +317,27 @@ func (p *Prober) expire(ctx context.Context) {
 			lost++
 		}
 	}
+	var streak int
+	var escalate bool
+	if lost > 0 {
+		p.lostStreak += lost
+		streak = p.lostStreak
+		// Once, on crossing, rather than on every sweep afterwards: the condition is
+		// continuous but the news is not.
+		if streak >= lostStreakThreshold && !p.streakEscalated {
+			p.streakEscalated = true
+			escalate = true
+		}
+	}
 	p.mu.Unlock()
 
 	if lost > 0 {
 		results.Add(ctx, int64(lost), metric.WithAttributes(attribute.String("result", "lost")))
-		p.logger.Warn("probes lost", "count", lost, "timeout", p.cfg.Timeout)
+		p.logger.Warn("probes lost", "count", lost, "timeout", p.cfg.Timeout, "streak", streak)
+	}
+	if escalate {
+		p.logger.Error("probe delivery has failed continuously; the prober's own subscription is a suspect",
+			"streak", streak, "threshold", lostStreakThreshold, "timeout", p.cfg.Timeout)
 	}
 }
 
