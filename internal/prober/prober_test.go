@@ -7,6 +7,7 @@ package prober
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -102,6 +103,166 @@ func TestExpire_OnlyRemovesProbesPastTheDeadline(t *testing.T) {
 	}
 	if _, ok := p.inFlight["fresh"]; !ok {
 		t.Error("in-window probe must be kept")
+	}
+}
+
+// The bug behind #173: the connection token was minted once and set statically, but it lives
+// 4h ± 10%. When it expired the SDK had nothing to present, raised
+// ConfigurationError{"GetToken must be set to handle expired token"} on every reconnect, and
+// the prober reported 100% loss for 41 hours while looking healthy from outside.
+//
+// Asserting the callback exists is most of the value; asserting it actually re-mints is the
+// rest, because a callback that returns the same expired string would fail identically.
+func TestClientConfig_RefreshesTheTokenRatherThanReusingIt(t *testing.T) {
+	var mints int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mints++
+		// Distinct per mint via the JWT id, not by decorating the signed string: mintToken
+		// parses what it gets back, so an appended suffix is not a different token, it is a
+		// malformed one.
+		claims := jwt.RegisteredClaims{
+			Subject:   "usr_internal123",
+			ID:        fmt.Sprintf("mint-%d", mints),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(4 * time.Hour)),
+		}
+		signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-secret"))
+		if err != nil {
+			t.Error(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"token":"` + signed + `"}`))
+	}))
+	defer srv.Close()
+
+	p := testProber(t, Config{AdminURL: srv.URL, APIKey: "k", OrganizationID: "org1", UserID: "u"})
+	cfg := p.clientConfig(context.Background(), "initial-token")
+
+	if cfg.Token != "initial-token" {
+		t.Errorf("Token = %q, want the token Run already minted", cfg.Token)
+	}
+	if cfg.GetToken == nil {
+		t.Fatal("GetToken must be set, or an expired token permanently wedges the prober")
+	}
+
+	first, err := cfg.GetToken(centrifuge.ConnectionTokenEvent{})
+	if err != nil {
+		t.Fatalf("GetToken: %v", err)
+	}
+	second, err := cfg.GetToken(centrifuge.ConnectionTokenEvent{})
+	if err != nil {
+		t.Fatalf("GetToken (second): %v", err)
+	}
+
+	if mints != 2 {
+		t.Errorf("admin was called %d times, want one mint per refresh", mints)
+	}
+	if first == second {
+		t.Error("each refresh must fetch a new token, not replay the previous one")
+	}
+	if first == "initial-token" {
+		t.Error("refresh returned the original token instead of a fresh one")
+	}
+}
+
+// A refresh that fails must surface as an error so the SDK backs off and retries. Returning a
+// stale token instead would recreate the original bug with extra steps.
+func TestClientConfig_RefreshFailurePropagates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	p := testProber(t, Config{AdminURL: srv.URL, APIKey: "k"})
+	cfg := p.clientConfig(context.Background(), "initial-token")
+
+	// Guarded so a regression that drops the callback fails with this message rather than a
+	// nil-dereference panic several frames away.
+	if cfg.GetToken == nil {
+		t.Fatal("GetToken must be set, or an expired token permanently wedges the prober")
+	}
+	got, err := cfg.GetToken(centrifuge.ConnectionTokenEvent{})
+	if err == nil {
+		t.Fatal("a failed refresh must return an error so the SDK retries")
+	}
+	if got != "" {
+		t.Errorf("returned token %q alongside an error; must be empty", got)
+	}
+}
+
+// A dead subscription reports every probe lost, forever, and until #173 that arrived as an
+// unbroken drip of identical WARN lines -- which is exactly what a genuinely-down pipeline
+// looks like, and what nobody reads. Crossing the threshold has to be distinguishable, and it
+// has to happen once rather than on every sweep.
+func TestExpire_EscalatesOnceWhenLossBecomesContinuous(t *testing.T) {
+	p := testProber(t, Config{Timeout: time.Millisecond})
+	ctx := context.Background()
+
+	expireN := func(n int) {
+		for i := 0; i < n; i++ {
+			p.inFlight[fmt.Sprintf("prb_%d", i)] = time.Now().Add(-time.Second)
+		}
+		p.expire(ctx)
+	}
+
+	expireN(lostStreakThreshold - 1)
+	if p.streakEscalated {
+		t.Fatalf("escalated at %d losses, below the threshold of %d", p.lostStreak, lostStreakThreshold)
+	}
+
+	expireN(1)
+	if !p.streakEscalated {
+		t.Fatalf("should have escalated at %d losses (threshold %d)", p.lostStreak, lostStreakThreshold)
+	}
+
+	// Still escalated, but the flag must not re-arm: the condition is continuous, the news is
+	// not, and a log line per sweep is the noise this replaced.
+	before := p.lostStreak
+	expireN(1)
+	if p.lostStreak != before+1 {
+		t.Errorf("streak = %d, want %d", p.lostStreak, before+1)
+	}
+	if !p.streakEscalated {
+		t.Error("escalation flag must stay set while loss continues")
+	}
+}
+
+// One delivery proves the subscription is alive again, so the next outage escalates afresh
+// rather than being swallowed by a flag left over from the last one.
+func TestOnPublication_ResetsTheLossStreak(t *testing.T) {
+	p := testProber(t, Config{Timeout: time.Millisecond})
+	ctx := context.Background()
+
+	p.lostStreak = lostStreakThreshold + 5
+	p.streakEscalated = true
+
+	p.inFlight["prb_live"] = time.Now()
+	data, err := json.Marshal(map[string]any{"metadata": map[string]any{MetadataKey: "prb_live"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.onPublication(ctx, centrifuge.PublicationEvent{Publication: centrifuge.Publication{Data: data}})
+
+	if p.lostStreak != 0 || p.streakEscalated {
+		t.Fatalf("a received probe must reset the streak, got streak=%d escalated=%v", p.lostStreak, p.streakEscalated)
+	}
+}
+
+// A publication that matches nothing in flight -- a redelivery, or a probe already expired --
+// is not evidence the subscription recovered, so it must not clear the streak.
+func TestOnPublication_UnmatchedFrameDoesNotResetTheStreak(t *testing.T) {
+	p := testProber(t, Config{Timeout: time.Millisecond})
+
+	p.lostStreak = lostStreakThreshold + 1
+	p.streakEscalated = true
+
+	data, err := json.Marshal(map[string]any{"metadata": map[string]any{MetadataKey: "prb_not_in_flight"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.onPublication(context.Background(), centrifuge.PublicationEvent{Publication: centrifuge.Publication{Data: data}})
+
+	if p.lostStreak == 0 || !p.streakEscalated {
+		t.Fatal("an unmatched frame must not count as recovery")
 	}
 }
 

@@ -50,8 +50,22 @@ Delivery was never the problem. Measured from the database rather than from a cl
 | max | 1.60 s | 1.25 s |
 | delivered | 417,463 / 417,463 | **450,037 / 450,037** |
 
-Both runs delivered 100% of notifications, flat minute by minute. The spans agreed:
+**Corrected 2026-08-17 — the completeness figure holds, the latency figures do not measure
+delivery.** `delivered_at` is stamped by the event writer, which batches: `NewBatch(100,
+500*time.Millisecond, …)` at `internal/eventwriter/writer.go:37`. So this column is delivery
+*plus* however long the batch took to fill, and that term dominates at low event rates. The tell
+is that it inverts against load — at 100 sends/s a later run measured p95 **335 ms** here while
+k6 measured 17 ms end to end, because ~300 events/s needs ~333 ms to fill a 100-event batch; at
+500 sends/s it falls to 115 ms. It is an upper bound contaminated by batching and is not
+comparable across throughputs.
+
+The trustworthy measurement is the trace. Walking raw span timestamps on a run-4 notification,
+`POST /v1/send` starts at `.994488435` and Centrifugo's `/api/publish` completes at `.998712882`
+— **4.2 ms for the entire pipeline including every NATS queue wait**. The per-hop spans agree:
 `delivery.send` p95 4.6 ms, `POST /v1/send` p95 9.3 ms.
+
+The conclusion this section draws is unchanged and if anything strengthened: delivery was never
+the bottleneck. Only the number supporting it was wrong in kind.
 
 The read path was the problem. In run 3, `GET /v1/inbox` p95 was 242 ms and **212 ms of it was
 the unread-count query** — specifically its watermark subquery,
@@ -123,12 +137,23 @@ At 100,000 connections this system degrades by getting slower, not by falling ov
 
 ## What is still open
 
-- **`ws_push_e2e_latency` p95 is 1.06 s against a 1000 ms threshold.** Down from 1m22s, and the
-  median is now 6 ms, but it still fails — narrowly. It remains uncorroborated server-side
-  (186 ms p95, 100% delivered) and Centrifugo's counters show publications sent matching pushes
-  received. That counter increments when a publication is written to the transport, not when the
-  client reads it, so socket-level backpressure at 100,000 connections is not ruled out. This is
-  now the only failing threshold and deserves its own investigation.
+- **`ws_push_e2e_latency` p95 is 1.06 s against a 1000 ms threshold** — the only failing one.
+  Down from 1m22s, median now 6 ms. Followed up on 2026-08-17 (see [issue #172](https://github.com/HermesNotifications/hermes/issues/172));
+  the summary is that no server-side measurement corroborates it. The trace puts the whole
+  pipeline at 4.2 ms and the prober, holding a single socket in a Go process during run 4, saw
+  p50 2.5 ms / p95 4.75 ms with 28 of 28 received.
+
+  Four candidate mechanisms have since been **excluded by experiment**: sockets per VU (25 / 5 /
+  1 — no effect), VUs per pod (40 / 200 / 1000 — no effect), sockets per k6 process (halving it
+  made the tail *worse*), and CFS throttling (0.03 s across 16 pods). What remains is that the
+  tail scales with offered send rate — at a constant 8,000 connections, 100/s gives p95 17 ms
+  and 500/s gives 530 ms — and secondarily with connection count. The mechanism is unexplained.
+
+  Two cautions for anyone picking this up. The prober was silently dead from 2026-08-16 05:00
+  ([#173](https://github.com/HermesNotifications/hermes/issues/173)), so the 2026-08-17
+  experiments had no independent control; only run 4's prober data predates the failure. And
+  `delivered_at − created_at` cannot be used as the server-side comparison — see the correction
+  above.
 - **Why run 1 measured 83 ms where run 3 measured 238 ms** is unexplained. Run 1 shed 6,705
   requests as 429s, which would flatter its percentiles, but that is an argument rather than a
   measurement. The index makes the question academic — run 4 beats both by an order of magnitude.
