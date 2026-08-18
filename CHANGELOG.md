@@ -11,6 +11,36 @@ simplification for 0.x; when it stops paying, the chart gets its own `chart-vX.Y
 `version` and its `appVersion` are all the same, and it builds the GitHub Release notes from
 the section below matching the version. A missing section fails the release.
 
+## 0.2.3
+
+One fix, to the component whose job is to tell you when something else is broken. Upgrade if you
+run the synthetic prober; nothing else changes.
+
+### The prober now refreshes its connection token
+
+`hermes-prober` minted its Centrifugo connection token once at startup and set it statically.
+Tokens from `POST /v1/auth/token` live 4h ± 10%; the prober runs for weeks. When the token
+expired the websocket stopped delivering, and the prober reported **100% probe loss until it was
+restarted** — in the instance that found this, for 41 hours.
+
+Nothing about that was visible from outside. The pod stayed `Running` and `Ready`, the socket
+stayed open, and the only symptom was an unbroken drip of identical `probes lost` warnings —
+which is exactly what a total pipeline outage looks like. If you alert on
+`hermes.probe.results{result="lost"}`, an alert firing after roughly four hours of uptime was
+more likely this bug than a real outage.
+
+centrifuge-go had diagnosed it immediately and correctly, raising
+`ConfigurationError{"GetToken must be set to handle expired token"}` on every reconnect attempt.
+No `OnError` handler was registered, so that went nowhere.
+
+The fix supplies a token-refresh callback, registers `OnError` and `OnDisconnected` handlers so
+the SDK's own diagnosis reaches a log, and escalates to `ERROR` once when probe loss becomes
+continuous — naming the prober's own subscription as a suspect rather than leaving every reader
+to assume the pipeline is down.
+
+**Readiness deliberately still does not gate on probe results.** The probe result stream remains
+the signal, as before; a prober that fails its own health check would only hide the evidence.
+
 ## 0.2.2
 
 One chart addition, and nothing to do on upgrade unless you want it.
