@@ -18,6 +18,7 @@ import (
 	"github.com/hermesnotifications/hermes/internal/httputil"
 	"github.com/hermesnotifications/hermes/internal/middleware"
 	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/observability"
 	"github.com/hermesnotifications/hermes/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -208,7 +209,15 @@ func (s *Server) API() huma.API {
 }
 
 func (s *Server) Handler() http.Handler {
-	var h http.Handler = s.router
+	// Directly outside the router, so the matched pattern can be read the moment
+	// routing is done -- chi, unlike ServeMux, sets no Request.Pattern for otelhttp
+	// to find, so without this every admin span is named for its method alone and
+	// every route collapses into one.
+	//
+	// send and inbox have had this since it was written; admin was missed, and its
+	// traffic is low enough that nothing made the gap obvious. Found by checking
+	// span names in production after 0.2.1 rather than by anything failing.
+	h := observability.ChiRoute(s.router)
 	// The limiter is built once in NewServer. Constructing it here would give
 	// every Handler() call a fresh, empty bucket map — which is what made the
 	// limiter silently inert under test, since the suites call Handler() per
