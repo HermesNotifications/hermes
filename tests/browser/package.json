@@ -13,9 +13,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^24.10.1",
-    "centrifuge": "^5.5.3",
+    "centrifuge": "^5.7.1",
     "typescript": "^5.9.3"
   },
   "license": "MIT"
