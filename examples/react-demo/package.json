@@ -21,11 +21,11 @@
     "sonner": "^2.0.7"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "typescript": "^5.9.3",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^7.0.2",
     "vite": "^8.1.5",
     "vitest": "^4.1.10"
   },

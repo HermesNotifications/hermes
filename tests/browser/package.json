@@ -14,9 +14,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "@types/node": "^24.10.1",
+    "@types/node": "^26.2.0",
     "centrifuge": "^5.5.3",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "license": "MIT"
 }
