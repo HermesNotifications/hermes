@@ -16,6 +16,7 @@ import (
 	"github.com/hermesnotifications/hermes/internal/httputil"
 	"github.com/hermesnotifications/hermes/internal/middleware"
 	"github.com/hermesnotifications/hermes/internal/models"
+	"github.com/hermesnotifications/hermes/internal/observability"
 )
 
 // UserStore defines the database operations the user service needs.
@@ -130,7 +131,14 @@ func (s *Server) API() huma.API {
 }
 
 func (s *Server) Handler() http.Handler {
-	var h http.Handler = s.router
+	// Directly outside the router, so the matched pattern can be read the moment
+	// routing is done. See the note in internal/admin/server.go: chi sets no
+	// Request.Pattern, so without this every span here is named for its method alone.
+	//
+	// This one matters more than the collapsed name suggests. The user routes are the
+	// ones carrying IDs -- /v1/users/{id}/preferences and friends -- so they are exactly
+	// where the templated route is load-bearing rather than cosmetic.
+	h := observability.ChiRoute(s.router)
 	// The limiter is built once in NewServer. Constructing it here would give
 	// every Handler() call a fresh, empty bucket map — which is what made the
 	// limiter silently inert under test, since the suites call Handler() per
