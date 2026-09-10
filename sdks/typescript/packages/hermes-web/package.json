@@ -45,7 +45,7 @@
     "esbuild": "^0.27.2",
     "jsdom": "^30.0.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "license": "Apache-2.0"
 }
